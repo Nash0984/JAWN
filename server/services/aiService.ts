@@ -297,7 +297,7 @@ class AIService {
     let totalRecall = 0;
     let validClasses = 0;
 
-    for (const [className, counts] of classCount.entries()) {
+    for (const [className, counts] of Array.from(classCount.entries())) {
       const precision = counts.tp / (counts.tp + counts.fp) || 0;
       const recall = counts.tp / (counts.tp + counts.fn) || 0;
       
