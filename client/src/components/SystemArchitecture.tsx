@@ -13,7 +13,7 @@ export default function SystemArchitecture() {
     <Card className="shadow-lg border border-border">
       <CardHeader>
         <CardTitle className="text-2xl font-bold text-foreground">
-          System Architecture
+          Maryland Benefits System Overview
         </CardTitle>
       </CardHeader>
       

@@ -8,11 +8,11 @@ export default function Home() {
       <section className="mb-12">
         <div className="text-center mb-8">
           <h2 className="text-4xl font-bold text-foreground mb-4">
-            AI-Powered Benefits Navigation
+            Maryland Benefits Navigator
           </h2>
           <p className="text-xl text-muted-foreground max-w-3xl mx-auto">
-            Get instant, accurate answers about benefit policies across all programs. 
-            Our RAG-powered system searches through thousands of policy documents to provide you with the most relevant information.
+            Get instant, accurate answers about Maryland's benefit programs available through marylandbenefits.gov. 
+            Find information about SNAP, Medicaid, TANF, energy assistance, VITA tax services, and other state assistance programs.
           </p>
         </div>
         
