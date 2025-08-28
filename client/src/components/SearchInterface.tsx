@@ -77,10 +77,10 @@ export default function SearchInterface() {
   };
 
   const quickSearches = [
-    "SNAP income limits 2025",
-    "Medicaid asset requirements", 
-    "Housing voucher waitlist",
-    "Work requirements TANF"
+    "Maryland SNAP income limits 2025",
+    "How to apply for Medicaid in Maryland", 
+    "VITA tax assistance locations Maryland",
+    "Energy assistance programs Maryland"
   ];
 
   return (
@@ -91,7 +91,7 @@ export default function SearchInterface() {
           <div className="relative">
             <Input 
               type="text" 
-              placeholder="Ask about SNAP eligibility, housing assistance, Medicaid requirements..."
+              placeholder="Ask about Maryland benefits: SNAP, Medicaid, VITA tax help, energy assistance..."
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               onKeyDown={handleKeyPress}

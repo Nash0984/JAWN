@@ -165,11 +165,71 @@ export class DatabaseStorage implements IStorage {
 
   // Benefit Programs
   async getBenefitPrograms(): Promise<BenefitProgram[]> {
+    // Ensure Maryland benefit programs are seeded
+    await this.seedMarylandBenefitPrograms();
+    
     return await db
       .select()
       .from(benefitPrograms)
       .where(eq(benefitPrograms.isActive, true))
       .orderBy(benefitPrograms.name);
+  }
+  
+  private async seedMarylandBenefitPrograms(): Promise<void> {
+    const marylandPrograms = [
+      {
+        name: "Maryland SNAP",
+        code: "MD_SNAP",
+        description: "Supplemental Nutrition Assistance Program providing food assistance to Maryland families and individuals"
+      },
+      {
+        name: "Maryland Medicaid",
+        code: "MD_MEDICAID", 
+        description: "Health insurance coverage for eligible Maryland residents through Maryland Health Connection"
+      },
+      {
+        name: "Maryland TANF",
+        code: "MD_TANF",
+        description: "Temporary Assistance for Needy Families providing cash assistance to Maryland families"
+      },
+      {
+        name: "Maryland Energy Assistance",
+        code: "MD_ENERGY",
+        description: "Energy assistance programs to help Maryland residents with utility bills and energy costs"
+      },
+      {
+        name: "Maryland WIC",
+        code: "MD_WIC",
+        description: "Women, Infants and Children program providing nutrition assistance for pregnant women and children"
+      },
+      {
+        name: "Maryland Children's Health Program",
+        code: "MD_MCHP", 
+        description: "Health benefits for Maryland children up to age 19"
+      },
+      {
+        name: "VITA Tax Assistance",
+        code: "MD_VITA",
+        description: "Free tax preparation assistance for Maryland residents with income under $67,000"
+      }
+    ];
+
+    for (const program of marylandPrograms) {
+      try {
+        const existing = await db
+          .select()
+          .from(benefitPrograms) 
+          .where(eq(benefitPrograms.code, program.code))
+          .limit(1);
+          
+        if (existing.length === 0) {
+          await db.insert(benefitPrograms).values(program);
+        }
+      } catch (error) {
+        // Program might already exist, continue with others
+        console.log(`Program ${program.code} already exists or error occurred`);
+      }
+    }
   }
 
   async createBenefitProgram(program: InsertBenefitProgram): Promise<BenefitProgram> {
