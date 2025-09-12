@@ -3,6 +3,7 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { ragService } from "./services/ragService";
 import { documentProcessor } from "./services/documentProcessor";
+import { documentIngestionService } from "./services/documentIngestion";
 import { ObjectStorageService } from "./objectStorage";
 import { 
   insertDocumentSchema, 
@@ -330,6 +331,97 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error fetching system status:", error);
       res.status(500).json({ error: "Failed to fetch system status" });
+    }
+  });
+
+  // Document Ingestion endpoints for Maryland SNAP manual
+  app.post("/api/ingest/maryland-snap", async (req, res) => {
+    try {
+      console.log('Starting Maryland SNAP manual ingestion...');
+      const documentIds = await documentIngestionService.ingestAllDocuments();
+      
+      res.json({
+        success: true,
+        message: `Successfully ingested ${documentIds.length} documents from Maryland SNAP manual`,
+        documentIds,
+        timestamp: new Date().toISOString()
+      });
+    } catch (error) {
+      console.error("Error ingesting Maryland SNAP documents:", error);
+      res.status(500).json({ 
+        success: false,
+        error: "Failed to ingest Maryland SNAP documents",
+        details: error instanceof Error ? error.message : "Unknown error"
+      });
+    }
+  });
+
+  // Get golden source documents with audit trail
+  app.get("/api/golden-source/documents", async (req, res) => {
+    try {
+      const documents = await documentIngestionService.listGoldenSourceDocuments();
+      res.json({
+        success: true,
+        documents,
+        count: documents.length,
+        timestamp: new Date().toISOString()
+      });
+    } catch (error) {
+      console.error("Error fetching golden source documents:", error);
+      res.status(500).json({ 
+        success: false,
+        error: "Failed to fetch golden source documents"
+      });
+    }
+  });
+
+  // Verify document integrity
+  app.post("/api/golden-source/verify/:documentId", async (req, res) => {
+    try {
+      const { documentId } = req.params;
+      const isValid = await documentIngestionService.verifyDocumentIntegrity(documentId);
+      
+      res.json({
+        success: true,
+        documentId,
+        isValid,
+        timestamp: new Date().toISOString()
+      });
+    } catch (error) {
+      console.error("Error verifying document integrity:", error);
+      res.status(500).json({ 
+        success: false,
+        error: "Failed to verify document integrity",
+        details: error instanceof Error ? error.message : "Unknown error"
+      });
+    }
+  });
+
+  // Get audit trail for a specific document
+  app.get("/api/golden-source/audit-trail/:documentId", async (req, res) => {
+    try {
+      const { documentId } = req.params;
+      const auditTrail = await documentIngestionService.getDocumentAuditTrail(documentId);
+      
+      if (!auditTrail) {
+        return res.status(404).json({
+          success: false,
+          error: "Document not found or not a golden source document"
+        });
+      }
+      
+      res.json({
+        success: true,
+        documentId,
+        auditTrail,
+        timestamp: new Date().toISOString()
+      });
+    } catch (error) {
+      console.error("Error fetching audit trail:", error);
+      res.status(500).json({ 
+        success: false,
+        error: "Failed to fetch audit trail"
+      });
     }
   });
 

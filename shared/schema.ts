@@ -44,6 +44,14 @@ export const documents = pgTable("documents", {
   qualityScore: real("quality_score"), // 0-1 quality assessment
   ocrAccuracy: real("ocr_accuracy"), // 0-1 OCR accuracy
   metadata: jsonb("metadata"), // extracted metadata
+  // Audit trail fields for golden source documents
+  sourceUrl: text("source_url"), // original URL where document was downloaded from
+  downloadedAt: timestamp("downloaded_at"), // when document was ingested from source
+  documentHash: text("document_hash"), // SHA-256 hash of original document for integrity
+  isGoldenSource: boolean("is_golden_source").default(false).notNull(), // marks official policy documents
+  sectionNumber: text("section_number"), // e.g., "100", "200", for SNAP manual sections
+  lastModifiedAt: timestamp("last_modified_at"), // last modified date from source
+  auditTrail: jsonb("audit_trail"), // detailed provenance information
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
@@ -177,6 +185,23 @@ export const insertDocumentSchema = createInsertSchema(documents).omit({
   createdAt: true,
   updatedAt: true,
 });
+
+// Schema for document ingestion with audit trail
+export const insertGoldenSourceDocumentSchema = createInsertSchema(documents)
+  .omit({
+    id: true,
+    createdAt: true,
+    updatedAt: true,
+  })
+  .extend({
+    sourceUrl: z.string().url(),
+    downloadedAt: z.date(),
+    documentHash: z.string(),
+    isGoldenSource: z.boolean().default(true),
+    sectionNumber: z.string().optional(),
+    lastModifiedAt: z.date().optional(),
+    auditTrail: z.any(),
+  });
 
 export const insertDocumentChunkSchema = createInsertSchema(documentChunks).omit({
   id: true,
