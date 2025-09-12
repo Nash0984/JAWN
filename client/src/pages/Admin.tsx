@@ -1,4 +1,6 @@
 import AdminDashboard from "@/components/AdminDashboard";
+import { DocumentIngestionPanel } from "@/components/DocumentIngestionPanel";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 export default function Admin() {
   return (
@@ -12,7 +14,20 @@ export default function Admin() {
         </p>
       </div>
 
-      <AdminDashboard />
+      <Tabs defaultValue="overview" className="space-y-6">
+        <TabsList>
+          <TabsTrigger value="overview">Overview</TabsTrigger>
+          <TabsTrigger value="documents">Golden Source Documents</TabsTrigger>
+        </TabsList>
+        
+        <TabsContent value="overview" className="space-y-6">
+          <AdminDashboard />
+        </TabsContent>
+        
+        <TabsContent value="documents" className="space-y-6">
+          <DocumentIngestionPanel />
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }
