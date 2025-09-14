@@ -13,7 +13,7 @@ export default function SystemArchitecture() {
     <Card className="shadow-lg border border-border">
       <CardHeader>
         <CardTitle className="text-2xl font-bold text-foreground">
-          Maryland Benefits System Overview
+          Maryland SNAP Policy Manual System
         </CardTitle>
       </CardHeader>
       
@@ -28,15 +28,15 @@ export default function SystemArchitecture() {
             <div className="space-y-2 text-sm">
               <div className="flex items-center justify-between">
                 <span className="text-muted-foreground">OCR Engine:</span>
-                <span className="text-foreground font-medium">Tesseract + OpenAI Vision</span>
+                <span className="text-foreground font-medium">Tesseract + Gemini Vision</span>
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-muted-foreground">Document Classification:</span>
-                <span className="text-foreground font-medium">GPT-5</span>
+                <span className="text-foreground font-medium">Gemini Pro</span>
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-muted-foreground">Quality Assessment:</span>
-                <span className="text-foreground font-medium">Computer Vision API</span>
+                <span className="text-foreground font-medium">Gemini Vision API</span>
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-muted-foreground">Chunking Strategy:</span>
@@ -58,7 +58,7 @@ export default function SystemArchitecture() {
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-muted-foreground">Embedding Model:</span>
-                <span className="text-foreground font-medium">text-embedding-3-large</span>
+                <span className="text-foreground font-medium">text-embedding-004</span>
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-muted-foreground">Dimensions:</span>
@@ -75,7 +75,7 @@ export default function SystemArchitecture() {
           <div className="bg-muted rounded-lg p-4">
             <h4 className="font-semibold text-foreground mb-3 flex items-center">
               <Brain className="text-purple-600 mr-2 h-5 w-5" />
-              RAG Pipeline
+              SNAP Document Analysis
             </h4>
             <div className="space-y-2 text-sm">
               <div className="flex items-center justify-between">
@@ -88,7 +88,7 @@ export default function SystemArchitecture() {
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-muted-foreground">LLM:</span>
-                <span className="text-foreground font-medium">GPT-5</span>
+                <span className="text-foreground font-medium">Gemini Pro</span>
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-muted-foreground">Framework:</span>

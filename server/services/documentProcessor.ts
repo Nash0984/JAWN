@@ -1,19 +1,19 @@
-import OpenAI from "openai";
+import { GoogleGenAI } from "@google/genai";
 import { storage } from "../storage";
 import { ragService } from "./ragService";
 import { ObjectStorageService } from "../objectStorage";
 
-// Lazy OpenAI initialization to prevent server crash at import-time
-let openai: OpenAI | null = null;
-function getOpenAI(): OpenAI {
-  if (!openai) {
-    const apiKey = process.env.OPENAI_API_KEY;
+// Lazy Gemini initialization to prevent server crash at import-time
+let gemini: GoogleGenAI | null = null;
+function getGemini(): GoogleGenAI {
+  if (!gemini) {
+    const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) {
-      throw new Error('OPENAI_API_KEY environment variable is required');
+      throw new Error('GEMINI_API_KEY environment variable is required');
     }
-    openai = new OpenAI({ apiKey });
+    gemini = new GoogleGenAI(apiKey);
   }
-  return openai;
+  return gemini;
 }
 
 export interface DocumentQualityAssessment {

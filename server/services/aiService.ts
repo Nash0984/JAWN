@@ -1,9 +1,17 @@
-import OpenAI from "openai";
+import { GoogleGenAI } from "@google/genai";
 
-// the newest OpenAI model is "gpt-5" which was released August 7, 2025. do not change this unless explicitly requested by the user
-const openai = new OpenAI({ 
-  apiKey: process.env.OPENAI_API_KEY || process.env.OPENAI_API_KEY_ENV_VAR || "default_key"
-});
+// Using Gemini for all AI operations
+let gemini: GoogleGenAI | null = null;
+function getGemini(): GoogleGenAI {
+  if (!gemini) {
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) {
+      throw new Error('GEMINI_API_KEY environment variable is required');
+    }
+    gemini = new GoogleGenAI(apiKey);
+  }
+  return gemini;
+}
 
 export interface ModelPerformanceMetrics {
   accuracy: number;
@@ -25,47 +33,38 @@ export interface TrainingMetrics {
 class AIService {
   async analyzeDocumentForFieldExtraction(text: string, documentType: string) {
     try {
-      const response = await openai.chat.completions.create({
-        model: "gpt-5", // the newest OpenAI model is "gpt-5" which was released August 7, 2025
-        messages: [
-          {
-            role: "system",
-            content: `You are an AI assistant specialized in extracting structured information from government benefit documents.
-            
-            For the document type "${documentType}", extract relevant fields such as:
-            - Eligibility requirements
-            - Income limits
-            - Asset limits
-            - Application deadlines
-            - Contact information
-            - Effective dates
-            - Program codes
-            - Geographic restrictions
-            
-            Respond with JSON containing the extracted fields and their values.
-            Use null for fields that cannot be determined.
-            
-            Format: {
-              "eligibilityRequirements": ["req1", "req2"],
-              "incomeLimits": {"1person": "amount", "2person": "amount"},
-              "assetLimits": "amount",
-              "applicationDeadline": "date or null",
-              "effectiveDate": "date or null",
-              "contactInfo": {"phone": "number", "website": "url"},
-              "programCodes": ["code1", "code2"],
-              "geographicScope": "federal|state|local|specific location",
-              "confidence": number
-            }`
-          },
-          {
-            role: "user",
-            content: text
-          }
-        ],
-        response_format: { type: "json_object" },
-      });
-
-      return JSON.parse(response.choices[0].message.content || "{}");
+      const model = getGemini().getGenerativeModel({ model: "gemini-1.5-pro" });
+      const prompt = `You are an AI assistant specialized in extracting structured information from government benefit documents.
+      
+      For the document type "${documentType}", extract relevant fields such as:
+      - Eligibility requirements
+      - Income limits
+      - Asset limits
+      - Application deadlines
+      - Contact information
+      - Effective dates
+      - Program codes
+      - Geographic restrictions
+      
+      Respond with JSON containing the extracted fields and their values.
+      Use null for fields that cannot be determined.
+      
+      Format: {
+        "eligibilityRequirements": ["req1", "req2"],
+        "incomeLimits": {"1person": "amount", "2person": "amount"},
+        "assetLimits": "amount",
+        "applicationDeadline": "date or null",
+        "effectiveDate": "date or null",
+        "contactInfo": {"phone": "number", "website": "url"},
+        "programCodes": ["code1", "code2"],
+        "geographicScope": "federal|state|local|specific location",
+        "confidence": number
+      }
+      
+      Document text: ${text}`;
+      
+      const response = await model.generateContent(prompt);
+      return JSON.parse(response.response.text() || "{}");
     } catch (error) {
       console.error("Field extraction error:", error);
       return { error: "Failed to extract fields", confidence: 0 };
@@ -74,30 +73,21 @@ class AIService {
 
   async generateDocumentSummary(text: string, maxLength: number = 200) {
     try {
-      const response = await openai.chat.completions.create({
-        model: "gpt-5", // the newest OpenAI model is "gpt-5" which was released August 7, 2025
-        messages: [
-          {
-            role: "system",
-            content: `Summarize the following government benefits document in ${maxLength} words or less.
-            Focus on:
-            - Main purpose of the document
-            - Key eligibility requirements
-            - Important dates or deadlines
-            - Primary benefit amounts or limits
-            - Application process overview
-            
-            Make the summary clear and actionable for benefits administrators.`
-          },
-          {
-            role: "user",
-            content: text
-          }
-        ],
-        max_tokens: Math.ceil(maxLength * 1.3), // Account for token-to-word ratio
-      });
-
-      return response.choices[0].message.content || "";
+      const model = getGemini().getGenerativeModel({ model: "gemini-1.5-pro" });
+      const prompt = `Summarize the following government benefits document in ${maxLength} words or less.
+      Focus on:
+      - Main purpose of the document
+      - Key eligibility requirements
+      - Important dates or deadlines
+      - Primary benefit amounts or limits
+      - Application process overview
+      
+      Make the summary clear and actionable for benefits administrators.
+      
+      Document text: ${text}`;
+      
+      const response = await model.generateContent(prompt);
+      return response.response.text() || "Summary generation failed";
     } catch (error) {
       console.error("Summary generation error:", error);
       return "Summary generation failed";
@@ -106,46 +96,41 @@ class AIService {
 
   async detectDocumentChanges(oldText: string, newText: string) {
     try {
-      const response = await openai.chat.completions.create({
-        model: "gpt-5", // the newest OpenAI model is "gpt-5" which was released August 7, 2025
-        messages: [
+      const model = getGemini().getGenerativeModel({ model: "gemini-1.5-pro" });
+      const prompt = `You are comparing two versions of a government benefits document to identify changes.
+      
+      Analyze the differences and categorize them as:
+      - POLICY_CHANGE: Changes to eligibility, benefits amounts, or requirements
+      - PROCEDURAL_CHANGE: Changes to application or administrative processes
+      - DATE_CHANGE: Updates to effective dates or deadlines  
+      - CONTACT_CHANGE: Updates to contact information
+      - FORMATTING_CHANGE: Minor formatting or structural changes
+      - OTHER: Any other type of change
+      
+      Respond with JSON:
+      {
+        "hasChanges": boolean,
+        "changesSummary": "brief description of main changes",
+        "changes": [
           {
-            role: "system",
-            content: `You are comparing two versions of a government benefits document to identify changes.
-            
-            Analyze the differences and categorize them as:
-            - POLICY_CHANGE: Changes to eligibility, benefits amounts, or requirements
-            - PROCEDURAL_CHANGE: Changes to application or administrative processes
-            - DATE_CHANGE: Updates to effective dates or deadlines  
-            - CONTACT_CHANGE: Updates to contact information
-            - FORMATTING_CHANGE: Minor formatting or structural changes
-            - OTHER: Any other type of change
-            
-            Respond with JSON:
-            {
-              "hasChanges": boolean,
-              "changesSummary": "brief description of main changes",
-              "changes": [
-                {
-                  "type": "POLICY_CHANGE|PROCEDURAL_CHANGE|etc",
-                  "description": "specific change description",
-                  "oldValue": "previous value or null",
-                  "newValue": "new value or null",
-                  "impact": "HIGH|MEDIUM|LOW"
-                }
-              ],
-              "recommendedActions": ["action1", "action2"]
-            }`
-          },
-          {
-            role: "user",
-            content: `OLD VERSION:\n${oldText}\n\nNEW VERSION:\n${newText}`
+            "type": "POLICY_CHANGE|PROCEDURAL_CHANGE|etc",
+            "description": "specific change description",
+            "oldValue": "previous value or null",
+            "newValue": "new value or null",
+            "impact": "HIGH|MEDIUM|LOW"
           }
         ],
-        response_format: { type: "json_object" },
-      });
-
-      return JSON.parse(response.choices[0].message.content || "{}");
+        "recommendedActions": ["action1", "action2"]
+      }
+      
+      OLD VERSION:
+      ${oldText}
+      
+      NEW VERSION:
+      ${newText}`;
+      
+      const response = await model.generateContent(prompt);
+      return JSON.parse(response.response.text() || "{}");
     } catch (error) {
       console.error("Change detection error:", error);
       return { 
@@ -159,42 +144,33 @@ class AIService {
 
   async validateDocumentCompliance(text: string, benefitProgram: string) {
     try {
-      const response = await openai.chat.completions.create({
-        model: "gpt-5", // the newest OpenAI model is "gpt-5" which was released August 7, 2025
-        messages: [
-          {
-            role: "system",
-            content: `You are a compliance expert for government benefit programs.
-            
-            Review the document for compliance with federal regulations for ${benefitProgram}.
-            Check for:
-            - Required legal language and disclaimers
-            - Proper citation of relevant regulations
-            - Accessibility requirements (plain language, reading level)
-            - Non-discrimination clauses
-            - Appeal rights information
-            - Privacy notices
-            - Reasonable accommodation information
-            
-            Respond with JSON:
-            {
-              "complianceScore": number (0-1),
-              "passedChecks": ["check1", "check2"],
-              "failedChecks": ["check1", "check2"], 
-              "warnings": ["warning1", "warning2"],
-              "requiredAdditions": ["addition1", "addition2"],
-              "overallAssessment": "COMPLIANT|NON_COMPLIANT|NEEDS_REVIEW"
-            }`
-          },
-          {
-            role: "user",
-            content: text
-          }
-        ],
-        response_format: { type: "json_object" },
-      });
-
-      return JSON.parse(response.choices[0].message.content || "{}");
+      const model = getGemini().getGenerativeModel({ model: "gemini-1.5-pro" });
+      const prompt = `You are a compliance expert for government benefit programs.
+      
+      Review the document for compliance with federal regulations for ${benefitProgram}.
+      Check for:
+      - Required legal language and disclaimers
+      - Proper citation of relevant regulations
+      - Accessibility requirements (plain language, reading level)
+      - Non-discrimination clauses
+      - Appeal rights information
+      - Privacy notices
+      - Reasonable accommodation information
+      
+      Respond with JSON:
+      {
+        "complianceScore": number (0-1),
+        "passedChecks": ["check1", "check2"],
+        "failedChecks": ["check1", "check2"], 
+        "warnings": ["warning1", "warning2"],
+        "requiredAdditions": ["addition1", "addition2"],
+        "overallAssessment": "COMPLIANT|NON_COMPLIANT|NEEDS_REVIEW"
+      }
+      
+      Document text: ${text}`;
+      
+      const response = await model.generateContent(prompt);
+      return JSON.parse(response.response.text() || "{}");
     } catch (error) {
       console.error("Compliance validation error:", error);
       return {
@@ -220,32 +196,23 @@ class AIService {
         const label = labels[i];
         
         // Generate variations and synthetic examples
-        const response = await openai.chat.completions.create({
-          model: "gpt-5", // the newest OpenAI model is "gpt-5" which was released August 7, 2025
-          messages: [
-            {
-              role: "system",
-              content: `Generate 3 variations of the following document that maintain the same classification label "${label}".
-              Vary the language while preserving the key information and intent.
-              
-              Respond with JSON:
-              {
-                "variations": [
-                  {"text": "variation1", "label": "${label}"},
-                  {"text": "variation2", "label": "${label}"},
-                  {"text": "variation3", "label": "${label}"}
-                ]
-              }`
-            },
-            {
-              role: "user",
-              content: doc
-            }
-          ],
-          response_format: { type: "json_object" },
-        });
-
-        const result = JSON.parse(response.choices[0].message.content || "{}");
+        const model = getGemini().getGenerativeModel({ model: "gemini-1.5-pro" });
+        const prompt = `Generate 3 variations of the following document that maintain the same classification label "${label}".
+        Vary the language while preserving the key information and intent.
+        
+        Respond with JSON:
+        {
+          "variations": [
+            {"text": "variation1", "label": "${label}"},
+            {"text": "variation2", "label": "${label}"},
+            {"text": "variation3", "label": "${label}"}
+          ]
+        }
+        
+        Original document: ${doc}`;
+        
+        const response = await model.generateContent(prompt);
+        const result = JSON.parse(response.response.text() || "{}");
         if (result.variations) {
           trainingExamples.push(...result.variations);
         }
@@ -322,39 +289,31 @@ class AIService {
 
   async generateModelReport(modelType: string, metrics: ModelPerformanceMetrics, trainingHistory: TrainingMetrics[]) {
     try {
-      const response = await openai.chat.completions.create({
-        model: "gpt-5", // the newest OpenAI model is "gpt-5" which was released August 7, 2025
-        messages: [
-          {
-            role: "system",
-            content: `Generate a comprehensive model performance report for a ${modelType} model.
-            
-            Include:
-            - Performance summary and key metrics analysis
-            - Training progress assessment
-            - Recommendations for improvement
-            - Production readiness assessment
-            - Potential issues or concerns
-            
-            Use clear, technical language appropriate for ML engineers and data scientists.`
-          },
-          {
-            role: "user",
-            content: `Model Performance Metrics:
-            Accuracy: ${metrics.accuracy.toFixed(3)}
-            Precision: ${metrics.precision.toFixed(3)}
-            Recall: ${metrics.recall.toFixed(3)}
-            F1 Score: ${metrics.f1Score.toFixed(3)}
-            
-            Training History (last 5 epochs):
-            ${trainingHistory.slice(-5).map(h => 
-              `Epoch ${h.epoch}: Loss=${h.loss.toFixed(3)}, Acc=${h.accuracy.toFixed(3)}, Val_Loss=${h.valLoss.toFixed(3)}, Val_Acc=${h.valAccuracy.toFixed(3)}`
-            ).join('\n')}`
-          }
-        ],
-      });
-
-      return response.choices[0].message.content || "Report generation failed";
+      const model = getGemini().getGenerativeModel({ model: "gemini-1.5-pro" });
+      const prompt = `Generate a comprehensive model performance report for a ${modelType} model.
+      
+      Include:
+      - Performance summary and key metrics analysis
+      - Training progress assessment
+      - Recommendations for improvement
+      - Production readiness assessment
+      - Potential issues or concerns
+      
+      Use clear, technical language appropriate for ML engineers and data scientists.
+      
+      Model Performance Metrics:
+      Accuracy: ${metrics.accuracy.toFixed(3)}
+      Precision: ${metrics.precision.toFixed(3)}
+      Recall: ${metrics.recall.toFixed(3)}
+      F1 Score: ${metrics.f1Score.toFixed(3)}
+      
+      Training History (last 5 epochs):
+      ${trainingHistory.slice(-5).map(h => 
+        `Epoch ${h.epoch}: Loss=${h.loss.toFixed(3)}, Acc=${h.accuracy.toFixed(3)}, Val_Loss=${h.valLoss.toFixed(3)}, Val_Acc=${h.valAccuracy.toFixed(3)}`
+      ).join('\n')}`;
+      
+      const response = await model.generateContent(prompt);
+      return response.response.text() || "Report generation failed";
     } catch (error) {
       console.error("Model report generation error:", error);
       return "Failed to generate model report";

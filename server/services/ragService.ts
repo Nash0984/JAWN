@@ -1,17 +1,17 @@
-import OpenAI from "openai";
+import { GoogleGenAI } from "@google/genai";
 import { storage } from "../storage";
 
-// Lazy OpenAI initialization to prevent server crash at import-time
-let openai: OpenAI | null = null;
-function getOpenAI(): OpenAI {
-  if (!openai) {
-    const apiKey = process.env.OPENAI_API_KEY;
+// Lazy Gemini initialization to prevent server crash at import-time
+let gemini: GoogleGenAI | null = null;
+function getGemini(): GoogleGenAI {
+  if (!gemini) {
+    const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) {
-      throw new Error('OPENAI_API_KEY environment variable is required');
+      throw new Error('GEMINI_API_KEY environment variable is required');
     }
-    openai = new OpenAI({ apiKey });
+    gemini = new GoogleGenAI(apiKey);
   }
-  return openai;
+  return gemini;
 }
 
 export interface SearchResult {
@@ -59,31 +59,26 @@ class RAGService {
 
   private async analyzeQuery(query: string) {
     try {
-      const response = await getOpenAI().chat.completions.create({
-        model: "gpt-4o", // Using currently available model
-        messages: [
-          {
-            role: "system",
-            content: `You are a Maryland benefits policy expert. Analyze the user query and extract:
-            1. Intent (eligibility, application, requirements, etc.)
-            2. Relevant entities (income, age, household size, etc.)
-            3. Likely Maryland benefit program if mentioned
-            
-            Focus on Maryland state programs available through marylandbenefits.gov and VITA services.
-            
-            Respond with JSON in this format:
-            {
-              "intent": "string",
-              "entities": ["entity1", "entity2"],
-              "benefitProgram": "MD_SNAP|MD_MEDICAID|MD_TANF|MD_ENERGY|MD_VITA|etc or null"
-            }`
-          },
-          { role: "user", content: query }
-        ],
-        response_format: { type: "json_object" },
-      });
+      const model = getGemini().getGenerativeModel({ model: "gemini-1.5-pro" });
+      const prompt = `You are a Maryland benefits policy expert. Analyze the user query and extract:
+      1. Intent (eligibility, application, requirements, etc.)
+      2. Relevant entities (income, age, household size, etc.)
+      3. Likely Maryland benefit program if mentioned
+      
+      Focus on Maryland state programs available through marylandbenefits.gov and VITA services.
+      
+      Respond with JSON in this format:
+      {
+        "intent": "string",
+        "entities": ["entity1", "entity2"],
+        "benefitProgram": "MD_SNAP|MD_MEDICAID|MD_TANF|MD_ENERGY|MD_VITA|etc or null"
+      }
+      
+      Query: ${query}`;
+      
+      const response = await model.generateContent(prompt);
 
-      return JSON.parse(response.choices[0].message.content || "{}");
+      return JSON.parse(response.response.text() || "{}");
     } catch (error) {
       console.error("Query analysis error:", error);
       return {
@@ -96,12 +91,10 @@ class RAGService {
 
   private async generateEmbedding(text: string): Promise<number[]> {
     try {
-      const response = await getOpenAI().embeddings.create({
-        model: "text-embedding-3-large",
-        input: text,
-      });
+      const model = getGemini().getGenerativeModel({ model: "text-embedding-004" });
+      const result = await model.embedContent(text);
       
-      return response.data[0].embedding;
+      return result.embedding.values;
     } catch (error) {
       console.error("Embedding generation error:", error);
       throw new Error("Failed to generate embeddings");
@@ -230,36 +223,29 @@ class RAGService {
         .map(chunk => `Source: ${chunk.filename}\nContent: ${chunk.content}`)
         .join("\n\n");
 
-      const response = await getOpenAI().chat.completions.create({
-        model: "gpt-4o", // Using currently available model
-        messages: [
-          {
-            role: "system",
-            content: `You are a Maryland benefits navigation assistant. Use the provided context to answer questions about Maryland state benefit programs available through marylandbenefits.gov and VITA services.
+      const model = getGemini().getGenerativeModel({ model: "gemini-1.5-pro" });
+      const prompt = `You are a Maryland benefits navigation assistant. Use the provided context to answer questions about Maryland state benefit programs available through marylandbenefits.gov and VITA services.
 
-            Guidelines:
-            - Focus specifically on Maryland state programs and their requirements
-            - Provide accurate, specific information based on the context
-            - If information is not in the context, clearly state limitations
-            - Direct users to marylandbenefits.gov for applications
-            - Mention VITA locations for free tax assistance (income under $67,000)
-            - Use clear, accessible language appropriate for Maryland residents
-            - Highlight important deadlines, requirements, or procedures
-            - If asked about eligibility, provide specific Maryland criteria and thresholds
-            - Include contact information: 1-855-642-8572 for phone applications
-            
-            Always base your response on the provided context and clearly cite sources.`
-          },
-          {
-            role: "user",
-            content: `Question: ${query}\n\nContext:\n${context}`
-          }
-        ],
-        max_tokens: 1000,
-        temperature: 0.1, // Low temperature for factual accuracy
-      });
+      Guidelines:
+      - Focus specifically on Maryland state programs and their requirements
+      - Provide accurate, specific information based on the context
+      - If information is not in the context, clearly state limitations
+      - Direct users to marylandbenefits.gov for applications
+      - Mention VITA locations for free tax assistance (income under $67,000)
+      - Use clear, accessible language appropriate for Maryland residents
+      - Highlight important deadlines, requirements, or procedures
+      - If asked about eligibility, provide specific Maryland criteria and thresholds
+      - Include contact information: 1-855-642-8572 for phone applications
+      
+      Always base your response on the provided context and clearly cite sources.
+      
+      Question: ${query}
+      
+      Context:
+      ${context}`;
 
-      const answer = response.choices[0].message.content || "I'm unable to provide an answer based on the available information.";
+      const response = await model.generateContent(prompt);
+      const answer = response.response.text() || "I'm unable to provide an answer based on the available information.";
 
       // Calculate overall relevance score
       const avgRelevanceScore = relevantChunks.length > 0 
