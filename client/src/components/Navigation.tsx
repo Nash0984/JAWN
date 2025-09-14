@@ -4,12 +4,25 @@ import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { File, Search, Upload, Settings, Brain, Menu, Bell, User } from "lucide-react";
 
+// Maryland State Logo SVG Component (simplified version based on brand guidelines)
+const MarylandLogo = ({ className = "h-8 w-auto" }: { className?: string }) => (
+  <svg className={className} viewBox="0 0 120 40" aria-label="State of Maryland Logo" role="img">
+    <rect width="120" height="40" fill="#c8122c" rx="4"/>
+    <text x="60" y="22" textAnchor="middle" fill="white" fontSize="12" fontFamily="Montserrat" fontWeight="600">
+      MARYLAND
+    </text>
+    <text x="60" y="32" textAnchor="middle" fill="#ffc838" fontSize="8" fontFamily="Montserrat" fontWeight="400">
+      SNAP BENEFITS
+    </text>
+  </svg>
+);
+
 export default function Navigation() {
   const [location] = useLocation();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const navigation = [
-    { name: "Search Policy Manual", href: "/", icon: Search, current: location === "/" },
+    { name: "Search SNAP Policies", href: "/", icon: Search, current: location === "/" },
     { name: "Upload Documents", href: "/upload", icon: Upload, current: location === "/upload" },
     { name: "Administration", href: "/admin", icon: Settings, current: location === "/admin" },
     { name: "AI Training", href: "/training", icon: Brain, current: location === "/training" },
@@ -24,21 +37,18 @@ export default function Navigation() {
             key={item.name}
             href={item.href}
             onClick={() => mobile && setMobileMenuOpen(false)}
+            className={`${
+              mobile ? "w-full justify-start" : ""
+            } ${
+              item.current
+                ? "bg-primary text-primary-foreground"
+                : "text-foreground hover:text-primary"
+            } inline-flex items-center px-3 py-2 rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50`}
+            data-testid={`nav-${item.href === "/" ? "home" : item.href.slice(1)}`}
+            aria-current={item.current ? "page" : undefined}
           >
-            <Button
-              variant={item.current ? "default" : "ghost"}
-              className={`${
-                mobile ? "w-full justify-start" : ""
-              } ${
-                item.current
-                  ? "bg-primary text-primary-foreground"
-                  : "text-foreground hover:text-primary"
-              }`}
-              data-testid={`nav-${item.href === "/" ? "home" : item.href.slice(1)}`}
-            >
-              <Icon className={`h-4 w-4 ${mobile ? "mr-2" : "md:hidden"}`} />
-              <span className={mobile ? "" : "hidden md:inline"}>{item.name}</span>
-            </Button>
+            <Icon className={`h-4 w-4 ${mobile ? "mr-2" : "md:hidden"}`} aria-hidden="true" />
+            <span className={mobile ? "" : "hidden md:inline"}>{item.name}</span>
           </Link>
         );
       })}
@@ -46,17 +56,18 @@ export default function Navigation() {
   );
 
   return (
-    <nav className="bg-card border-b border-border sticky top-0 z-50">
+    <nav className="bg-card border-b border-border sticky top-0 z-50" role="navigation" aria-label="Main navigation">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between items-center h-16">
           {/* Logo */}
           <div className="flex items-center">
             <Link href="/">
               <div className="flex-shrink-0 flex items-center cursor-pointer" data-testid="nav-logo">
-                <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
-                  <File className="text-primary-foreground h-5 w-5" />
+                <MarylandLogo className="h-10 w-auto" />
+                <div className="ml-3">
+                  <h1 className="text-lg font-semibold text-foreground leading-tight">Maryland SNAP</h1>
+                  <p className="text-sm text-muted-foreground">Policy Manual System</p>
                 </div>
-                <h1 className="ml-3 text-xl font-semibold text-foreground">Maryland SNAP Policy Manual</h1>
               </div>
             </Link>
             
