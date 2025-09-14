@@ -4,6 +4,7 @@ import { storage } from "./storage";
 import { ragService } from "./services/ragService";
 import { documentProcessor } from "./services/documentProcessor";
 import { documentIngestionService } from "./services/documentIngestion";
+import { automatedIngestionService } from "./services/automatedIngestion";
 import { ObjectStorageService } from "./objectStorage";
 import { 
   insertDocumentSchema, 
@@ -421,6 +422,102 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({ 
         success: false,
         error: "Failed to fetch audit trail"
+      });
+    }
+  });
+
+  // Automated Ingestion Management endpoints
+  app.get("/api/automated-ingestion/schedules", async (req, res) => {
+    try {
+      const schedules = automatedIngestionService.getSchedules();
+      res.json({
+        success: true,
+        schedules,
+        count: schedules.length,
+        timestamp: new Date().toISOString()
+      });
+    } catch (error) {
+      console.error("Error fetching ingestion schedules:", error);
+      res.status(500).json({ 
+        success: false,
+        error: "Failed to fetch ingestion schedules"
+      });
+    }
+  });
+
+  app.post("/api/automated-ingestion/trigger", async (req, res) => {
+    try {
+      const { reason } = req.body;
+      await automatedIngestionService.triggerManualIngestion(reason || 'Manual API trigger');
+      
+      res.json({
+        success: true,
+        message: 'Manual ingestion completed successfully',
+        timestamp: new Date().toISOString()
+      });
+    } catch (error) {
+      console.error("Error during manual ingestion:", error);
+      res.status(500).json({ 
+        success: false,
+        error: "Manual ingestion failed",
+        details: error instanceof Error ? error.message : "Unknown error"
+      });
+    }
+  });
+
+  app.patch("/api/automated-ingestion/schedules/:id", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const updates = req.body;
+      
+      const success = automatedIngestionService.updateSchedule(id, updates);
+      
+      if (!success) {
+        return res.status(404).json({
+          success: false,
+          error: "Schedule not found"
+        });
+      }
+      
+      const updatedSchedule = automatedIngestionService.getSchedule(id);
+      res.json({
+        success: true,
+        schedule: updatedSchedule,
+        timestamp: new Date().toISOString()
+      });
+    } catch (error) {
+      console.error("Error updating ingestion schedule:", error);
+      res.status(500).json({ 
+        success: false,
+        error: "Failed to update ingestion schedule"
+      });
+    }
+  });
+
+  app.post("/api/automated-ingestion/schedules", async (req, res) => {
+    try {
+      const { id, frequency, isActive } = req.body;
+      
+      if (!id || !frequency) {
+        return res.status(400).json({
+          success: false,
+          error: "Missing required fields: id, frequency"
+        });
+      }
+      
+      const schedule = automatedIngestionService.createSchedule(id, frequency, isActive);
+      
+      res.json({
+        success: true,
+        schedule,
+        message: `Created ingestion schedule: ${id}`,
+        timestamp: new Date().toISOString()
+      });
+    } catch (error) {
+      console.error("Error creating ingestion schedule:", error);
+      res.status(500).json({ 
+        success: false,
+        error: "Failed to create ingestion schedule"
       });
     }
   });
