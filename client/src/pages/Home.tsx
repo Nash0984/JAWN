@@ -8,11 +8,11 @@ export default function Home() {
       <section className="mb-12">
         <div className="text-center mb-8">
           <h2 className="text-4xl font-bold text-foreground mb-4">
-            Maryland Benefits Navigator
+            Maryland SNAP Policy Manual
           </h2>
           <p className="text-xl text-muted-foreground max-w-3xl mx-auto">
-            Get instant, accurate answers about Maryland's benefit programs available through marylandbenefits.gov. 
-            Find information about SNAP, Medicaid, TANF, energy assistance, VITA tax services, and other state assistance programs.
+            Get instant, accurate answers about Maryland's SNAP (Food Supplement Program) policies and procedures. 
+            Search through the official policy manual used by caseworkers and administrators to determine eligibility, benefits, and program requirements.
           </p>
         </div>
         

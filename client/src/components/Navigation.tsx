@@ -9,7 +9,7 @@ export default function Navigation() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const navigation = [
-    { name: "Search Benefits", href: "/", icon: Search, current: location === "/" },
+    { name: "Search Policy Manual", href: "/", icon: Search, current: location === "/" },
     { name: "Upload Documents", href: "/upload", icon: Upload, current: location === "/upload" },
     { name: "Administration", href: "/admin", icon: Settings, current: location === "/admin" },
     { name: "AI Training", href: "/training", icon: Brain, current: location === "/training" },
@@ -56,7 +56,7 @@ export default function Navigation() {
                 <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
                   <File className="text-primary-foreground h-5 w-5" />
                 </div>
-                <h1 className="ml-3 text-xl font-semibold text-foreground">Maryland Benefits Navigator</h1>
+                <h1 className="ml-3 text-xl font-semibold text-foreground">Maryland SNAP Policy Manual</h1>
               </div>
             </Link>
             
@@ -87,7 +87,7 @@ export default function Navigation() {
                       <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
                         <File className="text-primary-foreground h-5 w-5" />
                       </div>
-                      <h2 className="text-lg font-semibold text-foreground">Maryland Benefits Navigator</h2>
+                      <h2 className="text-lg font-semibold text-foreground">Maryland SNAP Policy Manual</h2>
                     </div>
                     <NavItems mobile />
                   </div>

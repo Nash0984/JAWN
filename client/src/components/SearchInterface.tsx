@@ -78,9 +78,9 @@ export default function SearchInterface() {
 
   const quickSearches = [
     "Maryland SNAP income limits 2025",
-    "How to apply for Medicaid in Maryland", 
-    "VITA tax assistance locations Maryland",
-    "Energy assistance programs Maryland"
+    "ABAWD work requirements", 
+    "Student eligibility for SNAP",
+    "Asset limits for SNAP benefits"
   ];
 
   return (
@@ -91,7 +91,7 @@ export default function SearchInterface() {
           <div className="relative">
             <Input 
               type="text" 
-              placeholder="Ask about Maryland benefits: SNAP, Medicaid, VITA tax help, energy assistance..."
+              placeholder="Ask about Maryland SNAP policies: eligibility, benefits calculation, work requirements..."
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               onKeyDown={handleKeyPress}
