@@ -3,8 +3,10 @@ import * as path from "path";
 import * as crypto from "crypto";
 import { storage } from "../storage";
 import { ObjectStorageService } from "../objectStorage";
+import { DocumentVersioningService } from "./documentVersioning.js";
 
 const objectStorageService = new ObjectStorageService();
+const versioningService = new DocumentVersioningService();
 
 export interface IngestionAuditTrail {
   ingestionId: string;
@@ -788,39 +790,111 @@ export class DocumentIngestionService {
     // Generate filename
     const filename = `maryland-snap-${docMetadata.sectionNumber}-${docMetadata.sectionTitle.replace(/[^a-zA-Z0-9]/g, '-').toLowerCase()}.${docMetadata.documentType.toLowerCase()}`;
 
-    // Create document record with full audit trail
-    const document = await storage.createDocument({
-      filename,
-      originalName: `Section ${docMetadata.sectionNumber} - ${docMetadata.sectionTitle}`,
-      objectPath: uploadUrl,
-      benefitProgramId: await this.getMarylandSnapProgramId(),
-      fileSize: documentData.length,
-      mimeType: response.headers.get('content-type') || 'application/octet-stream',
-      status: 'uploaded',
-      // Audit trail fields
-      sourceUrl: docMetadata.downloadUrl,
-      downloadedAt: new Date(downloadTimestamp),
-      documentHash,
-      isGoldenSource: true,
-      sectionNumber: docMetadata.sectionNumber,
-      lastModifiedAt: new Date(docMetadata.lastModified),
-      auditTrail: {
-        ...auditTrail,
-        batchInfo: batchAuditTrail
-      },
-      metadata: {
-        sectionTitle: docMetadata.sectionTitle,
-        documentType: docMetadata.documentType,
-        sourceSystem: 'Maryland DHS',
-        manual: 'SNAP Food Supplement Program Manual',
-        ingestionMetadata: {
-          ingestionId,
-          batchId: batchAuditTrail.batchId,
-          downloadTimestamp,
-          verificationStatus: 'verified'
+    // Check for existing document and handle versioning
+    const allDocs = await storage.getDocuments();
+    const existingDocs = allDocs.filter(doc => 
+      doc.sectionNumber === docMetadata.sectionNumber && doc.isGoldenSource === true
+    );
+
+    let document;
+    if (existingDocs.length > 0) {
+      // Document exists - check for changes and create version if needed
+      const existingDoc = existingDocs[0];
+      
+      const versionResult = await versioningService.createVersionIfChanged(
+        existingDoc.id,
+        documentData,
+        docMetadata.downloadUrl,
+        new Date(docMetadata.lastModified),
+        Object.fromEntries(response.headers.entries())
+      );
+      
+      if (versionResult.hasChanged) {
+        console.log(`📋 Document changed - created version ${versionResult.versionNumber}`);
+        
+        // Update existing document with new metadata
+        document = await storage.updateDocument(existingDoc.id, {
+          filename,
+          objectPath: uploadUrl,
+          fileSize: documentData.length,
+          documentHash,
+          lastModifiedAt: new Date(docMetadata.lastModified),
+          auditTrail: {
+            ...auditTrail,
+            batchInfo: batchAuditTrail
+          },
+          metadata: {
+            ...existingDoc.metadata,
+            sectionTitle: docMetadata.sectionTitle,
+            documentType: docMetadata.documentType,
+            sourceSystem: 'Maryland DHS',
+            manual: 'SNAP Food Supplement Program Manual',
+            latestVersion: versionResult.versionNumber,
+            ingestionMetadata: {
+              ingestionId,
+              batchId: batchAuditTrail.batchId,
+              downloadTimestamp,
+              verificationStatus: 'verified'
+            }
+          }
+        });
+        
+        // Update version with object path
+        if (versionResult.versionId) {
+          await versioningService.updateObjectPath(versionResult.versionId, uploadUrl);
         }
+      } else {
+        console.log(`📋 Document unchanged - version ${versionResult.versionNumber}`);
+        document = existingDoc;
       }
-    });
+    } else {
+      // New document - create record
+      document = await storage.createDocument({
+        filename,
+        originalName: `Section ${docMetadata.sectionNumber} - ${docMetadata.sectionTitle}`,
+        objectPath: uploadUrl,
+        benefitProgramId: await this.getMarylandSnapProgramId(),
+        fileSize: documentData.length,
+        mimeType: response.headers.get('content-type') || 'application/octet-stream',
+        status: 'uploaded',
+        // Audit trail fields
+        sourceUrl: docMetadata.downloadUrl,
+        downloadedAt: new Date(downloadTimestamp),
+        documentHash,
+        isGoldenSource: true,
+        sectionNumber: docMetadata.sectionNumber,
+        lastModifiedAt: new Date(docMetadata.lastModified),
+        auditTrail: {
+          ...auditTrail,
+          batchInfo: batchAuditTrail
+        },
+        metadata: {
+          sectionTitle: docMetadata.sectionTitle,
+          documentType: docMetadata.documentType,
+          sourceSystem: 'Maryland DHS',
+          manual: 'SNAP Food Supplement Program Manual',
+          ingestionMetadata: {
+            ingestionId,
+            batchId: batchAuditTrail.batchId,
+            downloadTimestamp,
+            verificationStatus: 'verified'
+          }
+        }
+      });
+      
+      // Create initial version
+      const versionResult = await versioningService.createVersionIfChanged(
+        document.id,
+        documentData,
+        docMetadata.downloadUrl,
+        new Date(docMetadata.lastModified),
+        Object.fromEntries(response.headers.entries())
+      );
+      
+      if (versionResult.versionId) {
+        await versioningService.updateObjectPath(versionResult.versionId, uploadUrl);
+      }
+    }
 
     console.log(`Document stored with ID: ${document.id}`);
     console.log(`Audit trail hash: ${documentHash}`);
