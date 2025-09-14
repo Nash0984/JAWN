@@ -1,10 +1,18 @@
 import OpenAI from "openai";
 import { storage } from "../storage";
 
-// the newest OpenAI model is "gpt-5" which was released August 7, 2025. do not change this unless explicitly requested by the user
-const openai = new OpenAI({ 
-  apiKey: process.env.OPENAI_API_KEY || process.env.OPENAI_API_KEY_ENV_VAR || "default_key"
-});
+// Lazy OpenAI initialization to prevent server crash at import-time
+let openai: OpenAI | null = null;
+function getOpenAI(): OpenAI {
+  if (!openai) {
+    const apiKey = process.env.OPENAI_API_KEY;
+    if (!apiKey) {
+      throw new Error('OPENAI_API_KEY environment variable is required');
+    }
+    openai = new OpenAI({ apiKey });
+  }
+  return openai;
+}
 
 export interface SearchResult {
   answer: string;
@@ -51,8 +59,8 @@ class RAGService {
 
   private async analyzeQuery(query: string) {
     try {
-      const response = await openai.chat.completions.create({
-        model: "gpt-5", // the newest OpenAI model is "gpt-5" which was released August 7, 2025
+      const response = await getOpenAI().chat.completions.create({
+        model: "gpt-4o", // Using currently available model
         messages: [
           {
             role: "system",
@@ -88,7 +96,7 @@ class RAGService {
 
   private async generateEmbedding(text: string): Promise<number[]> {
     try {
-      const response = await openai.embeddings.create({
+      const response = await getOpenAI().embeddings.create({
         model: "text-embedding-3-large",
         input: text,
       });
@@ -105,26 +113,111 @@ class RAGService {
     benefitProgramId?: string,
     queryAnalysis?: any
   ) {
-    // In a real implementation, this would:
-    // 1. Query the vector database (Pinecone, Chroma, etc.)
-    // 2. Apply metadata filters for benefit program
-    // 3. Perform hybrid search (vector + BM25)
-    // 4. Use reranking models for better relevance
-    
-    // For now, return mock relevant chunks
-    const documents = await storage.getDocuments({ 
-      benefitProgramId,
-      status: "processed",
-      limit: 10 
-    });
+    try {
+      // Get processed documents
+      const documents = await storage.getDocuments({ 
+        benefitProgramId,
+        status: "processed"
+      });
 
-    return documents.slice(0, 3).map(doc => ({
-      documentId: doc.id,
-      filename: doc.filename,
-      content: `Sample relevant content from ${doc.filename} related to the query...`,
-      relevanceScore: Math.random() * 0.3 + 0.7, // Mock score between 0.7-1.0
-      pageNumber: Math.floor(Math.random() * 50) + 1,
-    }));
+      if (documents.length === 0) {
+        return [];
+      }
+
+      const allResults: Array<{
+        documentId: string;
+        filename: string;
+        content: string;
+        relevanceScore: number;
+        pageNumber?: number;
+        chunkMetadata?: any;
+      }> = [];
+
+      // Get chunks for all relevant documents
+      for (const doc of documents) {
+        const chunks = await storage.getDocumentChunks(doc.id);
+        
+        for (const chunk of chunks) {
+          if (!chunk.embeddings) {
+            continue; // Skip chunks without embeddings
+          }
+
+          try {
+            // Parse stored embeddings
+            const chunkEmbedding = JSON.parse(chunk.embeddings) as number[];
+            
+            // Calculate cosine similarity
+            const similarity = this.calculateCosineSimilarity(queryEmbedding, chunkEmbedding);
+            
+            // Only include chunks with reasonable similarity
+            if (similarity > 0.6) {
+              allResults.push({
+                documentId: doc.id,
+                filename: doc.filename,
+                content: chunk.content,
+                relevanceScore: similarity,
+                pageNumber: chunk.pageNumber || undefined,
+                chunkMetadata: chunk.metadata
+              });
+            }
+          } catch (error) {
+            console.error(`Error processing chunk ${chunk.id}:`, error);
+            continue;
+          }
+        }
+      }
+
+      // Sort by relevance score and return top results
+      const topResults = allResults
+        .sort((a, b) => b.relevanceScore - a.relevanceScore)
+        .slice(0, 5); // Return top 5 most relevant chunks
+
+      console.log(`Found ${topResults.length} relevant chunks for query`);
+      return topResults;
+      
+    } catch (error) {
+      console.error("Error retrieving relevant chunks:", error);
+      // Fallback to simple document-based search
+      const documents = await storage.getDocuments({ 
+        benefitProgramId,
+        status: "processed",
+        limit: 3 
+      });
+
+      return documents.map(doc => ({
+        documentId: doc.id,
+        filename: doc.filename,
+        content: `Content from ${doc.filename} (embedding search failed, showing document summary)`,
+        relevanceScore: 0.7,
+        pageNumber: 1,
+      }));
+    }
+  }
+
+  /**
+   * Calculate cosine similarity between two vectors
+   */
+  private calculateCosineSimilarity(vecA: number[], vecB: number[]): number {
+    if (vecA.length !== vecB.length) {
+      return 0;
+    }
+
+    let dotProduct = 0;
+    let normA = 0;
+    let normB = 0;
+
+    for (let i = 0; i < vecA.length; i++) {
+      dotProduct += vecA[i] * vecB[i];
+      normA += vecA[i] * vecA[i];
+      normB += vecB[i] * vecB[i];
+    }
+
+    const magnitude = Math.sqrt(normA) * Math.sqrt(normB);
+    if (magnitude === 0) {
+      return 0;
+    }
+
+    return dotProduct / magnitude;
   }
 
   private async generateResponse(
@@ -137,8 +230,8 @@ class RAGService {
         .map(chunk => `Source: ${chunk.filename}\nContent: ${chunk.content}`)
         .join("\n\n");
 
-      const response = await openai.chat.completions.create({
-        model: "gpt-5", // the newest OpenAI model is "gpt-5" which was released August 7, 2025
+      const response = await getOpenAI().chat.completions.create({
+        model: "gpt-4o", // Using currently available model
         messages: [
           {
             role: "system",

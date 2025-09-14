@@ -2,6 +2,7 @@ import {
   users,
   documents,
   documentChunks,
+  documentVersions,
   benefitPrograms,
   documentTypes,
   policySources,
@@ -14,6 +15,8 @@ import {
   type InsertDocument,
   type DocumentChunk,
   type InsertDocumentChunk,
+  type DocumentVersion,
+  type InsertDocumentVersion,
   type BenefitProgram,
   type InsertBenefitProgram,
   type DocumentType,
@@ -73,6 +76,13 @@ export interface IStorage {
   createTrainingJob(job: InsertTrainingJob): Promise<TrainingJob>;
   getTrainingJobs(limit?: number): Promise<TrainingJob[]>;
   updateTrainingJob(id: string, updates: Partial<TrainingJob>): Promise<TrainingJob>;
+
+  // Document Versions
+  createDocumentVersion(version: InsertDocumentVersion): Promise<DocumentVersion>;
+  getDocumentVersions(documentId: string): Promise<DocumentVersion[]>;
+  getActiveDocumentVersion(documentId: string): Promise<DocumentVersion | null>;
+  updateDocumentVersion(id: string, updates: Partial<DocumentVersion>): Promise<DocumentVersion>;
+  deactivateDocumentVersions(documentId: string): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -338,6 +348,48 @@ export class DatabaseStorage implements IStorage {
       .where(eq(trainingJobs.id, id))
       .returning();
     return job;
+  }
+
+  // Document Versions
+  async createDocumentVersion(version: InsertDocumentVersion): Promise<DocumentVersion> {
+    const [docVersion] = await db.insert(documentVersions).values(version).returning();
+    return docVersion;
+  }
+
+  async getDocumentVersions(documentId: string): Promise<DocumentVersion[]> {
+    return await db
+      .select()
+      .from(documentVersions)
+      .where(eq(documentVersions.documentId, documentId))
+      .orderBy(desc(documentVersions.versionNumber));
+  }
+
+  async getActiveDocumentVersion(documentId: string): Promise<DocumentVersion | null> {
+    const [activeVersion] = await db
+      .select()
+      .from(documentVersions)
+      .where(and(
+        eq(documentVersions.documentId, documentId),
+        eq(documentVersions.isActive, true)
+      ))
+      .limit(1);
+    return activeVersion || null;
+  }
+
+  async updateDocumentVersion(id: string, updates: Partial<DocumentVersion>): Promise<DocumentVersion> {
+    const [version] = await db
+      .update(documentVersions)
+      .set(updates)
+      .where(eq(documentVersions.id, id))
+      .returning();
+    return version;
+  }
+
+  async deactivateDocumentVersions(documentId: string): Promise<void> {
+    await db
+      .update(documentVersions)
+      .set({ isActive: false })
+      .where(eq(documentVersions.documentId, documentId));
   }
 }
 

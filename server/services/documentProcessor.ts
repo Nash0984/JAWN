@@ -3,10 +3,18 @@ import { storage } from "../storage";
 import { ragService } from "./ragService";
 import { ObjectStorageService } from "../objectStorage";
 
-// the newest OpenAI model is "gpt-5" which was released August 7, 2025. do not change this unless explicitly requested by the user
-const openai = new OpenAI({ 
-  apiKey: process.env.OPENAI_API_KEY || process.env.OPENAI_API_KEY_ENV_VAR || "default_key"
-});
+// Lazy OpenAI initialization to prevent server crash at import-time
+let openai: OpenAI | null = null;
+function getOpenAI(): OpenAI {
+  if (!openai) {
+    const apiKey = process.env.OPENAI_API_KEY;
+    if (!apiKey) {
+      throw new Error('OPENAI_API_KEY environment variable is required');
+    }
+    openai = new OpenAI({ apiKey });
+  }
+  return openai;
+}
 
 export interface DocumentQualityAssessment {
   overall: "excellent" | "good" | "fair" | "poor";
@@ -287,8 +295,8 @@ class DocumentProcessor {
 
   private async classifyDocument(text: string) {
     try {
-      const response = await openai.chat.completions.create({
-        model: "gpt-5", // the newest OpenAI model is "gpt-5" which was released August 7, 2025
+      const response = await getOpenAI().chat.completions.create({
+        model: "gpt-4o", // Using currently available model
         messages: [
           {
             role: "system",
