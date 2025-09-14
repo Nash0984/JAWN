@@ -13,14 +13,18 @@ import Navigation from "@/components/Navigation";
 function Router() {
   return (
     <div className="min-h-screen bg-background">
+      {/* Skip link for accessibility */}
+      <a href="#main-content" className="skip-link">Skip to main content</a>
       <Navigation />
-      <Switch>
-        <Route path="/" component={Home} />
-        <Route path="/upload" component={Upload} />
-        <Route path="/admin" component={Admin} />
-        <Route path="/training" component={Training} />
-        <Route component={NotFound} />
-      </Switch>
+      <main id="main-content" role="main">
+        <Switch>
+          <Route path="/" component={Home} />
+          <Route path="/upload" component={Upload} />
+          <Route path="/admin" component={Admin} />
+          <Route path="/training" component={Training} />
+          <Route component={NotFound} />
+        </Switch>
+      </main>
     </div>
   );
 }

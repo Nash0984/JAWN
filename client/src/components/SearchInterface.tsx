@@ -44,8 +44,8 @@ export default function SearchInterface() {
     },
     onError: (error) => {
       toast({
-        title: "Search Failed",
-        description: "Unable to process your search query. Please try again.",
+        title: "Something went wrong",
+        description: "We couldn't search right now. Please try again in a moment.",
         variant: "destructive",
       });
       console.error("Search error:", error);
@@ -56,8 +56,8 @@ export default function SearchInterface() {
     const queryToSearch = searchQuery || query;
     if (!queryToSearch.trim()) {
       toast({
-        title: "Empty Query",
-        description: "Please enter a search query.",
+        title: "What would you like to know?",
+        description: "Please type your question about SNAP benefits.",
         variant: "destructive",
       });
       return;
@@ -77,54 +77,74 @@ export default function SearchInterface() {
   };
 
   const quickSearches = [
-    "Maryland SNAP income limits 2025",
-    "ABAWD work requirements", 
-    "Student eligibility for SNAP",
-    "Asset limits for SNAP benefits"
+    "How much money can I make and still get SNAP?",
+    "Do I have to work to get SNAP benefits?", 
+    "Can college students get SNAP?",
+    "How much money can I have in the bank?"
   ];
 
   return (
     <div className="space-y-8">
+      {/* Skip link for accessibility */}
+      <a href="#search-results" className="skip-link">Skip to search results</a>
+      
       {/* Search Interface */}
-      <Card className="shadow-lg border border-border">
-        <CardContent className="p-6">
-          <div className="relative">
-            <Input 
-              type="text" 
-              placeholder="Ask about Maryland SNAP policies: eligibility, benefits calculation, work requirements..."
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              onKeyDown={handleKeyPress}
-              className="w-full p-4 pr-12 text-lg"
-              data-testid="input-search"
-            />
-            <Button 
-              onClick={() => handleSearch()}
-              disabled={searchMutation.isPending}
-              className="absolute right-3 top-1/2 transform -translate-y-1/2"
-              data-testid="button-search"
-            >
-              {searchMutation.isPending ? (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              ) : (
-                <Search className="mr-2 h-4 w-4" />
-              )}
-              Search
-            </Button>
-          </div>
+      <section aria-labelledby="search-heading">
+        <h2 id="search-heading" className="sr-only">Search Maryland SNAP Information</h2>
+        <Card className="shadow-lg border border-border">
+          <CardContent className="p-6">
+            <div className="relative">
+              <label htmlFor="search-input" className="sr-only">
+                Search for SNAP information
+              </label>
+              <Input 
+                id="search-input"
+                type="text" 
+                placeholder="What do you want to know about Maryland SNAP? Try: How much can I get? What are the work rules?"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                onKeyDown={handleKeyPress}
+                className="w-full p-4 pr-12 text-lg"
+                data-testid="input-search"
+                aria-describedby="search-help"
+              />
+              <div id="search-help" className="sr-only">
+                Type your question about SNAP benefits and press Enter or click Search
+              </div>
+              <Button 
+                onClick={() => handleSearch()}
+                disabled={searchMutation.isPending}
+                className="absolute right-3 top-1/2 transform -translate-y-1/2"
+                data-testid="button-search"
+                aria-label={searchMutation.isPending ? "Searching..." : "Search for SNAP information"}
+              >
+                {searchMutation.isPending ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />
+                    <span className="sr-only">Searching...</span>
+                  </>
+                ) : (
+                  <>
+                    <Search className="mr-2 h-4 w-4" aria-hidden="true" />
+                    Search
+                  </>
+                )}
+              </Button>
+            </div>
           
           {/* Quick Search Options */}
           <div className="mt-4">
-            <p className="text-sm text-muted-foreground mb-2">Popular searches:</p>
-            <div className="flex flex-wrap gap-2">
-              {quickSearches.map((search) => (
+            <p className="text-sm text-muted-foreground mb-2" id="quick-search-label">Common questions:</p>
+            <div className="flex flex-wrap gap-2" role="group" aria-labelledby="quick-search-label">
+              {quickSearches.map((search, index) => (
                 <Button 
                   key={search}
                   variant="outline"
                   size="sm"
                   onClick={() => handleQuickSearch(search)}
-                  disabled={searchMutation.isPending}
                   data-testid={`button-quick-search-${search.replace(/\s+/g, '-').toLowerCase()}`}
+                  aria-label={`Search for: ${search}`}
+                  disabled={searchMutation.isPending}
                 >
                   {search}
                 </Button>
@@ -133,17 +153,19 @@ export default function SearchInterface() {
           </div>
         </CardContent>
       </Card>
+      </section>
 
       {/* Search Results */}
       {searchResult && (
-        <Card className="shadow-lg border border-border slide-up">
-          <CardContent className="p-6">
-            <div className="flex items-start space-x-3 mb-4">
-              <div className="w-8 h-8 bg-accent rounded-full flex items-center justify-center flex-shrink-0">
-                <Bot className="text-accent-foreground h-4 w-4" />
-              </div>
-              <div className="flex-1">
-                <h3 className="font-semibold text-foreground mb-2">AI Assistant Response</h3>
+        <section id="search-results" aria-labelledby="results-heading">
+          <Card className="shadow-lg border border-border slide-up">
+            <CardContent className="p-6">
+              <div className="flex items-start space-x-3 mb-4" aria-live="polite">
+                <div className="w-8 h-8 bg-accent rounded-full flex items-center justify-center flex-shrink-0">
+                  <Bot className="text-accent-foreground h-4 w-4" aria-hidden="true" />
+                </div>
+                <div className="flex-1">
+                  <h3 id="results-heading" className="font-semibold text-foreground mb-2">Answer</h3>
                 
                 {/* Query Analysis */}
                 {searchResult.queryAnalysis && (
@@ -201,7 +223,8 @@ export default function SearchInterface() {
               </div>
             </div>
           </CardContent>
-        </Card>
+          </Card>
+        </section>
       )}
     </div>
   );
