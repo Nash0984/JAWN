@@ -83,6 +83,34 @@ export const policySources = pgTable("policy_sources", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
+// Document versioning for golden source tracking
+export const documentVersions = pgTable("document_versions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  documentId: varchar("document_id").references(() => documents.id, { onDelete: "cascade" }).notNull(),
+  versionNumber: integer("version_number").notNull(),
+  documentHash: text("document_hash").notNull(), // SHA-256 hash of this version
+  sourceUrl: text("source_url").notNull(),
+  downloadedAt: timestamp("downloaded_at").notNull(),
+  lastModifiedAt: timestamp("last_modified_at"),
+  fileSize: integer("file_size"),
+  httpHeaders: jsonb("http_headers"), // HTTP headers from download
+  changesSummary: text("changes_summary"), // Summary of what changed
+  auditTrail: jsonb("audit_trail"), // Full audit information
+  objectPath: text("object_path"), // Path in object storage for this version
+  isActive: boolean("is_active").default(true).notNull(), // Current active version
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+// RAG search results for transparency and caching
+export const searchResults = pgTable("search_results", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  queryId: varchar("query_id").references(() => searchQueries.id, { onDelete: "cascade" }).notNull(),
+  chunkId: varchar("chunk_id").references(() => documentChunks.id, { onDelete: "cascade" }).notNull(),
+  relevanceScore: real("relevance_score").notNull(),
+  rankPosition: integer("rank_position").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
 export const searchQueries = pgTable("search_queries", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   query: text("query").notNull(),
@@ -91,6 +119,7 @@ export const searchQueries = pgTable("search_queries", {
   response: jsonb("response"), // AI response with sources
   relevanceScore: real("relevance_score"),
   responseTime: integer("response_time"), // in milliseconds
+  searchType: text("search_type").default("semantic").notNull(), // semantic, keyword, hybrid
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
@@ -168,6 +197,24 @@ export const trainingJobsRelations = relations(trainingJobs, ({ one }) => ({
   }),
 }));
 
+export const documentVersionsRelations = relations(documentVersions, ({ one }) => ({
+  document: one(documents, {
+    fields: [documentVersions.documentId],
+    references: [documents.id],
+  }),
+}));
+
+export const searchResultsRelations = relations(searchResults, ({ one }) => ({
+  query: one(searchQueries, {
+    fields: [searchResults.queryId],
+    references: [searchQueries.id],
+  }),
+  chunk: one(documentChunks, {
+    fields: [searchResults.chunkId],
+    references: [documentChunks.id],
+  }),
+}));
+
 // Insert Schemas
 export const insertUserSchema = createInsertSchema(users).pick({
   username: true,
@@ -228,6 +275,16 @@ export const insertTrainingJobSchema = createInsertSchema(trainingJobs).omit({
   createdAt: true,
 });
 
+export const insertDocumentVersionSchema = createInsertSchema(documentVersions).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertSearchResultSchema = createInsertSchema(searchResults).omit({
+  id: true,
+  createdAt: true,
+});
+
 // Types
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;
@@ -252,5 +309,11 @@ export type ModelVersion = typeof modelVersions.$inferSelect;
 
 export type InsertTrainingJob = z.infer<typeof insertTrainingJobSchema>;
 export type TrainingJob = typeof trainingJobs.$inferSelect;
+
+export type InsertDocumentVersion = z.infer<typeof insertDocumentVersionSchema>;
+export type DocumentVersion = typeof documentVersions.$inferSelect;
+
+export type InsertSearchResult = z.infer<typeof insertSearchResultSchema>;
+export type SearchResult = typeof searchResults.$inferSelect;
 
 export type DocumentType = typeof documentTypes.$inferSelect;
