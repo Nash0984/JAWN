@@ -100,11 +100,11 @@ export default function SearchInterface() {
               <Input 
                 id="search-input"
                 type="text" 
-                placeholder="What do you want to know about Maryland SNAP? Try: How much can I get? What are the work rules?"
+                placeholder="Ask about Maryland SNAP eligibility, income limits, work rules..."
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 onKeyDown={handleKeyPress}
-                className="w-full p-4 pr-12 text-lg"
+                className="w-full p-3 sm:p-4 pr-12 text-base sm:text-lg"
                 data-testid="input-search"
                 aria-describedby="search-help"
               />
