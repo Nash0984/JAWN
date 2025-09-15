@@ -1,5 +1,6 @@
 import { GoogleGenAI } from "@google/genai";
 import { storage } from "../storage";
+import { ReadingLevelService } from "./readingLevelService";
 
 // Lazy Gemini initialization to prevent server crash at import-time
 let gemini: GoogleGenAI | null = null;
@@ -92,7 +93,16 @@ class RAGService {
         model: "gemini-1.5-pro",
         contents: prompt
       });
-      const responseText = response.text || "";
+      let responseText = response.text || "";
+      
+      // Ensure response meets grade 6-8 reading level for accessibility
+      const readingService = ReadingLevelService.getInstance();
+      const { isValid, metrics } = readingService.validateResponse(responseText);
+      
+      if (!isValid && metrics.fleschKincaidGrade > 9) {
+        // Try to improve readability if response is too complex
+        responseText = await readingService.improveForPlainLanguage(responseText, 7);
+      }
       
       let result;
       try {

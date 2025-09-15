@@ -3,9 +3,11 @@ import { Link, useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { File, Search, FileText, HelpCircle, Menu, Bell, User } from "lucide-react";
+import LanguageSelector from "./LanguageSelector";
+import { useLanguage } from "@/hooks/useLanguage";
 
 // Maryland State Seal Component (official seal)
-const MarylandSeal = ({ className = "h-8 w-auto" }: { className?: string }) => (
+const MarylandSeal = ({ className = "h-8 w-auto", t }: { className?: string; t: any }) => (
   <div className="flex items-center space-x-3">
     <img 
       src="/maryland-seal.svg" 
@@ -17,8 +19,8 @@ const MarylandSeal = ({ className = "h-8 w-auto" }: { className?: string }) => (
       }}
     />
     <div className="hidden sm:block">
-      <h1 className="text-lg font-semibold text-foreground leading-tight">Maryland SNAP</h1>
-      <p className="text-xs text-muted-foreground">Document Verification</p>
+      <h1 className="text-lg font-semibold text-foreground leading-tight">{t("nav.title")}</h1>
+      <p className="text-xs text-muted-foreground">{t("nav.subtitle")}</p>
     </div>
   </div>
 );
@@ -26,11 +28,12 @@ const MarylandSeal = ({ className = "h-8 w-auto" }: { className?: string }) => (
 export default function Navigation() {
   const [location] = useLocation();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const { currentLanguage, changeLanguage, t } = useLanguage();
 
   const navigation = [
-    { name: "Check Documents", href: "/", icon: FileText, current: location === "/" },
-    { name: "Search Policies", href: "/search", icon: Search, current: location === "/search" },
-    { name: "Get Help", href: "/help", icon: HelpCircle, current: location === "/help" },
+    { name: t("nav.home"), href: "/", icon: FileText, current: location === "/" },
+    { name: t("nav.search"), href: "/search", icon: Search, current: location === "/search" },
+    { name: t("nav.help"), href: "/help", icon: HelpCircle, current: location === "/help" },
   ];
 
   const NavItems = ({ mobile = false }) => (
@@ -68,7 +71,7 @@ export default function Navigation() {
           <div className="flex items-center">
             <Link href="/">
               <div className="cursor-pointer" data-testid="nav-logo">
-                <MarylandSeal className="h-12 w-auto" />
+                <MarylandSeal className="h-12 w-auto" t={t} />
               </div>
             </Link>
             
@@ -78,6 +81,10 @@ export default function Navigation() {
 
           {/* Right side items */}
           <div className="flex items-center space-x-4">
+            <LanguageSelector 
+              currentLanguage={currentLanguage} 
+              onLanguageChange={changeLanguage} 
+            />
             <Button variant="ghost" size="sm" data-testid="nav-notifications">
               <Bell className="h-4 w-4" />
             </Button>
