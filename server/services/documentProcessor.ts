@@ -11,7 +11,7 @@ function getGemini(): GoogleGenAI {
     if (!apiKey) {
       throw new Error('GEMINI_API_KEY environment variable is required');
     }
-    gemini = new GoogleGenAI(apiKey);
+    gemini = new GoogleGenAI({ apiKey });
   }
   return gemini;
 }
@@ -295,37 +295,35 @@ class DocumentProcessor {
 
   private async classifyDocument(text: string) {
     try {
-      const response = await getOpenAI().chat.completions.create({
-        model: "gpt-4o", // Using currently available model
-        messages: [
-          {
-            role: "system",
-            content: `You are a document classification expert for government benefit programs. 
-            Analyze the provided text and classify it according to:
-            
-            1. Document Type: POLICY_MANUAL, GUIDANCE, REGULATION, NOTICE, FORM, COURT_DECISION, etc.
-            2. Benefit Program: SNAP, MEDICAID, HOUSING, TANF, WIC, SSI, UNEMPLOYMENT, etc.
-            3. Topic Categories: ELIGIBILITY, APPLICATION, REQUIREMENTS, APPEALS, RENEWALS, etc.
-            4. Jurisdiction Level: FEDERAL, STATE, LOCAL
-            5. Confidence Score: 0-1
-            
-            Respond with JSON in this format:
-            {
-              "documentType": "string",
-              "benefitProgram": "string",
-              "topics": ["topic1", "topic2"],
-              "jurisdictionLevel": "string",
-              "confidence": number,
-              "keyEntities": ["entity1", "entity2"],
-              "summary": "brief summary"
-            }`
-          },
-          { role: "user", content: text }
-        ],
-        response_format: { type: "json_object" },
+      const prompt = `You are a document classification expert for government benefit programs. 
+      Analyze the provided text and classify it according to:
+      
+      1. Document Type: POLICY_MANUAL, GUIDANCE, REGULATION, NOTICE, FORM, COURT_DECISION, etc.
+      2. Benefit Program: SNAP, MEDICAID, HOUSING, TANF, WIC, SSI, UNEMPLOYMENT, etc.
+      3. Topic Categories: ELIGIBILITY, APPLICATION, REQUIREMENTS, APPEALS, RENEWALS, etc.
+      4. Jurisdiction Level: FEDERAL, STATE, LOCAL
+      5. Confidence Score: 0-1
+      
+      Respond with JSON in this format:
+      {
+        "documentType": "string",
+        "benefitProgram": "string",
+        "topics": ["topic1", "topic2"],
+        "jurisdictionLevel": "string",
+        "confidence": number,
+        "keyEntities": ["entity1", "entity2"],
+        "summary": "brief summary"
+      }
+      
+      Document text: ${text}`;
+      
+      const ai = getGemini();
+      const response = await ai.models.generateContent({
+        model: "gemini-1.5-pro",
+        contents: prompt
       });
 
-      return JSON.parse(response.choices[0].message.content || "{}");
+      return JSON.parse(response.text || "{}");
     } catch (error) {
       console.error("Document classification error:", error);
       return {
