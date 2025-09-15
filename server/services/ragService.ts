@@ -90,9 +90,9 @@ class RAGService {
       const ai = getGemini();
       const response = await ai.models.generateContent({
         model: "gemini-1.5-pro",
-        contents: [{ parts: [{ text: prompt }] }]
+        contents: prompt
       });
-      const responseText = response.text || "";
+      const responseText = response.text();
       
       let result;
       try {
