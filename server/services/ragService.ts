@@ -92,7 +92,7 @@ class RAGService {
         model: "gemini-1.5-pro",
         contents: [{ parts: [{ text: prompt }] }]
       });
-      const responseText = response.text();
+      const responseText = response.text || "";
       
       let result;
       try {
