@@ -31,7 +31,101 @@ export interface SearchResult {
   };
 }
 
+export interface VerificationResult {
+  documentType: string;
+  meetsCriteria: boolean;
+  summary: string;
+  requirements: Array<{
+    requirement: string;
+    met: boolean;
+    explanation: string;
+  }>;
+  officialCitations: Array<{
+    section: string;
+    regulation: string;
+    text: string;
+  }>;
+  confidence: number;
+}
+
 class RAGService {
+  async verifyDocument(documentText: string, filename: string): Promise<VerificationResult> {
+    try {
+      const prompt = `You are a Maryland SNAP policy expert. Analyze this uploaded document to determine if it meets Maryland SNAP eligibility and verification requirements.
+
+      Document filename: ${filename}
+      Document content: ${documentText}
+
+      Analyze the document against Maryland SNAP policy and respond with JSON:
+      {
+        "documentType": "paystub|bank statement|utility bill|rent receipt|other",
+        "meetsCriteria": boolean,
+        "summary": "Plain English explanation in 1-2 sentences (grade 6-8 reading level)",
+        "requirements": [
+          {
+            "requirement": "specific requirement name",
+            "met": boolean,
+            "explanation": "plain English explanation why met or not met"
+          }
+        ],
+        "officialCitations": [
+          {
+            "section": "SNAP Manual Section X.X",
+            "regulation": "7 CFR 273.2", 
+            "text": "exact policy text supporting this decision"
+          }
+        ],
+        "confidence": number between 0-100
+      }
+
+      Focus on:
+      - Income verification requirements
+      - Asset verification standards
+      - Document timeliness (usually within 30-60 days)
+      - Readable text and complete information
+      - Maryland-specific SNAP policies
+      
+      Use plain English that a 6th-8th grader can understand.`;
+      
+      const ai = getGemini();
+      const response = await ai.models.generateContent({
+        model: "gemini-1.5-pro",
+        contents: [{ parts: [{ text: prompt }] }]
+      });
+      const responseText = response.text();
+      
+      let result;
+      try {
+        // Handle fenced JSON blocks or plain JSON
+        const jsonMatch = responseText.match(/```(?:json)?\n?([\s\S]*?)```/) || [null, responseText];
+        result = JSON.parse(jsonMatch[1].trim());
+      } catch (parseError) {
+        console.error("JSON parsing error:", parseError, "Raw response:", responseText);
+        result = {};
+      }
+      
+      // Ensure required fields exist
+      return {
+        documentType: result.documentType || "unknown",
+        meetsCriteria: result.meetsCriteria || false,
+        summary: result.summary || "Could not analyze this document.",
+        requirements: result.requirements || [],
+        officialCitations: result.officialCitations || [],
+        confidence: result.confidence || 0
+      };
+    } catch (error) {
+      console.error("Document verification error:", error);
+      return {
+        documentType: "unknown",
+        meetsCriteria: false,
+        summary: "We had trouble analyzing your document. Please try uploading a clearer image or contact support.",
+        requirements: [],
+        officialCitations: [],
+        confidence: 0
+      };
+    }
+  }
+
   async search(query: string, benefitProgramId?: string): Promise<SearchResult> {
     try {
       // Step 1: Analyze query intent and extract entities
@@ -100,7 +194,7 @@ class RAGService {
         contents: text
       });
       
-      return result.embeddings[0].values;
+      return result.embeddings?.[0]?.values || [];
     } catch (error) {
       console.error("Embedding generation error:", error);
       throw new Error("Failed to generate embeddings");

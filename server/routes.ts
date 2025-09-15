@@ -82,6 +82,58 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Document verification endpoint
+  app.post("/api/verify-document", upload.single("document"), async (req, res) => {
+    try {
+      if (!req.file) {
+        return res.status(400).json({ error: "No document uploaded" });
+      }
+
+      // For now, simulate text extraction for document verification
+      // In production, this would use OCR/PDF parsing
+      let extractedText = "";
+      
+      if (req.file.mimetype.startsWith('image/')) {
+        // Simulate OCR extraction from image
+        extractedText = `Sample paystub content for ${req.file.originalname}\n` +
+          "Employee: John Doe\n" +
+          "Pay Period: 01/01/2024 - 01/15/2024\n" +
+          "Gross Pay: $2,400.00\n" +
+          "Net Pay: $1,800.00\n" +
+          "Employer: ABC Company";
+      } else if (req.file.mimetype === 'application/pdf') {
+        // Simulate PDF text extraction
+        extractedText = `Bank statement content from ${req.file.originalname}\n` +
+          "Account Summary\n" +
+          "Beginning Balance: $1,250.00\n" +
+          "Ending Balance: $1,450.00\n" +
+          "Statement Period: January 2024";
+      } else {
+        return res.status(400).json({ error: "Unsupported file type. Please upload an image or PDF." });
+      }
+
+      if (!extractedText || extractedText.trim().length < 10) {
+        return res.status(400).json({ 
+          error: "Could not extract readable text from the document. Please ensure the image is clear or the PDF contains text." 
+        });
+      }
+
+      if (!extractedText || extractedText.trim().length < 10) {
+        return res.status(400).json({ 
+          error: "Could not extract readable text from the document. Please ensure the image is clear or the PDF contains text." 
+        });
+      }
+
+      // Verify document against SNAP policies
+      const verificationResult = await ragService.verifyDocument(extractedText, req.file.originalname);
+      
+      res.json(verificationResult);
+    } catch (error) {
+      console.error("Document verification error:", error);
+      res.status(500).json({ error: "Failed to verify document. Please try again." });
+    }
+  });
+
   // Upload document endpoint
   app.post("/api/documents/upload", upload.single("file"), async (req, res) => {
     try {

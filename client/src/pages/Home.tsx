@@ -1,5 +1,5 @@
 import SearchInterface from "@/components/SearchInterface";
-import DocumentVerification from "@/components/DocumentVerification";
+import DocumentVerificationInterface from "@/components/DocumentVerificationInterface";
 import { Camera, FileText, Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -19,53 +19,8 @@ export default function Home() {
           </p>
         </div>
         
-        {/* Document Upload Options */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
-          <Card className="hover:shadow-md transition-shadow cursor-pointer" data-testid="upload-mobile-photo">
-            <CardHeader className="text-center pb-4">
-              <Camera className="h-8 w-8 mx-auto text-primary mb-2" />
-              <CardTitle className="text-lg">Take a Photo</CardTitle>
-            </CardHeader>
-            <CardContent className="text-center pt-0">
-              <p className="text-sm text-muted-foreground mb-4">
-                Use your phone camera to check paystubs, bank statements, or other documents
-              </p>
-              <Button className="w-full" data-testid="button-camera">
-                Open Camera
-              </Button>
-            </CardContent>
-          </Card>
-          
-          <Card className="hover:shadow-md transition-shadow cursor-pointer" data-testid="upload-pdf">
-            <CardHeader className="text-center pb-4">
-              <FileText className="h-8 w-8 mx-auto text-primary mb-2" />
-              <CardTitle className="text-lg">Upload PDF</CardTitle>
-            </CardHeader>
-            <CardContent className="text-center pt-0">
-              <p className="text-sm text-muted-foreground mb-4">
-                Upload existing PDF documents for verification against SNAP policy
-              </p>
-              <Button variant="outline" className="w-full" data-testid="button-pdf">
-                Choose File
-              </Button>
-            </CardContent>
-          </Card>
-          
-          <Card className="hover:shadow-md transition-shadow cursor-pointer sm:col-span-2 lg:col-span-1" data-testid="upload-other">
-            <CardHeader className="text-center pb-4">
-              <Upload className="h-8 w-8 mx-auto text-primary mb-2" />
-              <CardTitle className="text-lg">Other Documents</CardTitle>
-            </CardHeader>
-            <CardContent className="text-center pt-0">
-              <p className="text-sm text-muted-foreground mb-4">
-                Upload images or scanned documents (PNG, JPG, JPEG)
-              </p>
-              <Button variant="outline" className="w-full" data-testid="button-upload">
-                Browse Files
-              </Button>
-            </CardContent>
-          </Card>
-        </div>
+        {/* Document Verification Interface - Functional */}
+        <DocumentVerificationInterface />
       </section>
 
       {/* Ask Questions Section */}
