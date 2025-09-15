@@ -2,19 +2,21 @@ import { useState } from "react";
 import { Link, useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
-import { File, Search, Upload, Settings, Brain, Menu, Bell, User } from "lucide-react";
+import { File, Search, FileText, HelpCircle, Menu, Bell, User } from "lucide-react";
 
-// Maryland State Logo SVG Component (simplified version based on brand guidelines)
-const MarylandLogo = ({ className = "h-8 w-auto" }: { className?: string }) => (
-  <svg className={className} viewBox="0 0 120 40" aria-label="State of Maryland Logo" role="img">
-    <rect width="120" height="40" fill="#c8122c" rx="4"/>
-    <text x="60" y="22" textAnchor="middle" fill="white" fontSize="12" fontFamily="Montserrat" fontWeight="600">
-      MARYLAND
-    </text>
-    <text x="60" y="32" textAnchor="middle" fill="#ffc838" fontSize="8" fontFamily="Montserrat" fontWeight="400">
-      SNAP BENEFITS
-    </text>
-  </svg>
+// Maryland State Seal Component (official seal)
+const MarylandSeal = ({ className = "h-8 w-auto" }: { className?: string }) => (
+  <div className="flex items-center space-x-3">
+    <img 
+      src="/maryland-seal.svg" 
+      alt="Maryland State Seal" 
+      className={`${className} flex-shrink-0`}
+    />
+    <div className="hidden sm:block">
+      <h1 className="text-lg font-semibold text-foreground leading-tight">Maryland SNAP</h1>
+      <p className="text-xs text-muted-foreground">Document Verification</p>
+    </div>
+  </div>
 );
 
 export default function Navigation() {
@@ -22,10 +24,9 @@ export default function Navigation() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const navigation = [
-    { name: "Search SNAP Policies", href: "/", icon: Search, current: location === "/" },
-    { name: "Upload Documents", href: "/upload", icon: Upload, current: location === "/upload" },
-    { name: "Administration", href: "/admin", icon: Settings, current: location === "/admin" },
-    { name: "AI Training", href: "/training", icon: Brain, current: location === "/training" },
+    { name: "Check Documents", href: "/", icon: FileText, current: location === "/" },
+    { name: "Search Policies", href: "/search", icon: Search, current: location === "/search" },
+    { name: "Get Help", href: "/help", icon: HelpCircle, current: location === "/help" },
   ];
 
   const NavItems = ({ mobile = false }) => (
@@ -62,12 +63,8 @@ export default function Navigation() {
           {/* Logo */}
           <div className="flex items-center">
             <Link href="/">
-              <div className="flex-shrink-0 flex items-center cursor-pointer" data-testid="nav-logo">
-                <MarylandLogo className="h-10 w-auto" />
-                <div className="ml-3">
-                  <h1 className="text-lg font-semibold text-foreground leading-tight">Maryland SNAP</h1>
-                  <p className="text-sm text-muted-foreground">Policy Manual System</p>
-                </div>
+              <div className="cursor-pointer" data-testid="nav-logo">
+                <MarylandSeal className="h-12 w-auto" />
               </div>
             </Link>
             
