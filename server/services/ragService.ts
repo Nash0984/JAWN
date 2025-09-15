@@ -9,7 +9,7 @@ function getGemini(): GoogleGenAI {
     if (!apiKey) {
       throw new Error('GEMINI_API_KEY environment variable is required');
     }
-    gemini = new GoogleGenAI(apiKey);
+    gemini = new GoogleGenAI({ apiKey });
   }
   return gemini;
 }
@@ -59,7 +59,6 @@ class RAGService {
 
   private async analyzeQuery(query: string) {
     try {
-      const model = getGemini().getGenerativeModel({ model: "gemini-1.5-pro" });
       const prompt = `You are a Maryland benefits policy expert. Analyze the user query and extract:
       1. Intent (eligibility, application, requirements, etc.)
       2. Relevant entities (income, age, household size, etc.)
@@ -76,9 +75,13 @@ class RAGService {
       
       Query: ${query}`;
       
-      const response = await model.generateContent(prompt);
+      const ai = getGemini();
+      const response = await ai.models.generateContent({
+        model: "gemini-1.5-pro",
+        contents: prompt
+      });
 
-      return JSON.parse(response.response.text() || "{}");
+      return JSON.parse(response.text || "{}");
     } catch (error) {
       console.error("Query analysis error:", error);
       return {
@@ -91,10 +94,13 @@ class RAGService {
 
   private async generateEmbedding(text: string): Promise<number[]> {
     try {
-      const model = getGemini().getGenerativeModel({ model: "text-embedding-004" });
-      const result = await model.embedContent(text);
+      const ai = getGemini();
+      const result = await ai.models.embedContent({
+        model: "text-embedding-004",
+        contents: text
+      });
       
-      return result.embedding.values;
+      return result.embeddings[0].values;
     } catch (error) {
       console.error("Embedding generation error:", error);
       throw new Error("Failed to generate embeddings");
@@ -223,7 +229,6 @@ class RAGService {
         .map(chunk => `Source: ${chunk.filename}\nContent: ${chunk.content}`)
         .join("\n\n");
 
-      const model = getGemini().getGenerativeModel({ model: "gemini-1.5-pro" });
       const prompt = `You are a Maryland benefits navigation assistant. Use the provided context to answer questions about Maryland state benefit programs available through marylandbenefits.gov and VITA services.
 
       Guidelines:
@@ -244,8 +249,12 @@ class RAGService {
       Context:
       ${context}`;
 
-      const response = await model.generateContent(prompt);
-      const answer = response.response.text() || "I'm unable to provide an answer based on the available information.";
+      const ai = getGemini();
+      const response = await ai.models.generateContent({
+        model: "gemini-1.5-pro",
+        contents: prompt
+      });
+      const answer = response.text || "I'm unable to provide an answer based on the available information.";
 
       // Calculate overall relevance score
       const avgRelevanceScore = relevantChunks.length > 0 

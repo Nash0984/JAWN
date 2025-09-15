@@ -8,7 +8,7 @@ function getGemini(): GoogleGenAI {
     if (!apiKey) {
       throw new Error('GEMINI_API_KEY environment variable is required');
     }
-    gemini = new GoogleGenAI(apiKey);
+    gemini = new GoogleGenAI({ apiKey });
   }
   return gemini;
 }
@@ -33,7 +33,6 @@ export interface TrainingMetrics {
 class AIService {
   async analyzeDocumentForFieldExtraction(text: string, documentType: string) {
     try {
-      const model = getGemini().getGenerativeModel({ model: "gemini-1.5-pro" });
       const prompt = `You are an AI assistant specialized in extracting structured information from government benefit documents.
       
       For the document type "${documentType}", extract relevant fields such as:
@@ -63,8 +62,13 @@ class AIService {
       
       Document text: ${text}`;
       
-      const response = await model.generateContent(prompt);
-      return JSON.parse(response.response.text() || "{}");
+      const ai = getGemini();
+      const response = await ai.models.generateContent({
+        model: "gemini-1.5-pro",
+        contents: prompt
+      });
+      
+      return JSON.parse(response.text || "{}");
     } catch (error) {
       console.error("Field extraction error:", error);
       return { error: "Failed to extract fields", confidence: 0 };
@@ -73,7 +77,6 @@ class AIService {
 
   async generateDocumentSummary(text: string, maxLength: number = 200) {
     try {
-      const model = getGemini().getGenerativeModel({ model: "gemini-1.5-pro" });
       const prompt = `Summarize the following government benefits document in ${maxLength} words or less.
       Focus on:
       - Main purpose of the document
@@ -86,8 +89,13 @@ class AIService {
       
       Document text: ${text}`;
       
-      const response = await model.generateContent(prompt);
-      return response.response.text() || "Summary generation failed";
+      const ai = getGemini();
+      const response = await ai.models.generateContent({
+        model: "gemini-1.5-pro",
+        contents: prompt
+      });
+      
+      return response.text || "Summary generation failed";
     } catch (error) {
       console.error("Summary generation error:", error);
       return "Summary generation failed";
@@ -96,7 +104,6 @@ class AIService {
 
   async detectDocumentChanges(oldText: string, newText: string) {
     try {
-      const model = getGemini().getGenerativeModel({ model: "gemini-1.5-pro" });
       const prompt = `You are comparing two versions of a government benefits document to identify changes.
       
       Analyze the differences and categorize them as:
@@ -129,8 +136,13 @@ class AIService {
       NEW VERSION:
       ${newText}`;
       
-      const response = await model.generateContent(prompt);
-      return JSON.parse(response.response.text() || "{}");
+      const ai = getGemini();
+      const response = await ai.models.generateContent({
+        model: "gemini-1.5-pro",
+        contents: prompt
+      });
+      
+      return JSON.parse(response.text || "{}");
     } catch (error) {
       console.error("Change detection error:", error);
       return { 
@@ -144,7 +156,6 @@ class AIService {
 
   async validateDocumentCompliance(text: string, benefitProgram: string) {
     try {
-      const model = getGemini().getGenerativeModel({ model: "gemini-1.5-pro" });
       const prompt = `You are a compliance expert for government benefit programs.
       
       Review the document for compliance with federal regulations for ${benefitProgram}.
@@ -169,8 +180,13 @@ class AIService {
       
       Document text: ${text}`;
       
-      const response = await model.generateContent(prompt);
-      return JSON.parse(response.response.text() || "{}");
+      const ai = getGemini();
+      const response = await ai.models.generateContent({
+        model: "gemini-1.5-pro",
+        contents: prompt
+      });
+      
+      return JSON.parse(response.text || "{}");
     } catch (error) {
       console.error("Compliance validation error:", error);
       return {
@@ -196,7 +212,6 @@ class AIService {
         const label = labels[i];
         
         // Generate variations and synthetic examples
-        const model = getGemini().getGenerativeModel({ model: "gemini-1.5-pro" });
         const prompt = `Generate 3 variations of the following document that maintain the same classification label "${label}".
         Vary the language while preserving the key information and intent.
         
@@ -211,8 +226,13 @@ class AIService {
         
         Original document: ${doc}`;
         
-        const response = await model.generateContent(prompt);
-        const result = JSON.parse(response.response.text() || "{}");
+        const ai = getGemini();
+        const response = await ai.models.generateContent({
+          model: "gemini-1.5-pro",
+          contents: prompt
+        });
+        
+        const result = JSON.parse(response.text || "{}");
         if (result.variations) {
           trainingExamples.push(...result.variations);
         }
@@ -289,7 +309,6 @@ class AIService {
 
   async generateModelReport(modelType: string, metrics: ModelPerformanceMetrics, trainingHistory: TrainingMetrics[]) {
     try {
-      const model = getGemini().getGenerativeModel({ model: "gemini-1.5-pro" });
       const prompt = `Generate a comprehensive model performance report for a ${modelType} model.
       
       Include:
@@ -312,8 +331,13 @@ class AIService {
         `Epoch ${h.epoch}: Loss=${h.loss.toFixed(3)}, Acc=${h.accuracy.toFixed(3)}, Val_Loss=${h.valLoss.toFixed(3)}, Val_Acc=${h.valAccuracy.toFixed(3)}`
       ).join('\n')}`;
       
-      const response = await model.generateContent(prompt);
-      return response.response.text() || "Report generation failed";
+      const ai = getGemini();
+      const response = await ai.models.generateContent({
+        model: "gemini-1.5-pro",
+        contents: prompt
+      });
+      
+      return response.text || "Report generation failed";
     } catch (error) {
       console.error("Model report generation error:", error);
       return "Failed to generate model report";
