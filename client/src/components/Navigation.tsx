@@ -11,6 +11,10 @@ const MarylandSeal = ({ className = "h-8 w-auto" }: { className?: string }) => (
       src="/maryland-seal.svg" 
       alt="Maryland State Seal" 
       className={`${className} flex-shrink-0`}
+      onError={(e) => {
+        console.log('Failed to load Maryland seal:', e);
+        (e.target as HTMLImageElement).style.display = 'none';
+      }}
     />
     <div className="hidden sm:block">
       <h1 className="text-lg font-semibold text-foreground leading-tight">Maryland SNAP</h1>
