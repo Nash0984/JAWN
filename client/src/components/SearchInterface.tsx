@@ -3,31 +3,45 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Search, Bot } from "lucide-react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Separator } from "@/components/ui/separator";
+import { Loader2, Search, Bot, Calculator, BookOpen, CheckCircle2, Info } from "lucide-react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 
-interface SearchResult {
+interface HybridSearchResult {
   answer: string;
-  sources: Array<{
-    documentId: string;
-    filename: string;
-    content: string;
-    relevanceScore: number;
-    pageNumber?: number;
-  }>;
-  relevanceScore?: number;
-  queryAnalysis?: {
-    intent: string;
-    entities: string[];
-    benefitProgram?: string;
+  type: 'deterministic' | 'ai_generated' | 'hybrid';
+  classification: {
+    type: string;
+    confidence: number;
+    reasoning: string;
   };
+  calculation?: {
+    eligible: boolean;
+    estimatedBenefit?: number;
+    reason: string;
+    breakdown?: any;
+    appliedRules?: string[];
+  };
+  aiExplanation?: {
+    answer: string;
+    sources: Array<{
+      documentId: string;
+      filename: string;
+      content: string;
+      relevanceScore: number;
+    }>;
+    relevanceScore?: number;
+  };
+  nextSteps?: string[];
+  responseTime: number;
 }
 
 export default function SearchInterface() {
   const [query, setQuery] = useState("");
-  const [searchResult, setSearchResult] = useState<SearchResult | null>(null);
+  const [searchResult, setSearchResult] = useState<HybridSearchResult | null>(null);
   const { toast } = useToast();
 
   const { data: benefitPrograms = [] } = useQuery({
@@ -39,7 +53,7 @@ export default function SearchInterface() {
       const response = await apiRequest("POST", "/api/search", { query });
       return response.json();
     },
-    onSuccess: (data: SearchResult) => {
+    onSuccess: (data: HybridSearchResult) => {
       setSearchResult(data);
     },
     onError: (error) => {
@@ -77,18 +91,16 @@ export default function SearchInterface() {
   };
 
   const quickSearches = [
-    "How much money can I make and still get SNAP?",
-    "Do I have to work to get SNAP benefits?", 
-    "Can college students get SNAP?",
-    "How much money can I have in the bank?"
+    "Do I qualify with a household of 2 and $2000 monthly income?",
+    "How much SNAP benefits can I get?",
+    "What is the income limit for SNAP?",
+    "Can college students get SNAP?"
   ];
 
   return (
     <div className="space-y-8">
-      {/* Skip link for accessibility */}
       <a href="#search-results" className="skip-link">Skip to search results</a>
       
-      {/* Search Interface */}
       <section aria-labelledby="search-heading">
         <h2 id="search-heading" className="sr-only">Search Maryland SNAP Information</h2>
         <Card className="shadow-lg border border-border">
@@ -132,9 +144,8 @@ export default function SearchInterface() {
               </Button>
             </div>
           
-          {/* Quick Search Options */}
           <div className="mt-4">
-            <p className="text-sm text-muted-foreground mb-2" id="quick-search-label">Common questions:</p>
+            <p className="text-sm text-muted-foreground mb-2" id="quick-search-label">Try asking:</p>
             <div className="flex flex-wrap gap-2" role="group" aria-labelledby="quick-search-label">
               {quickSearches.map((search, index) => (
                 <Button 
@@ -142,7 +153,7 @@ export default function SearchInterface() {
                   variant="outline"
                   size="sm"
                   onClick={() => handleQuickSearch(search)}
-                  data-testid={`button-quick-search-${search.replace(/\s+/g, '-').toLowerCase()}`}
+                  data-testid={`button-quick-search-${index}`}
                   aria-label={`Search for: ${search}`}
                   disabled={searchMutation.isPending}
                 >
@@ -155,74 +166,152 @@ export default function SearchInterface() {
       </Card>
       </section>
 
-      {/* Search Results */}
       {searchResult && (
         <section id="search-results" aria-labelledby="results-heading">
           <Card className="shadow-lg border border-border slide-up">
             <CardContent className="p-6">
-              <div className="flex items-start space-x-3 mb-4" aria-live="polite">
+              {/* Result Type Badge */}
+              <div className="flex items-center gap-2 mb-4">
+                {searchResult.type === 'deterministic' && (
+                  <>
+                    <Calculator className="h-5 w-5 text-primary" />
+                    <Badge variant="default" className="bg-primary">Deterministic Calculation</Badge>
+                  </>
+                )}
+                {searchResult.type === 'ai_generated' && (
+                  <>
+                    <BookOpen className="h-5 w-5 text-accent-foreground" />
+                    <Badge variant="secondary">Policy Interpretation</Badge>
+                  </>
+                )}
+                {searchResult.type === 'hybrid' && (
+                  <>
+                    <Bot className="h-5 w-5 text-primary" />
+                    <Badge variant="default">Hybrid Answer</Badge>
+                  </>
+                )}
+                <span className="text-xs text-muted-foreground ml-auto">
+                  {searchResult.responseTime}ms
+                </span>
+              </div>
+
+              {/* Deterministic Calculation Result */}
+              {searchResult.calculation && (
+                <Alert className={searchResult.calculation.eligible ? "bg-green-50 dark:bg-green-950 border-green-200 dark:border-green-800 mb-4" : "bg-yellow-50 dark:bg-yellow-950 border-yellow-200 dark:border-yellow-800 mb-4"}>
+                  <CheckCircle2 className={`h-4 w-4 ${searchResult.calculation.eligible ? "text-green-600 dark:text-green-400" : "text-yellow-600 dark:text-yellow-400"}`} />
+                  <AlertDescription className={searchResult.calculation.eligible ? "text-green-900 dark:text-green-100" : "text-yellow-900 dark:text-yellow-100"}>
+                    <div className="font-semibold mb-2">
+                      {searchResult.calculation.eligible ? "Potentially Eligible" : "May Not Be Eligible"}
+                    </div>
+                    {searchResult.calculation.estimatedBenefit !== undefined && searchResult.calculation.estimatedBenefit > 0 && (
+                      <div className="text-2xl font-bold mb-2">
+                        ${(searchResult.calculation.estimatedBenefit / 100).toFixed(2)} / month
+                      </div>
+                    )}
+                    <div className="text-sm">{searchResult.calculation.reason}</div>
+                  </AlertDescription>
+                </Alert>
+              )}
+
+              {/* Main Answer */}
+              <div className="flex items-start space-x-3 mb-4">
                 <div className="w-8 h-8 bg-accent rounded-full flex items-center justify-center flex-shrink-0">
                   <Bot className="text-accent-foreground h-4 w-4" aria-hidden="true" />
                 </div>
                 <div className="flex-1">
                   <h3 id="results-heading" className="font-semibold text-foreground mb-2">Answer</h3>
-                
-                {/* Query Analysis */}
-                {searchResult.queryAnalysis && (
-                  <div className="mb-4 flex flex-wrap gap-2">
-                    <Badge variant="secondary">
-                      Intent: {searchResult.queryAnalysis.intent}
-                    </Badge>
-                    {searchResult.queryAnalysis.benefitProgram && (
-                      <Badge variant="outline">
-                        Program: {searchResult.queryAnalysis.benefitProgram}
-                      </Badge>
-                    )}
-                    {searchResult.queryAnalysis.entities.length > 0 && (
-                      searchResult.queryAnalysis.entities.slice(0, 3).map(entity => (
-                        <Badge key={entity} variant="outline">
-                          {entity}
-                        </Badge>
-                      ))
-                    )}
+                  <div className="prose dark:prose-invert max-w-none text-foreground">
+                    <p className="whitespace-pre-wrap">{searchResult.answer}</p>
                   </div>
-                )}
-
-                {/* AI Response */}
-                <div className="prose prose-sm max-w-none text-muted-foreground mb-4">
-                  <div className="whitespace-pre-wrap">{searchResult.answer}</div>
                 </div>
-                
-                {/* Source Citations */}
-                {searchResult.sources.length > 0 && (
-                  <div className="p-3 bg-muted rounded-lg">
-                    <p className="text-sm font-medium text-muted-foreground mb-2">Sources:</p>
-                    <div className="space-y-1">
-                      {searchResult.sources.map((source, index) => (
-                        <div 
-                          key={source.documentId} 
-                          className="text-xs text-muted-foreground"
-                          data-testid={`source-${index}`}
-                        >
-                          📄 {source.filename}
-                          {source.pageNumber && ` (Page ${source.pageNumber})`}
-                          <span className="ml-2 text-green-600">
-                            {Math.round(source.relevanceScore * 100)}% relevance
-                          </span>
-                        </div>
+              </div>
+
+              {/* Calculation Breakdown */}
+              {searchResult.calculation?.breakdown && searchResult.calculation.breakdown.length > 0 && (
+                <>
+                  <Separator className="my-4" />
+                  <div className="space-y-2">
+                    <h4 className="font-semibold text-sm flex items-center gap-2">
+                      <Calculator className="h-4 w-4" />
+                      Calculation Steps
+                    </h4>
+                    <ul className="space-y-1 text-sm">
+                      {searchResult.calculation.breakdown.map((step: string, index: number) => (
+                        <li key={index} className="flex items-start gap-2">
+                          <span className="text-muted-foreground">•</span>
+                          <span>{step}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                </>
+              )}
+
+              {/* Next Steps */}
+              {searchResult.nextSteps && searchResult.nextSteps.length > 0 && (
+                <>
+                  <Separator className="my-4" />
+                  <div className="space-y-2">
+                    <h4 className="font-semibold text-sm flex items-center gap-2">
+                      <Info className="h-4 w-4" />
+                      Next Steps
+                    </h4>
+                    <ul className="space-y-2">
+                      {searchResult.nextSteps.map((step, index) => (
+                        <li key={index} className="flex items-start gap-2 text-sm">
+                          <CheckCircle2 className="h-4 w-4 text-primary mt-0.5 flex-shrink-0" />
+                          <span>{step}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                </>
+              )}
+
+              {/* Sources (for AI explanations) */}
+              {searchResult.aiExplanation?.sources && searchResult.aiExplanation.sources.length > 0 && (
+                <>
+                  <Separator className="my-4" />
+                  <div className="space-y-3">
+                    <h4 className="font-semibold text-sm flex items-center gap-2">
+                      <BookOpen className="h-4 w-4" />
+                      Policy References
+                    </h4>
+                    <div className="space-y-2">
+                      {searchResult.aiExplanation.sources.slice(0, 3).map((source, index) => (
+                        <Card key={index} className="bg-muted">
+                          <CardContent className="p-3">
+                            <div className="flex justify-between items-start mb-1">
+                              <span className="text-xs font-medium text-foreground">{source.filename}</span>
+                              <Badge variant="outline" className="text-xs">
+                                {(source.relevanceScore * 100).toFixed(0)}% match
+                              </Badge>
+                            </div>
+                            <p className="text-xs text-muted-foreground line-clamp-2">
+                              {source.content}
+                            </p>
+                          </CardContent>
+                        </Card>
                       ))}
                     </div>
-                    
-                    {searchResult.relevanceScore && (
-                      <div className="mt-2 text-xs text-muted-foreground">
-                        Overall confidence: {Math.round(searchResult.relevanceScore * 100)}%
-                      </div>
-                    )}
                   </div>
-                )}
-              </div>
-            </div>
-          </CardContent>
+                </>
+              )}
+
+              {/* Classification Debug Info */}
+              {searchResult.classification && (
+                <div className="mt-4 pt-4 border-t border-border">
+                  <details className="text-xs text-muted-foreground">
+                    <summary className="cursor-pointer hover:text-foreground">Query Analysis</summary>
+                    <div className="mt-2 space-y-1 pl-4">
+                      <div>Type: <Badge variant="outline" className="text-xs ml-2">{searchResult.classification.type}</Badge></div>
+                      <div>Confidence: {(searchResult.classification.confidence * 100).toFixed(0)}%</div>
+                      <div>Reasoning: {searchResult.classification.reasoning}</div>
+                    </div>
+                  </details>
+                </div>
+              )}
+            </CardContent>
           </Card>
         </section>
       )}

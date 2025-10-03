@@ -7,6 +7,7 @@ import { documentIngestionService } from "./services/documentIngestion";
 import { automatedIngestionService } from "./services/automatedIngestion";
 import { ObjectStorageService } from "./objectStorage";
 import { rulesEngine } from "./services/rulesEngine";
+import { hybridService } from "./services/hybridService";
 import { 
   insertDocumentSchema, 
   insertSearchQuerySchema, 
@@ -31,7 +32,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     res.json({ status: "healthy", timestamp: new Date().toISOString() });
   });
 
-  // Search endpoint
+  // Hybrid search endpoint - intelligently routes to Rules Engine or RAG
   app.post("/api/search", async (req, res) => {
     try {
       const { query, benefitProgramId, userId } = req.body;
@@ -40,23 +41,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: "Query is required and must be a string" });
       }
 
-      const startTime = Date.now();
-      const result = await ragService.search(query, benefitProgramId);
-      const responseTime = Date.now() - startTime;
+      // Use hybrid service for intelligent routing
+      const result = await hybridService.search(query, benefitProgramId);
 
-      // Save search query
+      // Save search query with hybrid result
       await storage.createSearchQuery({
         query,
         userId,
         benefitProgramId,
-        response: result,
-        relevanceScore: result.relevanceScore || 0,
-        responseTime,
+        response: {
+          answer: result.answer,
+          type: result.type,
+          classification: result.classification,
+        },
+        relevanceScore: result.aiExplanation?.relevanceScore || result.classification.confidence,
+        responseTime: result.responseTime,
       });
 
       res.json(result);
     } catch (error) {
-      console.error("Search error:", error);
+      console.error("Hybrid search error:", error);
       res.status(500).json({ error: "Internal server error during search" });
     }
   });
