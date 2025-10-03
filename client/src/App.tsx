@@ -7,6 +7,7 @@ import Home from "@/pages/Home";
 import Upload from "@/pages/Upload";
 import Admin from "@/pages/Admin";
 import Training from "@/pages/Training";
+import EligibilityChecker from "@/pages/EligibilityChecker";
 import NotFound from "@/pages/not-found";
 import Navigation from "@/components/Navigation";
 
@@ -22,6 +23,7 @@ function Router() {
           <Route path="/upload" component={Upload} />
           <Route path="/admin" component={Admin} />
           <Route path="/training" component={Training} />
+          <Route path="/eligibility" component={EligibilityChecker} />
           <Route component={NotFound} />
         </Switch>
       </main>

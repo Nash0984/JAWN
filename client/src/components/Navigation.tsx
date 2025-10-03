@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Link, useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
-import { File, Search, FileText, HelpCircle, Menu, Bell, User } from "lucide-react";
+import { File, Search, FileText, HelpCircle, Menu, Bell, User, Calculator } from "lucide-react";
 import LanguageSelector from "./LanguageSelector";
 import { useLanguage } from "@/hooks/useLanguage";
 
@@ -32,6 +32,7 @@ export default function Navigation() {
 
   const navigation = [
     { name: t("nav.home"), href: "/", icon: FileText, current: location === "/" },
+    { name: "Eligibility Check", href: "/eligibility", icon: Calculator, current: location === "/eligibility" },
     { name: t("nav.search"), href: "/search", icon: Search, current: location === "/search" },
     { name: t("nav.help"), href: "/help", icon: HelpCircle, current: location === "/help" },
   ];

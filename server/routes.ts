@@ -6,6 +6,7 @@ import { documentProcessor } from "./services/documentProcessor";
 import { documentIngestionService } from "./services/documentIngestion";
 import { automatedIngestionService } from "./services/automatedIngestion";
 import { ObjectStorageService } from "./objectStorage";
+import { rulesEngine } from "./services/rulesEngine";
 import { 
   insertDocumentSchema, 
   insertSearchQuerySchema, 
@@ -571,6 +572,256 @@ export async function registerRoutes(app: Express): Promise<Server> {
         success: false,
         error: "Failed to create ingestion schedule"
       });
+    }
+  });
+
+  // ============================================================================
+  // RULES AS CODE - ELIGIBILITY & BENEFIT CALCULATION ENDPOINTS
+  // ============================================================================
+
+  // Eligibility pre-screening endpoint
+  app.post("/api/eligibility/check", async (req, res) => {
+    try {
+      const { householdSize, monthlyIncome, hasEarnedIncome, hasSSI, hasTANF, userId } = req.body;
+
+      if (!householdSize || !monthlyIncome) {
+        return res.status(400).json({ 
+          error: "Missing required fields: householdSize, monthlyIncome" 
+        });
+      }
+
+      // Get Maryland SNAP program
+      const programs = await storage.getBenefitPrograms();
+      const snapProgram = programs.find(p => p.code === "MD_SNAP");
+
+      if (!snapProgram) {
+        return res.status(500).json({ error: "Maryland SNAP program not found" });
+      }
+
+      const result = await rulesEngine.checkEligibility({
+        benefitProgramId: snapProgram.id,
+        householdSize,
+        monthlyGrossIncome: monthlyIncome,
+        monthlyNetIncome: hasEarnedIncome ? monthlyIncome * 0.8 : monthlyIncome, // Rough estimate
+        hasSSI: hasSSI || false,
+        hasTANF: hasTANF || false,
+        hasElderly: false,
+        hasDisabled: false,
+      });
+
+      res.json(result);
+    } catch (error) {
+      console.error("Eligibility check error:", error);
+      res.status(500).json({ error: "Failed to check eligibility" });
+    }
+  });
+
+  // Full benefit calculation endpoint
+  app.post("/api/eligibility/calculate", async (req, res) => {
+    try {
+      const {
+        householdSize,
+        monthlyGrossIncome,
+        monthlyEarnedIncome,
+        hasElderly,
+        hasDisabled,
+        hasSSI,
+        hasTANF,
+        shelterCosts,
+        utilityCosts,
+        dependentCareCosts,
+        medicalExpenses,
+        userId,
+      } = req.body;
+
+      if (!householdSize || monthlyGrossIncome === undefined) {
+        return res.status(400).json({ 
+          error: "Missing required fields: householdSize, monthlyGrossIncome" 
+        });
+      }
+
+      // Get Maryland SNAP program
+      const programs = await storage.getBenefitPrograms();
+      const snapProgram = programs.find(p => p.code === "MD_SNAP");
+
+      if (!snapProgram) {
+        return res.status(500).json({ error: "Maryland SNAP program not found" });
+      }
+
+      const result = await rulesEngine.calculateBenefit({
+        benefitProgramId: snapProgram.id,
+        householdSize,
+        monthlyGrossIncome,
+        monthlyEarnedIncome: monthlyEarnedIncome || 0,
+        hasElderly: hasElderly || false,
+        hasDisabled: hasDisabled || false,
+        hasSSI: hasSSI || false,
+        hasTANF: hasTANF || false,
+        shelterCosts: shelterCosts || 0,
+        utilityCosts: utilityCosts || 0,
+        dependentCareCosts: dependentCareCosts || 0,
+        medicalExpenses: medicalExpenses || 0,
+      });
+
+      // Save calculation if user provided
+      if (userId) {
+        await storage.createEligibilityCalculation({
+          userId,
+          benefitProgramId: snapProgram.id,
+          householdSize,
+          grossIncome: monthlyGrossIncome,
+          netIncome: result.calculation?.netIncome || 0,
+          calculatedBenefit: result.estimatedBenefit || 0,
+          isEligible: result.eligible,
+          calculationDetails: result.calculation || {},
+          appliedRules: result.appliedRules || [],
+        });
+      }
+
+      res.json(result);
+    } catch (error) {
+      console.error("Benefit calculation error:", error);
+      res.status(500).json({ error: "Failed to calculate benefit" });
+    }
+  });
+
+  // Get active SNAP income limits
+  app.get("/api/rules/income-limits", async (req, res) => {
+    try {
+      const programs = await storage.getBenefitPrograms();
+      const snapProgram = programs.find(p => p.code === "MD_SNAP");
+
+      if (!snapProgram) {
+        return res.status(500).json({ error: "Maryland SNAP program not found" });
+      }
+
+      const limits = await storage.getSnapIncomeLimits(snapProgram.id);
+      const activeLimits = limits.filter(l => l.isActive);
+
+      res.json({
+        success: true,
+        data: activeLimits,
+        count: activeLimits.length,
+      });
+    } catch (error) {
+      console.error("Error fetching income limits:", error);
+      res.status(500).json({ error: "Failed to fetch income limits" });
+    }
+  });
+
+  // Get active SNAP deductions
+  app.get("/api/rules/deductions", async (req, res) => {
+    try {
+      const programs = await storage.getBenefitPrograms();
+      const snapProgram = programs.find(p => p.code === "MD_SNAP");
+
+      if (!snapProgram) {
+        return res.status(500).json({ error: "Maryland SNAP program not found" });
+      }
+
+      const deductions = await storage.getSnapDeductions(snapProgram.id);
+      const activeDeductions = deductions.filter(d => d.isActive);
+
+      res.json({
+        success: true,
+        data: activeDeductions,
+        count: activeDeductions.length,
+      });
+    } catch (error) {
+      console.error("Error fetching deductions:", error);
+      res.status(500).json({ error: "Failed to fetch deductions" });
+    }
+  });
+
+  // Get active SNAP allotments
+  app.get("/api/rules/allotments", async (req, res) => {
+    try {
+      const programs = await storage.getBenefitPrograms();
+      const snapProgram = programs.find(p => p.code === "MD_SNAP");
+
+      if (!snapProgram) {
+        return res.status(500).json({ error: "Maryland SNAP program not found" });
+      }
+
+      const allotments = await storage.getSnapAllotments(snapProgram.id);
+      const activeAllotments = allotments.filter(a => a.isActive);
+
+      res.json({
+        success: true,
+        data: activeAllotments,
+        count: activeAllotments.length,
+      });
+    } catch (error) {
+      console.error("Error fetching allotments:", error);
+      res.status(500).json({ error: "Failed to fetch allotments" });
+    }
+  });
+
+  // Get categorical eligibility rules
+  app.get("/api/rules/categorical-eligibility", async (req, res) => {
+    try {
+      const programs = await storage.getBenefitPrograms();
+      const snapProgram = programs.find(p => p.code === "MD_SNAP");
+
+      if (!snapProgram) {
+        return res.status(500).json({ error: "Maryland SNAP program not found" });
+      }
+
+      const rules = await storage.getCategoricalEligibilityRules(snapProgram.id);
+      const activeRules = rules.filter(r => r.isActive);
+
+      res.json({
+        success: true,
+        data: activeRules,
+        count: activeRules.length,
+      });
+    } catch (error) {
+      console.error("Error fetching categorical eligibility rules:", error);
+      res.status(500).json({ error: "Failed to fetch categorical eligibility rules" });
+    }
+  });
+
+  // Get document requirements
+  app.get("/api/rules/document-requirements", async (req, res) => {
+    try {
+      const programs = await storage.getBenefitPrograms();
+      const snapProgram = programs.find(p => p.code === "MD_SNAP");
+
+      if (!snapProgram) {
+        return res.status(500).json({ error: "Maryland SNAP program not found" });
+      }
+
+      const requirements = await storage.getDocumentRequirementRules(snapProgram.id);
+      const activeRequirements = requirements.filter(r => r.isActive);
+
+      res.json({
+        success: true,
+        data: activeRequirements,
+        count: activeRequirements.length,
+      });
+    } catch (error) {
+      console.error("Error fetching document requirements:", error);
+      res.status(500).json({ error: "Failed to fetch document requirements" });
+    }
+  });
+
+  // Get recent eligibility calculations
+  app.get("/api/eligibility/calculations", async (req, res) => {
+    try {
+      const { userId, limit } = req.query;
+      const calculations = await storage.getEligibilityCalculations(
+        userId as string,
+        limit ? parseInt(limit as string) : 50
+      );
+
+      res.json({
+        success: true,
+        data: calculations,
+        count: calculations.length,
+      });
+    } catch (error) {
+      console.error("Error fetching calculations:", error);
+      res.status(500).json({ error: "Failed to fetch calculations" });
     }
   });
 
