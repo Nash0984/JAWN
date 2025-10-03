@@ -215,6 +215,262 @@ export const searchResultsRelations = relations(searchResults, ({ one }) => ({
   }),
 }));
 
+// ============================================================================
+// RULES AS CODE TABLES - Versioned, Editable Policy Rules
+// ============================================================================
+
+// Federal Poverty Levels - Updated annually
+export const povertyLevels = pgTable("poverty_levels", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  year: integer("year").notNull(),
+  householdSize: integer("household_size").notNull(),
+  monthlyIncome: integer("monthly_income").notNull(), // 100% FPL in cents
+  annualIncome: integer("annual_income").notNull(), // 100% FPL in cents
+  effectiveDate: timestamp("effective_date").notNull(),
+  endDate: timestamp("end_date"),
+  isActive: boolean("is_active").default(true).notNull(),
+  createdBy: varchar("created_by").references(() => users.id),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+// SNAP Income Limits - Gross and net income limits by household size
+export const snapIncomeLimits = pgTable("snap_income_limits", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  benefitProgramId: varchar("benefit_program_id").references(() => benefitPrograms.id).notNull(),
+  householdSize: integer("household_size").notNull(),
+  grossMonthlyLimit: integer("gross_monthly_limit").notNull(), // in cents
+  netMonthlyLimit: integer("net_monthly_limit").notNull(), // in cents
+  percentOfPoverty: integer("percent_of_poverty").notNull(), // e.g., 200 for 200% FPL
+  effectiveDate: timestamp("effective_date").notNull(),
+  endDate: timestamp("end_date"),
+  isActive: boolean("is_active").default(true).notNull(),
+  notes: text("notes"),
+  createdBy: varchar("created_by").references(() => users.id),
+  approvedBy: varchar("approved_by").references(() => users.id),
+  approvedAt: timestamp("approved_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+// SNAP Deduction Rules - Standard, earned income, dependent care, shelter, medical
+export const snapDeductions = pgTable("snap_deductions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  benefitProgramId: varchar("benefit_program_id").references(() => benefitPrograms.id).notNull(),
+  deductionType: text("deduction_type").notNull(), // standard, earned_income, dependent_care, shelter, medical
+  deductionName: text("deduction_name").notNull(),
+  calculationType: text("calculation_type").notNull(), // fixed, percentage, tiered, capped
+  amount: integer("amount"), // Fixed amount in cents (for standard deduction)
+  percentage: integer("percentage"), // Percentage as integer (20 = 20%)
+  minAmount: integer("min_amount"), // Minimum in cents
+  maxAmount: integer("max_amount"), // Maximum in cents (shelter cap, medical deduction threshold)
+  conditions: jsonb("conditions"), // Eligibility conditions for this deduction
+  effectiveDate: timestamp("effective_date").notNull(),
+  endDate: timestamp("end_date"),
+  isActive: boolean("is_active").default(true).notNull(),
+  notes: text("notes"),
+  createdBy: varchar("created_by").references(() => users.id),
+  approvedBy: varchar("approved_by").references(() => users.id),
+  approvedAt: timestamp("approved_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+// SNAP Allotment Amounts - Maximum monthly benefit by household size
+export const snapAllotments = pgTable("snap_allotments", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  benefitProgramId: varchar("benefit_program_id").references(() => benefitPrograms.id).notNull(),
+  householdSize: integer("household_size").notNull(),
+  maxMonthlyBenefit: integer("max_monthly_benefit").notNull(), // in cents
+  minMonthlyBenefit: integer("min_monthly_benefit"), // Minimum benefit (e.g., $23 for 1-2 person)
+  effectiveDate: timestamp("effective_date").notNull(),
+  endDate: timestamp("end_date"),
+  isActive: boolean("is_active").default(true).notNull(),
+  notes: text("notes"),
+  createdBy: varchar("created_by").references(() => users.id),
+  approvedBy: varchar("approved_by").references(() => users.id),
+  approvedAt: timestamp("approved_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+// Categorical Eligibility Rules - SSI, TANF, General Assistance recipients
+export const categoricalEligibilityRules = pgTable("categorical_eligibility_rules", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  benefitProgramId: varchar("benefit_program_id").references(() => benefitPrograms.id).notNull(),
+  ruleName: text("rule_name").notNull(),
+  ruleCode: text("rule_code").notNull().unique(), // SSI, TANF, GA, BBCE
+  description: text("description"),
+  bypassGrossIncomeTest: boolean("bypass_gross_income_test").default(false).notNull(),
+  bypassAssetTest: boolean("bypass_asset_test").default(false).notNull(),
+  bypassNetIncomeTest: boolean("bypass_net_income_test").default(false).notNull(),
+  conditions: jsonb("conditions"), // Required conditions to qualify
+  effectiveDate: timestamp("effective_date").notNull(),
+  endDate: timestamp("end_date"),
+  isActive: boolean("is_active").default(true).notNull(),
+  notes: text("notes"),
+  createdBy: varchar("created_by").references(() => users.id),
+  approvedBy: varchar("approved_by").references(() => users.id),
+  approvedAt: timestamp("approved_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+// Document Requirement Rules - Required documents based on circumstances
+export const documentRequirementRules = pgTable("document_requirement_rules", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  benefitProgramId: varchar("benefit_program_id").references(() => benefitPrograms.id).notNull(),
+  requirementName: text("requirement_name").notNull(),
+  documentType: text("document_type").notNull(), // income, identity, residency, expenses
+  requiredWhen: jsonb("required_when").notNull(), // Conditions when this document is required
+  acceptableDocuments: jsonb("acceptable_documents").notNull(), // List of acceptable document types
+  validityPeriod: integer("validity_period"), // Days document remains valid (e.g., 60 for paystubs)
+  isRequired: boolean("is_required").default(true).notNull(),
+  canBeWaived: boolean("can_be_waived").default(false).notNull(),
+  waiverConditions: jsonb("waiver_conditions"),
+  effectiveDate: timestamp("effective_date").notNull(),
+  endDate: timestamp("end_date"),
+  isActive: boolean("is_active").default(true).notNull(),
+  notes: text("notes"),
+  createdBy: varchar("created_by").references(() => users.id),
+  approvedBy: varchar("approved_by").references(() => users.id),
+  approvedAt: timestamp("approved_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+// Eligibility Calculations - Audit trail of all eligibility determinations
+export const eligibilityCalculations = pgTable("eligibility_calculations", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id),
+  benefitProgramId: varchar("benefit_program_id").references(() => benefitPrograms.id).notNull(),
+  householdSize: integer("household_size").notNull(),
+  grossMonthlyIncome: integer("gross_monthly_income").notNull(), // in cents
+  netMonthlyIncome: integer("net_monthly_income").notNull(), // in cents
+  deductions: jsonb("deductions").notNull(), // Breakdown of all deductions applied
+  categoricalEligibility: text("categorical_eligibility"), // Which categorical rule applied, if any
+  isEligible: boolean("is_eligible").notNull(),
+  monthlyBenefit: integer("monthly_benefit"), // Calculated benefit in cents
+  ineligibilityReasons: jsonb("ineligibility_reasons"), // If not eligible, why?
+  rulesSnapshot: jsonb("rules_snapshot").notNull(), // Which rule versions were used
+  calculatedAt: timestamp("calculated_at").defaultNow().notNull(),
+  calculatedBy: varchar("calculated_by").references(() => users.id),
+  ipAddress: text("ip_address"),
+  userAgent: text("user_agent"),
+});
+
+// Rule Change Log - Track all changes to policy rules
+export const ruleChangeLogs = pgTable("rule_change_logs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  ruleTable: text("rule_table").notNull(), // Which table was changed
+  ruleId: varchar("rule_id").notNull(), // ID of the changed rule
+  changeType: text("change_type").notNull(), // create, update, delete, approve
+  oldValues: jsonb("old_values"),
+  newValues: jsonb("new_values").notNull(),
+  changeReason: text("change_reason"),
+  changedBy: varchar("changed_by").references(() => users.id).notNull(),
+  approvedBy: varchar("approved_by").references(() => users.id),
+  approvedAt: timestamp("approved_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+// Client Cases - Track individual client cases for navigators
+export const clientCases = pgTable("client_cases", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  clientName: text("client_name").notNull(),
+  clientIdentifier: text("client_identifier"), // Last 4 SSN or case number
+  benefitProgramId: varchar("benefit_program_id").references(() => benefitPrograms.id).notNull(),
+  assignedNavigator: varchar("assigned_navigator").references(() => users.id),
+  status: text("status").notNull().default("screening"), // screening, documents_pending, submitted, approved, denied
+  householdSize: integer("household_size"),
+  estimatedIncome: integer("estimated_income"), // in cents
+  eligibilityCalculationId: varchar("eligibility_calculation_id").references(() => eligibilityCalculations.id),
+  applicationSubmittedAt: timestamp("application_submitted_at"),
+  applicationApprovedAt: timestamp("application_approved_at"),
+  notes: text("notes"),
+  tags: jsonb("tags"), // For categorization/filtering
+  createdBy: varchar("created_by").references(() => users.id).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+// Relations for Rules as Code tables
+export const povertyLevelsRelations = relations(povertyLevels, ({ one }) => ({
+  creator: one(users, {
+    fields: [povertyLevels.createdBy],
+    references: [users.id],
+  }),
+}));
+
+export const snapIncomeLimitsRelations = relations(snapIncomeLimits, ({ one }) => ({
+  benefitProgram: one(benefitPrograms, {
+    fields: [snapIncomeLimits.benefitProgramId],
+    references: [benefitPrograms.id],
+  }),
+  creator: one(users, {
+    fields: [snapIncomeLimits.createdBy],
+    references: [users.id],
+  }),
+}));
+
+export const snapDeductionsRelations = relations(snapDeductions, ({ one }) => ({
+  benefitProgram: one(benefitPrograms, {
+    fields: [snapDeductions.benefitProgramId],
+    references: [benefitPrograms.id],
+  }),
+}));
+
+export const snapAllotmentsRelations = relations(snapAllotments, ({ one }) => ({
+  benefitProgram: one(benefitPrograms, {
+    fields: [snapAllotments.benefitProgramId],
+    references: [benefitPrograms.id],
+  }),
+}));
+
+export const categoricalEligibilityRulesRelations = relations(categoricalEligibilityRules, ({ one }) => ({
+  benefitProgram: one(benefitPrograms, {
+    fields: [categoricalEligibilityRules.benefitProgramId],
+    references: [benefitPrograms.id],
+  }),
+}));
+
+export const documentRequirementRulesRelations = relations(documentRequirementRules, ({ one }) => ({
+  benefitProgram: one(benefitPrograms, {
+    fields: [documentRequirementRules.benefitProgramId],
+    references: [benefitPrograms.id],
+  }),
+}));
+
+export const eligibilityCalculationsRelations = relations(eligibilityCalculations, ({ one }) => ({
+  user: one(users, {
+    fields: [eligibilityCalculations.userId],
+    references: [users.id],
+  }),
+  benefitProgram: one(benefitPrograms, {
+    fields: [eligibilityCalculations.benefitProgramId],
+    references: [benefitPrograms.id],
+  }),
+}));
+
+export const clientCasesRelations = relations(clientCases, ({ one }) => ({
+  benefitProgram: one(benefitPrograms, {
+    fields: [clientCases.benefitProgramId],
+    references: [benefitPrograms.id],
+  }),
+  navigator: one(users, {
+    fields: [clientCases.assignedNavigator],
+    references: [users.id],
+  }),
+  creator: one(users, {
+    fields: [clientCases.createdBy],
+    references: [users.id],
+  }),
+  eligibilityCalculation: one(eligibilityCalculations, {
+    fields: [clientCases.eligibilityCalculationId],
+    references: [eligibilityCalculations.id],
+  }),
+}));
+
 // Insert Schemas
 export const insertUserSchema = createInsertSchema(users).pick({
   username: true,
@@ -317,3 +573,84 @@ export type InsertSearchResult = z.infer<typeof insertSearchResultSchema>;
 export type SearchResult = typeof searchResults.$inferSelect;
 
 export type DocumentType = typeof documentTypes.$inferSelect;
+
+// Rules as Code Insert Schemas
+export const insertPovertyLevelSchema = createInsertSchema(povertyLevels).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertSnapIncomeLimitSchema = createInsertSchema(snapIncomeLimits).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertSnapDeductionSchema = createInsertSchema(snapDeductions).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertSnapAllotmentSchema = createInsertSchema(snapAllotments).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertCategoricalEligibilityRuleSchema = createInsertSchema(categoricalEligibilityRules).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertDocumentRequirementRuleSchema = createInsertSchema(documentRequirementRules).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertEligibilityCalculationSchema = createInsertSchema(eligibilityCalculations).omit({
+  id: true,
+  calculatedAt: true,
+});
+
+export const insertRuleChangeLogSchema = createInsertSchema(ruleChangeLogs).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertClientCaseSchema = createInsertSchema(clientCases).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+// Rules as Code Types
+export type InsertPovertyLevel = z.infer<typeof insertPovertyLevelSchema>;
+export type PovertyLevel = typeof povertyLevels.$inferSelect;
+
+export type InsertSnapIncomeLimit = z.infer<typeof insertSnapIncomeLimitSchema>;
+export type SnapIncomeLimit = typeof snapIncomeLimits.$inferSelect;
+
+export type InsertSnapDeduction = z.infer<typeof insertSnapDeductionSchema>;
+export type SnapDeduction = typeof snapDeductions.$inferSelect;
+
+export type InsertSnapAllotment = z.infer<typeof insertSnapAllotmentSchema>;
+export type SnapAllotment = typeof snapAllotments.$inferSelect;
+
+export type InsertCategoricalEligibilityRule = z.infer<typeof insertCategoricalEligibilityRuleSchema>;
+export type CategoricalEligibilityRule = typeof categoricalEligibilityRules.$inferSelect;
+
+export type InsertDocumentRequirementRule = z.infer<typeof insertDocumentRequirementRuleSchema>;
+export type DocumentRequirementRule = typeof documentRequirementRules.$inferSelect;
+
+export type InsertEligibilityCalculation = z.infer<typeof insertEligibilityCalculationSchema>;
+export type EligibilityCalculation = typeof eligibilityCalculations.$inferSelect;
+
+export type InsertRuleChangeLog = z.infer<typeof insertRuleChangeLogSchema>;
+export type RuleChangeLog = typeof ruleChangeLogs.$inferSelect;
+
+export type InsertClientCase = z.infer<typeof insertClientCaseSchema>;
+export type ClientCase = typeof clientCases.$inferSelect;
