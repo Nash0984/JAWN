@@ -9,6 +9,14 @@ import {
   searchQueries,
   modelVersions,
   trainingJobs,
+  snapIncomeLimits,
+  snapDeductions,
+  snapAllotments,
+  categoricalEligibilityRules,
+  documentRequirementRules,
+  eligibilityCalculations,
+  clientCases,
+  povertyLevels,
   type User,
   type InsertUser,
   type Document,
@@ -28,9 +36,25 @@ import {
   type InsertModelVersion,
   type TrainingJob,
   type InsertTrainingJob,
+  type SnapIncomeLimit,
+  type InsertSnapIncomeLimit,
+  type SnapDeduction,
+  type InsertSnapDeduction,
+  type SnapAllotment,
+  type InsertSnapAllotment,
+  type CategoricalEligibilityRule,
+  type InsertCategoricalEligibilityRule,
+  type DocumentRequirementRule,
+  type InsertDocumentRequirementRule,
+  type EligibilityCalculation,
+  type InsertEligibilityCalculation,
+  type ClientCase,
+  type InsertClientCase,
+  type PovertyLevel,
+  type InsertPovertyLevel,
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, desc, and, ilike, sql } from "drizzle-orm";
+import { eq, desc, and, ilike, sql, or, isNull, lte, gte } from "drizzle-orm";
 
 export interface IStorage {
   // Users
@@ -83,6 +107,45 @@ export interface IStorage {
   getActiveDocumentVersion(documentId: string): Promise<DocumentVersion | null>;
   updateDocumentVersion(id: string, updates: Partial<DocumentVersion>): Promise<DocumentVersion>;
   deactivateDocumentVersions(documentId: string): Promise<void>;
+
+  // Rules as Code - SNAP Income Limits
+  createSnapIncomeLimit(limit: InsertSnapIncomeLimit): Promise<SnapIncomeLimit>;
+  getSnapIncomeLimits(benefitProgramId: string): Promise<SnapIncomeLimit[]>;
+  updateSnapIncomeLimit(id: string, updates: Partial<SnapIncomeLimit>): Promise<SnapIncomeLimit>;
+
+  // Rules as Code - SNAP Deductions
+  createSnapDeduction(deduction: InsertSnapDeduction): Promise<SnapDeduction>;
+  getSnapDeductions(benefitProgramId: string): Promise<SnapDeduction[]>;
+  updateSnapDeduction(id: string, updates: Partial<SnapDeduction>): Promise<SnapDeduction>;
+
+  // Rules as Code - SNAP Allotments
+  createSnapAllotment(allotment: InsertSnapAllotment): Promise<SnapAllotment>;
+  getSnapAllotments(benefitProgramId: string): Promise<SnapAllotment[]>;
+  updateSnapAllotment(id: string, updates: Partial<SnapAllotment>): Promise<SnapAllotment>;
+
+  // Rules as Code - Categorical Eligibility
+  createCategoricalEligibilityRule(rule: InsertCategoricalEligibilityRule): Promise<CategoricalEligibilityRule>;
+  getCategoricalEligibilityRules(benefitProgramId: string): Promise<CategoricalEligibilityRule[]>;
+  updateCategoricalEligibilityRule(id: string, updates: Partial<CategoricalEligibilityRule>): Promise<CategoricalEligibilityRule>;
+
+  // Rules as Code - Document Requirements
+  createDocumentRequirementRule(rule: InsertDocumentRequirementRule): Promise<DocumentRequirementRule>;
+  getDocumentRequirementRules(benefitProgramId: string): Promise<DocumentRequirementRule[]>;
+  updateDocumentRequirementRule(id: string, updates: Partial<DocumentRequirementRule>): Promise<DocumentRequirementRule>;
+
+  // Rules as Code - Eligibility Calculations
+  createEligibilityCalculation(calculation: InsertEligibilityCalculation): Promise<EligibilityCalculation>;
+  getEligibilityCalculations(userId?: string, limit?: number): Promise<EligibilityCalculation[]>;
+
+  // Rules as Code - Client Cases
+  createClientCase(clientCase: InsertClientCase): Promise<ClientCase>;
+  getClientCases(navigatorId?: string, status?: string): Promise<ClientCase[]>;
+  getClientCase(id: string): Promise<ClientCase | undefined>;
+  updateClientCase(id: string, updates: Partial<ClientCase>): Promise<ClientCase>;
+
+  // Rules as Code - Poverty Levels
+  createPovertyLevel(level: InsertPovertyLevel): Promise<PovertyLevel>;
+  getPovertyLevels(year?: number): Promise<PovertyLevel[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -390,6 +453,193 @@ export class DatabaseStorage implements IStorage {
       .update(documentVersions)
       .set({ isActive: false })
       .where(eq(documentVersions.documentId, documentId));
+  }
+
+  // Rules as Code - SNAP Income Limits
+  async createSnapIncomeLimit(limit: InsertSnapIncomeLimit): Promise<SnapIncomeLimit> {
+    const [incomeLimit] = await db.insert(snapIncomeLimits).values(limit).returning();
+    return incomeLimit;
+  }
+
+  async getSnapIncomeLimits(benefitProgramId: string): Promise<SnapIncomeLimit[]> {
+    return await db
+      .select()
+      .from(snapIncomeLimits)
+      .where(eq(snapIncomeLimits.benefitProgramId, benefitProgramId))
+      .orderBy(desc(snapIncomeLimits.effectiveDate));
+  }
+
+  async updateSnapIncomeLimit(id: string, updates: Partial<SnapIncomeLimit>): Promise<SnapIncomeLimit> {
+    const [limit] = await db
+      .update(snapIncomeLimits)
+      .set({ ...updates, updatedAt: sql`NOW()` })
+      .where(eq(snapIncomeLimits.id, id))
+      .returning();
+    return limit;
+  }
+
+  // Rules as Code - SNAP Deductions
+  async createSnapDeduction(deduction: InsertSnapDeduction): Promise<SnapDeduction> {
+    const [snapDeduction] = await db.insert(snapDeductions).values(deduction).returning();
+    return snapDeduction;
+  }
+
+  async getSnapDeductions(benefitProgramId: string): Promise<SnapDeduction[]> {
+    return await db
+      .select()
+      .from(snapDeductions)
+      .where(eq(snapDeductions.benefitProgramId, benefitProgramId))
+      .orderBy(snapDeductions.deductionType);
+  }
+
+  async updateSnapDeduction(id: string, updates: Partial<SnapDeduction>): Promise<SnapDeduction> {
+    const [deduction] = await db
+      .update(snapDeductions)
+      .set({ ...updates, updatedAt: sql`NOW()` })
+      .where(eq(snapDeductions.id, id))
+      .returning();
+    return deduction;
+  }
+
+  // Rules as Code - SNAP Allotments
+  async createSnapAllotment(allotment: InsertSnapAllotment): Promise<SnapAllotment> {
+    const [snapAllotment] = await db.insert(snapAllotments).values(allotment).returning();
+    return snapAllotment;
+  }
+
+  async getSnapAllotments(benefitProgramId: string): Promise<SnapAllotment[]> {
+    return await db
+      .select()
+      .from(snapAllotments)
+      .where(eq(snapAllotments.benefitProgramId, benefitProgramId))
+      .orderBy(desc(snapAllotments.effectiveDate));
+  }
+
+  async updateSnapAllotment(id: string, updates: Partial<SnapAllotment>): Promise<SnapAllotment> {
+    const [allotment] = await db
+      .update(snapAllotments)
+      .set({ ...updates, updatedAt: sql`NOW()` })
+      .where(eq(snapAllotments.id, id))
+      .returning();
+    return allotment;
+  }
+
+  // Rules as Code - Categorical Eligibility
+  async createCategoricalEligibilityRule(rule: InsertCategoricalEligibilityRule): Promise<CategoricalEligibilityRule> {
+    const [catRule] = await db.insert(categoricalEligibilityRules).values(rule).returning();
+    return catRule;
+  }
+
+  async getCategoricalEligibilityRules(benefitProgramId: string): Promise<CategoricalEligibilityRule[]> {
+    return await db
+      .select()
+      .from(categoricalEligibilityRules)
+      .where(eq(categoricalEligibilityRules.benefitProgramId, benefitProgramId))
+      .orderBy(desc(categoricalEligibilityRules.effectiveDate));
+  }
+
+  async updateCategoricalEligibilityRule(id: string, updates: Partial<CategoricalEligibilityRule>): Promise<CategoricalEligibilityRule> {
+    const [rule] = await db
+      .update(categoricalEligibilityRules)
+      .set({ ...updates, updatedAt: sql`NOW()` })
+      .where(eq(categoricalEligibilityRules.id, id))
+      .returning();
+    return rule;
+  }
+
+  // Rules as Code - Document Requirements
+  async createDocumentRequirementRule(rule: InsertDocumentRequirementRule): Promise<DocumentRequirementRule> {
+    const [docRule] = await db.insert(documentRequirementRules).values(rule).returning();
+    return docRule;
+  }
+
+  async getDocumentRequirementRules(benefitProgramId: string): Promise<DocumentRequirementRule[]> {
+    return await db
+      .select()
+      .from(documentRequirementRules)
+      .where(eq(documentRequirementRules.benefitProgramId, benefitProgramId))
+      .orderBy(desc(documentRequirementRules.effectiveDate));
+  }
+
+  async updateDocumentRequirementRule(id: string, updates: Partial<DocumentRequirementRule>): Promise<DocumentRequirementRule> {
+    const [rule] = await db
+      .update(documentRequirementRules)
+      .set({ ...updates, updatedAt: sql`NOW()` })
+      .where(eq(documentRequirementRules.id, id))
+      .returning();
+    return rule;
+  }
+
+  // Rules as Code - Eligibility Calculations
+  async createEligibilityCalculation(calculation: InsertEligibilityCalculation): Promise<EligibilityCalculation> {
+    const [calc] = await db.insert(eligibilityCalculations).values(calculation).returning();
+    return calc;
+  }
+
+  async getEligibilityCalculations(userId?: string, limit: number = 50): Promise<EligibilityCalculation[]> {
+    let query = db.select().from(eligibilityCalculations);
+    
+    if (userId) {
+      query = query.where(eq(eligibilityCalculations.userId, userId));
+    }
+    
+    return await query
+      .orderBy(desc(eligibilityCalculations.calculatedAt))
+      .limit(limit);
+  }
+
+  // Rules as Code - Client Cases
+  async createClientCase(clientCase: InsertClientCase): Promise<ClientCase> {
+    const [newCase] = await db.insert(clientCases).values(clientCase).returning();
+    return newCase;
+  }
+
+  async getClientCases(navigatorId?: string, status?: string): Promise<ClientCase[]> {
+    let query = db.select().from(clientCases);
+    
+    const conditions = [];
+    if (navigatorId) {
+      conditions.push(eq(clientCases.assignedNavigator, navigatorId));
+    }
+    if (status) {
+      conditions.push(eq(clientCases.status, status));
+    }
+    
+    if (conditions.length > 0) {
+      query = query.where(and(...conditions));
+    }
+    
+    return await query.orderBy(desc(clientCases.updatedAt));
+  }
+
+  async getClientCase(id: string): Promise<ClientCase | undefined> {
+    const [clientCase] = await db.select().from(clientCases).where(eq(clientCases.id, id));
+    return clientCase || undefined;
+  }
+
+  async updateClientCase(id: string, updates: Partial<ClientCase>): Promise<ClientCase> {
+    const [clientCase] = await db
+      .update(clientCases)
+      .set({ ...updates, updatedAt: sql`NOW()` })
+      .where(eq(clientCases.id, id))
+      .returning();
+    return clientCase;
+  }
+
+  // Rules as Code - Poverty Levels
+  async createPovertyLevel(level: InsertPovertyLevel): Promise<PovertyLevel> {
+    const [povertyLevel] = await db.insert(povertyLevels).values(level).returning();
+    return povertyLevel;
+  }
+
+  async getPovertyLevels(year?: number): Promise<PovertyLevel[]> {
+    let query = db.select().from(povertyLevels);
+    
+    if (year) {
+      query = query.where(eq(povertyLevels.year, year));
+    }
+    
+    return await query.orderBy(desc(povertyLevels.year), povertyLevels.householdSize);
   }
 }
 
