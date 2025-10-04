@@ -81,6 +81,31 @@ export default function PolicyManual() {
     },
   });
 
+  // Trigger FULL ingestion (download PDFs, extract text, generate embeddings)
+  const fullIngestMutation = useMutation({
+    mutationFn: async () => {
+      const response = await apiRequest("POST", "/api/manual/ingest-full", {});
+      return response.json();
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/manual/sections"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/manual/status"] });
+      toast({
+        title: "Full ingestion completed!",
+        description: `Processed ${data.sectionsProcessed} sections, created ${data.chunksCreated} chunks, found ${data.crossReferencesExtracted} cross-references.`,
+        duration: 10000,
+      });
+    },
+    onError: (error) => {
+      toast({
+        title: "Full ingestion failed",
+        description: "Could not complete manual ingestion. Check console for errors.",
+        variant: "destructive",
+      });
+      console.error("Full ingestion error:", error);
+    },
+  });
+
   const sections: ManualSection[] = sectionsData?.data || [];
   const status: ManualStatus | undefined = statusData;
 
@@ -170,6 +195,34 @@ export default function PolicyManual() {
                           </>
                         ) : (
                           <>Load now</>
+                        )}
+                      </Button>
+                    </AlertDescription>
+                  </Alert>
+                )}
+
+                {status.withContent === 0 && status.ingested > 0 && (
+                  <Alert className="bg-blue-50 dark:bg-blue-950 border-blue-200 dark:border-blue-800">
+                    <FileText className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                    <AlertDescription className="text-blue-900 dark:text-blue-100 flex items-center justify-between">
+                      <span>Ready to extract content from {status.ingested} documents and generate embeddings for search?</span>
+                      <Button 
+                        onClick={() => fullIngestMutation.mutate()}
+                        disabled={fullIngestMutation.isPending}
+                        size="sm"
+                        data-testid="button-full-ingest"
+                        className="ml-4"
+                      >
+                        {fullIngestMutation.isPending ? (
+                          <>
+                            <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                            Processing...
+                          </>
+                        ) : (
+                          <>
+                            <Download className="mr-2 h-4 w-4" />
+                            Extract Content & Generate Embeddings
+                          </>
                         )}
                       </Button>
                     </AlertDescription>

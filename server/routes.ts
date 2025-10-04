@@ -906,6 +906,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Trigger FULL manual ingestion (download PDFs, extract text, generate embeddings)
+  app.post("/api/manual/ingest-full", async (req, res) => {
+    try {
+      // Import the full ingestion service
+      const { ingestCompleteManual } = await import("./services/manualIngestionService");
+      
+      console.log("Starting complete manual ingestion pipeline...");
+      
+      // Run the complete ingestion
+      const result = await ingestCompleteManual();
+      
+      res.json({
+        success: true,
+        message: "Manual ingestion completed successfully",
+        sectionsProcessed: result.sectionsProcessed,
+        chunksCreated: result.chunksCreated,
+        crossReferencesExtracted: result.crossReferencesExtracted,
+        errors: result.errors,
+      });
+    } catch (error) {
+      console.error("Error during full manual ingestion:", error);
+      res.status(500).json({ 
+        error: "Failed to complete manual ingestion",
+        details: error instanceof Error ? error.message : 'Unknown error',
+      });
+    }
+  });
+
   const httpServer = createServer(app);
   return httpServer;
 }
