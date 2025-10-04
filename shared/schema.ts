@@ -499,6 +499,28 @@ export const manualSectionsRelations = relations(manualSections, ({ one }) => ({
   }),
 }));
 
+// Cross References - Track references between manual sections
+export const sectionCrossReferences = pgTable("section_cross_references", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  fromSectionId: varchar("from_section_id").references(() => manualSections.id, { onDelete: "cascade" }).notNull(),
+  toSectionNumber: text("to_section_number").notNull(), // Section being referenced (e.g., "115", "200")
+  referenceType: text("reference_type").notNull(), // "see_section", "defined_in", "related_to", "superseded_by"
+  context: text("context"), // The text snippet where reference appears
+  chunkId: varchar("chunk_id").references(() => documentChunks.id, { onDelete: "set null" }), // Which chunk contains this reference
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const sectionCrossReferencesRelations = relations(sectionCrossReferences, ({ one }) => ({
+  fromSection: one(manualSections, {
+    fields: [sectionCrossReferences.fromSectionId],
+    references: [manualSections.id],
+  }),
+  chunk: one(documentChunks, {
+    fields: [sectionCrossReferences.chunkId],
+    references: [documentChunks.id],
+  }),
+}));
+
 // Insert Schemas
 export const insertUserSchema = createInsertSchema(users).pick({
   username: true,
