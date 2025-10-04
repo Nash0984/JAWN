@@ -3,9 +3,6 @@ import mammoth from 'mammoth';
 import crypto from 'crypto';
 import { ScrapedSection } from './manualScraper';
 
-// pdf-parse has CommonJS exports only
-const pdfParse = require('pdf-parse');
-
 export interface ProcessedDocument {
   sectionNumber: string;
   rawText: string;
@@ -52,7 +49,9 @@ export async function downloadDocument(url: string, timeout: number = 60000): Pr
  */
 export async function extractPdfText(buffer: Buffer): Promise<{ text: string; pageCount: number }> {
   try {
-    const data = await pdfParse(buffer);
+    // Dynamic import for ESM module
+    const { pdf } = await import('pdf-parse');
+    const data = await pdf(new Uint8Array(buffer));
     return {
       text: data.text,
       pageCount: data.numpages,
