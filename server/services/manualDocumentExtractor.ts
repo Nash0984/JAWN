@@ -1,8 +1,10 @@
 import axios from 'axios';
-import pdfParse from 'pdf-parse';
 import mammoth from 'mammoth';
 import crypto from 'crypto';
 import { ScrapedSection } from './manualScraper';
+
+// pdf-parse has CommonJS exports only
+const pdfParse = require('pdf-parse');
 
 export interface ProcessedDocument {
   sectionNumber: string;

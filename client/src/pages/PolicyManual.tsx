@@ -106,7 +106,7 @@ export default function PolicyManual() {
     },
   });
 
-  const sections: ManualSection[] = sectionsData?.data || [];
+  const sections: ManualSection[] = (sectionsData as any)?.data || [];
   const status: ManualStatus | undefined = statusData;
 
   // Group sections by category
