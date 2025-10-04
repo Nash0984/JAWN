@@ -58,7 +58,7 @@ export default function SystemArchitecture() {
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-muted-foreground">Embedding Model:</span>
-                <span className="text-foreground font-medium">text-embedding-004</span>
+                <span className="text-foreground font-medium">gemini-embedding-001</span>
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-muted-foreground">Dimensions:</span>

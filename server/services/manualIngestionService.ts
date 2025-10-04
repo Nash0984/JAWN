@@ -217,13 +217,10 @@ export async function generateEmbeddings(chunks: string[]): Promise<string[]> {
         batch.map(async (chunk) => {
           try {
             const result = await ai.models.embedContent({
-              model: "text-embedding-004",
-              contents: [{
-                role: 'user',
-                parts: [{ text: chunk }]
-              }]
+              model: "gemini-embedding-001",
+              contents: chunk
             });
-            return JSON.stringify(result.embedding?.values || []);
+            return JSON.stringify(result.embeddings?.[0]?.values || []);
           } catch (error) {
             console.error('Error generating embedding for chunk:', error);
             return JSON.stringify([]);
@@ -326,6 +323,44 @@ export async function ingestCompleteManual(): Promise<{
           sectionId = newSection.id;
         }
         
+        // Create or update document record for this section
+        const [existingDoc] = await db
+          .select()
+          .from(documents)
+          .where(eq(documents.sectionNumber, doc.sectionNumber));
+        
+        let documentId: string;
+        
+        if (existingDoc) {
+          documentId = existingDoc.id;
+          await db
+            .update(documents)
+            .set({
+              lastModifiedAt: doc.metadata.lastModified,
+              fileSize: doc.fileSize,
+              status: 'processing',
+              updatedAt: new Date(),
+            })
+            .where(eq(documents.id, documentId));
+        } else {
+          const [newDoc] = await db
+            .insert(documents)
+            .values({
+              filename: `${doc.sectionNumber}-${scrapedSection.sectionTitle}.${scrapedSection.fileType}`,
+              originalName: `${scrapedSection.sectionTitle}.${scrapedSection.fileType}`,
+              fileSize: doc.fileSize,
+              mimeType: scrapedSection.fileType === 'pdf' ? 'application/pdf' : 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+              status: 'processing',
+              isGoldenSource: true,
+              sectionNumber: doc.sectionNumber,
+              sourceUrl: scrapedSection.sourceUrl,
+              lastModifiedAt: doc.metadata.lastModified,
+              documentHash: doc.documentHash,
+            })
+            .returning();
+          documentId = newDoc.id;
+        }
+        
         // Step 4: Chunk the document
         const chunks = chunkDocument(doc.rawText, doc.sectionNumber, scrapedSection.sectionTitle);
         console.log(`  Section ${doc.sectionNumber}: ${chunks.length} chunks`);
@@ -337,7 +372,7 @@ export async function ingestCompleteManual(): Promise<{
         // Step 6: Store chunks with embeddings
         for (let i = 0; i < chunks.length; i++) {
           await db.insert(documentChunks).values({
-            documentId: sectionId, // Using section ID as document ID
+            documentId: documentId, // Using document ID from documents table
             chunkIndex: i,
             content: chunks[i].content,
             embeddings: embeddings[i],
