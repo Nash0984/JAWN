@@ -216,11 +216,14 @@ export async function generateEmbeddings(chunks: string[]): Promise<string[]> {
       const batchEmbeddings = await Promise.all(
         batch.map(async (chunk) => {
           try {
-            const result = await ai.models.embed({
+            const result = await ai.models.embedContent({
               model: "text-embedding-004",
-              content: chunk,
+              contents: [{
+                role: 'user',
+                parts: [{ text: chunk }]
+              }]
             });
-            return JSON.stringify(result.embeddings);
+            return JSON.stringify(result.embedding?.values || []);
           } catch (error) {
             console.error('Error generating embedding for chunk:', error);
             return JSON.stringify([]);
