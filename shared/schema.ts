@@ -471,11 +471,45 @@ export const clientCasesRelations = relations(clientCases, ({ one }) => ({
   }),
 }));
 
+// Manual Sections - Table of Contents for browsing the policy manual
+export const manualSections = pgTable("manual_sections", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  sectionNumber: text("section_number").notNull().unique(), // e.g., "100", "115", "200"
+  sectionTitle: text("section_title").notNull(), // e.g., "Household Composition"
+  category: text("category").notNull(), // e.g., "100s - Eligibility", "200s - Income & Resources", "400s - Application Process"
+  parentSection: text("parent_section"), // For sub-sections
+  sortOrder: integer("sort_order").notNull(), // Display order
+  documentId: varchar("document_id").references(() => documents.id), // Link to actual document
+  sourceUrl: text("source_url"), // Original URL
+  fileType: text("file_type"), // PDF, DOCX, etc.
+  fileSize: integer("file_size"), // in bytes
+  lastModified: timestamp("last_modified"), // from source
+  effectiveDate: timestamp("effective_date"),
+  isActive: boolean("is_active").default(true).notNull(),
+  hasContent: boolean("has_content").default(false).notNull(), // Whether content has been ingested
+  metadata: jsonb("metadata"), // Additional section metadata
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const manualSectionsRelations = relations(manualSections, ({ one }) => ({
+  document: one(documents, {
+    fields: [manualSections.documentId],
+    references: [documents.id],
+  }),
+}));
+
 // Insert Schemas
 export const insertUserSchema = createInsertSchema(users).pick({
   username: true,
   password: true,
   role: true,
+});
+
+export const insertManualSectionSchema = createInsertSchema(manualSections).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
 });
 
 export const insertBenefitProgramSchema = createInsertSchema(benefitPrograms).omit({

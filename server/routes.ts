@@ -8,6 +8,7 @@ import { automatedIngestionService } from "./services/automatedIngestion";
 import { ObjectStorageService } from "./objectStorage";
 import { rulesEngine } from "./services/rulesEngine";
 import { hybridService } from "./services/hybridService";
+import { manualIngestionService } from "./services/manualIngestion";
 import { 
   insertDocumentSchema, 
   insertSearchQuerySchema, 
@@ -826,6 +827,82 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error fetching calculations:", error);
       res.status(500).json({ error: "Failed to fetch calculations" });
+    }
+  });
+
+  // ============================================================================
+  // POLICY MANUAL ENDPOINTS
+  // ============================================================================
+
+  // Get all manual sections (table of contents)
+  app.get("/api/manual/sections", async (req, res) => {
+    try {
+      const sections = await storage.getManualSections();
+      res.json({
+        success: true,
+        data: sections,
+        count: sections.length,
+      });
+    } catch (error) {
+      console.error("Error fetching manual sections:", error);
+      res.status(500).json({ error: "Failed to fetch manual sections" });
+    }
+  });
+
+  // Get manual structure (metadata without DB access)
+  app.get("/api/manual/structure", async (req, res) => {
+    try {
+      const structure = manualIngestionService.getManualStructure();
+      res.json({
+        success: true,
+        data: structure,
+        total: manualIngestionService.getTotalSections(),
+      });
+    } catch (error) {
+      console.error("Error fetching manual structure:", error);
+      res.status(500).json({ error: "Failed to fetch manual structure" });
+    }
+  });
+
+  // Get manual ingestion status
+  app.get("/api/manual/status", async (req, res) => {
+    try {
+      const status = await manualIngestionService.getIngestionStatus();
+      const isComplete = await manualIngestionService.verifyCompleteness();
+      
+      res.json({
+        success: true,
+        ...status,
+        isComplete,
+      });
+    } catch (error) {
+      console.error("Error fetching manual status:", error);
+      res.status(500).json({ error: "Failed to fetch manual status" });
+    }
+  });
+
+  // Trigger manual metadata ingestion
+  app.post("/api/manual/ingest-metadata", async (req, res) => {
+    try {
+      const programs = await storage.getBenefitPrograms();
+      const snapProgram = programs.find(p => p.code === "MD_SNAP");
+
+      if (!snapProgram) {
+        return res.status(500).json({ error: "Maryland SNAP program not found" });
+      }
+
+      await manualIngestionService.ingestSectionMetadata(snapProgram.id);
+
+      const status = await manualIngestionService.getIngestionStatus();
+
+      res.json({
+        success: true,
+        message: "Manual metadata ingested successfully",
+        ...status,
+      });
+    } catch (error) {
+      console.error("Error ingesting manual metadata:", error);
+      res.status(500).json({ error: "Failed to ingest manual metadata" });
     }
   });
 

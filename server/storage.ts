@@ -17,6 +17,7 @@ import {
   eligibilityCalculations,
   clientCases,
   povertyLevels,
+  manualSections,
   type User,
   type InsertUser,
   type Document,
@@ -146,6 +147,9 @@ export interface IStorage {
   // Rules as Code - Poverty Levels
   createPovertyLevel(level: InsertPovertyLevel): Promise<PovertyLevel>;
   getPovertyLevels(year?: number): Promise<PovertyLevel[]>;
+
+  // Policy Manual Sections
+  getManualSections(): Promise<any[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -640,6 +644,11 @@ export class DatabaseStorage implements IStorage {
     }
     
     return await query.orderBy(desc(povertyLevels.year), povertyLevels.householdSize);
+  }
+
+  // Policy Manual Sections
+  async getManualSections(): Promise<any[]> {
+    return await db.select().from(manualSections).orderBy(manualSections.sortOrder);
   }
 }
 
