@@ -24,6 +24,12 @@ export interface HybridSearchResult {
     reason: string;
     breakdown?: any;
     appliedRules?: string[];
+    policyCitations?: Array<{
+      sectionNumber: string;
+      sectionTitle: string;
+      ruleType: string;
+      description: string;
+    }>;
   };
   
   // AI-generated explanation (if applicable)
@@ -33,6 +39,12 @@ export interface HybridSearchResult {
       documentId: string;
       filename: string;
       content: string;
+      relevanceScore: number;
+    }>;
+    citations?: Array<{
+      sectionNumber: string;
+      sectionTitle: string;
+      sourceUrl?: string;
       relevanceScore: number;
     }>;
     relevanceScore?: number;
@@ -249,10 +261,12 @@ class HybridService {
         reason: calculationResult.reason || '',
         breakdown: calculationResult.calculationBreakdown,
         appliedRules: calculationResult.calculationBreakdown,
+        policyCitations: calculationResult.policyCitations,
       } : undefined,
       aiExplanation: {
         answer: ragResult.answer,
         sources: ragResult.sources,
+        citations: ragResult.citations,
         relevanceScore: ragResult.relevanceScore,
       },
       nextSteps: calculationResult 
