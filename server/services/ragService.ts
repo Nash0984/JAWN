@@ -6,9 +6,9 @@ import { ReadingLevelService } from "./readingLevelService";
 let gemini: GoogleGenAI | null = null;
 function getGemini(): GoogleGenAI {
   if (!gemini) {
-    const apiKey = process.env.GEMINI_API_KEY;
+    const apiKey = process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY;
     if (!apiKey) {
-      throw new Error('GEMINI_API_KEY environment variable is required');
+      throw new Error('GOOGLE_API_KEY or GEMINI_API_KEY environment variable is required');
     }
     gemini = new GoogleGenAI({ apiKey });
   }
@@ -23,6 +23,15 @@ export interface SearchResult {
     content: string;
     relevanceScore: number;
     pageNumber?: number;
+    sectionNumber?: string;
+    sectionTitle?: string;
+    sourceUrl?: string;
+  }>;
+  citations: Array<{
+    sectionNumber: string;
+    sectionTitle: string;
+    sourceUrl?: string;
+    relevanceScore: number;
   }>;
   relevanceScore?: number;
   queryAnalysis?: {
@@ -233,6 +242,9 @@ class RAGService {
         content: string;
         relevanceScore: number;
         pageNumber?: number;
+        sectionNumber?: string;
+        sectionTitle?: string;
+        sourceUrl?: string;
         chunkMetadata?: any;
       }> = [];
 
@@ -254,12 +266,16 @@ class RAGService {
             
             // Only include chunks with reasonable similarity
             if (similarity > 0.6) {
+              const metadata = doc.metadata as any;
               allResults.push({
                 documentId: doc.id,
                 filename: doc.filename,
                 content: chunk.content,
                 relevanceScore: similarity,
                 pageNumber: chunk.pageNumber || undefined,
+                sectionNumber: doc.sectionNumber || undefined,
+                sectionTitle: metadata?.sectionTitle || undefined,
+                sourceUrl: doc.sourceUrl || undefined,
                 chunkMetadata: chunk.metadata
               });
             }
@@ -365,9 +381,35 @@ class RAGService {
         ? relevantChunks.reduce((sum, chunk) => sum + chunk.relevanceScore, 0) / relevantChunks.length
         : 0;
 
+      // Extract unique citations from chunks with section information
+      const citationsMap = new Map<string, {
+        sectionNumber: string;
+        sectionTitle: string;
+        sourceUrl?: string;
+        relevanceScore: number;
+      }>();
+
+      relevantChunks.forEach(chunk => {
+        if (chunk.sectionNumber) {
+          const existing = citationsMap.get(chunk.sectionNumber);
+          if (!existing || chunk.relevanceScore > existing.relevanceScore) {
+            citationsMap.set(chunk.sectionNumber, {
+              sectionNumber: chunk.sectionNumber,
+              sectionTitle: chunk.sectionTitle || `Section ${chunk.sectionNumber}`,
+              sourceUrl: chunk.sourceUrl,
+              relevanceScore: chunk.relevanceScore
+            });
+          }
+        }
+      });
+
+      const citations = Array.from(citationsMap.values())
+        .sort((a, b) => b.relevanceScore - a.relevanceScore);
+
       return {
         answer,
         sources: relevantChunks,
+        citations,
         relevanceScore: avgRelevanceScore,
         queryAnalysis,
       };
