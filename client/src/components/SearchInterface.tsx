@@ -9,6 +9,7 @@ import { Loader2, Search, Bot, Calculator, BookOpen, CheckCircle2, Info } from "
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { ExportButton } from "@/components/ExportButton";
 
 interface HybridSearchResult {
   answer: string;
@@ -184,8 +185,9 @@ export default function SearchInterface() {
         <section id="search-results" aria-labelledby="results-heading">
           <Card className="shadow-lg border border-border slide-up">
             <CardContent className="p-6">
-              {/* Result Type Badge */}
-              <div className="flex items-center gap-2 mb-4">
+              {/* Result Type Badge and Export Button */}
+              <div className="flex items-center gap-2 mb-4 justify-between">
+                <div className="flex items-center gap-2">
                 {searchResult.type === 'deterministic' && (
                   <>
                     <Calculator className="h-5 w-5 text-primary" />
@@ -204,9 +206,76 @@ export default function SearchInterface() {
                     <Badge variant="default">Hybrid Answer</Badge>
                   </>
                 )}
-                <span className="text-xs text-muted-foreground ml-auto">
+                <span className="text-xs text-muted-foreground">
                   {searchResult.responseTime}ms
                 </span>
+                </div>
+                <ExportButton
+                  data={(() => {
+                    const exportData: any[] = [];
+                    
+                    if (searchResult.calculation?.policyCitations) {
+                      searchResult.calculation.policyCitations.forEach(citation => {
+                        exportData.push({
+                          type: 'Policy Citation',
+                          sectionNumber: citation.sectionNumber,
+                          sectionTitle: citation.sectionTitle,
+                          ruleType: citation.ruleType,
+                          description: citation.description,
+                        });
+                      });
+                    }
+                    
+                    if (searchResult.aiExplanation?.citations) {
+                      searchResult.aiExplanation.citations.forEach(citation => {
+                        exportData.push({
+                          type: 'AI Citation',
+                          sectionNumber: citation.sectionNumber,
+                          sectionTitle: citation.sectionTitle,
+                          relevanceScore: citation.relevanceScore,
+                          sourceUrl: citation.sourceUrl || '—',
+                        });
+                      });
+                    }
+                    
+                    if (searchResult.aiExplanation?.sources) {
+                      searchResult.aiExplanation.sources.forEach((source, idx) => {
+                        exportData.push({
+                          type: 'Source',
+                          filename: source.filename,
+                          sectionNumber: source.sectionNumber || '—',
+                          sectionTitle: source.sectionTitle || '—',
+                          relevanceScore: source.relevanceScore,
+                          content: source.content,
+                        });
+                      });
+                    }
+                    
+                    return exportData.length > 0 ? exportData : [{
+                      type: 'Answer',
+                      query: query,
+                      answer: searchResult.answer,
+                      responseType: searchResult.type,
+                      responseTime: searchResult.responseTime,
+                    }];
+                  })()}
+                  filename={`snap-search-${new Date().toISOString().split('T')[0]}`}
+                  title="SNAP Search Results"
+                  columns={[
+                    { header: "Type", key: "type" },
+                    { header: "Section Number", key: "sectionNumber" },
+                    { header: "Section Title", key: "sectionTitle" },
+                    { 
+                      header: "Relevance Score", 
+                      key: "relevanceScore",
+                      format: (val) => val ? `${(val * 100).toFixed(0)}%` : '—'
+                    },
+                    { header: "Description/Content", key: "description" },
+                    { header: "Source URL", key: "sourceUrl" },
+                  ]}
+                  size="sm"
+                  variant="outline"
+                />
               </div>
 
               {/* Deterministic Calculation Result */}
