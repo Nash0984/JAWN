@@ -24,6 +24,12 @@ interface HybridSearchResult {
     reason: string;
     breakdown?: any;
     appliedRules?: string[];
+    policyCitations?: Array<{
+      sectionNumber: string;
+      sectionTitle: string;
+      ruleType: string;
+      description: string;
+    }>;
   };
   aiExplanation?: {
     answer: string;
@@ -31,6 +37,14 @@ interface HybridSearchResult {
       documentId: string;
       filename: string;
       content: string;
+      relevanceScore: number;
+      sectionNumber?: string;
+      sectionTitle?: string;
+    }>;
+    citations?: Array<{
+      sectionNumber: string;
+      sectionTitle: string;
+      sourceUrl?: string;
       relevanceScore: number;
     }>;
     relevanceScore?: number;
@@ -243,6 +257,104 @@ export default function SearchInterface() {
                         </li>
                       ))}
                     </ul>
+                  </div>
+                </>
+              )}
+
+              {/* Policy Citations from Rules Engine */}
+              {searchResult.calculation?.policyCitations && searchResult.calculation.policyCitations.length > 0 && (
+                <>
+                  <Separator className="my-4" />
+                  <div className="space-y-3">
+                    <h4 className="font-semibold text-sm flex items-center gap-2">
+                      <BookOpen className="h-4 w-4" />
+                      Supporting Policy Sections
+                    </h4>
+                    <div className="grid gap-2">
+                      {searchResult.calculation.policyCitations.map((citation, index) => (
+                        <Card key={index} className="bg-muted/50 hover:bg-muted transition-colors">
+                          <CardContent className="p-3">
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="flex-1">
+                                <div className="flex items-center gap-2 mb-1">
+                                  <Badge variant="outline" className="text-xs font-mono">
+                                    Section {citation.sectionNumber}
+                                  </Badge>
+                                  <span className="text-sm font-medium">{citation.sectionTitle}</span>
+                                </div>
+                                <p className="text-xs text-muted-foreground">{citation.description}</p>
+                              </div>
+                              <Button 
+                                variant="ghost" 
+                                size="sm" 
+                                asChild
+                                className="flex-shrink-0"
+                                data-testid={`button-view-section-${citation.sectionNumber}`}
+                              >
+                                <a href={`/policy-manual?section=${citation.sectionNumber}`}>
+                                  View
+                                </a>
+                              </Button>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      ))}
+                    </div>
+                  </div>
+                </>
+              )}
+
+              {/* Manual Citations from RAG */}
+              {searchResult.aiExplanation?.citations && searchResult.aiExplanation.citations.length > 0 && (
+                <>
+                  <Separator className="my-4" />
+                  <div className="space-y-3">
+                    <h4 className="font-semibold text-sm flex items-center gap-2">
+                      <BookOpen className="h-4 w-4" />
+                      Relevant Manual Sections
+                    </h4>
+                    <div className="grid gap-2">
+                      {searchResult.aiExplanation.citations.map((citation, index) => (
+                        <Card key={index} className="bg-muted/50 hover:bg-muted transition-colors">
+                          <CardContent className="p-3">
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="flex-1">
+                                <div className="flex items-center gap-2 mb-1">
+                                  <Badge variant="outline" className="text-xs font-mono">
+                                    Section {citation.sectionNumber}
+                                  </Badge>
+                                  <span className="text-sm font-medium">{citation.sectionTitle}</span>
+                                  <Badge variant="secondary" className="text-xs ml-auto">
+                                    {(citation.relevanceScore * 100).toFixed(0)}% relevant
+                                  </Badge>
+                                </div>
+                                {citation.sourceUrl && (
+                                  <a 
+                                    href={citation.sourceUrl} 
+                                    target="_blank" 
+                                    rel="noopener noreferrer"
+                                    className="text-xs text-primary hover:underline"
+                                  >
+                                    View official document ↗
+                                  </a>
+                                )}
+                              </div>
+                              <Button 
+                                variant="ghost" 
+                                size="sm" 
+                                asChild
+                                className="flex-shrink-0"
+                                data-testid={`button-view-manual-${citation.sectionNumber}`}
+                              >
+                                <a href={`/policy-manual?section=${citation.sectionNumber}`}>
+                                  View
+                                </a>
+                              </Button>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      ))}
+                    </div>
                   </div>
                 </>
               )}
