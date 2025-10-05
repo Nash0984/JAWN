@@ -7,6 +7,8 @@ import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { 
   BookOpen, 
   Download, 
@@ -15,7 +17,9 @@ import {
   XCircle,
   FileText,
   RefreshCw,
-  ExternalLink
+  ExternalLink,
+  ArrowRight,
+  Link2
 } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -42,9 +46,25 @@ interface ManualStatus {
   isComplete: boolean;
 }
 
+interface SectionDetail {
+  section: ManualSection;
+  crossReferences: Array<{
+    id: string;
+    toSectionNumber: string;
+    referenceType: string;
+    context: string;
+  }>;
+  chunks: Array<{
+    id: string;
+    content: string;
+    chunkIndex: number;
+  }>;
+}
+
 export default function PolicyManual() {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+  const [selectedSectionId, setSelectedSectionId] = useState<string | null>(null);
   const { toast } = useToast();
 
   // Fetch manual sections
@@ -55,6 +75,12 @@ export default function PolicyManual() {
   // Fetch manual status
   const { data: statusData, isLoading: statusLoading } = useQuery<{ success: boolean } & ManualStatus>({
     queryKey: ["/api/manual/status"],
+  });
+
+  // Fetch section details
+  const { data: sectionDetailData, isLoading: sectionDetailLoading } = useQuery<{ success: boolean; data: SectionDetail }>({
+    queryKey: ["/api/manual/sections", selectedSectionId],
+    enabled: !!selectedSectionId,
   });
 
   // Trigger metadata ingestion
@@ -315,8 +341,9 @@ export default function PolicyManual() {
                 {filteredSections.map((section) => (
                   <div
                     key={section.id}
-                    className="flex items-center justify-between p-4 border border-border rounded-lg hover:bg-muted transition-colors"
+                    className="flex items-center justify-between p-4 border border-border rounded-lg hover:bg-muted transition-colors cursor-pointer"
                     data-testid={`section-${section.sectionNumber}`}
+                    onClick={() => setSelectedSectionId(section.id)}
                   >
                     <div className="flex-1">
                       <div className="flex items-center gap-3">
@@ -340,6 +367,7 @@ export default function PolicyManual() {
                         size="sm"
                         asChild
                         data-testid={`button-download-${section.sectionNumber}`}
+                        onClick={(e) => e.stopPropagation()}
                       >
                         <a href={section.sourceUrl} target="_blank" rel="noopener noreferrer">
                           <ExternalLink className="h-4 w-4" />
@@ -373,8 +401,9 @@ export default function PolicyManual() {
                     {sectionsByCategory[category].map((section) => (
                       <div
                         key={section.id}
-                        className="flex items-center justify-between p-4 border border-border rounded-lg hover:bg-muted transition-colors"
+                        className="flex items-center justify-between p-4 border border-border rounded-lg hover:bg-muted transition-colors cursor-pointer"
                         data-testid={`section-${section.sectionNumber}`}
+                        onClick={() => setSelectedSectionId(section.id)}
                       >
                         <div className="flex-1">
                           <div className="flex items-center gap-3">
@@ -398,6 +427,7 @@ export default function PolicyManual() {
                             size="sm"
                             asChild
                             data-testid={`button-download-${section.sectionNumber}`}
+                            onClick={(e) => e.stopPropagation()}
                           >
                             <a href={section.sourceUrl} target="_blank" rel="noopener noreferrer">
                               <ExternalLink className="h-4 w-4" />
@@ -413,6 +443,124 @@ export default function PolicyManual() {
           </Accordion>
         )}
       </div>
+
+      {/* Section Detail Dialog */}
+      <Dialog open={!!selectedSectionId} onOpenChange={() => setSelectedSectionId(null)}>
+        <DialogContent className="max-w-4xl max-h-[80vh]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-3">
+              {sectionDetailData?.data.section && (
+                <>
+                  <Badge variant="outline" className="font-mono">
+                    {sectionDetailData.data.section.sectionNumber}
+                  </Badge>
+                  <span>{sectionDetailData.data.section.sectionTitle}</span>
+                </>
+              )}
+            </DialogTitle>
+          </DialogHeader>
+
+          {sectionDetailLoading ? (
+            <div className="space-y-4">
+              <Skeleton className="h-32 w-full" />
+              <Skeleton className="h-32 w-full" />
+            </div>
+          ) : sectionDetailData?.data ? (
+            <ScrollArea className="h-[60vh] pr-4">
+              <div className="space-y-6">
+                {/* Section Content */}
+                {sectionDetailData.data.chunks.length > 0 ? (
+                  <div className="space-y-3">
+                    <h3 className="font-semibold text-lg">Section Content</h3>
+                    <div className="bg-muted p-4 rounded-lg space-y-3">
+                      {sectionDetailData.data.chunks.map((chunk) => (
+                        <p key={chunk.id} className="text-sm text-muted-foreground leading-relaxed">
+                          {chunk.content}
+                        </p>
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  <Alert>
+                    <FileText className="h-4 w-4" />
+                    <AlertDescription>
+                      Content not yet extracted for this section.
+                      <Button
+                        variant="link"
+                        size="sm"
+                        asChild
+                        className="ml-2"
+                      >
+                        <a href={sectionDetailData.data.section.sourceUrl} target="_blank" rel="noopener noreferrer">
+                          View Original PDF
+                        </a>
+                      </Button>
+                    </AlertDescription>
+                  </Alert>
+                )}
+
+                {/* Cross-References */}
+                {sectionDetailData.data.crossReferences.length > 0 && (
+                  <div className="space-y-3">
+                    <h3 className="font-semibold text-lg flex items-center gap-2">
+                      <Link2 className="h-5 w-5" />
+                      Related Sections
+                    </h3>
+                    <div className="space-y-2">
+                      {sectionDetailData.data.crossReferences.map((ref) => {
+                        // Find the referenced section to navigate to it
+                        const referencedSection = sections.find(s => s.sectionNumber === ref.toSectionNumber);
+                        
+                        return (
+                          <div
+                            key={ref.id}
+                            className="border border-border rounded-lg p-3 hover:bg-muted transition-colors"
+                          >
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="flex-1">
+                                <div className="flex items-center gap-2 mb-1">
+                                  <Badge variant="secondary" className="text-xs">
+                                    {ref.referenceType.replace(/_/g, ' ')}
+                                  </Badge>
+                                  <Badge variant="outline" className="font-mono">
+                                    Section {ref.toSectionNumber}
+                                  </Badge>
+                                </div>
+                                {ref.context && (
+                                  <p className="text-sm text-muted-foreground italic">
+                                    "{ref.context}"
+                                  </p>
+                                )}
+                              </div>
+                              {referencedSection ? (
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => {
+                                    setSelectedSectionId(null);
+                                    setTimeout(() => setSelectedSectionId(referencedSection.id), 100);
+                                  }}
+                                  data-testid={`button-navigate-${ref.toSectionNumber}`}
+                                >
+                                  <ArrowRight className="h-4 w-4" />
+                                </Button>
+                              ) : (
+                                <Badge variant="outline" className="text-xs">
+                                  Not Found
+                                </Badge>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </ScrollArea>
+          ) : null}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
