@@ -849,6 +849,36 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Get specific manual section with details
+  app.get("/api/manual/sections/:id", async (req, res) => {
+    try {
+      const { id } = req.params;
+      
+      // Get section details, cross-references, and chunks in parallel
+      const [section, crossReferences, chunks] = await Promise.all([
+        storage.getManualSection(id),
+        storage.getSectionCrossReferences(id),
+        storage.getSectionChunks(id)
+      ]);
+
+      if (!section) {
+        return res.status(404).json({ error: "Section not found" });
+      }
+
+      res.json({
+        success: true,
+        data: {
+          section,
+          crossReferences,
+          chunks,
+        },
+      });
+    } catch (error) {
+      console.error("Error fetching section details:", error);
+      res.status(500).json({ error: "Failed to fetch section details" });
+    }
+  });
+
   // Get manual structure (metadata without DB access)
   app.get("/api/manual/structure", async (req, res) => {
     try {

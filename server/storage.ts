@@ -18,6 +18,7 @@ import {
   clientCases,
   povertyLevels,
   manualSections,
+  sectionCrossReferences,
   type User,
   type InsertUser,
   type Document,
@@ -150,6 +151,9 @@ export interface IStorage {
 
   // Policy Manual Sections
   getManualSections(): Promise<any[]>;
+  getManualSection(id: string): Promise<any | undefined>;
+  getSectionCrossReferences(sectionId: string): Promise<any[]>;
+  getSectionChunks(sectionId: string): Promise<any[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -649,6 +653,34 @@ export class DatabaseStorage implements IStorage {
   // Policy Manual Sections
   async getManualSections(): Promise<any[]> {
     return await db.select().from(manualSections).orderBy(manualSections.sortOrder);
+  }
+
+  async getManualSection(id: string): Promise<any | undefined> {
+    const [section] = await db.select().from(manualSections).where(eq(manualSections.id, id));
+    return section || undefined;
+  }
+
+  async getSectionCrossReferences(sectionId: string): Promise<any[]> {
+    return await db
+      .select()
+      .from(sectionCrossReferences)
+      .where(eq(sectionCrossReferences.fromSectionId, sectionId));
+  }
+
+  async getSectionChunks(sectionId: string): Promise<any[]> {
+    // First get the section to find its document ID
+    const [section] = await db.select().from(manualSections).where(eq(manualSections.id, sectionId));
+    if (!section || !section.documentId) {
+      return [];
+    }
+    
+    // Then get chunks for that document
+    const chunks = await db
+      .select()
+      .from(documentChunks)
+      .where(eq(documentChunks.documentId, section.documentId))
+      .orderBy(documentChunks.chunkIndex);
+    return chunks;
   }
 }
 
