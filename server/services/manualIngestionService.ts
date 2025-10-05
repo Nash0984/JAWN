@@ -202,7 +202,11 @@ export function extractCrossReferences(text: string): CrossReference[] {
  */
 export async function generateEmbeddings(chunks: string[]): Promise<string[]> {
   try {
-    const ai = getGemini();
+    const apiKey = process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY;
+    if (!apiKey) {
+      throw new Error('GOOGLE_API_KEY or GEMINI_API_KEY is required');
+    }
+
     const embeddings: string[] = [];
     
     // Process in batches of 10
@@ -212,15 +216,34 @@ export async function generateEmbeddings(chunks: string[]): Promise<string[]> {
       
       console.log(`Generating embeddings for chunks ${i + 1}-${Math.min(i + batchSize, chunks.length)}/${chunks.length}...`);
       
-      // Generate embeddings for each chunk in the batch
+      // Generate embeddings for each chunk using direct REST API
       const batchEmbeddings = await Promise.all(
         batch.map(async (chunk) => {
           try {
-            const result = await ai.models.embedContent({
-              model: "gemini-embedding-001",
-              contents: chunk
-            });
-            return JSON.stringify(result.embeddings?.[0]?.values || []);
+            // Direct REST API call to avoid SDK routing issues
+            const response = await fetch(
+              `https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:embedContent?key=${apiKey}`,
+              {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                  content: {
+                    parts: [{ text: chunk }]
+                  }
+                })
+              }
+            );
+
+            if (!response.ok) {
+              const error = await response.text();
+              console.error('Embedding API error:', error);
+              return JSON.stringify([]);
+            }
+
+            const data = await response.json();
+            return JSON.stringify(data.embedding?.values || []);
           } catch (error) {
             console.error('Error generating embedding for chunk:', error);
             return JSON.stringify([]);
