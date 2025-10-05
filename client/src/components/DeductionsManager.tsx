@@ -40,7 +40,7 @@ export function DeductionsManager() {
   const [editingDeduction, setEditingDeduction] = useState<SnapDeduction | null>(null);
   const { toast } = useToast();
   
-  const { data: deductions = [], isLoading } = useQuery({
+  const { data: deductions = [], isLoading } = useQuery<SnapDeduction[]>({
     queryKey: ["/api/rules/deductions"],
   });
 
