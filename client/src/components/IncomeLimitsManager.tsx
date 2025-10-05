@@ -14,6 +14,7 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useForm } from "react-hook-form";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { ExportButton } from "@/components/ExportButton";
 
 interface SnapIncomeLimit {
   id: string;
@@ -143,14 +144,49 @@ export function IncomeLimitsManager() {
               Manage gross and net monthly income limits by household size (Manual Section 115)
             </CardDescription>
           </div>
-          <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-            <DialogTrigger asChild>
-              <Button onClick={handleNew} data-testid="button-add-income-limit">
-                <Plus className="mr-2 h-4 w-4" />
-                Add Income Limit
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="max-w-2xl">
+          <div className="flex gap-2">
+            <ExportButton
+              data={limits}
+              filename="snap-income-limits"
+              title="SNAP Income Limits"
+              columns={[
+                { header: "Household Size", key: "householdSize" },
+                { 
+                  header: "Gross Income Limit", 
+                  key: "grossMonthlyLimit",
+                  format: (val) => `$${(val / 100).toFixed(2)}`
+                },
+                { 
+                  header: "Net Income Limit", 
+                  key: "netMonthlyLimit",
+                  format: (val) => `$${(val / 100).toFixed(2)}`
+                },
+                { 
+                  header: "Manual Section", 
+                  key: "notes",
+                  format: (val) => val?.match(/Manual Section: (\d+)/)?.[1] || "—"
+                },
+                { 
+                  header: "Effective Date", 
+                  key: "effectiveDate",
+                  format: (val) => new Date(val).toLocaleDateString()
+                },
+                { 
+                  header: "Status", 
+                  key: "isActive",
+                  format: (val) => val ? "Active" : "Inactive"
+                },
+              ]}
+              size="sm"
+            />
+            <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+              <DialogTrigger asChild>
+                <Button onClick={handleNew} data-testid="button-add-income-limit">
+                  <Plus className="mr-2 h-4 w-4" />
+                  Add Income Limit
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="max-w-2xl">
               <DialogHeader>
                 <DialogTitle>
                   {editingLimit ? "Edit Income Limit" : "Add Income Limit"}
@@ -269,8 +305,9 @@ export function IncomeLimitsManager() {
                   </div>
                 </form>
               </Form>
-            </DialogContent>
-          </Dialog>
+              </DialogContent>
+            </Dialog>
+          </div>
         </div>
       </CardHeader>
       <CardContent>
