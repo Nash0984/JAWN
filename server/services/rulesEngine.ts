@@ -68,6 +68,12 @@ export interface EligibilityResult {
     allotmentId: string;
     categoricalRuleId?: string;
   };
+  policyCitations: Array<{
+    sectionNumber: string;
+    sectionTitle: string;
+    ruleType: string; // 'income' | 'deduction' | 'categorical' | 'allotment'
+    description: string;
+  }>;
 }
 
 export interface DocumentChecklistItem {
@@ -414,6 +420,68 @@ class RulesEngine {
       }
     }
 
+    // Build policy citations linking to manual sections
+    const policyCitations: Array<{
+      sectionNumber: string;
+      sectionTitle: string;
+      ruleType: string;
+      description: string;
+    }> = [];
+
+    // Income limits citation
+    policyCitations.push({
+      sectionNumber: '409',
+      sectionTitle: 'Income Eligibility',
+      ruleType: 'income',
+      description: `Maryland SNAP income limits for household size ${household.size}`
+    });
+
+    // Deductions citations
+    if (deductionAmounts.standardDeduction > 0) {
+      policyCitations.push({
+        sectionNumber: '212',
+        sectionTitle: 'Deductions',
+        ruleType: 'deduction',
+        description: 'Standard deduction for SNAP households'
+      });
+    }
+
+    if (deductionAmounts.earnedIncomeDeduction > 0) {
+      policyCitations.push({
+        sectionNumber: '213',
+        sectionTitle: 'Determining Income Deductions',
+        ruleType: 'deduction',
+        description: '20% earned income deduction'
+      });
+    }
+
+    if (deductionAmounts.shelterDeduction > 0) {
+      policyCitations.push({
+        sectionNumber: '214',
+        sectionTitle: 'Utility Allowances',
+        ruleType: 'deduction',
+        description: 'Shelter and utility cost deductions'
+      });
+    }
+
+    // Categorical eligibility citation
+    if (categoricalRule) {
+      policyCitations.push({
+        sectionNumber: '115',
+        sectionTitle: 'Categorical Eligibility',
+        ruleType: 'categorical',
+        description: `${categoricalRule.ruleName} categorical eligibility bypass`
+      });
+    }
+
+    // Allotment calculation citation
+    policyCitations.push({
+      sectionNumber: '600',
+      sectionTitle: 'Standards for Income and Deductions',
+      ruleType: 'allotment',
+      description: 'Maximum SNAP allotment tables and benefit calculation'
+    });
+
     return {
       isEligible,
       reason: isEligible 
@@ -432,6 +500,7 @@ class RulesEngine {
         allotmentId: allotment.id,
         categoricalRuleId: categoricalRule?.id,
       },
+      policyCitations,
     };
   }
 
