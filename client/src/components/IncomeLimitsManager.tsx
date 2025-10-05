@@ -19,11 +19,11 @@ interface SnapIncomeLimit {
   id: string;
   benefitProgramId: string;
   householdSize: number;
-  grossMonthlyIncomeLimit: number;
-  netMonthlyIncomeLimit: number;
-  manualSection: string | null;
+  grossMonthlyLimit: number;
+  netMonthlyLimit: number;
+  notes: string | null;
   effectiveDate: string;
-  expirationDate: string | null;
+  endDate: string | null;
   isActive: boolean;
 }
 
@@ -106,11 +106,12 @@ export function IncomeLimitsManager() {
 
   const handleEdit = (limit: SnapIncomeLimit) => {
     setEditingLimit(limit);
+    const manualSection = limit.notes?.match(/Manual Section: (\d+)/)?.[1] || "115";
     form.reset({
       householdSize: limit.householdSize,
-      grossMonthlyIncomeLimit: limit.grossMonthlyIncomeLimit / 100,
-      netMonthlyIncomeLimit: limit.netMonthlyIncomeLimit / 100,
-      manualSection: limit.manualSection || "115",
+      grossMonthlyIncomeLimit: limit.grossMonthlyLimit / 100,
+      netMonthlyIncomeLimit: limit.netMonthlyLimit / 100,
+      manualSection,
       effectiveDate: limit.effectiveDate.split('T')[0],
     });
     setIsDialogOpen(true);
@@ -300,37 +301,40 @@ export function IncomeLimitsManager() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {limits.map((limit) => (
-                <TableRow key={limit.id} data-testid={`row-income-limit-${limit.householdSize}`}>
-                  <TableCell className="font-medium">{limit.householdSize}</TableCell>
-                  <TableCell>${(limit.grossMonthlyIncomeLimit / 100).toFixed(2)}</TableCell>
-                  <TableCell>${(limit.netMonthlyIncomeLimit / 100).toFixed(2)}</TableCell>
-                  <TableCell>
-                    <Badge variant="outline">{limit.manualSection || "—"}</Badge>
-                  </TableCell>
-                  <TableCell>{new Date(limit.effectiveDate).toLocaleDateString()}</TableCell>
-                  <TableCell>
-                    {limit.isActive ? (
-                      <Badge variant="default" className="bg-green-600">
-                        <CheckCircle2 className="mr-1 h-3 w-3" />
-                        Active
-                      </Badge>
-                    ) : (
-                      <Badge variant="secondary">Inactive</Badge>
-                    )}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => handleEdit(limit)}
-                      data-testid={`button-edit-${limit.householdSize}`}
-                    >
-                      <Edit className="h-4 w-4" />
-                    </Button>
-                  </TableCell>
-                </TableRow>
-              ))}
+              {limits.map((limit) => {
+                const manualSection = limit.notes?.match(/Manual Section: (\d+)/)?.[1] || "—";
+                return (
+                  <TableRow key={limit.id} data-testid={`row-income-limit-${limit.householdSize}`}>
+                    <TableCell className="font-medium">{limit.householdSize}</TableCell>
+                    <TableCell>${(limit.grossMonthlyLimit / 100).toFixed(2)}</TableCell>
+                    <TableCell>${(limit.netMonthlyLimit / 100).toFixed(2)}</TableCell>
+                    <TableCell>
+                      <Badge variant="outline">{manualSection}</Badge>
+                    </TableCell>
+                    <TableCell>{new Date(limit.effectiveDate).toLocaleDateString()}</TableCell>
+                    <TableCell>
+                      {limit.isActive ? (
+                        <Badge variant="default" className="bg-green-600">
+                          <CheckCircle2 className="mr-1 h-3 w-3" />
+                          Active
+                        </Badge>
+                      ) : (
+                        <Badge variant="secondary">Inactive</Badge>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleEdit(limit)}
+                        data-testid={`button-edit-${limit.householdSize}`}
+                      >
+                        <Edit className="h-4 w-4" />
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
             </TableBody>
           </Table>
         )}

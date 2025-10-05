@@ -693,24 +693,85 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Get active SNAP income limits
   app.get("/api/rules/income-limits", async (req, res) => {
     try {
-      const programs = await storage.getBenefitPrograms();
-      const snapProgram = programs.find(p => p.code === "MD_SNAP");
-
-      if (!snapProgram) {
-        return res.status(500).json({ error: "Maryland SNAP program not found" });
+      const { benefitProgramId } = req.query;
+      
+      let programId = benefitProgramId as string;
+      if (!programId) {
+        const programs = await storage.getBenefitPrograms();
+        const snapProgram = programs.find(p => p.code === "MD_SNAP");
+        if (!snapProgram) {
+          return res.status(500).json({ error: "Maryland SNAP program not found" });
+        }
+        programId = snapProgram.id;
       }
 
-      const limits = await storage.getSnapIncomeLimits(snapProgram.id);
-      const activeLimits = limits.filter(l => l.isActive);
+      const limits = await storage.getSnapIncomeLimits(programId);
 
       res.json({
         success: true,
-        data: activeLimits,
-        count: activeLimits.length,
+        data: limits,
+        count: limits.length,
       });
     } catch (error) {
       console.error("Error fetching income limits:", error);
       res.status(500).json({ error: "Failed to fetch income limits" });
+    }
+  });
+
+  // Create new SNAP income limit
+  app.post("/api/rules/income-limits", async (req, res) => {
+    try {
+      const { benefitProgramId, householdSize, grossMonthlyIncomeLimit, netMonthlyIncomeLimit, manualSection, effectiveDate } = req.body;
+
+      if (!benefitProgramId || !householdSize || grossMonthlyIncomeLimit === undefined || netMonthlyIncomeLimit === undefined) {
+        return res.status(400).json({ error: "Missing required fields" });
+      }
+
+      const limit = await storage.createSnapIncomeLimit({
+        benefitProgramId,
+        householdSize,
+        grossMonthlyLimit: grossMonthlyIncomeLimit,
+        netMonthlyLimit: netMonthlyIncomeLimit,
+        percentOfPoverty: 200,
+        effectiveDate: effectiveDate ? new Date(effectiveDate) : new Date(),
+        endDate: null,
+        isActive: true,
+        notes: manualSection ? `Manual Section: ${manualSection}` : null,
+      });
+
+      res.json({
+        success: true,
+        data: limit,
+      });
+    } catch (error) {
+      console.error("Error creating income limit:", error);
+      res.status(500).json({ error: "Failed to create income limit" });
+    }
+  });
+
+  // Update SNAP income limit
+  app.patch("/api/rules/income-limits/:id", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { householdSize, grossMonthlyIncomeLimit, netMonthlyIncomeLimit, manualSection, effectiveDate, isActive } = req.body;
+
+      const updates: any = {};
+      if (householdSize !== undefined) updates.householdSize = householdSize;
+      if (grossMonthlyIncomeLimit !== undefined) updates.grossMonthlyLimit = grossMonthlyIncomeLimit;
+      if (netMonthlyIncomeLimit !== undefined) updates.netMonthlyLimit = netMonthlyIncomeLimit;
+      if (manualSection !== undefined) updates.notes = `Manual Section: ${manualSection}`;
+      if (effectiveDate !== undefined) updates.effectiveDate = new Date(effectiveDate);
+      if (isActive !== undefined) updates.isActive = isActive;
+
+      const limit = await storage.updateSnapIncomeLimit(id, updates);
+
+      res.json({
+        success: true,
+        data: limit,
+      });
+    } catch (error) {
+      console.error("Error updating income limit:", error);
+      res.status(500).json({ error: "Failed to update income limit" });
     }
   });
 
