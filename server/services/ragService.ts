@@ -1,18 +1,74 @@
 import { GoogleGenAI } from "@google/genai";
 import { storage } from "../storage";
 import { ReadingLevelService } from "./readingLevelService";
+import { auditService } from "./auditService";
 
 // Lazy Gemini initialization to prevent server crash at import-time
 let gemini: GoogleGenAI | null = null;
-function getGemini(): GoogleGenAI {
+let geminiAvailable = true;
+let lastGeminiError: Date | null = null;
+
+function getGemini(): GoogleGenAI | null {
   if (!gemini) {
     const apiKey = process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY;
     if (!apiKey) {
-      throw new Error('GOOGLE_API_KEY or GEMINI_API_KEY environment variable is required');
+      geminiAvailable = false;
+      return null;
     }
-    gemini = new GoogleGenAI({ apiKey });
+    try {
+      gemini = new GoogleGenAI({ apiKey });
+      geminiAvailable = true;
+    } catch (error) {
+      console.error('Failed to initialize Gemini API:', error);
+      geminiAvailable = false;
+      lastGeminiError = new Date();
+      return null;
+    }
   }
   return gemini;
+}
+
+/**
+ * Generate fallback response when Gemini API is unavailable
+ */
+function generateFallbackResponse(type: string, context?: any): any {
+  const timestamp = new Date().toISOString();
+  
+  switch (type) {
+    case 'verification':
+      return {
+        documentType: "unknown",
+        meetsCriteria: false,
+        summary: "Document verification is temporarily unavailable. Please try again later or contact support for manual review.",
+        requirements: [],
+        officialCitations: [],
+        confidence: 0,
+        fallback: true
+      };
+      
+    case 'search':
+      return {
+        answer: "AI-powered search is temporarily unavailable. Please use specific keywords or contact support for assistance.",
+        sources: [],
+        citations: [],
+        relevanceScore: 0,
+        fallback: true
+      };
+      
+    case 'queryAnalysis':
+      return {
+        intent: "general_inquiry",
+        entities: [],
+        benefitProgram: null,
+        fallback: true
+      };
+      
+    default:
+      return {
+        error: "Service temporarily unavailable",
+        fallback: true
+      };
+  }
 }
 
 export interface SearchResult {
@@ -59,8 +115,59 @@ export interface VerificationResult {
 }
 
 class RAGService {
+  /**
+   * Check if Gemini API is available
+   */
+  async checkAvailability(): Promise<boolean> {
+    try {
+      const ai = getGemini();
+      if (!ai) {
+        return false;
+      }
+      
+      // Try a simple test query
+      const testPrompt = "Respond with OK";
+      const response = await ai.models.generateContent({
+        model: "gemini-1.5-flash",
+        contents: testPrompt
+      });
+      
+      geminiAvailable = !!response.text;
+      return geminiAvailable;
+    } catch (error) {
+      console.error("Gemini API availability check failed:", error);
+      geminiAvailable = false;
+      lastGeminiError = new Date();
+      
+      // Log the API failure
+      await auditService.logExternalService({
+        service: "Gemini",
+        action: "availability_check",
+        success: false,
+        error: (error as any).message
+      }).catch(console.error);
+      
+      return false;
+    }
+  }
+
   async verifyDocument(documentText: string, filename: string): Promise<VerificationResult> {
     try {
+      const ai = getGemini();
+      
+      // Check if Gemini API is available
+      if (!ai || !geminiAvailable) {
+        console.warn("Gemini API not available, returning fallback response");
+        await auditService.logExternalService({
+          service: "Gemini",
+          action: "document_verification",
+          success: false,
+          error: "API not available"
+        }).catch(console.error);
+        
+        return generateFallbackResponse('verification');
+      }
+
       const prompt = `You are a Maryland SNAP policy expert. Analyze this uploaded document to determine if it meets Maryland SNAP eligibility and verification requirements.
 
       Document filename: ${filename}
@@ -97,9 +204,9 @@ class RAGService {
       
       Use plain English that a 6th-8th grader can understand.`;
       
-      const ai = getGemini();
+      const startTime = Date.now();
       const response = await ai.models.generateContent({
-        model: "gemini-1.5-pro",
+        model: "gemini-1.5-flash",
         contents: prompt
       });
       let responseText = response.text || "";
@@ -190,7 +297,7 @@ class RAGService {
       
       const ai = getGemini();
       const response = await ai.models.generateContent({
-        model: "gemini-1.5-pro",
+        model: "gemini-1.5-flash",
         contents: prompt
       });
 
@@ -371,7 +478,7 @@ class RAGService {
 
       const ai = getGemini();
       const response = await ai.models.generateContent({
-        model: "gemini-1.5-pro",
+        model: "gemini-1.5-flash",
         contents: prompt
       });
       const answer = response.text || "I'm unable to provide an answer based on the available information.";

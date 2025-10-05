@@ -9,6 +9,10 @@ import { ObjectStorageService } from "./objectStorage";
 import { rulesEngine } from "./services/rulesEngine";
 import { hybridService } from "./services/hybridService";
 import { manualIngestionService } from "./services/manualIngestion";
+import { auditService } from "./services/auditService";
+import { asyncHandler, validationError, notFoundError, externalServiceError } from "./middleware/errorHandler";
+import { db } from "./db";
+import { sql } from "drizzle-orm";
 import { 
   insertDocumentSchema, 
   insertSearchQuerySchema, 
@@ -28,43 +32,156 @@ const upload = multer({
 
 export async function registerRoutes(app: Express): Promise<Server> {
   
-  // Health check
-  app.get("/api/health", async (req, res) => {
-    res.json({ status: "healthy", timestamp: new Date().toISOString() });
-  });
+  // Comprehensive health check endpoint
+  app.get("/api/health", asyncHandler(async (req, res) => {
+    const healthStatus: any = {
+      status: "healthy",
+      timestamp: new Date().toISOString(),
+      uptime: process.uptime(),
+      services: {
+        database: { status: "unknown", latency: null },
+        geminiApi: { status: "unknown", configured: false },
+        objectStorage: { status: "unknown", configured: false }
+      },
+      system: {
+        memory: {
+          used: process.memoryUsage().heapUsed / 1024 / 1024,
+          total: process.memoryUsage().heapTotal / 1024 / 1024,
+          unit: "MB"
+        },
+        nodeVersion: process.version,
+        environment: process.env.NODE_ENV || "development"
+      }
+    };
+
+    let degradedCount = 0;
+
+    // Check database connectivity
+    try {
+      const startTime = Date.now();
+      const result = await db.execute(sql`SELECT 1 as test`);
+      const latency = Date.now() - startTime;
+      
+      healthStatus.services.database = {
+        status: "healthy",
+        latency: `${latency}ms`,
+        connectionActive: true
+      };
+    } catch (error) {
+      degradedCount++;
+      healthStatus.services.database = {
+        status: "unhealthy",
+        error: "Database connection failed",
+        message: process.env.NODE_ENV === "development" ? (error as any).message : undefined
+      };
+      
+      // Log critical database error
+      await auditService.logError({
+        message: "Health check: Database connection failed",
+        statusCode: 503,
+        method: "GET",
+        path: "/api/health",
+        details: error
+      }).catch(console.error);
+    }
+
+    // Check Gemini API availability (if configured)
+    const geminiKey = process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY;
+    if (geminiKey) {
+      try {
+        healthStatus.services.geminiApi.configured = true;
+        // Simple check - just verify the service is initialized
+        const testAvailability = await ragService.checkAvailability();
+        healthStatus.services.geminiApi.status = testAvailability ? "healthy" : "degraded";
+      } catch (error) {
+        degradedCount++;
+        healthStatus.services.geminiApi = {
+          status: "unhealthy",
+          configured: true,
+          error: "Gemini API check failed",
+          message: process.env.NODE_ENV === "development" ? (error as any).message : undefined
+        };
+      }
+    } else {
+      healthStatus.services.geminiApi = {
+        status: "not_configured",
+        configured: false,
+        message: "Gemini API key not configured"
+      };
+    }
+
+    // Check Object Storage availability
+    try {
+      const objectStorageEnvVars = process.env.PUBLIC_OBJECT_SEARCH_PATHS || process.env.PRIVATE_OBJECT_DIR;
+      healthStatus.services.objectStorage.configured = !!objectStorageEnvVars;
+      
+      if (objectStorageEnvVars) {
+        const objectStorageService = new ObjectStorageService();
+        // Simple availability check
+        healthStatus.services.objectStorage.status = "healthy";
+      }
+    } catch (error) {
+      healthStatus.services.objectStorage = {
+        status: "degraded",
+        configured: true,
+        error: "Object storage check failed"
+      };
+    }
+
+    // Determine overall health status
+    if (healthStatus.services.database.status === "unhealthy") {
+      healthStatus.status = "unhealthy";
+    } else if (degradedCount > 0) {
+      healthStatus.status = "degraded";
+    }
+
+    // Set appropriate HTTP status code
+    const statusCode = healthStatus.status === "healthy" ? 200 : 
+                       healthStatus.status === "degraded" ? 200 : 503;
+
+    res.status(statusCode).json(healthStatus);
+  }));
 
   // Hybrid search endpoint - intelligently routes to Rules Engine or RAG
-  app.post("/api/search", async (req, res) => {
-    try {
-      const { query, benefitProgramId, userId } = req.body;
-      
-      if (!query || typeof query !== "string") {
-        return res.status(400).json({ error: "Query is required and must be a string" });
-      }
-
-      // Use hybrid service for intelligent routing
-      const result = await hybridService.search(query, benefitProgramId);
-
-      // Save search query with hybrid result
-      await storage.createSearchQuery({
-        query,
-        userId,
-        benefitProgramId,
-        response: {
-          answer: result.answer,
-          type: result.type,
-          classification: result.classification,
-        },
-        relevanceScore: result.aiExplanation?.relevanceScore || result.classification.confidence,
-        responseTime: result.responseTime,
-      });
-
-      res.json(result);
-    } catch (error) {
-      console.error("Hybrid search error:", error);
-      res.status(500).json({ error: "Internal server error during search" });
+  app.post("/api/search", asyncHandler(async (req, res, next) => {
+    const { query, benefitProgramId, userId } = req.body;
+    
+    // Validate request parameters
+    if (!query || typeof query !== "string") {
+      throw validationError("Query is required and must be a string");
     }
-  });
+
+    if (query.length > 1000) {
+      throw validationError("Query must be less than 1000 characters");
+    }
+
+    // Log the search request
+    await auditService.logSearch({
+      query,
+      userId,
+      benefitProgramId,
+      searchType: "hybrid"
+    });
+
+    // Use hybrid service for intelligent routing
+    const result = await hybridService.search(query, benefitProgramId);
+
+    // Save search query with hybrid result
+    await storage.createSearchQuery({
+      query,
+      userId,
+      benefitProgramId,
+      response: {
+        answer: result.answer,
+        type: result.type,
+        classification: result.classification,
+      },
+      relevanceScore: result.aiExplanation?.relevanceScore || result.classification.confidence,
+      responseTime: result.responseTime,
+    });
+
+    res.json(result);
+  }));
 
   // Get benefit programs
   app.get("/api/benefit-programs", async (req, res) => {

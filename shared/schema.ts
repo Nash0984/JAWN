@@ -374,6 +374,20 @@ export const ruleChangeLogs = pgTable("rule_change_logs", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
+// Audit Logs - Comprehensive audit trail for all system events
+export const auditLogs = pgTable("audit_logs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  action: text("action").notNull(), // e.g., "API_REQUEST", "ERROR", "AUTH_LOGIN", "ADMIN_UPDATE", "DOCUMENT_UPLOAD"
+  entityType: text("entity_type"), // e.g., "USER", "RULE", "DOCUMENT", "REQUEST"
+  entityId: varchar("entity_id"), // ID of the affected entity
+  userId: varchar("user_id").references(() => users.id), // User who performed the action
+  metadata: jsonb("metadata").notNull().default({}), // Additional context
+  ipAddress: text("ip_address"), // IP address of the request
+  userAgent: text("user_agent"), // User agent string
+  timestamp: timestamp("timestamp").defaultNow().notNull(),
+  indexed: boolean("indexed").default(false).notNull(), // For indexing/archival
+});
+
 // Client Cases - Track individual client cases for navigators
 export const clientCases = pgTable("client_cases", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -677,6 +691,11 @@ export const insertRuleChangeLogSchema = createInsertSchema(ruleChangeLogs).omit
   createdAt: true,
 });
 
+export const insertAuditLogSchema = createInsertSchema(auditLogs).omit({
+  id: true,
+  timestamp: true,
+});
+
 export const insertClientCaseSchema = createInsertSchema(clientCases).omit({
   id: true,
   createdAt: true,
@@ -707,6 +726,9 @@ export type EligibilityCalculation = typeof eligibilityCalculations.$inferSelect
 
 export type InsertRuleChangeLog = z.infer<typeof insertRuleChangeLogSchema>;
 export type RuleChangeLog = typeof ruleChangeLogs.$inferSelect;
+
+export type InsertAuditLog = z.infer<typeof insertAuditLogSchema>;
+export type AuditLog = typeof auditLogs.$inferSelect;
 
 export type InsertClientCase = z.infer<typeof insertClientCaseSchema>;
 export type ClientCase = typeof clientCases.$inferSelect;
