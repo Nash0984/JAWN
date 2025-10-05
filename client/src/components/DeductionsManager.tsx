@@ -201,14 +201,7 @@ export function DeductionsManager() {
                 { 
                   header: "Household Size", 
                   key: "householdSizeMin",
-                  format: (val, row: any) => {
-                    if (row.householdSizeMin && row.householdSizeMax) {
-                      return `${row.householdSizeMin}-${row.householdSizeMax}`;
-                    } else if (row.householdSizeMin) {
-                      return `${row.householdSizeMin}+`;
-                    }
-                    return "All";
-                  }
+                  format: (val: any) => val ? `${val}+` : "All"
                 },
                 { header: "Notes", key: "notes" },
                 { 
