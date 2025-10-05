@@ -4,9 +4,9 @@ import { GoogleGenAI } from "@google/genai";
 let gemini: GoogleGenAI | null = null;
 function getGemini(): GoogleGenAI {
   if (!gemini) {
-    const apiKey = process.env.GEMINI_API_KEY;
+    const apiKey = process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY;
     if (!apiKey) {
-      throw new Error('GEMINI_API_KEY environment variable is required');
+      throw new Error('GOOGLE_API_KEY or GEMINI_API_KEY environment variable is required');
     }
     gemini = new GoogleGenAI({ apiKey });
   }
