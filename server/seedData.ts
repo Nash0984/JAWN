@@ -31,17 +31,52 @@ export async function seedDocumentTypes() {
   try {
     const types = await storage.getDocumentTypes();
     
-    // Check if policy manual type exists
-    const policyManualType = types.find(t => t.code === 'POLICY_MANUAL');
-    
-    if (!policyManualType) {
-      console.log('Document types need to be seeded. This should be done via database migration.');
-      // In a real system, document types would be seeded via database migration
+    // Define document types for Maryland SNAP system
+    const documentTypesToSeed = [
+      {
+        code: 'POLICY_MANUAL',
+        name: 'Policy Manual',
+        description: 'Maryland SNAP Policy Manual sections',
+      },
+      {
+        code: 'FEDERAL_REGULATION',
+        name: 'Federal Regulation',
+        description: 'Federal SNAP regulations (7 CFR Part 273)',
+      },
+      {
+        code: 'STATE_REGULATION',
+        name: 'State Regulation',
+        description: 'Maryland state regulations (COMAR Title 10)',
+      },
+      {
+        code: 'GUIDANCE',
+        name: 'Program Guidance',
+        description: 'FNS memos, action transmittals, information memos',
+      },
+      {
+        code: 'CLIENT_DOCUMENT',
+        name: 'Client Document',
+        description: 'Documents uploaded by clients for verification (income, residency, etc.)',
+      },
+    ];
+
+    let seededCount = 0;
+    for (const docType of documentTypesToSeed) {
+      const existing = types.find(t => t.code === docType.code);
+      if (!existing) {
+        await storage.createDocumentType(docType);
+        seededCount++;
+        console.log(`✓ Seeded document type: ${docType.name}`);
+      }
+    }
+
+    if (seededCount > 0) {
+      console.log(`✓ Seeded ${seededCount} new document types`);
     } else {
       console.log('✓ Document types already exist');
     }
   } catch (error) {
-    console.error('Error checking document types:', error);
+    console.error('Error seeding document types:', error);
     throw error;
   }
 }

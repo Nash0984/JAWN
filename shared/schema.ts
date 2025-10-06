@@ -904,6 +904,10 @@ export type DocumentVersion = typeof documentVersions.$inferSelect;
 export type InsertSearchResult = z.infer<typeof insertSearchResultSchema>;
 export type SearchResult = typeof searchResults.$inferSelect;
 
+export const insertDocumentTypeSchema = createInsertSchema(documentTypes).omit({
+  id: true,
+});
+export type InsertDocumentType = z.infer<typeof insertDocumentTypeSchema>;
 export type DocumentType = typeof documentTypes.$inferSelect;
 
 // Rules as Code Insert Schemas

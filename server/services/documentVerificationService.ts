@@ -492,42 +492,49 @@ Respond ONLY with a valid JSON object matching this structure:
       let analysis: DocumentAnalysis;
       
       try {
-        // Fetch the actual document image from object storage
-        if (!document.objectPath) {
-          throw new Error('Document has no object storage path - cannot analyze');
-        }
+        let fileBuffer: Buffer;
+        const mimeType = request.contextInfo?.mimeType || document.mimeType;
 
-        if (!document.mimeType) {
+        if (!mimeType) {
           throw new Error('Document has no MIME type - cannot analyze');
         }
 
-        // Normalize the object path - converts full GCS URLs to /objects/{uuid} format
-        // This handles both formats: 
-        // - Full URLs: https://storage.googleapis.com/replit-objstore-{id}/.private/uploads/{uuid}?X-Goog-Algorithm=...
-        // - Already normalized: /objects/{uuid}
-        let normalizedPath: string;
-        try {
-          normalizedPath = this.objectStorageService.normalizeObjectEntityPath(document.objectPath);
-          
-          if (!normalizedPath || normalizedPath.trim() === '') {
-            throw new Error(`Path normalization resulted in empty path. Original path: ${document.objectPath}`);
+        // Check if file buffer was provided directly in contextInfo (for immediate verification)
+        if (request.contextInfo?.fileBuffer) {
+          console.log(`📄 Using file buffer from contextInfo for document ${document.id}`);
+          fileBuffer = request.contextInfo.fileBuffer;
+        } else {
+          // Fetch the actual document image from object storage
+          if (!document.objectPath) {
+            throw new Error('Document has no object storage path - cannot analyze');
           }
-          
-          console.log(`📄 Normalized object path from "${document.objectPath.substring(0, 100)}..." to "${normalizedPath}"`);
-        } catch (pathError) {
-          throw new Error(`Failed to normalize object storage path "${document.objectPath}": ${pathError instanceof Error ? pathError.message : 'Unknown error'}`);
-        }
 
-        // Get the file from object storage using the normalized path
-        const objectFile = await this.objectStorageService.getObjectEntityFile(normalizedPath);
-        
-        // Download the file contents as a buffer
-        const [fileBuffer] = await objectFile.download();
+          // Normalize the object path - converts full GCS URLs to /objects/{uuid} format
+          let normalizedPath: string;
+          try {
+            normalizedPath = this.objectStorageService.normalizeObjectEntityPath(document.objectPath);
+            
+            if (!normalizedPath || normalizedPath.trim() === '') {
+              throw new Error(`Path normalization resulted in empty path. Original path: ${document.objectPath}`);
+            }
+            
+            console.log(`📄 Normalized object path from "${document.objectPath.substring(0, 100)}..." to "${normalizedPath}"`);
+          } catch (pathError) {
+            throw new Error(`Failed to normalize object storage path "${document.objectPath}": ${pathError instanceof Error ? pathError.message : 'Unknown error'}`);
+          }
+
+          // Get the file from object storage using the normalized path
+          const objectFile = await this.objectStorageService.getObjectEntityFile(normalizedPath);
+          
+          // Download the file contents as a buffer
+          [fileBuffer] = await objectFile.download();
+          console.log(`📄 Downloaded file from object storage for document ${document.id}`);
+        }
         
         // Call the analyzeDocument method with the actual image data
         analysis = await this.analyzeDocument(
           fileBuffer,
-          document.mimeType
+          mimeType
         );
         
         console.log(`✓ Successfully analyzed document ${document.id} using Gemini Vision API`);

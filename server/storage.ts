@@ -96,6 +96,7 @@ export interface IStorage {
 
   // Document Types
   getDocumentTypes(): Promise<DocumentType[]>;
+  createDocumentType(docType: { code: string; name: string; description?: string }): Promise<DocumentType>;
 
   // Policy Sources
   getPolicySources(): Promise<PolicySource[]>;
@@ -376,6 +377,11 @@ export class DatabaseStorage implements IStorage {
       .from(documentTypes)
       .where(eq(documentTypes.isActive, true))
       .orderBy(documentTypes.name);
+  }
+
+  async createDocumentType(docType: { code: string; name: string; description?: string }): Promise<DocumentType> {
+    const [type] = await db.insert(documentTypes).values(docType).returning();
+    return type;
   }
 
   // Policy Sources

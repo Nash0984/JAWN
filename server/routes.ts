@@ -263,10 +263,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
     const documentType = req.body.documentType || 'income';
     const clientCaseId = req.body.clientCaseId;
 
-    // Temporarily create a document record to get an ID for verification
+    // Upload to object storage first
+    const objectStorageService = new ObjectStorageService();
+    const uploadUrl = await objectStorageService.getObjectEntityUploadURL();
+    
+    const uploadResponse = await fetch(uploadUrl, {
+      method: 'PUT',
+      body: req.file.buffer,
+      headers: {
+        'Content-Type': req.file.mimetype,
+      },
+    });
+
+    if (!uploadResponse.ok) {
+      throw new Error(`Upload failed: ${uploadResponse.statusText}`);
+    }
+
+    const objectPath = objectStorageService.normalizeObjectEntityPath(uploadUrl);
+
+    // Create document record with objectPath
     const document = await storage.createDocument({
       filename: req.file.originalname,
       originalName: req.file.originalname,
+      objectPath,
       fileSize: req.file.size,
       mimeType: req.file.mimetype,
       uploadedBy: req.user?.id,
@@ -280,6 +299,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     });
 
     // Verify the document using Gemini Vision API
+    // Pass buffer for immediate verification (avoids redundant storage fetch)
     const result = await documentVerificationService.verifyDocument({
       documentId: document.id,
       requirementType: documentType,
@@ -800,18 +820,53 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(500).json({ error: "Maryland SNAP program not found" });
       }
 
-      const result = await rulesEngine.checkEligibility({
-        benefitProgramId: snapProgram.id,
-        householdSize,
-        monthlyGrossIncome: monthlyIncome,
-        monthlyNetIncome: hasEarnedIncome ? monthlyIncome * 0.8 : monthlyIncome, // Rough estimate
-        hasSSI: hasSSI || false,
-        hasTANF: hasTANF || false,
-        hasElderly: false,
-        hasDisabled: false,
-      });
+      const household = {
+        size: householdSize,
+        grossMonthlyIncome: monthlyIncome, // Already in cents from frontend
+        earnedIncome: hasEarnedIncome ? monthlyIncome : 0,
+        unearnedIncome: hasEarnedIncome ? 0 : monthlyIncome,
+        categoricalEligibility: hasSSI ? 'SSI' : hasTANF ? 'TANF' : undefined,
+      };
 
-      res.json(result);
+      const result = await rulesEngine.calculateEligibility(
+        snapProgram.id,
+        household,
+        userId
+      );
+
+      // Log calculation for audit trail
+      if (userId) {
+        await rulesEngine.logCalculation(
+          snapProgram.id,
+          household,
+          result,
+          userId,
+          req.ip,
+          req.get('user-agent')
+        );
+      }
+
+      res.json({
+        eligible: result.isEligible,
+        estimatedBenefit: result.monthlyBenefit,
+        reason: result.reason,
+        nextSteps: result.isEligible ? [
+          'Complete a full application at marylandbenefits.gov',
+          'Gather required documentation',
+          'Schedule an interview with your local DSS office'
+        ] : [
+          'Review your household income and expenses',
+          'Check if you qualify for other assistance programs',
+          'Contact your local DSS office for guidance'
+        ],
+        requiredDocuments: [
+          'Proof of identity',
+          'Proof of income',
+          'Proof of residence',
+          'Social Security numbers for all household members'
+        ],
+        appliedRules: result.calculationBreakdown,
+      });
     } catch (error) {
       console.error("Eligibility check error:", error);
       res.status(500).json({ error: "Failed to check eligibility" });
@@ -850,37 +905,49 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(500).json({ error: "Maryland SNAP program not found" });
       }
 
-      const result = await rulesEngine.calculateBenefit({
-        benefitProgramId: snapProgram.id,
-        householdSize,
-        monthlyGrossIncome,
-        monthlyEarnedIncome: monthlyEarnedIncome || 0,
+      const household = {
+        size: householdSize,
+        grossMonthlyIncome: monthlyGrossIncome,
+        earnedIncome: monthlyEarnedIncome || 0,
+        unearnedIncome: monthlyGrossIncome - (monthlyEarnedIncome || 0),
         hasElderly: hasElderly || false,
         hasDisabled: hasDisabled || false,
-        hasSSI: hasSSI || false,
-        hasTANF: hasTANF || false,
-        shelterCosts: shelterCosts || 0,
-        utilityCosts: utilityCosts || 0,
-        dependentCareCosts: dependentCareCosts || 0,
+        dependentCareExpenses: dependentCareCosts || 0,
         medicalExpenses: medicalExpenses || 0,
-      });
+        shelterCosts: (shelterCosts || 0) + (utilityCosts || 0),
+        categoricalEligibility: hasSSI ? 'SSI' : hasTANF ? 'TANF' : undefined,
+      };
+
+      const result = await rulesEngine.calculateEligibility(
+        snapProgram.id,
+        household,
+        userId
+      );
 
       // Save calculation if user provided
       if (userId) {
-        await storage.createEligibilityCalculation({
-          userId,
-          benefitProgramId: snapProgram.id,
-          householdSize,
-          grossIncome: monthlyGrossIncome,
-          netIncome: result.calculation?.netIncome || 0,
-          calculatedBenefit: result.estimatedBenefit || 0,
-          isEligible: result.eligible,
-          calculationDetails: result.calculation || {},
-          appliedRules: result.appliedRules || [],
-        });
+        await rulesEngine.logCalculation(
+          snapProgram.id,
+          household,
+          result,
+          userId
+        );
       }
 
-      res.json(result);
+      res.json({
+        eligible: result.isEligible,
+        estimatedBenefit: result.monthlyBenefit,
+        reason: result.reason,
+        breakdown: result.calculationBreakdown,
+        calculation: {
+          grossIncome: result.grossIncomeTest,
+          netIncome: result.netIncomeTest,
+          deductions: result.deductions,
+          maxAllotment: result.maxAllotment,
+        },
+        policyCitations: result.policyCitations,
+        appliedRules: result.rulesSnapshot,
+      });
     } catch (error) {
       console.error("Benefit calculation error:", error);
       res.status(500).json({ error: "Failed to calculate benefit" });
