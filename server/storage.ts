@@ -80,12 +80,14 @@ export interface IStorage {
   getBenefitPrograms(): Promise<BenefitProgram[]>;
   createBenefitProgram(program: InsertBenefitProgram): Promise<BenefitProgram>;
   getBenefitProgram(id: string): Promise<BenefitProgram | undefined>;
+  getBenefitProgramByCode(code: string): Promise<BenefitProgram | undefined>;
 
   // Document Types
   getDocumentTypes(): Promise<DocumentType[]>;
 
   // Policy Sources
   getPolicySources(): Promise<PolicySource[]>;
+  getPolicySourceById(id: string): Promise<PolicySource | undefined>;
   createPolicySource(source: InsertPolicySource): Promise<PolicySource>;
   updatePolicySource(id: string, updates: Partial<PolicySource>): Promise<PolicySource>;
 
@@ -326,6 +328,14 @@ export class DatabaseStorage implements IStorage {
     return program || undefined;
   }
 
+  async getBenefitProgramByCode(code: string): Promise<BenefitProgram | undefined> {
+    const [program] = await db
+      .select()
+      .from(benefitPrograms)
+      .where(eq(benefitPrograms.code, code));
+    return program || undefined;
+  }
+
   // Document Types
   async getDocumentTypes(): Promise<DocumentType[]> {
     return await db
@@ -342,6 +352,14 @@ export class DatabaseStorage implements IStorage {
       .from(policySources)
       .where(eq(policySources.isActive, true))
       .orderBy(desc(policySources.createdAt));
+  }
+
+  async getPolicySourceById(id: string): Promise<PolicySource | undefined> {
+    const [source] = await db
+      .select()
+      .from(policySources)
+      .where(eq(policySources.id, id));
+    return source || undefined;
   }
 
   async createPolicySource(source: InsertPolicySource): Promise<PolicySource> {
