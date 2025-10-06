@@ -128,7 +128,7 @@ class RAGService {
       // Try a simple test query
       const testPrompt = "Respond with OK";
       const response = await ai.models.generateContent({
-        model: "gemini-1.5-flash",
+        model: "gemini-1.5-pro",
         contents: testPrompt
       });
       
@@ -206,7 +206,7 @@ class RAGService {
       
       const startTime = Date.now();
       const response = await ai.models.generateContent({
-        model: "gemini-1.5-flash",
+        model: "gemini-1.5-pro",
         contents: prompt
       });
       let responseText = response.text || "";
@@ -297,7 +297,7 @@ class RAGService {
       
       const ai = getGemini();
       const response = await ai.models.generateContent({
-        model: "gemini-1.5-flash",
+        model: "gemini-1.5-pro",
         contents: prompt
       });
 
@@ -478,7 +478,7 @@ class RAGService {
 
       const ai = getGemini();
       const response = await ai.models.generateContent({
-        model: "gemini-1.5-flash",
+        model: "gemini-1.5-pro",
         contents: prompt
       });
       const answer = response.text || "I'm unable to provide an answer based on the available information.";
