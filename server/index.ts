@@ -24,10 +24,6 @@ app.use(requestLoggerMiddleware());
   
   const server = await registerRoutes(app);
 
-  // Use the centralized error handling middleware
-  app.use(errorHandler.handle404()); // Handle 404 errors
-  app.use(errorHandler.handle()); // Handle all other errors
-
   // importantly only setup vite in development and after
   // setting up all the other routes so the catch-all route
   // doesn't interfere with the other routes
@@ -36,6 +32,11 @@ app.use(requestLoggerMiddleware());
   } else {
     serveStatic(app);
   }
+
+  // Use the centralized error handling middleware AFTER Vite setup
+  // This ensures Vite's catch-all route can serve the frontend before 404s are thrown
+  app.use(errorHandler.handle404()); // Handle 404 errors
+  app.use(errorHandler.handle()); // Handle all other errors
 
   // ALWAYS serve the app on the port specified in the environment variable PORT
   // Other ports are firewalled. Default to 5000 if not specified.

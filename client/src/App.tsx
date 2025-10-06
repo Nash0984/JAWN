@@ -9,6 +9,7 @@ import Admin from "@/pages/Admin";
 import Training from "@/pages/Training";
 import EligibilityChecker from "@/pages/EligibilityChecker";
 import PolicyManual from "@/pages/PolicyManual";
+import DocumentVerificationPage from "@/pages/DocumentVerificationPage";
 import NotFound from "@/pages/not-found";
 import Navigation from "@/components/Navigation";
 
@@ -22,6 +23,7 @@ function Router() {
         <Switch>
           <Route path="/" component={Home} />
           <Route path="/upload" component={Upload} />
+          <Route path="/verify" component={DocumentVerificationPage} />
           <Route path="/admin" component={Admin} />
           <Route path="/training" component={Training} />
           <Route path="/eligibility" component={EligibilityChecker} />
