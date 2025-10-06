@@ -53,11 +53,22 @@ The system implements Maryland Digital Style Guide (2023) branding elements:
 **Migration Status**: ✅ **Complete** - All OpenAI calls have been successfully migrated to Google Gemini API.
 
 ## Data Storage Solutions
-**Primary Database**: PostgreSQL with tables for users, documents, document chunks, benefit programs, policy sources, search queries, model versions, and training jobs.
+**Primary Database**: PostgreSQL with comprehensive schema including:
+- Core tables: users, documents, document chunks, benefit programs, policy sources
+- Rules as Code: income limits, deductions, allotments, categorical eligibility, document requirements
+- Citation tracking: policy_citations, policy_variances (federal vs state mapping)
+- Navigator workspace: client_interaction_sessions, ee_export_batches, consent_forms, client_consents
+- Audit & governance: audit_logs, rule_change_logs, eligibility_calculations
+- Document integrity: document_versions with SHA-256 hashing for golden source tracking
 
 **Object Storage**: Google Cloud Storage integration for document file storage with custom ACL (Access Control List) policies for security. Includes upload URL generation and direct-to-storage uploads.
 
 **Vector Storage**: Embedded within the document chunks table to store semantic embeddings for RAG search functionality.
+
+**Policy Source Scraping**: Automated document ingestion infrastructure (`server/services/policySourceScraper.ts`) configured with 9 official sources:
+- Federal: 7 CFR Part 273, FNS Policy Memos, Handbook 310, E&T Operations Handbook, Implementation Memoranda
+- Maryland: COMAR Title 10, SNAP Policy Manual, Action Transmittals (AT), Information Memos (IM)
+- Priority-based sync scheduling, integrity tracking via document hashing, and version management for golden source documents
 
 ## Authentication and Authorization
 **User Management**: Basic user authentication system with username/password, supporting user roles (user, admin, super_admin).
