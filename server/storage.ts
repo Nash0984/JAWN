@@ -60,6 +60,12 @@ import {
   eeExportBatches,
   type EEExportBatch,
   type InsertEEExportBatch,
+  consentForms,
+  type ConsentForm,
+  type InsertConsentForm,
+  clientConsents,
+  type ClientConsent,
+  type InsertClientConsent,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and, ilike, sql, or, isNull, lte, gte } from "drizzle-orm";
@@ -174,6 +180,15 @@ export interface IStorage {
   createEEExportBatch(batch: InsertEEExportBatch): Promise<EEExportBatch>;
   getEEExportBatches(): Promise<EEExportBatch[]>;
   getEEExportBatch(id: string): Promise<EEExportBatch | undefined>;
+
+  // Consent Management - Forms
+  createConsentForm(form: InsertConsentForm): Promise<ConsentForm>;
+  getConsentForms(): Promise<ConsentForm[]>;
+  getConsentForm(id: string): Promise<ConsentForm | undefined>;
+
+  // Consent Management - Client Consents
+  createClientConsent(consent: InsertClientConsent): Promise<ClientConsent>;
+  getClientConsents(clientCaseId?: string): Promise<ClientConsent[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -778,6 +793,40 @@ export class DatabaseStorage implements IStorage {
   async getEEExportBatch(id: string): Promise<EEExportBatch | undefined> {
     const [batch] = await db.select().from(eeExportBatches).where(eq(eeExportBatches.id, id));
     return batch || undefined;
+  }
+
+  // Consent Management - Forms
+  async createConsentForm(form: InsertConsentForm): Promise<ConsentForm> {
+    const [newForm] = await db.insert(consentForms).values(form).returning();
+    return newForm;
+  }
+
+  async getConsentForms(): Promise<ConsentForm[]> {
+    return await db
+      .select()
+      .from(consentForms)
+      .orderBy(desc(consentForms.createdAt));
+  }
+
+  async getConsentForm(id: string): Promise<ConsentForm | undefined> {
+    const [form] = await db.select().from(consentForms).where(eq(consentForms.id, id));
+    return form || undefined;
+  }
+
+  // Consent Management - Client Consents
+  async createClientConsent(consent: InsertClientConsent): Promise<ClientConsent> {
+    const [newConsent] = await db.insert(clientConsents).values(consent).returning();
+    return newConsent;
+  }
+
+  async getClientConsents(clientCaseId?: string): Promise<ClientConsent[]> {
+    let query = db.select().from(clientConsents);
+    
+    if (clientCaseId) {
+      query = query.where(eq(clientConsents.clientCaseId, clientCaseId));
+    }
+    
+    return await query.orderBy(desc(clientConsents.consentDate));
   }
 }
 
