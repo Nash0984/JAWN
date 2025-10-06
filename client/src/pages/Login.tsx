@@ -45,19 +45,31 @@ export default function Login() {
 
   const loginMutation = useMutation({
     mutationFn: async (data: LoginFormData) => {
-      const response = await apiRequest("/api/auth/login", {
-        method: "POST",
-        body: JSON.stringify(data),
-      });
+      const response = await apiRequest("POST", "/api/auth/login", data);
       return response.json();
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
+      
+      // Determine dashboard URL based on user role
+      const role = data.user.role;
+      let dashboardUrl = "/";
+      
+      if (role === "admin" || role === "super_admin") {
+        dashboardUrl = "/dashboard/admin";
+      } else if (role === "navigator") {
+        dashboardUrl = "/dashboard/navigator";
+      } else if (role === "caseworker") {
+        dashboardUrl = "/dashboard/caseworker";
+      } else if (role === "client") {
+        dashboardUrl = "/dashboard/client";
+      }
+      
       toast({
         title: "Welcome back!",
         description: `Logged in as ${data.user.username}`,
       });
-      setLocation("/");
+      setLocation(dashboardUrl);
     },
     onError: (error: Error) => {
       toast({
