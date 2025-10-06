@@ -18,10 +18,13 @@ import {
   insertDocumentSchema, 
   insertSearchQuerySchema, 
   insertPolicySourceSchema,
-  insertTrainingJobSchema 
+  insertTrainingJobSchema,
+  insertUserSchema 
 } from "@shared/schema";
 import { z } from "zod";
 import multer from "multer";
+import bcrypt from "bcryptjs";
+import passport from "./auth";
 
 // Configure multer for memory storage
 const upload = multer({ 
@@ -231,6 +234,83 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
     res.json(response);
   }));
+
+  // Authentication Routes
+  
+  // Signup
+  app.post("/api/auth/signup", asyncHandler(async (req, res, next) => {
+    const validatedData = insertUserSchema.parse(req.body);
+    
+    // Check if username already exists
+    const existingUser = await storage.getUserByUsername(validatedData.username);
+    if (existingUser) {
+      throw validationError("Username already exists");
+    }
+
+    // Hash password
+    const hashedPassword = await bcrypt.hash(validatedData.password, 10);
+
+    // Create user
+    const user = await storage.createUser({
+      ...validatedData,
+      password: hashedPassword,
+    });
+
+    // Log the user in automatically after signup
+    req.login(user, (err) => {
+      if (err) {
+        return next(new Error("Failed to log in after signup"));
+      }
+
+      // Return user without password
+      const { password, ...userWithoutPassword } = user;
+      res.status(201).json({ user: userWithoutPassword });
+    });
+  }));
+
+  // Login
+  app.post("/api/auth/login", (req, res, next) => {
+    passport.authenticate("local", (err: any, user: any, info: any) => {
+      if (err) {
+        return next(err);
+      }
+      
+      if (!user) {
+        return res.status(401).json({ error: info?.message || "Invalid credentials" });
+      }
+
+      req.login(user, (err) => {
+        if (err) {
+          return next(err);
+        }
+
+        // Return user without password
+        const { password, ...userWithoutPassword } = user;
+        res.json({ user: userWithoutPassword });
+      });
+    })(req, res, next);
+  });
+
+  // Logout
+  app.post("/api/auth/logout", (req, res) => {
+    req.logout((err) => {
+      if (err) {
+        return res.status(500).json({ error: "Failed to logout" });
+      }
+      res.json({ message: "Logged out successfully" });
+    });
+  });
+
+  // Get current user
+  app.get("/api/auth/me", (req, res) => {
+    if (!req.user) {
+      return res.status(401).json({ error: "Not authenticated" });
+    }
+
+    // Return user without password
+    const { password, ...userWithoutPassword } = req.user as any;
+    res.json({ user: userWithoutPassword });
+  });
 
   // Get benefit programs
   app.get("/api/benefit-programs", async (req, res) => {
