@@ -19,11 +19,14 @@ import {
   RefreshCw,
   ExternalLink,
   ArrowRight,
-  Link2
+  Link2,
+  Sparkles
 } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { PolicyChatWidget } from "@/components/PolicyChatWidget";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
 
 interface ManualSection {
   id: string;
@@ -66,6 +69,7 @@ export default function PolicyManual() {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [selectedSectionId, setSelectedSectionId] = useState<string | null>(null);
+  const [useLivingManual, setUseLivingManual] = useState(false);
   const { toast } = useToast();
 
   // Fetch manual sections
@@ -82,6 +86,22 @@ export default function PolicyManual() {
   const { data: sectionDetailData, isLoading: sectionDetailLoading } = useQuery<{ success: boolean; data: SectionDetail }>({
     queryKey: ["/api/manual/sections", selectedSectionId],
     enabled: !!selectedSectionId,
+  });
+
+  // Fetch AI-generated text from Rules as Code
+  const generateTextMutation = useMutation({
+    mutationFn: async (sectionId: string) => {
+      const response = await apiRequest("POST", `/api/manual/generate-text/${sectionId}`, {});
+      return response.json();
+    },
+    onError: (error) => {
+      toast({
+        title: "Text generation failed",
+        description: "Could not generate text from Rules as Code. This section may not have associated rules.",
+        variant: "destructive",
+      });
+      console.error("Text generation error:", error);
+    },
   });
 
   // Trigger metadata ingestion
@@ -449,15 +469,34 @@ export default function PolicyManual() {
       <Dialog open={!!selectedSectionId} onOpenChange={() => setSelectedSectionId(null)}>
         <DialogContent className="max-w-4xl max-h-[80vh]">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-3">
-              {sectionDetailData?.data.section && (
-                <>
-                  <Badge variant="outline" className="font-mono">
-                    {sectionDetailData.data.section.sectionNumber}
-                  </Badge>
-                  <span>{sectionDetailData.data.section.sectionTitle}</span>
-                </>
-              )}
+            <DialogTitle className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                {sectionDetailData?.data.section && (
+                  <>
+                    <Badge variant="outline" className="font-mono">
+                      {sectionDetailData.data.section.sectionNumber}
+                    </Badge>
+                    <span>{sectionDetailData.data.section.sectionTitle}</span>
+                  </>
+                )}
+              </div>
+              <div className="flex items-center gap-2">
+                <Switch
+                  id="living-manual"
+                  checked={useLivingManual}
+                  onCheckedChange={(checked) => {
+                    setUseLivingManual(checked);
+                    if (checked && selectedSectionId && !generateTextMutation.data) {
+                      generateTextMutation.mutate(selectedSectionId);
+                    }
+                  }}
+                  data-testid="toggle-living-manual"
+                />
+                <Label htmlFor="living-manual" className="flex items-center gap-1 cursor-pointer">
+                  <Sparkles className="h-4 w-4 text-primary" />
+                  <span className="text-sm">Living Manual</span>
+                </Label>
+              </div>
             </DialogTitle>
           </DialogHeader>
 
@@ -469,35 +508,70 @@ export default function PolicyManual() {
           ) : sectionDetailData?.data ? (
             <ScrollArea className="h-[60vh] pr-4">
               <div className="space-y-6">
-                {/* Section Content */}
-                {sectionDetailData.data.chunks.length > 0 ? (
+                {/* Living Manual AI-Generated Content */}
+                {useLivingManual ? (
                   <div className="space-y-3">
-                    <h3 className="font-semibold text-lg">Section Content</h3>
-                    <div className="bg-muted p-4 rounded-lg space-y-3">
-                      {sectionDetailData.data.chunks.map((chunk) => (
-                        <p key={chunk.id} className="text-sm text-muted-foreground leading-relaxed">
-                          {chunk.content}
-                        </p>
-                      ))}
+                    <div className="flex items-center gap-2">
+                      <Sparkles className="h-5 w-5 text-primary" />
+                      <h3 className="font-semibold text-lg">AI-Generated Policy Text (from Rules as Code)</h3>
                     </div>
+                    {generateTextMutation.isPending ? (
+                      <div className="bg-muted p-6 rounded-lg flex items-center justify-center">
+                        <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                        <span className="text-sm text-muted-foreground">Generating text from Rules as Code database...</span>
+                      </div>
+                    ) : generateTextMutation.data?.success ? (
+                      <div className="bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 p-6 rounded-lg">
+                        <div className="prose prose-sm dark:prose-invert max-w-none">
+                          <div dangerouslySetInnerHTML={{ __html: generateTextMutation.data.data.content.replace(/\n/g, '<br/>') }} />
+                        </div>
+                        <div className="mt-4 pt-4 border-t border-blue-200 dark:border-blue-800">
+                          <p className="text-xs text-muted-foreground">
+                            Generated from {generateTextMutation.data.data.ruleCount} active rules • 
+                            {new Date(generateTextMutation.data.data.generatedAt).toLocaleString()}
+                          </p>
+                        </div>
+                      </div>
+                    ) : (
+                      <Alert>
+                        <FileText className="h-4 w-4" />
+                        <AlertDescription>
+                          No Rules as Code available for this section. This feature works for sections with income limits, deductions, allotments, categorical eligibility, or document requirements.
+                        </AlertDescription>
+                      </Alert>
+                    )}
                   </div>
                 ) : (
-                  <Alert>
-                    <FileText className="h-4 w-4" />
-                    <AlertDescription>
-                      Content not yet extracted for this section.
-                      <Button
-                        variant="link"
-                        size="sm"
-                        asChild
-                        className="ml-2"
-                      >
-                        <a href={sectionDetailData.data.section.sourceUrl} target="_blank" rel="noopener noreferrer">
-                          View Original PDF
-                        </a>
-                      </Button>
-                    </AlertDescription>
-                  </Alert>
+                  /* Original Scraped Content */
+                  sectionDetailData.data.chunks.length > 0 ? (
+                    <div className="space-y-3">
+                      <h3 className="font-semibold text-lg">Section Content</h3>
+                      <div className="bg-muted p-4 rounded-lg space-y-3">
+                        {sectionDetailData.data.chunks.map((chunk) => (
+                          <p key={chunk.id} className="text-sm text-muted-foreground leading-relaxed">
+                            {chunk.content}
+                          </p>
+                        ))}
+                      </div>
+                    </div>
+                  ) : (
+                    <Alert>
+                      <FileText className="h-4 w-4" />
+                      <AlertDescription>
+                        Content not yet extracted for this section.
+                        <Button
+                          variant="link"
+                          size="sm"
+                          asChild
+                          className="ml-2"
+                        >
+                          <a href={sectionDetailData.data.section.sourceUrl} target="_blank" rel="noopener noreferrer">
+                            View Original PDF
+                          </a>
+                        </Button>
+                      </AlertDescription>
+                    </Alert>
+                  )
                 )}
 
                 {/* Cross-References */}

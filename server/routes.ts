@@ -11,6 +11,7 @@ import { hybridService } from "./services/hybridService";
 import { manualIngestionService } from "./services/manualIngestion";
 import { auditService } from "./services/auditService";
 import { documentVerificationService } from "./services/documentVerificationService";
+import { textGenerationService } from "./services/textGenerationService";
 import { asyncHandler, validationError, notFoundError, externalServiceError } from "./middleware/errorHandler";
 import { requireAuth, requireStaff, requireAdmin } from "./middleware/auth";
 import { db } from "./db";
@@ -1367,6 +1368,95 @@ export async function registerRoutes(app: Express): Promise<Server> {
         error: "Failed to complete manual ingestion",
         details: error instanceof Error ? error.message : 'Unknown error',
       });
+    }
+  });
+
+  // ============================================================================
+  // LIVING POLICY MANUAL - Text generation from Rules as Code
+  // ============================================================================
+
+  // Generate text for a specific section from Rules as Code
+  app.post("/api/manual/generate-text/:sectionId", requireAuth, async (req, res) => {
+    try {
+      const { sectionId } = req.params;
+      
+      // Get Maryland SNAP program
+      const programs = await storage.getBenefitPrograms();
+      const snapProgram = programs.find(p => p.code === "MD_SNAP");
+
+      if (!snapProgram) {
+        return res.status(500).json({ error: "Maryland SNAP program not found" });
+      }
+
+      const generated = await textGenerationService.generateSectionText(
+        snapProgram.id,
+        sectionId
+      );
+
+      res.json({
+        success: true,
+        data: generated
+      });
+    } catch (error) {
+      console.error("Error generating section text:", error);
+      res.status(500).json({ 
+        error: "Failed to generate section text",
+        details: error instanceof Error ? error.message : 'Unknown error'
+      });
+    }
+  });
+
+  // Generate income limits text
+  app.post("/api/manual/generate/income-limits", requireAuth, async (req, res) => {
+    try {
+      const programs = await storage.getBenefitPrograms();
+      const snapProgram = programs.find(p => p.code === "MD_SNAP");
+
+      if (!snapProgram) {
+        return res.status(500).json({ error: "Maryland SNAP program not found" });
+      }
+
+      const generated = await textGenerationService.generateIncomeLimitsText(snapProgram.id);
+      res.json({ success: true, data: generated });
+    } catch (error) {
+      console.error("Error generating income limits text:", error);
+      res.status(500).json({ error: "Failed to generate income limits text" });
+    }
+  });
+
+  // Generate deductions text
+  app.post("/api/manual/generate/deductions", requireAuth, async (req, res) => {
+    try {
+      const programs = await storage.getBenefitPrograms();
+      const snapProgram = programs.find(p => p.code === "MD_SNAP");
+
+      if (!snapProgram) {
+        return res.status(500).json({ error: "Maryland SNAP program not found" });
+      }
+
+      const generated = await textGenerationService.generateDeductionsText(snapProgram.id);
+      res.json({ success: true, data: generated });
+    } catch (error) {
+      console.error("Error generating deductions text:", error);
+      res.status(500).json({ error: "Failed to generate deductions text" });
+    }
+  });
+
+  // Generate allotments text
+  app.post("/api/manual/generate/allotments", requireAuth, async (req, res) => {
+    try {
+      const programs = await storage.getBenefitPrograms();
+      const snapProgram = programs.find(p => p.code === "MD_SNAP");
+
+      if (!snapProgram) {
+        return res.status(500).json({ error: "Maryland SNAP program not found" });
+      }
+
+      const generated = await textGenerationService.generateAllotmentsText(snapProgram.id);
+      res.json({ success: true, data: generated });
+    } catch (error) {
+      console.error("Error generating allotments text:", error);
+      res.status(500).json({ error: "Failed to generate allotments text" });
     }
   });
 
