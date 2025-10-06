@@ -48,9 +48,9 @@ The system implements Maryland Digital Style Guide (2023) branding elements:
 
 **Document Processing Pipeline**: Multi-stage processing including OCR (Tesseract + Google Gemini Vision), document classification (partially OpenAI), quality assessment, semantic chunking, and embedding generation optimized for Maryland SNAP policy documents.
 
-**AI Integration**: Google Gemini API integration for document analysis, query processing, and RAG-based search responses (95% migrated from OpenAI). Primary implementation in `server/services/aiService.ts`, `server/services/ragService.ts`, and `server/services/documentProcessor.ts` using `@google/genai` library. Includes custom AI services for document field extraction, quality assessment, and training job management. Migration provides cost optimization and improved performance for Maryland SNAP-specific queries.
+**AI Integration**: Google Gemini API integration for document analysis, query processing, and RAG-based search responses. Primary implementation in `server/services/aiService.ts`, `server/services/ragService.ts`, and `server/services/documentProcessor.ts` using `@google/genai` library v1.19.0. Uses `gemini-2.5-flash` for text generation and `text-embedding-004` for embeddings. Includes custom AI services for document field extraction, quality assessment, and training job management. All JSON responses from Gemini are parsed with markdown code block handling for robustness.
 
-**Migration Status**: ✅ **Complete** - All OpenAI calls have been successfully migrated to Google Gemini API.
+**Migration Status**: ✅ **100% Complete** - All OpenAI calls have been successfully migrated to Google Gemini API. Migration provides cost optimization and improved performance for Maryland SNAP-specific queries.
 
 ## Data Storage Solutions
 **Primary Database**: PostgreSQL with comprehensive schema including:
@@ -110,7 +110,7 @@ The system implements Maryland Digital Style Guide (2023) branding elements:
 ## External Dependencies
 
 ### Current Implementation
-**AI Services**: Google Gemini API (`@google/genai`) for language model access, document analysis, embedding generation, and RAG response synthesis. Models used: `gemini-1.5-pro`, `text-embedding-004`. One remaining OpenAI dependency for document classification.
+**AI Services**: Google Gemini API (`@google/genai`) for language model access, document analysis, embedding generation, and RAG response synthesis. Models used: `gemini-2.5-flash`, `text-embedding-004`.
 
 **Database**: PostgreSQL database via Drizzle ORM (`drizzle-orm`) with Neon Database provider. Schema defined in `shared/schema.ts`. Connection pooling and SNAP-specific data modeling implemented.
 
@@ -123,10 +123,9 @@ The system implements Maryland Digital Style Guide (2023) branding elements:
 **File Upload**: Uppy library for robust file upload with progress tracking and direct-to-storage uploads.
 
 ### Implementation Status
-- ✅ **Google Gemini API**: 95% migrated (primary AI operations)
+- ✅ **Google Gemini API**: 100% migration complete
 - ✅ **Maryland Branding**: Colors, typography, logo component implemented  
 - ✅ **Database**: PostgreSQL with Drizzle ORM fully implemented
 - ✅ **Basic Accessibility**: ARIA labels, skip links, semantic HTML
 - ✅ **Mobile Responsive**: Touch targets, responsive breakpoints
-- ✅ **Google Gemini API**: 100% migration complete
 - 🔄 **marylandbenefits.gov Integration**: Planned for future implementation
