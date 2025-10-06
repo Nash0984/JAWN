@@ -128,7 +128,7 @@ class RAGService {
       // Try a simple test query
       const testPrompt = "Respond with OK";
       const response = await ai.models.generateContent({
-        model: "gemini-1.5-pro",
+        model: "gemini-2.5-flash",
         contents: testPrompt
       });
       
@@ -206,7 +206,7 @@ class RAGService {
       
       const startTime = Date.now();
       const response = await ai.models.generateContent({
-        model: "gemini-1.5-pro",
+        model: "gemini-2.5-flash",
         contents: prompt
       });
       let responseText = response.text || "";
@@ -296,12 +296,27 @@ class RAGService {
       Query: ${query}`;
       
       const ai = getGemini();
+      if (!ai) {
+        return {
+          intent: "general_inquiry",
+          entities: [],
+          benefitProgram: null,
+        };
+      }
+      
       const response = await ai.models.generateContent({
-        model: "gemini-1.5-pro",
+        model: "gemini-2.5-flash",
         contents: prompt
       });
 
-      return JSON.parse(response.text || "{}");
+      // Strip markdown code blocks if present
+      let responseText = response.text || "{}";
+      const jsonMatch = responseText.match(/```(?:json)?\s*(\{[\s\S]*?\})\s*```/);
+      if (jsonMatch) {
+        responseText = jsonMatch[1];
+      }
+
+      return JSON.parse(responseText);
     } catch (error) {
       console.error("Query analysis error:", error);
       return {
@@ -315,8 +330,12 @@ class RAGService {
   private async generateEmbedding(text: string): Promise<number[]> {
     try {
       const ai = getGemini();
+      if (!ai) {
+        throw new Error("Gemini API not available");
+      }
+      
       const result = await ai.models.embedContent({
-        model: "gemini-embedding-001",
+        model: "text-embedding-004",
         contents: text
       });
       
@@ -477,8 +496,12 @@ class RAGService {
       ${context}`;
 
       const ai = getGemini();
+      if (!ai) {
+        throw new Error("Gemini API not available");
+      }
+      
       const response = await ai.models.generateContent({
-        model: "gemini-1.5-pro",
+        model: "gemini-2.5-flash",
         contents: prompt
       });
       const answer = response.text || "I'm unable to provide an answer based on the available information.";
