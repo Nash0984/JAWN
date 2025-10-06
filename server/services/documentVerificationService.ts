@@ -2,6 +2,7 @@ import { GoogleGenAI } from '@google/genai';
 import { storage } from '../storage';
 import type { Document, DocumentRequirementRule } from '../../shared/schema';
 import { ragService } from './ragService';
+import { ObjectStorageService } from '../objectStorage';
 
 const geminiApiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
 
@@ -60,6 +61,11 @@ export interface VerificationRequest {
 }
 
 export class DocumentVerificationService {
+  private objectStorageService: ObjectStorageService;
+
+  constructor() {
+    this.objectStorageService = new ObjectStorageService();
+  }
   
   /**
    * Analyze a document using Gemini Vision API
@@ -69,23 +75,192 @@ export class DocumentVerificationService {
     mimeType: string,
     analysisPrompt?: string
   ): Promise<DocumentAnalysis> {
-    // TODO: Implement Gemini Vision API integration
-    // For now, return placeholder analysis
-    // The verifyDocument method uses placeholder data anyway
+    if (!genAI) {
+      throw new Error('Gemini API key not configured. Please set GEMINI_API_KEY or GOOGLE_API_KEY environment variable.');
+    }
+
+    try {
+      let base64Image: string;
+      if (Buffer.isBuffer(imageData)) {
+        base64Image = imageData.toString('base64');
+      } else if (typeof imageData === 'string') {
+        if (imageData.startsWith('data:')) {
+          base64Image = imageData.split(',')[1];
+        } else {
+          base64Image = imageData;
+        }
+      } else {
+        throw new Error('Invalid imageData format. Expected Buffer or base64 string.');
+      }
+
+      const defaultPrompt = `You are analyzing a document for Maryland SNAP (Supplemental Nutrition Assistance Program) benefit verification.
+
+Please analyze this document image and extract the following information in a structured JSON format:
+
+1. Document Type: Identify what type of document this is (pay_stub, medical_document, utility_bill, bank_statement, id_card, lease_agreement, tax_return, social_security_statement, unemployment_statement, etc.)
+
+2. Extracted Data:
+   - dates: Array of all dates found (in any format)
+   - amounts: Array of all monetary amounts found (include currency symbols)
+   - names: Array of all person names found
+   - addresses: Array of all addresses found
+   - identifiers: Array of account numbers, ID numbers, case numbers, etc.
+   - issuer: The organization or entity that issued the document
+   - recipientName: The primary person this document is for/about
+   - documentDate: The primary/issue date of the document
+   - expirationDate: If applicable, when this document expires
+
+3. Quality Assessment:
+   - readability: Rate as "high", "medium", or "low" based on image clarity and text legibility
+   - completeness: Rate as "complete", "partial", or "incomplete" based on whether all document sections are visible
+   - authenticity: Rate as "likely_authentic", "uncertain", or "concerns" based on presence of official elements (letterhead, signatures, seals, formatting)
+   - issues: List any quality problems (blurry, cut off, poor lighting, missing sections, etc.)
+
+4. Raw Text: Extract ALL visible text from the document verbatim
+
+Respond ONLY with a valid JSON object matching this structure:
+{
+  "documentType": "string",
+  "confidence": 0.0-1.0,
+  "extractedData": {
+    "dates": ["string"],
+    "amounts": ["string"],
+    "names": ["string"],
+    "addresses": ["string"],
+    "identifiers": ["string"],
+    "issuer": "string",
+    "recipientName": "string",
+    "documentDate": "string",
+    "expirationDate": "string"
+  },
+  "quality": {
+    "readability": "high|medium|low",
+    "completeness": "complete|partial|incomplete",
+    "authenticity": "likely_authentic|uncertain|concerns",
+    "issues": ["string"]
+  },
+  "rawText": "string"
+}`;
+
+      const prompt = analysisPrompt || defaultPrompt;
+
+      const result = await genAI.models.generateContent({
+        model: 'gemini-1.5-pro',
+        contents: [
+          {
+            role: 'user',
+            parts: [
+              {
+                inlineData: {
+                  data: base64Image,
+                  mimeType: mimeType
+                }
+              },
+              {
+                text: prompt
+              }
+            ]
+          }
+        ]
+      });
+
+      const text = result.text || '';
+
+      let analysis: DocumentAnalysis;
+      try {
+        const jsonMatch = text.match(/\{[\s\S]*\}/);
+        if (!jsonMatch) {
+          throw new Error('No JSON found in response');
+        }
+        
+        const parsed = JSON.parse(jsonMatch[0]);
+        
+        analysis = {
+          documentType: parsed.documentType || 'unknown',
+          confidence: typeof parsed.confidence === 'number' ? parsed.confidence : 0.7,
+          extractedData: {
+            dates: parsed.extractedData?.dates || [],
+            amounts: parsed.extractedData?.amounts || [],
+            names: parsed.extractedData?.names || [],
+            addresses: parsed.extractedData?.addresses || [],
+            identifiers: parsed.extractedData?.identifiers || [],
+            issuer: parsed.extractedData?.issuer || '',
+            recipientName: parsed.extractedData?.recipientName || '',
+            documentDate: parsed.extractedData?.documentDate || '',
+            expirationDate: parsed.extractedData?.expirationDate || ''
+          },
+          quality: {
+            readability: parsed.quality?.readability || 'medium',
+            completeness: parsed.quality?.completeness || 'partial',
+            authenticity: parsed.quality?.authenticity || 'uncertain',
+            issues: parsed.quality?.issues || []
+          },
+          rawText: parsed.rawText || text
+        };
+      } catch (parseError) {
+        console.warn('Failed to parse Gemini response as JSON, using fallback extraction:', parseError);
+        
+        analysis = {
+          documentType: this.extractDocumentTypeFromText(text),
+          confidence: 0.6,
+          extractedData: this.extractDataFromText(text),
+          quality: {
+            readability: 'medium',
+            completeness: 'partial',
+            authenticity: 'uncertain',
+            issues: ['Could not parse structured response']
+          },
+          rawText: text
+        };
+      }
+
+      return analysis;
+    } catch (error) {
+      console.error('Error analyzing document with Gemini Vision API:', error);
+      throw new Error(`Document analysis failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  private extractDocumentTypeFromText(text: string): string {
+    const lowerText = text.toLowerCase();
     
-    console.warn('analyzeDocument called but Gemini Vision API integration not yet complete');
+    if (lowerText.includes('pay stub') || lowerText.includes('paystub') || lowerText.includes('earnings statement')) {
+      return 'pay_stub';
+    }
+    if (lowerText.includes('medical') || lowerText.includes('doctor') || lowerText.includes('physician')) {
+      return 'medical_document';
+    }
+    if (lowerText.includes('utility') || lowerText.includes('electric') || lowerText.includes('gas bill') || lowerText.includes('water bill')) {
+      return 'utility_bill';
+    }
+    if (lowerText.includes('bank statement') || lowerText.includes('account statement')) {
+      return 'bank_statement';
+    }
+    if (lowerText.includes('driver') || lowerText.includes('license') || lowerText.includes('identification')) {
+      return 'id_card';
+    }
+    if (lowerText.includes('lease') || lowerText.includes('rental agreement')) {
+      return 'lease_agreement';
+    }
+    
+    return 'unknown';
+  }
+
+  private extractDataFromText(text: string): DocumentAnalysis['extractedData'] {
+    const dateRegex = /\b(\d{1,2}[-\/]\d{1,2}[-\/]\d{2,4}|\d{4}[-\/]\d{1,2}[-\/]\d{1,2}|(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+\d{1,2},?\s+\d{4})\b/gi;
+    const amountRegex = /\$\s*[\d,]+\.?\d{0,2}|\b\d+\.\d{2}\s*(?:USD|dollars?)\b/gi;
+    const dates = text.match(dateRegex) || [];
+    const amounts = text.match(amountRegex) || [];
+    
+    const uniqueDates = Array.from(new Set(dates)).slice(0, 10);
+    const uniqueAmounts = Array.from(new Set(amounts)).slice(0, 10);
     
     return {
-      documentType: 'unknown',
-      confidence: 0.5,
-      extractedData: {},
-      quality: {
-        readability: 'medium' as const,
-        completeness: 'partial' as const,
-        authenticity: 'uncertain' as const,
-        issues: ['Gemini Vision API integration pending']
-      },
-      rawText: ''
+      dates: uniqueDates,
+      amounts: uniqueAmounts,
+      names: [],
+      addresses: [],
+      identifiers: []
     };
   }
 
@@ -313,20 +488,68 @@ export class DocumentVerificationService {
         console.warn(`No active requirements found for type: ${request.requirementType}`);
       }
 
-      // Analyze document with Gemini Vision
-      // Note: In production, we'd fetch the actual image from object storage
-      // For now, we'll use a placeholder analysis
-      const analysis: DocumentAnalysis = {
-        documentType: request.requirementType,
-        confidence: 0.85,
-        extractedData: {},
-        quality: {
-          readability: 'high',
-          completeness: 'complete',
-          authenticity: 'likely_authentic',
-          issues: []
+      // Analyze document with Gemini Vision API
+      let analysis: DocumentAnalysis;
+      
+      try {
+        // Fetch the actual document image from object storage
+        if (!document.objectPath) {
+          throw new Error('Document has no object storage path - cannot analyze');
         }
-      };
+
+        if (!document.mimeType) {
+          throw new Error('Document has no MIME type - cannot analyze');
+        }
+
+        // Normalize the object path - converts full GCS URLs to /objects/{uuid} format
+        // This handles both formats: 
+        // - Full URLs: https://storage.googleapis.com/replit-objstore-{id}/.private/uploads/{uuid}?X-Goog-Algorithm=...
+        // - Already normalized: /objects/{uuid}
+        let normalizedPath: string;
+        try {
+          normalizedPath = this.objectStorageService.normalizeObjectEntityPath(document.objectPath);
+          
+          if (!normalizedPath || normalizedPath.trim() === '') {
+            throw new Error(`Path normalization resulted in empty path. Original path: ${document.objectPath}`);
+          }
+          
+          console.log(`📄 Normalized object path from "${document.objectPath.substring(0, 100)}..." to "${normalizedPath}"`);
+        } catch (pathError) {
+          throw new Error(`Failed to normalize object storage path "${document.objectPath}": ${pathError instanceof Error ? pathError.message : 'Unknown error'}`);
+        }
+
+        // Get the file from object storage using the normalized path
+        const objectFile = await this.objectStorageService.getObjectEntityFile(normalizedPath);
+        
+        // Download the file contents as a buffer
+        const [fileBuffer] = await objectFile.download();
+        
+        // Call the analyzeDocument method with the actual image data
+        analysis = await this.analyzeDocument(
+          fileBuffer,
+          document.mimeType
+        );
+        
+        console.log(`✓ Successfully analyzed document ${document.id} using Gemini Vision API`);
+      } catch (error) {
+        console.error('Error fetching or analyzing document from object storage:', error);
+        
+        // Provide helpful error messages based on the type of error
+        if (error instanceof Error) {
+          if (error.message.includes('normalize') || error.message.includes('path')) {
+            throw new Error(`Object storage path error for document ${document.id}: ${error.message}. The stored path may be malformed or invalid.`);
+          }
+          if (error.message.includes('Object not found')) {
+            throw new Error(`Document file not found in object storage for document ${document.id}. The file may have been deleted or the path is incorrect.`);
+          }
+          if (error.message.includes('object storage')) {
+            throw new Error(`Cannot verify document ${document.id}: ${error.message}. Please ensure the document is properly uploaded to object storage.`);
+          }
+        }
+        
+        // For other errors, re-throw with context
+        throw new Error(`Document analysis failed for document ${document.id}: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      }
 
       // Route to specific verification logic based on document type
       let verificationResult: Partial<VerificationResult>;
