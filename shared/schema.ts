@@ -535,6 +535,186 @@ export const sectionCrossReferencesRelations = relations(sectionCrossReferences,
   }),
 }));
 
+// ============================================================================
+// CITATION TRACKING - Federal and State Source Citations with Variance Analysis
+// ============================================================================
+
+export const policyCitations = pgTable("policy_citations", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  ruleTable: text("rule_table").notNull(), // Which rule table this citation applies to
+  ruleId: varchar("rule_id").notNull(), // ID of the rule
+  citationType: text("citation_type").notNull(), // federal_regulation, state_regulation, federal_guidance, state_policy
+  authority: text("authority").notNull(), // e.g., "7 CFR §273.10", "COMAR 10.01.01.15", "AT 24-17"
+  sourceDocumentId: varchar("source_document_id").references(() => documents.id),
+  sectionReference: text("section_reference"), // Specific section/page in source
+  effectiveDate: timestamp("effective_date"),
+  citationText: text("citation_text"), // Actual text from the source
+  url: text("url"), // Direct link to source
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const policyVariances = pgTable("policy_variances", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  ruleTable: text("rule_table").notNull(),
+  ruleId: varchar("rule_id").notNull(),
+  federalCitationId: varchar("federal_citation_id").references(() => policyCitations.id),
+  stateCitationId: varchar("state_citation_id").references(() => policyCitations.id),
+  varianceType: text("variance_type").notNull(), // state_option, more_generous, less_generous, different_implementation
+  explanation: text("explanation").notNull(), // Why Maryland differs from federal baseline
+  federalAuthority: text("federal_authority"), // e.g., "7 CFR §273.2(j)(2) permits state option"
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+// ============================================================================
+// NAVIGATOR WORKSPACE - Client Interaction Tracking for E&E Export
+// ============================================================================
+
+export const clientInteractionSessions = pgTable("client_interaction_sessions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  clientCaseId: varchar("client_case_id").references(() => clientCases.id),
+  navigatorId: varchar("navigator_id").references(() => users.id).notNull(),
+  sessionType: text("session_type").notNull(), // screening, application_assist, recert_assist, documentation, follow_up
+  interactionDate: timestamp("interaction_date").defaultNow().notNull(),
+  durationMinutes: integer("duration_minutes"),
+  location: text("location"), // office, phone, field_visit, video
+  topicsDiscussed: jsonb("topics_discussed"), // Array of topics covered
+  documentsReceived: jsonb("documents_received"), // Documents submitted during session
+  documentsVerified: jsonb("documents_verified"), // Verification results
+  actionItems: jsonb("action_items"), // Follow-up tasks
+  notes: text("notes"),
+  outcomeStatus: text("outcome_status"), // completed, needs_follow_up, referred, application_submitted
+  exportedToEE: boolean("exported_to_ee").default(false).notNull(),
+  exportedAt: timestamp("exported_at"),
+  exportBatchId: varchar("export_batch_id"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const eeExportBatches = pgTable("ee_export_batches", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  exportType: text("export_type").notNull(), // daily, weekly, manual
+  sessionCount: integer("session_count").notNull(),
+  exportFormat: text("export_format").notNull(), // csv, json, xml
+  filePath: text("file_path"),
+  fileSize: integer("file_size"),
+  exportedBy: varchar("exported_by").references(() => users.id).notNull(),
+  exportedAt: timestamp("exported_at").defaultNow().notNull(),
+  uploadedToEE: boolean("uploaded_to_ee").default(false).notNull(),
+  uploadedAt: timestamp("uploaded_at"),
+  uploadConfirmation: text("upload_confirmation"),
+  notes: text("notes"),
+});
+
+// ============================================================================
+// CONSENT MANAGEMENT - Admin-Configurable Consent Forms
+// ============================================================================
+
+export const consentForms = pgTable("consent_forms", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  formName: text("form_name").notNull(),
+  formCode: text("form_code").notNull().unique(), // benefits_disclosure, information_sharing, etc.
+  formTitle: text("form_title").notNull(),
+  formContent: text("form_content").notNull(), // HTML content editable by admin
+  purpose: text("purpose").notNull(), // Description of why this consent is needed
+  version: integer("version").notNull().default(1),
+  isActive: boolean("is_active").default(false).notNull(),
+  requiresSignature: boolean("requires_signature").default(true).notNull(),
+  expirationDays: integer("expiration_days"), // How long consent is valid (null = indefinite)
+  benefitProgramId: varchar("benefit_program_id").references(() => benefitPrograms.id),
+  createdBy: varchar("created_by").references(() => users.id).notNull(),
+  approvedBy: varchar("approved_by").references(() => users.id),
+  approvedAt: timestamp("approved_at"),
+  effectiveDate: timestamp("effective_date"),
+  endDate: timestamp("end_date"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const clientConsents = pgTable("client_consents", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  clientCaseId: varchar("client_case_id").references(() => clientCases.id).notNull(),
+  consentFormId: varchar("consent_form_id").references(() => consentForms.id).notNull(),
+  sessionId: varchar("session_id").references(() => clientInteractionSessions.id),
+  consentGiven: boolean("consent_given").notNull(),
+  consentDate: timestamp("consent_date").defaultNow().notNull(),
+  signatureData: text("signature_data"), // Base64 encoded signature image
+  signatureMethod: text("signature_method"), // digital, wet_signature, verbal, electronic
+  witnessedBy: varchar("witnessed_by").references(() => users.id),
+  ipAddress: text("ip_address"),
+  expiresAt: timestamp("expires_at"),
+  revokedAt: timestamp("revoked_at"),
+  revokedReason: text("revoked_reason"),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+// Relations for new tables
+export const policyCitationsRelations = relations(policyCitations, ({ one }) => ({
+  sourceDocument: one(documents, {
+    fields: [policyCitations.sourceDocumentId],
+    references: [documents.id],
+  }),
+}));
+
+export const policyVariancesRelations = relations(policyVariances, ({ one }) => ({
+  federalCitation: one(policyCitations, {
+    fields: [policyVariances.federalCitationId],
+    references: [policyCitations.id],
+  }),
+  stateCitation: one(policyCitations, {
+    fields: [policyVariances.stateCitationId],
+    references: [policyCitations.id],
+  }),
+}));
+
+export const clientInteractionSessionsRelations = relations(clientInteractionSessions, ({ one }) => ({
+  clientCase: one(clientCases, {
+    fields: [clientInteractionSessions.clientCaseId],
+    references: [clientCases.id],
+  }),
+  navigator: one(users, {
+    fields: [clientInteractionSessions.navigatorId],
+    references: [users.id],
+  }),
+}));
+
+export const eeExportBatchesRelations = relations(eeExportBatches, ({ one }) => ({
+  exportedByUser: one(users, {
+    fields: [eeExportBatches.exportedBy],
+    references: [users.id],
+  }),
+}));
+
+export const consentFormsRelations = relations(consentForms, ({ one }) => ({
+  benefitProgram: one(benefitPrograms, {
+    fields: [consentForms.benefitProgramId],
+    references: [benefitPrograms.id],
+  }),
+  creator: one(users, {
+    fields: [consentForms.createdBy],
+    references: [users.id],
+  }),
+}));
+
+export const clientConsentsRelations = relations(clientConsents, ({ one }) => ({
+  clientCase: one(clientCases, {
+    fields: [clientConsents.clientCaseId],
+    references: [clientCases.id],
+  }),
+  consentForm: one(consentForms, {
+    fields: [clientConsents.consentFormId],
+    references: [consentForms.id],
+  }),
+  session: one(clientInteractionSessions, {
+    fields: [clientConsents.sessionId],
+    references: [clientInteractionSessions.id],
+  }),
+  witness: one(users, {
+    fields: [clientConsents.witnessedBy],
+    references: [users.id],
+  }),
+}));
+
 // Insert Schemas
 export const insertUserSchema = createInsertSchema(users).pick({
   username: true,
@@ -702,6 +882,39 @@ export const insertClientCaseSchema = createInsertSchema(clientCases).omit({
   updatedAt: true,
 });
 
+export const insertPolicyCitationSchema = createInsertSchema(policyCitations).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertPolicyVarianceSchema = createInsertSchema(policyVariances).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertClientInteractionSessionSchema = createInsertSchema(clientInteractionSessions).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertEEExportBatchSchema = createInsertSchema(eeExportBatches).omit({
+  id: true,
+  exportedAt: true,
+});
+
+export const insertConsentFormSchema = createInsertSchema(consentForms).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertClientConsentSchema = createInsertSchema(clientConsents).omit({
+  id: true,
+  consentDate: true,
+  createdAt: true,
+});
+
 // Rules as Code Types
 export type InsertPovertyLevel = z.infer<typeof insertPovertyLevelSchema>;
 export type PovertyLevel = typeof povertyLevels.$inferSelect;
@@ -732,3 +945,21 @@ export type AuditLog = typeof auditLogs.$inferSelect;
 
 export type InsertClientCase = z.infer<typeof insertClientCaseSchema>;
 export type ClientCase = typeof clientCases.$inferSelect;
+
+export type InsertPolicyCitation = z.infer<typeof insertPolicyCitationSchema>;
+export type PolicyCitation = typeof policyCitations.$inferSelect;
+
+export type InsertPolicyVariance = z.infer<typeof insertPolicyVarianceSchema>;
+export type PolicyVariance = typeof policyVariances.$inferSelect;
+
+export type InsertClientInteractionSession = z.infer<typeof insertClientInteractionSessionSchema>;
+export type ClientInteractionSession = typeof clientInteractionSessions.$inferSelect;
+
+export type InsertEEExportBatch = z.infer<typeof insertEEExportBatchSchema>;
+export type EEExportBatch = typeof eeExportBatches.$inferSelect;
+
+export type InsertConsentForm = z.infer<typeof insertConsentFormSchema>;
+export type ConsentForm = typeof consentForms.$inferSelect;
+
+export type InsertClientConsent = z.infer<typeof insertClientConsentSchema>;
+export type ClientConsent = typeof clientConsents.$inferSelect;
