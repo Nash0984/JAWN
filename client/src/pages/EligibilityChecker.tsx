@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { CheckCircle2, XCircle, Loader2, Users, DollarSign, FileText, Info } from "lucide-react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { PolicyChatWidget } from "@/components/PolicyChatWidget";
 
 interface EligibilityResult {
   eligible: boolean;
@@ -376,6 +377,7 @@ export default function EligibilityChecker() {
           </Alert>
         </div>
       )}
+      <PolicyChatWidget context="eligibility" />
     </div>
   );
 }
