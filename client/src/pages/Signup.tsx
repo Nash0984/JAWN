@@ -59,19 +59,31 @@ export default function Signup() {
 
   const signupMutation = useMutation({
     mutationFn: async (data: SignupFormData) => {
-      const response = await apiRequest("/api/auth/signup", {
-        method: "POST",
-        body: JSON.stringify(data),
-      });
+      const response = await apiRequest("POST", "/api/auth/signup", data);
       return response.json();
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
+      
+      // Determine dashboard URL based on user role
+      const role = data.user.role;
+      let dashboardUrl = "/";
+      
+      if (role === "admin" || role === "super_admin") {
+        dashboardUrl = "/dashboard/admin";
+      } else if (role === "navigator") {
+        dashboardUrl = "/dashboard/navigator";
+      } else if (role === "caseworker") {
+        dashboardUrl = "/dashboard/caseworker";
+      } else if (role === "client") {
+        dashboardUrl = "/dashboard/client";
+      }
+      
       toast({
         title: "Account created!",
         description: `Welcome, ${data.user.username}! You're now logged in.`,
       });
-      setLocation("/");
+      setLocation(dashboardUrl);
     },
     onError: (error: Error) => {
       toast({

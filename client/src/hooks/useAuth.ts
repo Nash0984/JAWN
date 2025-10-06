@@ -58,7 +58,7 @@ export function useAuth(): AuthState {
     isClient: isAuthenticated && role === "client",
     isNavigator: isAuthenticated && role === "navigator",
     isCaseworker: isAuthenticated && role === "caseworker",
-    isAdmin: isAuthenticated && role === "admin",
+    isAdmin: isAuthenticated && (role === "admin" || role === "super_admin"),
     isSuperAdmin: isAuthenticated && role === "super_admin",
     isStaff: isAuthenticated && (role === "navigator" || role === "caseworker" || role === "admin" || role === "super_admin"),
     login: () => {

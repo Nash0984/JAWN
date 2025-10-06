@@ -16,6 +16,11 @@ import Login from "@/pages/Login";
 import Signup from "@/pages/Signup";
 import NotFound from "@/pages/not-found";
 import Navigation from "@/components/Navigation";
+import ProtectedRoute from "@/components/ProtectedRoute";
+import ClientDashboard from "@/pages/ClientDashboard";
+import NavigatorDashboard from "@/pages/NavigatorDashboard";
+import CaseworkerDashboard from "@/pages/CaseworkerDashboard";
+import AdminDashboard from "@/pages/AdminDashboard";
 
 function Router() {
   const [location] = useLocation();
@@ -31,17 +36,106 @@ function Router() {
       
       <main id="main-content" role="main">
         <Switch>
+          {/* Public routes */}
           <Route path="/" component={Home} />
+          <Route path="/search" component={Home} />
+          <Route path="/help" component={Home} />
           <Route path="/login" component={Login} />
           <Route path="/signup" component={Signup} />
-          <Route path="/upload" component={Upload} />
-          <Route path="/verify" component={DocumentVerificationPage} />
-          <Route path="/navigator" component={NavigatorWorkspace} />
-          <Route path="/consent" component={ConsentManagement} />
-          <Route path="/admin" component={Admin} />
-          <Route path="/training" component={Training} />
-          <Route path="/eligibility" component={EligibilityChecker} />
-          <Route path="/manual" component={PolicyManual} />
+          
+          {/* Role-specific dashboards */}
+          <Route path="/dashboard/client">
+            {() => (
+              <ProtectedRoute>
+                <ClientDashboard />
+              </ProtectedRoute>
+            )}
+          </Route>
+          <Route path="/dashboard/navigator">
+            {() => (
+              <ProtectedRoute requireStaff>
+                <NavigatorDashboard />
+              </ProtectedRoute>
+            )}
+          </Route>
+          <Route path="/dashboard/caseworker">
+            {() => (
+              <ProtectedRoute requireStaff>
+                <CaseworkerDashboard />
+              </ProtectedRoute>
+            )}
+          </Route>
+          <Route path="/dashboard/admin">
+            {() => (
+              <ProtectedRoute requireAdmin>
+                <AdminDashboard />
+              </ProtectedRoute>
+            )}
+          </Route>
+          
+          {/* Protected routes - require authentication */}
+          <Route path="/eligibility">
+            {() => (
+              <ProtectedRoute>
+                <EligibilityChecker />
+              </ProtectedRoute>
+            )}
+          </Route>
+          <Route path="/manual">
+            {() => (
+              <ProtectedRoute>
+                <PolicyManual />
+              </ProtectedRoute>
+            )}
+          </Route>
+          
+          {/* Staff-only routes */}
+          <Route path="/verify">
+            {() => (
+              <ProtectedRoute requireStaff>
+                <DocumentVerificationPage />
+              </ProtectedRoute>
+            )}
+          </Route>
+          <Route path="/navigator">
+            {() => (
+              <ProtectedRoute requireStaff>
+                <NavigatorWorkspace />
+              </ProtectedRoute>
+            )}
+          </Route>
+          <Route path="/consent">
+            {() => (
+              <ProtectedRoute requireStaff>
+                <ConsentManagement />
+              </ProtectedRoute>
+            )}
+          </Route>
+          
+          {/* Admin-only routes */}
+          <Route path="/upload">
+            {() => (
+              <ProtectedRoute requireAdmin>
+                <Upload />
+              </ProtectedRoute>
+            )}
+          </Route>
+          <Route path="/admin">
+            {() => (
+              <ProtectedRoute requireAdmin>
+                <Admin />
+              </ProtectedRoute>
+            )}
+          </Route>
+          <Route path="/training">
+            {() => (
+              <ProtectedRoute requireAdmin>
+                <Training />
+              </ProtectedRoute>
+            )}
+          </Route>
+          
+          {/* 404 fallback */}
           <Route component={NotFound} />
         </Switch>
       </main>
