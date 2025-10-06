@@ -623,6 +623,31 @@ export const eeExportBatches = pgTable("ee_export_batches", {
 });
 
 // ============================================================================
+// RULES EXTRACTION - Track AI-powered extraction of rules from manual sections
+// ============================================================================
+
+export const extractionJobs = pgTable("extraction_jobs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  manualSectionId: varchar("manual_section_id").references(() => manualSections.id).notNull(),
+  sectionNumber: text("section_number").notNull(),
+  sectionTitle: text("section_title").notNull(),
+  extractionType: text("extraction_type").notNull(), // income_limits, deductions, allotments, categorical_eligibility, document_requirements, full_auto
+  status: text("status").notNull().default("pending"), // pending, processing, completed, failed, reviewed, approved
+  rulesExtracted: integer("rules_extracted").default(0).notNull(),
+  extractedRules: jsonb("extracted_rules"), // JSON array of extracted rules before DB insertion
+  errorMessage: text("error_message"),
+  extractedBy: varchar("extracted_by").references(() => users.id),
+  reviewedBy: varchar("reviewed_by").references(() => users.id),
+  approvedBy: varchar("approved_by").references(() => users.id),
+  startedAt: timestamp("started_at"),
+  completedAt: timestamp("completed_at"),
+  reviewedAt: timestamp("reviewed_at"),
+  approvedAt: timestamp("approved_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+// ============================================================================
 // DOCUMENT VERIFICATION - Track verification results and requirements satisfaction
 // ============================================================================
 
@@ -1000,6 +1025,12 @@ export const insertEEExportBatchSchema = createInsertSchema(eeExportBatches).omi
   exportedAt: true,
 });
 
+export const insertExtractionJobSchema = createInsertSchema(extractionJobs).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
 export const insertConsentFormSchema = createInsertSchema(consentForms).omit({
   id: true,
   createdAt: true,
@@ -1067,6 +1098,9 @@ export type ClientInteractionSession = typeof clientInteractionSessions.$inferSe
 
 export type InsertEEExportBatch = z.infer<typeof insertEEExportBatchSchema>;
 export type EEExportBatch = typeof eeExportBatches.$inferSelect;
+
+export type InsertExtractionJob = z.infer<typeof insertExtractionJobSchema>;
+export type ExtractionJob = typeof extractionJobs.$inferSelect;
 
 export type InsertConsentForm = z.infer<typeof insertConsentFormSchema>;
 export type ConsentForm = typeof consentForms.$inferSelect;
