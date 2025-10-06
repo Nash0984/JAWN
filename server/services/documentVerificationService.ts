@@ -1,6 +1,7 @@
 import { GoogleGenAI } from '@google/genai';
 import { storage } from '../storage';
 import type { Document, DocumentRequirementRule } from '../../shared/schema';
+import { ragService } from './ragService';
 
 const geminiApiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
 
@@ -43,6 +44,12 @@ export interface VerificationResult {
   extractedInfo: Record<string, any>;
   confidenceScore: number;
   analysis: DocumentAnalysis;
+  policyCitations: Array<{
+    section: string;
+    regulation: string;
+    text: string;
+    sourceUrl?: string;
+  }>;
 }
 
 export interface VerificationRequest {
@@ -410,6 +417,12 @@ Return your analysis as a structured JSON object.`;
         });
       }
 
+      // Generate policy citations (always, regardless of validation status)
+      const policyCitations = await this.generatePolicyCitations(
+        request.requirementType,
+        relevantRequirements
+      );
+
       return {
         isValid: verificationResult.isValid || false,
         satisfiesRequirements,
@@ -418,12 +431,135 @@ Return your analysis as a structured JSON object.`;
         validUntil: verificationResult.validUntil,
         extractedInfo: verificationResult.extractedInfo || {},
         confidenceScore: analysis.confidence,
-        analysis
+        analysis,
+        policyCitations
       };
     } catch (error) {
       console.error('Error verifying document:', error);
       throw error;
     }
+  }
+
+  /**
+   * Generate policy citations for document verification requirements
+   */
+  async generatePolicyCitations(
+    requirementType: string,
+    requirements: DocumentRequirementRule[]
+  ): Promise<Array<{ section: string; regulation: string; text: string; sourceUrl?: string }>> {
+    const citations: Array<{ section: string; regulation: string; text: string; sourceUrl?: string }> = [];
+    
+    // Map document types to Maryland SNAP manual sections
+    const policyMapping: Record<string, Array<{ section: string; regulation: string; text: string }>> = {
+      'income': [
+        {
+          section: '409',
+          regulation: 'Maryland SNAP Manual',
+          text: 'Income verification requirements for SNAP eligibility. Acceptable documents include pay stubs, employer statements, tax returns, and self-employment records showing gross monthly income.'
+        },
+        {
+          section: '7 CFR 273.2(f)(1)(vii)',
+          regulation: 'Federal Regulations',
+          text: 'Verification of income must be obtained from documentary evidence or collateral contacts. Pay stubs or employer statements are acceptable if they show current gross monthly income.'
+        }
+      ],
+      'residency': [
+        {
+          section: '409.2',
+          regulation: 'Maryland SNAP Manual',
+          text: 'Residency verification for SNAP applicants. Acceptable documents include utility bills, lease agreements, or mail showing current Maryland address within the last 60 days.'
+        },
+        {
+          section: 'COMAR 10.02.04.06',
+          regulation: 'Maryland Code of Regulations',
+          text: 'Maryland residents must provide proof of residency. Utility bills dated within 60 days are acceptable verification.'
+        }
+      ],
+      'work_exemption': [
+        {
+          section: '115',
+          regulation: 'Maryland SNAP Manual',
+          text: 'Work requirement exemptions for individuals who are unable to work due to physical or mental limitations. Medical documentation from a licensed professional is required.'
+        },
+        {
+          section: '7 CFR 273.7(b)(1)',
+          regulation: 'Federal Regulations',
+          text: 'Individuals who are physically or mentally unfit for employment are exempt from ABAWD work requirements. Verification through medical documentation is required.'
+        }
+      ],
+      'disability': [
+        {
+          section: '115.3',
+          regulation: 'Maryland SNAP Manual',
+          text: 'Disability verification for SNAP categorical eligibility and exemptions. Acceptable documents include SSI award letters, disability determination letters, or medical certification.'
+        }
+      ],
+      'identity': [
+        {
+          section: '409.1',
+          regulation: 'Maryland SNAP Manual',
+          text: 'Identity verification for SNAP applicants. Acceptable documents include driver\'s license, state ID, passport, birth certificate, or other official documents with photo or identifying information.'
+        }
+      ],
+      'expenses': [
+        {
+          section: '212-214',
+          regulation: 'Maryland SNAP Manual',
+          text: 'Expense verification for allowable deductions including shelter costs, dependent care, and medical expenses. Documentation must show amount and frequency of expenses.'
+        }
+      ],
+      'childcare': [
+        {
+          section: '213',
+          regulation: 'Maryland SNAP Manual',
+          text: 'Dependent care expense verification. Acceptable documents include receipts, provider statements, or billing statements showing amounts paid for care of dependents.'
+        }
+      ],
+      'medical': [
+        {
+          section: '214',
+          regulation: 'Maryland SNAP Manual',
+          text: 'Medical expense deduction verification for elderly or disabled household members. Acceptable documents include medical bills, receipts, or provider statements.'
+        }
+      ]
+    };
+    
+    // Add standard citations for the document type
+    const standardCitations = policyMapping[requirementType] || [];
+    citations.push(...standardCitations);
+    
+    // Add citations from requirement rules
+    for (const req of requirements) {
+      if (req.policySource) {
+        citations.push({
+          section: req.ruleId || 'N/A',
+          regulation: req.policySource,
+          text: req.description || ''
+        });
+      }
+    }
+    
+    // Query RAG service for additional context-specific citations
+    try {
+      const ragQuery = `What are the Maryland SNAP policy requirements for ${requirementType} verification documents?`;
+      const ragResult = await ragService.search(ragQuery);
+      
+      // Extract citations from RAG result if available
+      if (ragResult.citations && ragResult.citations.length > 0) {
+        ragResult.citations.slice(0, 2).forEach(citation => {
+          citations.push({
+            section: citation.sectionNumber || '',
+            regulation: citation.sectionTitle || 'Maryland SNAP Policy',
+            text: citation.excerpt || '',
+            sourceUrl: citation.sourceUrl
+          });
+        });
+      }
+    } catch (error) {
+      console.warn('Could not fetch RAG citations:', error);
+    }
+    
+    return citations;
   }
 
   /**
