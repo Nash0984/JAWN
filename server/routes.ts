@@ -1222,6 +1222,151 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ============================================================================
+  // NAVIGATOR WORKSPACE - Client session tracking and E&E exports
+  // ============================================================================
+
+  const sessionCreateSchema = z.object({
+    clientCaseId: z.string().optional(),
+    sessionType: z.enum(['screening', 'application_assist', 'recert_assist', 'documentation', 'follow_up']),
+    location: z.enum(['office', 'phone', 'field_visit', 'video']),
+    durationMinutes: z.number().int().positive().optional(),
+    topicsDiscussed: z.array(z.string()).optional(),
+    notes: z.string().optional(),
+    outcomeStatus: z.enum(['completed', 'needs_follow_up', 'referred', 'application_submitted']),
+    actionItems: z.array(z.any()).optional(),
+    documentsReceived: z.array(z.any()).optional(),
+    documentsVerified: z.array(z.any()).optional()
+  });
+
+  const exportCreateSchema = z.object({
+    exportType: z.enum(['daily', 'weekly', 'manual']),
+    exportFormat: z.enum(['csv', 'json', 'xml']),
+    notes: z.string().optional()
+  });
+
+  // Get all client interaction sessions for the current navigator
+  app.get("/api/navigator/sessions", asyncHandler(async (req, res) => {
+    const sessions = await storage.getClientInteractionSessions();
+    res.json(sessions);
+  }));
+
+  // Create a new client interaction session
+  app.post("/api/navigator/sessions", asyncHandler(async (req, res) => {
+    const validatedData = sessionCreateSchema.parse(req.body);
+    
+    const sessionData = {
+      ...validatedData,
+      navigatorId: req.user?.id || 'system',
+      exportedToEE: false
+    };
+
+    const session = await storage.createClientInteractionSession(sessionData);
+    res.json(session);
+  }));
+
+  // Get all E&E export batches
+  app.get("/api/navigator/exports", asyncHandler(async (req, res) => {
+    const exports = await storage.getEEExportBatches();
+    res.json(exports);
+  }));
+
+  // Create a new E&E export batch
+  app.post("/api/navigator/exports", asyncHandler(async (req, res) => {
+    const validatedData = exportCreateSchema.parse(req.body);
+
+    // Get unexported sessions
+    const unexportedSessions = await storage.getUnexportedSessions();
+
+    if (unexportedSessions.length === 0) {
+      throw validationError("No sessions available for export");
+    }
+
+    // Create export batch
+    const exportBatch = await storage.createEEExportBatch({
+      ...validatedData,
+      sessionCount: unexportedSessions.length,
+      exportedBy: req.user?.id || 'system',
+      uploadedToEE: false
+    });
+
+    // Mark sessions as exported
+    await storage.markSessionsAsExported(unexportedSessions.map(s => s.id), exportBatch.id);
+
+    res.json(exportBatch);
+  }));
+
+  // Download an E&E export batch file
+  app.get("/api/navigator/exports/:id/download", asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    const exportBatch = await storage.getEEExportBatch(id);
+
+    if (!exportBatch) {
+      throw validationError("Export batch not found");
+    }
+
+    // Get sessions for this export
+    const sessions = await storage.getSessionsByExportBatch(id);
+
+    // Generate export file based on format
+    let content: string;
+    let mimeType: string;
+    let filename: string;
+
+    if (exportBatch.exportFormat === 'csv') {
+      mimeType = 'text/csv';
+      filename = `ee-export-${id}.csv`;
+      
+      // CSV headers
+      const headers = [
+        'Session ID', 'Client Case ID', 'Session Type', 'Date', 'Duration (min)',
+        'Location', 'Outcome', 'Topics', 'Action Items', 'Notes'
+      ].join(',');
+
+      // CSV rows
+      const rows = sessions.map(s => [
+        s.id,
+        s.clientCaseId || '',
+        s.sessionType,
+        new Date(s.interactionDate).toISOString(),
+        s.durationMinutes || '',
+        s.location || '',
+        s.outcomeStatus || '',
+        JSON.stringify(s.topicsDiscussed || []),
+        JSON.stringify(s.actionItems || []),
+        (s.notes || '').replace(/"/g, '""') // Escape quotes
+      ].map(v => `"${v}"`).join(','));
+
+      content = [headers, ...rows].join('\n');
+    } else if (exportBatch.exportFormat === 'json') {
+      mimeType = 'application/json';
+      filename = `ee-export-${id}.json`;
+      content = JSON.stringify(sessions, null, 2);
+    } else { // xml
+      mimeType = 'application/xml';
+      filename = `ee-export-${id}.xml`;
+      content = `<?xml version="1.0" encoding="UTF-8"?>
+<export>
+  <sessions>
+${sessions.map(s => `    <session>
+      <id>${s.id}</id>
+      <clientCaseId>${s.clientCaseId || ''}</clientCaseId>
+      <sessionType>${s.sessionType}</sessionType>
+      <date>${new Date(s.interactionDate).toISOString()}</date>
+      <duration>${s.durationMinutes || ''}</duration>
+      <location>${s.location || ''}</location>
+      <outcome>${s.outcomeStatus || ''}</outcome>
+      <notes>${(s.notes || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</notes>
+    </session>`).join('\n')}
+  </sessions>
+</export>`;
+    }
+
+    res.setHeader('Content-Type', mimeType);
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.send(content);
+  }));
+
   const httpServer = createServer(app);
   return httpServer;
 }

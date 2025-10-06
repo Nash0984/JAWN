@@ -54,6 +54,12 @@ import {
   type InsertClientCase,
   type PovertyLevel,
   type InsertPovertyLevel,
+  clientInteractionSessions,
+  type ClientInteractionSession,
+  type InsertClientInteractionSession,
+  eeExportBatches,
+  type EEExportBatch,
+  type InsertEEExportBatch,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and, ilike, sql, or, isNull, lte, gte } from "drizzle-orm";
@@ -156,6 +162,18 @@ export interface IStorage {
   getManualSection(id: string): Promise<any | undefined>;
   getSectionCrossReferences(sectionId: string): Promise<any[]>;
   getSectionChunks(sectionId: string): Promise<any[]>;
+
+  // Navigator Workspace - Client Interaction Sessions
+  createClientInteractionSession(session: InsertClientInteractionSession): Promise<ClientInteractionSession>;
+  getClientInteractionSessions(navigatorId?: string): Promise<ClientInteractionSession[]>;
+  getUnexportedSessions(): Promise<ClientInteractionSession[]>;
+  markSessionsAsExported(sessionIds: string[], exportBatchId: string): Promise<void>;
+  getSessionsByExportBatch(exportBatchId: string): Promise<ClientInteractionSession[]>;
+
+  // Navigator Workspace - E&E Export Batches
+  createEEExportBatch(batch: InsertEEExportBatch): Promise<EEExportBatch>;
+  getEEExportBatches(): Promise<EEExportBatch[]>;
+  getEEExportBatch(id: string): Promise<EEExportBatch | undefined>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -699,6 +717,67 @@ export class DatabaseStorage implements IStorage {
       .where(eq(documentChunks.documentId, section.documentId))
       .orderBy(documentChunks.chunkIndex);
     return chunks;
+  }
+
+  // Navigator Workspace - Client Interaction Sessions
+  async createClientInteractionSession(session: InsertClientInteractionSession): Promise<ClientInteractionSession> {
+    const [newSession] = await db.insert(clientInteractionSessions).values(session).returning();
+    return newSession;
+  }
+
+  async getClientInteractionSessions(navigatorId?: string): Promise<ClientInteractionSession[]> {
+    let query = db.select().from(clientInteractionSessions);
+    
+    if (navigatorId) {
+      query = query.where(eq(clientInteractionSessions.navigatorId, navigatorId));
+    }
+    
+    return await query.orderBy(desc(clientInteractionSessions.interactionDate));
+  }
+
+  async getUnexportedSessions(): Promise<ClientInteractionSession[]> {
+    return await db
+      .select()
+      .from(clientInteractionSessions)
+      .where(eq(clientInteractionSessions.exportedToEE, false))
+      .orderBy(desc(clientInteractionSessions.interactionDate));
+  }
+
+  async markSessionsAsExported(sessionIds: string[], exportBatchId: string): Promise<void> {
+    await db
+      .update(clientInteractionSessions)
+      .set({ 
+        exportedToEE: true, 
+        exportedAt: sql`NOW()`,
+        exportBatchId 
+      })
+      .where(sql`${clientInteractionSessions.id} = ANY(${sessionIds})`);
+  }
+
+  async getSessionsByExportBatch(exportBatchId: string): Promise<ClientInteractionSession[]> {
+    return await db
+      .select()
+      .from(clientInteractionSessions)
+      .where(eq(clientInteractionSessions.exportBatchId, exportBatchId))
+      .orderBy(desc(clientInteractionSessions.interactionDate));
+  }
+
+  // Navigator Workspace - E&E Export Batches
+  async createEEExportBatch(batch: InsertEEExportBatch): Promise<EEExportBatch> {
+    const [newBatch] = await db.insert(eeExportBatches).values(batch).returning();
+    return newBatch;
+  }
+
+  async getEEExportBatches(): Promise<EEExportBatch[]> {
+    return await db
+      .select()
+      .from(eeExportBatches)
+      .orderBy(desc(eeExportBatches.exportedAt));
+  }
+
+  async getEEExportBatch(id: string): Promise<EEExportBatch | undefined> {
+    const [batch] = await db.select().from(eeExportBatches).where(eq(eeExportBatches.id, id));
+    return batch || undefined;
   }
 }
 
