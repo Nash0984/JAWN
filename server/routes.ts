@@ -1600,6 +1600,65 @@ ${sessions.map(s => `    <session>
     res.json(consent);
   }));
 
+  // ===== RULES EXTRACTION ROUTES =====
+  
+  // Extract rules from a single manual section
+  app.post("/api/extraction/extract-section", requireAuth, requireRole(['admin', 'super_admin']), asyncHandler(async (req, res) => {
+    const { extractRulesFromSection } = await import('./services/rulesExtractionService');
+    
+    const { manualSectionId, extractionType } = req.body;
+    
+    if (!manualSectionId) {
+      throw validationError("Manual section ID is required");
+    }
+    
+    const result = await extractRulesFromSection(
+      manualSectionId,
+      extractionType,
+      req.user?.id
+    );
+    
+    res.json(result);
+  }));
+
+  // Batch extract rules from multiple sections
+  app.post("/api/extraction/extract-batch", requireAuth, requireRole(['admin', 'super_admin']), asyncHandler(async (req, res) => {
+    const { batchExtractRules } = await import('./services/rulesExtractionService');
+    
+    const { manualSectionIds } = req.body;
+    
+    if (!Array.isArray(manualSectionIds) || manualSectionIds.length === 0) {
+      throw validationError("Manual section IDs array is required");
+    }
+    
+    const result = await batchExtractRules(manualSectionIds, req.user?.id);
+    
+    res.json(result);
+  }));
+
+  // Get extraction job status
+  app.get("/api/extraction/jobs/:jobId", requireAuth, requireRole(['admin', 'super_admin']), asyncHandler(async (req, res) => {
+    const { getExtractionJob } = await import('./services/rulesExtractionService');
+    
+    const job = await getExtractionJob(req.params.jobId);
+    
+    if (!job) {
+      res.status(404).json({ message: "Extraction job not found" });
+      return;
+    }
+    
+    res.json(job);
+  }));
+
+  // Get all extraction jobs
+  app.get("/api/extraction/jobs", requireAuth, requireRole(['admin', 'super_admin']), asyncHandler(async (req, res) => {
+    const { getAllExtractionJobs } = await import('./services/rulesExtractionService');
+    
+    const jobs = await getAllExtractionJobs();
+    
+    res.json(jobs);
+  }));
+
   const httpServer = createServer(app);
   return httpServer;
 }
