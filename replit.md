@@ -107,6 +107,37 @@ The system implements Maryland Digital Style Guide (2023) branding elements:
 
 **Chat API**: Backend endpoint (`/api/chat/ask`) providing RAG-powered responses with policy citations, audit logging, and context-aware query enhancement.
 
+## Rules Extraction Pipeline (Phase 1A Complete)
+
+**Gemini-Powered Extraction**: Automated system to extract structured Rules as Code from Maryland SNAP policy manual sections using Google Gemini AI (`server/services/rulesExtractionService.ts`):
+- **Section-Type Detection**: Auto-detects extraction type based on section number (200s=income limits, 300s=deductions, 400s=allotments) and content analysis
+- **Five Specialized Extractors**: 
+  - Income Limits (`extractIncomeLimits`) - household size, gross/net limits, poverty percentages
+  - Deductions (`extractDeductions`) - standard, earned income, dependent care, shelter, medical
+  - Allotments (`extractAllotments`) - maximum monthly benefits by household size
+  - Categorical Eligibility (`extractCategoricalRules`) - SSI, TANF, GA, BBCE bypass rules
+  - Document Requirements (`extractDocumentRequirements`) - verification document types and conditions
+- **Defensive Parsing**: `parseGeminiResponse<T>()` helper with try/catch, markdown handling, array validation, and graceful error fallback
+- **Extraction Tracking**: `extraction_jobs` table tracks job status, rules extracted count, errors, and completion timestamps
+
+**Admin Interface**: Rules Extraction UI (`client/src/pages/RulesExtraction.tsx`) at `/admin/rules` providing:
+- Section selection with extraction status indicators
+- Single-section and batch extraction triggers
+- Extraction job history with progress tracking
+- Extraction type selector (income, deductions, allotments, categorical, documents, auto-detect)
+
+**API Endpoints** (`server/routes.ts` lines 1606-1663):
+- `POST /api/extraction/extract-section` - Extract rules from single manual section (admin-only, Zod validated)
+- `POST /api/extraction/extract-batch` - Batch extract from multiple sections (admin-only, Zod validated)
+- `GET /api/extraction/jobs/:jobId` - Get extraction job status
+- `GET /api/extraction/jobs` - List all extraction jobs
+
+**Production Hardening Status**:
+- ✅ **Core Functionality**: Extraction service operational with defensive error handling
+- ✅ **Request Validation**: Zod schemas for API endpoints
+- ✅ **Response Validation**: Array validation in parseGeminiResponse
+- 🔄 **Enhanced Hardening**: Extracted data validation with Zod, retry logic, comprehensive error metrics (future enhancement)
+
 ## External Dependencies
 
 ### Current Implementation
