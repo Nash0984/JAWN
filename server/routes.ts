@@ -309,7 +309,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
           explanation: "This requirement is satisfied by the document"
         }))
       ),
-      officialCitations: result.policyCitations || [],
+      officialCitations: result.policyCitations.map(cite => ({
+        section: cite.section,
+        regulation: cite.regulation,
+        text: cite.text
+      })),
       confidence: Math.round(result.confidenceScore * 100),
       verificationResult: result
     };
