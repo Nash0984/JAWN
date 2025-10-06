@@ -16,6 +16,7 @@ import {
 import { useMutation } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { PolicyChatWidget } from "@/components/PolicyChatWidget";
 
 interface VerificationResult {
   documentType: string;
@@ -376,6 +377,14 @@ export default function DocumentVerification() {
           </CardContent>
         </Card>
       )}
+
+      {/* Policy Chat Widget - Always available */}
+      <PolicyChatWidget 
+        context={{ 
+          page: 'document-verification',
+          documentType: selectedFile ? selectedFile.name.split('.')[0] : undefined
+        }}
+      />
     </div>
   );
 }

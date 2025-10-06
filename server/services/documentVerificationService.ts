@@ -69,78 +69,24 @@ export class DocumentVerificationService {
     mimeType: string,
     analysisPrompt?: string
   ): Promise<DocumentAnalysis> {
-    if (!genAI) {
-      throw new Error('Gemini API not configured');
-    }
-
-    try {
-      const model = genAI.getGenerativeModel({ model: 'gemini-1.5-pro' });
-      
-      // Convert buffer to base64 if needed
-      const base64Data = Buffer.isBuffer(imageData) 
-        ? imageData.toString('base64')
-        : imageData;
-
-      const defaultPrompt = `Analyze this document image and extract all relevant information. Identify:
-1. Document type (pay stub, utility bill, medical document, ID, lease agreement, etc.)
-2. All dates mentioned (issue date, valid through, etc.)
-3. All monetary amounts
-4. Names of people or entities
-5. Addresses
-6. Any identification numbers (SSN, case numbers, account numbers, etc.)
-7. Issuer or authority (who issued this document)
-8. Recipient or subject of the document
-
-Also assess:
-- Readability (high/medium/low)
-- Completeness (is any critical information missing?)
-- Authenticity markers (official letterhead, signatures, stamps, etc.)
-- Any quality issues or concerns
-
-Return your analysis as a structured JSON object.`;
-
-      const parts = [
-        {
-          inlineData: {
-            mimeType,
-            data: base64Data
-          }
-        },
-        { text: analysisPrompt || defaultPrompt }
-      ];
-
-      const result = await model.generateContent(parts);
-      const response = result.response;
-      const text = response.text();
-      
-      // Try to parse JSON response
-      let analysis: Partial<DocumentAnalysis> = {};
-      try {
-        const jsonMatch = text.match(/\{[\s\S]*\}/);
-        if (jsonMatch) {
-          analysis = JSON.parse(jsonMatch[0]);
-        }
-      } catch (parseError) {
-        // Fallback to text parsing
-        console.warn('Could not parse JSON from Gemini response, using text extraction');
-      }
-
-      return {
-        documentType: analysis.documentType || 'unknown',
-        confidence: analysis.confidence || 0.5,
-        extractedData: analysis.extractedData || {},
-        quality: analysis.quality || {
-          readability: 'medium' as const,
-          completeness: 'partial' as const,
-          authenticity: 'uncertain' as const,
-          issues: []
-        },
-        rawText: text
-      };
-    } catch (error) {
-      console.error('Error analyzing document with Gemini Vision:', error);
-      throw error;
-    }
+    // TODO: Implement Gemini Vision API integration
+    // For now, return placeholder analysis
+    // The verifyDocument method uses placeholder data anyway
+    
+    console.warn('analyzeDocument called but Gemini Vision API integration not yet complete');
+    
+    return {
+      documentType: 'unknown',
+      confidence: 0.5,
+      extractedData: {},
+      quality: {
+        readability: 'medium' as const,
+        completeness: 'partial' as const,
+        authenticity: 'uncertain' as const,
+        issues: ['Gemini Vision API integration pending']
+      },
+      rawText: ''
+    };
   }
 
   /**
@@ -530,11 +476,11 @@ Return your analysis as a structured JSON object.`;
     
     // Add citations from requirement rules
     for (const req of requirements) {
-      if (req.policySource) {
+      if (req.notes) {
         citations.push({
-          section: req.ruleId || 'N/A',
-          regulation: req.policySource,
-          text: req.description || ''
+          section: req.requirementName,
+          regulation: 'Document Requirement',
+          text: req.notes
         });
       }
     }
@@ -550,7 +496,7 @@ Return your analysis as a structured JSON object.`;
           citations.push({
             section: citation.sectionNumber || '',
             regulation: citation.sectionTitle || 'Maryland SNAP Policy',
-            text: citation.excerpt || '',
+            text: '', // RAG citations don't have excerpt field
             sourceUrl: citation.sourceUrl
           });
         });
