@@ -77,6 +77,36 @@ The system implements Maryland Digital Style Guide (2023) branding elements:
 
 **Session Management**: Uses connect-pg-simple for PostgreSQL-backed session storage.
 
+## Navigator Workspace & E&E Integration
+
+**Benefits Navigator Workspace**: Fully implemented client session tracking system (`client/src/pages/NavigatorWorkspace.tsx`) enabling navigators to:
+- Log client interaction sessions (screening, application assistance, recertification, documentation, follow-up)
+- Track session details (date, duration, location, topics, outcomes, action items)
+- Monitor export status for each session
+
+**E&E Export Infrastructure**: Export batch generation system providing the foundation for Maryland DHS Eligibility & Enrollment (E&E) system integration:
+- Multi-format export generation (CSV, JSON, XML) via `server/routes.ts` endpoints
+- Session batch management with export tracking (`ee_export_batches` table)
+- Automatic marking of sessions as exported to prevent duplicates
+- Download functionality for manual or automated transfer to E&E system
+
+**Integration Status**: 
+- ✅ **Export Pathway Built**: File generation, batch tracking, and session management complete
+- 🔄 **Maryland DHS E&E Integration**: Awaiting specific integration requirements from Maryland DHS IT team
+- The current implementation provides the data export foundation that can be connected to Maryland's E&E system once integration specifications are provided
+
+**Note**: The E&E export functionality is designed as a pathway - it generates properly formatted exports ready for Maryland DHS systems, but does not include automated upload/integration pending receipt of official Maryland DHS system specifications and API endpoints.
+
+## Conversational AI Integration
+
+**PolicyChatWidget**: Reusable conversational AI component (`client/src/components/PolicyChatWidget.tsx`) integrated across all major pages:
+- Document Verification (`context="document-verification"`) - help with verification requirements
+- Navigator Workspace (`context="navigator-workspace"`) - guidance on session tracking and exports
+- Eligibility Checker (`context="eligibility"`) - answers about SNAP eligibility rules
+- Policy Manual (`context="policy-manual"`) - explanations of policy sections
+
+**Chat API**: Backend endpoint (`/api/chat/ask`) providing RAG-powered responses with policy citations, audit logging, and context-aware query enhancement.
+
 ## External Dependencies
 
 ### Current Implementation
