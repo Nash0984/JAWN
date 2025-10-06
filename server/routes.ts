@@ -1602,19 +1602,25 @@ ${sessions.map(s => `    <session>
 
   // ===== RULES EXTRACTION ROUTES =====
   
+  // Request validation schemas
+  const extractSectionSchema = z.object({
+    manualSectionId: z.string().min(1, "Manual section ID is required"),
+    extractionType: z.enum(['income_limits', 'deductions', 'allotments', 'categorical_eligibility', 'document_requirements', 'full_auto']).optional().default('full_auto'),
+  });
+  
+  const extractBatchSchema = z.object({
+    manualSectionIds: z.array(z.string().min(1)).min(1, "At least one manual section ID is required"),
+  });
+  
   // Extract rules from a single manual section
-  app.post("/api/extraction/extract-section", requireAuth, requireRole(['admin', 'super_admin']), asyncHandler(async (req, res) => {
+  app.post("/api/extraction/extract-section", requireAdmin, asyncHandler(async (req, res) => {
     const { extractRulesFromSection } = await import('./services/rulesExtractionService');
     
-    const { manualSectionId, extractionType } = req.body;
-    
-    if (!manualSectionId) {
-      throw validationError("Manual section ID is required");
-    }
+    const validatedData = extractSectionSchema.parse(req.body);
     
     const result = await extractRulesFromSection(
-      manualSectionId,
-      extractionType,
+      validatedData.manualSectionId,
+      validatedData.extractionType,
       req.user?.id
     );
     
@@ -1622,22 +1628,18 @@ ${sessions.map(s => `    <session>
   }));
 
   // Batch extract rules from multiple sections
-  app.post("/api/extraction/extract-batch", requireAuth, requireRole(['admin', 'super_admin']), asyncHandler(async (req, res) => {
+  app.post("/api/extraction/extract-batch", requireAdmin, asyncHandler(async (req, res) => {
     const { batchExtractRules } = await import('./services/rulesExtractionService');
     
-    const { manualSectionIds } = req.body;
+    const validatedData = extractBatchSchema.parse(req.body);
     
-    if (!Array.isArray(manualSectionIds) || manualSectionIds.length === 0) {
-      throw validationError("Manual section IDs array is required");
-    }
-    
-    const result = await batchExtractRules(manualSectionIds, req.user?.id);
+    const result = await batchExtractRules(validatedData.manualSectionIds, req.user?.id);
     
     res.json(result);
   }));
 
   // Get extraction job status
-  app.get("/api/extraction/jobs/:jobId", requireAuth, requireRole(['admin', 'super_admin']), asyncHandler(async (req, res) => {
+  app.get("/api/extraction/jobs/:jobId", requireAdmin, asyncHandler(async (req, res) => {
     const { getExtractionJob } = await import('./services/rulesExtractionService');
     
     const job = await getExtractionJob(req.params.jobId);
@@ -1651,7 +1653,7 @@ ${sessions.map(s => `    <session>
   }));
 
   // Get all extraction jobs
-  app.get("/api/extraction/jobs", requireAuth, requireRole(['admin', 'super_admin']), asyncHandler(async (req, res) => {
+  app.get("/api/extraction/jobs", requireAdmin, asyncHandler(async (req, res) => {
     const { getAllExtractionJobs } = await import('./services/rulesExtractionService');
     
     const jobs = await getAllExtractionJobs();
