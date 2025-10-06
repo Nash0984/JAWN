@@ -8,8 +8,16 @@ export const users = pgTable("users", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   username: text("username").notNull().unique(),
   password: text("password").notNull(),
-  role: text("role").notNull().default("user"), // user, admin, super_admin
+  email: text("email"),
+  fullName: text("full_name"),
+  phone: text("phone"),
+  role: text("role").notNull().default("client"), // client, navigator, caseworker, admin
+  // Maryland DHS staff fields
+  dhsEmployeeId: text("dhs_employee_id"), // for navigators and caseworkers
+  officeLocation: text("office_location"), // local DHS office location
+  isActive: boolean("is_active").default(true).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
 export const benefitPrograms = pgTable("benefit_programs", {
@@ -798,10 +806,13 @@ export const verificationRequirementsMetRelations = relations(verificationRequir
 }));
 
 // Insert Schemas
-export const insertUserSchema = createInsertSchema(users).pick({
-  username: true,
-  password: true,
-  role: true,
+export const insertUserSchema = createInsertSchema(users).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+}).extend({
+  role: z.enum(["client", "navigator", "caseworker", "admin"]).default("client"),
+  email: z.string().email().optional(),
 });
 
 export const insertManualSectionSchema = createInsertSchema(manualSections).omit({
