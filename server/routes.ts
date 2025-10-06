@@ -12,6 +12,7 @@ import { manualIngestionService } from "./services/manualIngestion";
 import { auditService } from "./services/auditService";
 import { documentVerificationService } from "./services/documentVerificationService";
 import { asyncHandler, validationError, notFoundError, externalServiceError } from "./middleware/errorHandler";
+import { requireAuth, requireStaff, requireAdmin } from "./middleware/auth";
 import { db } from "./db";
 import { sql } from "drizzle-orm";
 import { 
@@ -147,7 +148,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   }));
 
   // Hybrid search endpoint - intelligently routes to Rules Engine or RAG
-  app.post("/api/search", asyncHandler(async (req, res, next) => {
+  app.post("/api/search", requireAuth, asyncHandler(async (req, res, next) => {
     const { query, benefitProgramId, userId } = req.body;
     
     // Validate request parameters
@@ -188,7 +189,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   }));
 
   // Conversational chat endpoint for policy questions
-  app.post("/api/chat/ask", asyncHandler(async (req, res) => {
+  app.post("/api/chat/ask", requireAuth, asyncHandler(async (req, res) => {
     const { query, context, benefitProgramId } = req.body;
     const userId = (req as any).userId;
 
@@ -335,7 +336,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Document verification endpoint with Gemini Vision API
-  app.post("/api/verify-document", upload.single("document"), asyncHandler(async (req, res) => {
+  app.post("/api/verify-document", requireAuth, upload.single("document"), asyncHandler(async (req, res) => {
     if (!req.file) {
       throw validationError("No document uploaded");
     }
@@ -438,7 +439,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   }));
 
   // Upload document endpoint
-  app.post("/api/documents/upload", upload.single("file"), async (req, res) => {
+  app.post("/api/documents/upload", requireAdmin, upload.single("file"), async (req, res) => {
     try {
       if (!req.file) {
         return res.status(400).json({ error: "No file uploaded" });
@@ -493,7 +494,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Get document upload URL
-  app.post("/api/documents/upload-url", async (req, res) => {
+  app.post("/api/documents/upload-url", requireAdmin, async (req, res) => {
     try {
       const objectStorageService = new ObjectStorageService();
       const uploadURL = await objectStorageService.getObjectEntityUploadURL();
@@ -505,7 +506,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Create document record after upload
-  app.post("/api/documents", async (req, res) => {
+  app.post("/api/documents", requireAdmin, async (req, res) => {
     try {
       const documentData = insertDocumentSchema.parse(req.body);
       const document = await storage.createDocument(documentData);
@@ -524,7 +525,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Get documents
-  app.get("/api/documents", async (req, res) => {
+  app.get("/api/documents", requireAdmin, async (req, res) => {
     try {
       const { benefitProgramId, status, limit } = req.query;
       const filters = {
@@ -542,7 +543,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Get document by ID
-  app.get("/api/documents/:id", async (req, res) => {
+  app.get("/api/documents/:id", requireAdmin, async (req, res) => {
     try {
       const document = await storage.getDocument(req.params.id);
       if (!document) {
@@ -556,7 +557,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Update document processing status
-  app.patch("/api/documents/:id/status", async (req, res) => {
+  app.patch("/api/documents/:id/status", requireAdmin, async (req, res) => {
     try {
       const { status, processingStatus, qualityScore, ocrAccuracy } = req.body;
       
@@ -575,7 +576,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Policy Sources Management
-  app.get("/api/policy-sources", async (req, res) => {
+  app.get("/api/policy-sources", requireAdmin, async (req, res) => {
     try {
       const sources = await storage.getPolicySources();
       res.json(sources);
@@ -585,7 +586,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/policy-sources", async (req, res) => {
+  app.post("/api/policy-sources", requireAdmin, async (req, res) => {
     try {
       const sourceData = insertPolicySourceSchema.parse(req.body);
       const source = await storage.createPolicySource(sourceData);
@@ -599,7 +600,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.patch("/api/policy-sources/:id", async (req, res) => {
+  app.patch("/api/policy-sources/:id", requireAdmin, async (req, res) => {
     try {
       const { syncStatus, lastSyncAt } = req.body;
       const source = await storage.updatePolicySource(req.params.id, {
@@ -614,7 +615,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Model Management
-  app.get("/api/models", async (req, res) => {
+  app.get("/api/models", requireAdmin, async (req, res) => {
     try {
       const models = await storage.getModelVersions();
       res.json(models);
@@ -625,7 +626,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Training Jobs
-  app.get("/api/training-jobs", async (req, res) => {
+  app.get("/api/training-jobs", requireAdmin, async (req, res) => {
     try {
       const jobs = await storage.getTrainingJobs();
       res.json(jobs);
@@ -635,7 +636,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/training-jobs", async (req, res) => {
+  app.post("/api/training-jobs", requireAdmin, async (req, res) => {
     try {
       const jobData = insertTrainingJobSchema.parse(req.body);
       const job = await storage.createTrainingJob(jobData);
@@ -649,7 +650,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.patch("/api/training-jobs/:id", async (req, res) => {
+  app.patch("/api/training-jobs/:id", requireAdmin, async (req, res) => {
     try {
       const { status, progress, metrics } = req.body;
       const job = await storage.updateTrainingJob(req.params.id, {
@@ -665,7 +666,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // System metrics and status
-  app.get("/api/system/status", async (req, res) => {
+  app.get("/api/system/status", requireAdmin, async (req, res) => {
     try {
       const [totalDocuments] = await storage.getDocuments({ limit: 1 });
       const recentProcessing = await storage.getDocuments({ status: "processing", limit: 10 });
@@ -691,7 +692,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Document Ingestion endpoints for Maryland SNAP manual
-  app.post("/api/ingest/maryland-snap", async (req, res) => {
+  app.post("/api/ingest/maryland-snap", requireAdmin, async (req, res) => {
     try {
       console.log('Starting Maryland SNAP manual ingestion...');
       const documentIds = await documentIngestionService.ingestAllDocuments();
@@ -713,7 +714,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Get golden source documents with audit trail
-  app.get("/api/golden-source/documents", async (req, res) => {
+  app.get("/api/golden-source/documents", requireAdmin, async (req, res) => {
     try {
       const documents = await documentIngestionService.listGoldenSourceDocuments();
       res.json({
@@ -732,7 +733,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Verify document integrity
-  app.post("/api/golden-source/verify/:documentId", async (req, res) => {
+  app.post("/api/golden-source/verify/:documentId", requireAdmin, async (req, res) => {
     try {
       const { documentId } = req.params;
       const isValid = await documentIngestionService.verifyDocumentIntegrity(documentId);
@@ -754,7 +755,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Get audit trail for a specific document
-  app.get("/api/golden-source/audit-trail/:documentId", async (req, res) => {
+  app.get("/api/golden-source/audit-trail/:documentId", requireAdmin, async (req, res) => {
     try {
       const { documentId } = req.params;
       const auditTrail = await documentIngestionService.getDocumentAuditTrail(documentId);
@@ -782,7 +783,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Automated Ingestion Management endpoints
-  app.get("/api/automated-ingestion/schedules", async (req, res) => {
+  app.get("/api/automated-ingestion/schedules", requireAdmin, async (req, res) => {
     try {
       const schedules = automatedIngestionService.getSchedules();
       res.json({
@@ -800,7 +801,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/automated-ingestion/trigger", async (req, res) => {
+  app.post("/api/automated-ingestion/trigger", requireAdmin, async (req, res) => {
     try {
       const { reason } = req.body;
       await automatedIngestionService.triggerManualIngestion(reason || 'Manual API trigger');
@@ -820,7 +821,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.patch("/api/automated-ingestion/schedules/:id", async (req, res) => {
+  app.patch("/api/automated-ingestion/schedules/:id", requireAdmin, async (req, res) => {
     try {
       const { id } = req.params;
       const updates = req.body;
@@ -849,7 +850,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/automated-ingestion/schedules", async (req, res) => {
+  app.post("/api/automated-ingestion/schedules", requireAdmin, async (req, res) => {
     try {
       const { id, frequency, isActive } = req.body;
       
@@ -882,7 +883,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // ============================================================================
 
   // Eligibility pre-screening endpoint
-  app.post("/api/eligibility/check", async (req, res) => {
+  app.post("/api/eligibility/check", requireAuth, async (req, res) => {
     try {
       const { householdSize, monthlyIncome, hasEarnedIncome, hasSSI, hasTANF, userId } = req.body;
 
@@ -954,7 +955,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Full benefit calculation endpoint
-  app.post("/api/eligibility/calculate", async (req, res) => {
+  app.post("/api/eligibility/calculate", requireAuth, async (req, res) => {
     try {
       const {
         householdSize,
@@ -1035,7 +1036,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Get active SNAP income limits
-  app.get("/api/rules/income-limits", async (req, res) => {
+  app.get("/api/rules/income-limits", requireAuth, async (req, res) => {
     try {
       const { benefitProgramId } = req.query;
       
@@ -1063,7 +1064,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Create new SNAP income limit
-  app.post("/api/rules/income-limits", async (req, res) => {
+  app.post("/api/rules/income-limits", requireAdmin, async (req, res) => {
     try {
       const { benefitProgramId, householdSize, grossMonthlyIncomeLimit, netMonthlyIncomeLimit, manualSection, effectiveDate } = req.body;
 
@@ -1094,7 +1095,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Update SNAP income limit
-  app.patch("/api/rules/income-limits/:id", async (req, res) => {
+  app.patch("/api/rules/income-limits/:id", requireAdmin, async (req, res) => {
     try {
       const { id } = req.params;
       const { householdSize, grossMonthlyIncomeLimit, netMonthlyIncomeLimit, manualSection, effectiveDate, isActive } = req.body;
@@ -1120,7 +1121,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Get active SNAP deductions
-  app.get("/api/rules/deductions", async (req, res) => {
+  app.get("/api/rules/deductions", requireAuth, async (req, res) => {
     try {
       const programs = await storage.getBenefitPrograms();
       const snapProgram = programs.find(p => p.code === "MD_SNAP");
@@ -1144,7 +1145,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Get active SNAP allotments
-  app.get("/api/rules/allotments", async (req, res) => {
+  app.get("/api/rules/allotments", requireAuth, async (req, res) => {
     try {
       const programs = await storage.getBenefitPrograms();
       const snapProgram = programs.find(p => p.code === "MD_SNAP");
@@ -1168,7 +1169,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Get categorical eligibility rules
-  app.get("/api/rules/categorical-eligibility", async (req, res) => {
+  app.get("/api/rules/categorical-eligibility", requireAuth, async (req, res) => {
     try {
       const programs = await storage.getBenefitPrograms();
       const snapProgram = programs.find(p => p.code === "MD_SNAP");
@@ -1192,7 +1193,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Get document requirements
-  app.get("/api/rules/document-requirements", async (req, res) => {
+  app.get("/api/rules/document-requirements", requireAuth, async (req, res) => {
     try {
       const programs = await storage.getBenefitPrograms();
       const snapProgram = programs.find(p => p.code === "MD_SNAP");
@@ -1216,7 +1217,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Get recent eligibility calculations
-  app.get("/api/eligibility/calculations", async (req, res) => {
+  app.get("/api/eligibility/calculations", requireAuth, async (req, res) => {
     try {
       const { userId, limit } = req.query;
       const calculations = await storage.getEligibilityCalculations(
@@ -1240,7 +1241,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // ============================================================================
 
   // Get all manual sections (table of contents)
-  app.get("/api/manual/sections", async (req, res) => {
+  app.get("/api/manual/sections", requireAuth, async (req, res) => {
     try {
       const sections = await storage.getManualSections();
       res.json({
@@ -1255,7 +1256,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Get specific manual section with details
-  app.get("/api/manual/sections/:id", async (req, res) => {
+  app.get("/api/manual/sections/:id", requireAuth, async (req, res) => {
     try {
       const { id } = req.params;
       
@@ -1285,7 +1286,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Get manual structure (metadata without DB access)
-  app.get("/api/manual/structure", async (req, res) => {
+  app.get("/api/manual/structure", requireAuth, async (req, res) => {
     try {
       const structure = manualIngestionService.getManualStructure();
       res.json({
@@ -1300,7 +1301,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Get manual ingestion status
-  app.get("/api/manual/status", async (req, res) => {
+  app.get("/api/manual/status", requireAuth, async (req, res) => {
     try {
       const status = await manualIngestionService.getIngestionStatus();
       const isComplete = await manualIngestionService.verifyCompleteness();
@@ -1317,7 +1318,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Trigger manual metadata ingestion
-  app.post("/api/manual/ingest-metadata", async (req, res) => {
+  app.post("/api/manual/ingest-metadata", requireAdmin, async (req, res) => {
     try {
       const programs = await storage.getBenefitPrograms();
       const snapProgram = programs.find(p => p.code === "MD_SNAP");
@@ -1342,7 +1343,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Trigger FULL manual ingestion (download PDFs, extract text, generate embeddings)
-  app.post("/api/manual/ingest-full", async (req, res) => {
+  app.post("/api/manual/ingest-full", requireAdmin, async (req, res) => {
     try {
       // Import the full ingestion service
       const { ingestCompleteManual } = await import("./services/manualIngestionService");
@@ -1393,13 +1394,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Get all client interaction sessions for the current navigator
-  app.get("/api/navigator/sessions", asyncHandler(async (req, res) => {
+  app.get("/api/navigator/sessions", requireStaff, asyncHandler(async (req, res) => {
     const sessions = await storage.getClientInteractionSessions();
     res.json(sessions);
   }));
 
   // Create a new client interaction session
-  app.post("/api/navigator/sessions", asyncHandler(async (req, res) => {
+  app.post("/api/navigator/sessions", requireStaff, asyncHandler(async (req, res) => {
     const validatedData = sessionCreateSchema.parse(req.body);
     
     const sessionData = {
@@ -1413,13 +1414,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
   }));
 
   // Get all E&E export batches
-  app.get("/api/navigator/exports", asyncHandler(async (req, res) => {
+  app.get("/api/navigator/exports", requireStaff, asyncHandler(async (req, res) => {
     const exports = await storage.getEEExportBatches();
     res.json(exports);
   }));
 
   // Create a new E&E export batch
-  app.post("/api/navigator/exports", asyncHandler(async (req, res) => {
+  app.post("/api/navigator/exports", requireStaff, asyncHandler(async (req, res) => {
     const validatedData = exportCreateSchema.parse(req.body);
 
     // Get unexported sessions
@@ -1444,7 +1445,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   }));
 
   // Download an E&E export batch file
-  app.get("/api/navigator/exports/:id/download", asyncHandler(async (req, res) => {
+  app.get("/api/navigator/exports/:id/download", requireStaff, asyncHandler(async (req, res) => {
     const { id } = req.params;
     const exportBatch = await storage.getEEExportBatch(id);
 
@@ -1539,13 +1540,13 @@ ${sessions.map(s => `    <session>
   });
 
   // Get all consent forms
-  app.get("/api/consent/forms", asyncHandler(async (req, res) => {
+  app.get("/api/consent/forms", requireStaff, asyncHandler(async (req, res) => {
     const forms = await storage.getConsentForms();
     res.json(forms);
   }));
 
   // Create a new consent form
-  app.post("/api/consent/forms", asyncHandler(async (req, res) => {
+  app.post("/api/consent/forms", requireStaff, asyncHandler(async (req, res) => {
     const validatedData = consentFormSchema.parse(req.body);
     
     const formData = {
@@ -1559,14 +1560,14 @@ ${sessions.map(s => `    <session>
   }));
 
   // Get all client consents
-  app.get("/api/consent/client-consents", asyncHandler(async (req, res) => {
+  app.get("/api/consent/client-consents", requireAuth, asyncHandler(async (req, res) => {
     const clientCaseId = req.query.clientCaseId as string | undefined;
     const consents = await storage.getClientConsents(clientCaseId);
     res.json(consents);
   }));
 
   // Create a new client consent
-  app.post("/api/consent/client-consents", asyncHandler(async (req, res) => {
+  app.post("/api/consent/client-consents", requireAuth, asyncHandler(async (req, res) => {
     const validatedData = clientConsentSchema.parse(req.body);
     
     // Verify that the form exists and is active

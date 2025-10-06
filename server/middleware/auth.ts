@@ -1,12 +1,15 @@
 import { Request, Response, NextFunction } from "express";
-import type { User } from "../../shared/schema";
+import type { User as AppUser } from "../../shared/schema";
 
 // Extend Express Request type to include user
 declare global {
   namespace Express {
-    interface User extends import("../../shared/schema").User {}
+    interface User extends AppUser {}
   }
 }
+
+// Local type alias for convenience
+type User = AppUser;
 
 /**
  * Middleware to ensure user is authenticated
