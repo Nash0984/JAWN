@@ -22,6 +22,44 @@ if (!geminiApiKey) {
 
 const genAI = new GoogleGenerativeAI(geminiApiKey || "");
 
+/**
+ * Safely parse Gemini JSON response with error handling
+ */
+function parseGeminiResponse<T>(responseText: string, arrayKey: string, functionName: string): T[] {
+  try {
+    // Handle markdown code blocks
+    let jsonText = responseText.trim();
+    if (jsonText.startsWith('```')) {
+      const match = jsonText.match(/```(?:json)?\n([\s\S]*?)\n```/);
+      if (match) {
+        jsonText = match[1].trim();
+      }
+    }
+    
+    const parsed = JSON.parse(jsonText);
+    
+    // Validate response structure
+    if (!parsed || typeof parsed !== 'object') {
+      console.error(`[${functionName}] Invalid Gemini response structure (not object):`, responseText);
+      return [];
+    }
+    
+    const data = parsed[arrayKey];
+    
+    // Ensure we got an array
+    if (!Array.isArray(data)) {
+      console.error(`[${functionName}] Invalid Gemini response - expected array for key '${arrayKey}', got:`, typeof data);
+      return [];
+    }
+    
+    return data as T[];
+  } catch (error) {
+    console.error(`[${functionName}] Error parsing Gemini response:`, error);
+    if (responseText) console.error(`[${functionName}] Response text:`, responseText);
+    return [];
+  }
+}
+
 interface ExtractedIncomeLimit {
   householdSize: number;
   grossMonthlyLimit: number; // in cents
@@ -169,17 +207,7 @@ If no income limits are found, return: {"incomeLimits": []}`;
   const result = await model.generateContent(prompt);
   const responseText = result.response.text();
   
-  // Handle markdown code blocks
-  let jsonText = responseText.trim();
-  if (jsonText.startsWith('```')) {
-    const match = jsonText.match(/```(?:json)?\n([\s\S]*?)\n```/);
-    if (match) {
-      jsonText = match[1].trim();
-    }
-  }
-  
-  const parsed = JSON.parse(jsonText);
-  return parsed.incomeLimits || [];
+  return parseGeminiResponse<ExtractedIncomeLimit>(responseText, 'incomeLimits', 'extractIncomeLimits');
 }
 
 /**
@@ -219,16 +247,7 @@ If none found: {"deductions": []}`;
   const result = await model.generateContent(prompt);
   const responseText = result.response.text();
   
-  let jsonText = responseText.trim();
-  if (jsonText.startsWith('```')) {
-    const match = jsonText.match(/```(?:json)?\n([\s\S]*?)\n```/);
-    if (match) {
-      jsonText = match[1].trim();
-    }
-  }
-  
-  const parsed = JSON.parse(jsonText);
-  return parsed.deductions || [];
+  return parseGeminiResponse<ExtractedDeduction>(responseText, 'deductions', 'extractDeductions');
 }
 
 /**
@@ -263,16 +282,7 @@ If none found: {"allotments": []}`;
   const result = await model.generateContent(prompt);
   const responseText = result.response.text();
   
-  let jsonText = responseText.trim();
-  if (jsonText.startsWith('```')) {
-    const match = jsonText.match(/```(?:json)?\n([\s\S]*?)\n```/);
-    if (match) {
-      jsonText = match[1].trim();
-    }
-  }
-  
-  const parsed = JSON.parse(jsonText);
-  return parsed.allotments || [];
+  return parseGeminiResponse<ExtractedAllotment>(responseText, 'allotments', 'extractAllotments');
 }
 
 /**
@@ -311,16 +321,7 @@ If none found: {"categoricalRules": []}`;
   const result = await model.generateContent(prompt);
   const responseText = result.response.text();
   
-  let jsonText = responseText.trim();
-  if (jsonText.startsWith('```')) {
-    const match = jsonText.match(/```(?:json)?\n([\s\S]*?)\n```/);
-    if (match) {
-      jsonText = match[1].trim();
-    }
-  }
-  
-  const parsed = JSON.parse(jsonText);
-  return parsed.categoricalRules || [];
+  return parseGeminiResponse<ExtractedCategoricalRule>(responseText, 'categoricalRules', 'extractCategoricalRules');
 }
 
 /**
@@ -360,16 +361,7 @@ If none found: {"documentRequirements": []}`;
   const result = await model.generateContent(prompt);
   const responseText = result.response.text();
   
-  let jsonText = responseText.trim();
-  if (jsonText.startsWith('```')) {
-    const match = jsonText.match(/```(?:json)?\n([\s\S]*?)\n```/);
-    if (match) {
-      jsonText = match[1].trim();
-    }
-  }
-  
-  const parsed = JSON.parse(jsonText);
-  return parsed.documentRequirements || [];
+  return parseGeminiResponse<ExtractedDocumentRequirement>(responseText, 'documentRequirements', 'extractDocumentRequirements');
 }
 
 /**

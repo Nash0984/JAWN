@@ -12,6 +12,7 @@ import PolicyManual from "@/pages/PolicyManual";
 import DocumentVerificationPage from "@/pages/DocumentVerificationPage";
 import NavigatorWorkspace from "@/pages/NavigatorWorkspace";
 import ConsentManagement from "@/pages/ConsentManagement";
+import RulesExtraction from "@/pages/RulesExtraction";
 import Login from "@/pages/Login";
 import Signup from "@/pages/Signup";
 import NotFound from "@/pages/not-found";
@@ -124,6 +125,13 @@ function Router() {
             {() => (
               <ProtectedRoute requireAdmin>
                 <Admin />
+              </ProtectedRoute>
+            )}
+          </Route>
+          <Route path="/admin/rules">
+            {() => (
+              <ProtectedRoute requireAdmin>
+                <RulesExtraction />
               </ProtectedRoute>
             )}
           </Route>
