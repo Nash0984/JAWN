@@ -23,6 +23,7 @@ import {
 } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { PolicyChatWidget } from "@/components/PolicyChatWidget";
 
 interface ManualSection {
   id: string;
@@ -561,6 +562,7 @@ export default function PolicyManual() {
           ) : null}
         </DialogContent>
       </Dialog>
+      <PolicyChatWidget context="policy-manual" />
     </div>
   );
 }
