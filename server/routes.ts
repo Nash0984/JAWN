@@ -10,6 +10,7 @@ import { rulesEngine } from "./services/rulesEngine";
 import { hybridService } from "./services/hybridService";
 import { manualIngestionService } from "./services/manualIngestion";
 import { auditService } from "./services/auditService";
+import { documentVerificationService } from "./services/documentVerificationService";
 import { asyncHandler, validationError, notFoundError, externalServiceError } from "./middleware/errorHandler";
 import { db } from "./db";
 import { sql } from "drizzle-orm";
@@ -205,57 +206,84 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Document verification endpoint
-  app.post("/api/verify-document", upload.single("document"), async (req, res) => {
-    try {
-      if (!req.file) {
-        return res.status(400).json({ error: "No document uploaded" });
-      }
-
-      // For now, simulate text extraction for document verification
-      // In production, this would use OCR/PDF parsing
-      let extractedText = "";
-      
-      if (req.file.mimetype.startsWith('image/')) {
-        // Simulate OCR extraction from image
-        extractedText = `Sample paystub content for ${req.file.originalname}\n` +
-          "Employee: John Doe\n" +
-          "Pay Period: 01/01/2024 - 01/15/2024\n" +
-          "Gross Pay: $2,400.00\n" +
-          "Net Pay: $1,800.00\n" +
-          "Employer: ABC Company";
-      } else if (req.file.mimetype === 'application/pdf') {
-        // Simulate PDF text extraction
-        extractedText = `Bank statement content from ${req.file.originalname}\n` +
-          "Account Summary\n" +
-          "Beginning Balance: $1,250.00\n" +
-          "Ending Balance: $1,450.00\n" +
-          "Statement Period: January 2024";
-      } else {
-        return res.status(400).json({ error: "Unsupported file type. Please upload an image or PDF." });
-      }
-
-      if (!extractedText || extractedText.trim().length < 10) {
-        return res.status(400).json({ 
-          error: "Could not extract readable text from the document. Please ensure the image is clear or the PDF contains text." 
-        });
-      }
-
-      if (!extractedText || extractedText.trim().length < 10) {
-        return res.status(400).json({ 
-          error: "Could not extract readable text from the document. Please ensure the image is clear or the PDF contains text." 
-        });
-      }
-
-      // Verify document against SNAP policies
-      const verificationResult = await ragService.verifyDocument(extractedText, req.file.originalname);
-      
-      res.json(verificationResult);
-    } catch (error) {
-      console.error("Document verification error:", error);
-      res.status(500).json({ error: "Failed to verify document. Please try again." });
+  // Document verification endpoint with Gemini Vision API
+  app.post("/api/verify-document", upload.single("document"), asyncHandler(async (req, res) => {
+    if (!req.file) {
+      throw validationError("No document uploaded");
     }
-  });
+
+    const documentType = req.body.documentType || 'income';
+    const clientCaseId = req.body.clientCaseId;
+
+    // Temporarily create a document record to get an ID for verification
+    const document = await storage.createDocument({
+      filename: req.file.originalname,
+      originalName: req.file.originalname,
+      fileSize: req.file.size,
+      mimeType: req.file.mimetype,
+      uploadedBy: req.user?.id,
+      status: 'uploaded',
+      documentTypeId: null,
+      benefitProgramId: null,
+      metadata: {
+        uploadedForVerification: true,
+        requirementType: documentType
+      }
+    });
+
+    // Verify the document using Gemini Vision API
+    const result = await documentVerificationService.verifyDocument({
+      documentId: document.id,
+      requirementType: documentType,
+      clientCaseId,
+      contextInfo: {
+        fileBuffer: req.file.buffer,
+        mimeType: req.file.mimetype
+      }
+    });
+
+    // Get plain-language explanation
+    const explanation = documentVerificationService.getVerificationExplanation(result);
+
+    // Format response to match UI expectations
+    const response = {
+      documentType: documentType,
+      meetsCriteria: result.isValid,
+      summary: explanation,
+      requirements: result.rejectionReasons.map((reason, index) => ({
+        requirement: `Requirement ${index + 1}`,
+        met: false,
+        explanation: reason
+      })).concat(
+        result.satisfiesRequirements.map((reqId) => ({
+          requirement: `Requirement ${reqId}`,
+          met: true,
+          explanation: "This requirement is satisfied by the document"
+        }))
+      ),
+      officialCitations: [], // TODO: Link to policy citations
+      confidence: Math.round(result.confidenceScore * 100),
+      verificationResult: result
+    };
+
+    // Log the verification to audit trail
+    await auditService.logEvent({
+      action: 'DOCUMENT_VERIFIED',
+      entityType: 'DOCUMENT',
+      entityId: document.id,
+      userId: req.user?.id,
+      metadata: {
+        documentType,
+        isValid: result.isValid,
+        confidenceScore: result.confidenceScore,
+        clientCaseId
+      },
+      ipAddress: req.ip,
+      userAgent: req.get('user-agent')
+    });
+
+    res.json(response);
+  }));
 
   // Upload document endpoint
   app.post("/api/documents/upload", upload.single("file"), async (req, res) => {

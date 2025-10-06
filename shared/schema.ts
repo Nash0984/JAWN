@@ -615,6 +615,45 @@ export const eeExportBatches = pgTable("ee_export_batches", {
 });
 
 // ============================================================================
+// DOCUMENT VERIFICATION - Track verification results and requirements satisfaction
+// ============================================================================
+
+export const documentVerifications = pgTable("document_verifications", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  documentId: varchar("document_id").references(() => documents.id, { onDelete: "cascade" }).notNull(),
+  clientCaseId: varchar("client_case_id").references(() => clientCases.id),
+  sessionId: varchar("session_id").references(() => clientInteractionSessions.id),
+  requirementType: text("requirement_type").notNull(), // income, identity, residency, work_exemption, etc.
+  verificationStatus: text("verification_status").notNull(), // verified, rejected, pending_review, expired
+  isValid: boolean("is_valid").notNull(),
+  confidenceScore: real("confidence_score"),
+  satisfiesRequirements: jsonb("satisfies_requirements"), // Array of requirement IDs satisfied
+  rejectionReasons: jsonb("rejection_reasons"), // Array of rejection reason strings
+  warnings: jsonb("warnings"), // Array of warning strings
+  extractedData: jsonb("extracted_data"), // Structured data extracted from document
+  analysisResult: jsonb("analysis_result"), // Full Gemini Vision analysis
+  validFrom: timestamp("valid_from").defaultNow().notNull(),
+  validUntil: timestamp("valid_until"),
+  verifiedBy: varchar("verified_by").references(() => users.id),
+  verifiedAt: timestamp("verified_at").defaultNow().notNull(),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const verificationRequirementsMet = pgTable("verification_requirements_met", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  verificationId: varchar("verification_id").references(() => documentVerifications.id, { onDelete: "cascade" }).notNull(),
+  requirementId: varchar("requirement_id").references(() => documentRequirementRules.id).notNull(),
+  clientCaseId: varchar("client_case_id").references(() => clientCases.id).notNull(),
+  metAt: timestamp("met_at").defaultNow().notNull(),
+  expiresAt: timestamp("expires_at"),
+  isActive: boolean("is_active").default(true).notNull(),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+// ============================================================================
 // CONSENT MANAGEMENT - Admin-Configurable Consent Forms
 // ============================================================================
 
@@ -721,6 +760,40 @@ export const clientConsentsRelations = relations(clientConsents, ({ one }) => ({
   witness: one(users, {
     fields: [clientConsents.witnessedBy],
     references: [users.id],
+  }),
+}));
+
+export const documentVerificationsRelations = relations(documentVerifications, ({ one }) => ({
+  document: one(documents, {
+    fields: [documentVerifications.documentId],
+    references: [documents.id],
+  }),
+  clientCase: one(clientCases, {
+    fields: [documentVerifications.clientCaseId],
+    references: [clientCases.id],
+  }),
+  session: one(clientInteractionSessions, {
+    fields: [documentVerifications.sessionId],
+    references: [clientInteractionSessions.id],
+  }),
+  verifiedByUser: one(users, {
+    fields: [documentVerifications.verifiedBy],
+    references: [users.id],
+  }),
+}));
+
+export const verificationRequirementsMetRelations = relations(verificationRequirementsMet, ({ one }) => ({
+  verification: one(documentVerifications, {
+    fields: [verificationRequirementsMet.verificationId],
+    references: [documentVerifications.id],
+  }),
+  requirement: one(documentRequirementRules, {
+    fields: [verificationRequirementsMet.requirementId],
+    references: [documentRequirementRules.id],
+  }),
+  clientCase: one(clientCases, {
+    fields: [verificationRequirementsMet.clientCaseId],
+    references: [clientCases.id],
   }),
 }));
 
@@ -924,6 +997,19 @@ export const insertClientConsentSchema = createInsertSchema(clientConsents).omit
   createdAt: true,
 });
 
+export const insertDocumentVerificationSchema = createInsertSchema(documentVerifications).omit({
+  id: true,
+  verifiedAt: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertVerificationRequirementMetSchema = createInsertSchema(verificationRequirementsMet).omit({
+  id: true,
+  metAt: true,
+  createdAt: true,
+});
+
 // Rules as Code Types
 export type InsertPovertyLevel = z.infer<typeof insertPovertyLevelSchema>;
 export type PovertyLevel = typeof povertyLevels.$inferSelect;
@@ -972,3 +1058,9 @@ export type ConsentForm = typeof consentForms.$inferSelect;
 
 export type InsertClientConsent = z.infer<typeof insertClientConsentSchema>;
 export type ClientConsent = typeof clientConsents.$inferSelect;
+
+export type InsertDocumentVerification = z.infer<typeof insertDocumentVerificationSchema>;
+export type DocumentVerification = typeof documentVerifications.$inferSelect;
+
+export type InsertVerificationRequirementMet = z.infer<typeof insertVerificationRequirementMetSchema>;
+export type VerificationRequirementMet = typeof verificationRequirementsMet.$inferSelect;
