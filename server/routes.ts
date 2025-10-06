@@ -1367,6 +1367,91 @@ ${sessions.map(s => `    <session>
     res.send(content);
   }));
 
+  // ============================================================================
+  // CONSENT MANAGEMENT - Forms and client consents
+  // ============================================================================
+
+  const consentFormSchema = z.object({
+    formName: z.string().min(1),
+    formCode: z.string().min(1),
+    formTitle: z.string().min(1),
+    formContent: z.string().min(50),
+    purpose: z.string().min(10),
+    requiresSignature: z.boolean().default(true),
+    expirationDays: z.number().int().positive().optional(),
+    isActive: z.boolean().default(false)
+  });
+
+  const clientConsentSchema = z.object({
+    clientCaseId: z.string().min(1),
+    consentFormId: z.string().min(1),
+    consentGiven: z.boolean(),
+    consentDate: z.string(),
+    signatureMethod: z.string().optional(),
+    notes: z.string().optional()
+  });
+
+  // Get all consent forms
+  app.get("/api/consent/forms", asyncHandler(async (req, res) => {
+    const forms = await storage.getConsentForms();
+    res.json(forms);
+  }));
+
+  // Create a new consent form
+  app.post("/api/consent/forms", asyncHandler(async (req, res) => {
+    const validatedData = consentFormSchema.parse(req.body);
+    
+    const formData = {
+      ...validatedData,
+      version: 1,
+      createdBy: req.user?.id || 'system'
+    };
+
+    const form = await storage.createConsentForm(formData);
+    res.json(form);
+  }));
+
+  // Get all client consents
+  app.get("/api/consent/client-consents", asyncHandler(async (req, res) => {
+    const clientCaseId = req.query.clientCaseId as string | undefined;
+    const consents = await storage.getClientConsents(clientCaseId);
+    res.json(consents);
+  }));
+
+  // Create a new client consent
+  app.post("/api/consent/client-consents", asyncHandler(async (req, res) => {
+    const validatedData = clientConsentSchema.parse(req.body);
+    
+    // Verify that the form exists and is active
+    const form = await storage.getConsentForm(validatedData.consentFormId);
+    if (!form) {
+      throw validationError("Consent form not found");
+    }
+    if (!form.isActive) {
+      throw validationError("Consent form is not active");
+    }
+    
+    // Calculate expiration date if the form has an expiration period
+    let expiresAt: Date | null = null;
+    if (form.expirationDays) {
+      const consentDate = new Date(validatedData.consentDate);
+      expiresAt = new Date(consentDate.getTime() + form.expirationDays * 24 * 60 * 60 * 1000);
+    }
+
+    const consentData = {
+      clientCaseId: validatedData.clientCaseId,
+      consentFormId: validatedData.consentFormId,
+      consentGiven: validatedData.consentGiven,
+      consentDate: new Date(validatedData.consentDate),
+      signatureMethod: validatedData.signatureMethod,
+      notes: validatedData.notes,
+      expiresAt
+    };
+
+    const consent = await storage.createClientConsent(consentData);
+    res.json(consent);
+  }));
+
   const httpServer = createServer(app);
   return httpServer;
 }
