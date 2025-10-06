@@ -73,14 +73,23 @@ export const documentChunks = pgTable("document_chunks", {
 export const policySources = pgTable("policy_sources", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   name: text("name").notNull(),
+  sourceType: text("source_type").notNull(), // federal_regulation, state_regulation, federal_guidance, state_policy, federal_memo
+  jurisdiction: text("jurisdiction").notNull(), // federal, maryland
+  description: text("description"),
   url: text("url"),
   benefitProgramId: varchar("benefit_program_id").references(() => benefitPrograms.id),
   syncType: text("sync_type").notNull(), // manual, api, web_scraping
+  syncSchedule: text("sync_schedule"), // daily, weekly, monthly
   syncConfig: jsonb("sync_config"), // configuration for automated sync
   lastSyncAt: timestamp("last_sync_at"),
-  syncStatus: text("sync_status").default("idle"), // idle, syncing, error
+  lastSuccessfulSyncAt: timestamp("last_successful_sync_at"),
+  syncStatus: text("sync_status").default("idle"), // idle, syncing, success, error
+  syncError: text("sync_error"),
+  documentCount: integer("document_count").default(0),
+  priority: integer("priority").default(0), // Higher priority sources synced first
   isActive: boolean("is_active").default(true).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
 // Document versioning for golden source tracking
