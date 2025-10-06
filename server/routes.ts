@@ -184,6 +184,54 @@ export async function registerRoutes(app: Express): Promise<Server> {
     res.json(result);
   }));
 
+  // Conversational chat endpoint for policy questions
+  app.post("/api/chat/ask", asyncHandler(async (req, res) => {
+    const { query, context, benefitProgramId } = req.body;
+    const userId = (req as any).userId;
+
+    if (!query || typeof query !== 'string') {
+      throw validationError("Query is required and must be a string");
+    }
+
+    if (query.length > 1000) {
+      throw validationError("Query must be less than 1000 characters");
+    }
+
+    // Enhance query with context if provided
+    let enhancedQuery = query;
+    if (context) {
+      if (context.page === 'document-verification') {
+        enhancedQuery = `Regarding document verification for ${context.documentType || 'SNAP'}: ${query}`;
+      } else if (context.page === 'eligibility') {
+        enhancedQuery = `Regarding SNAP eligibility calculations: ${query}`;
+      } else if (context.requirementId) {
+        enhancedQuery = `Regarding requirement ${context.requirementId}: ${query}`;
+      }
+    }
+
+    // Log the chat request
+    await auditService.logSearch({
+      query: enhancedQuery,
+      userId,
+      benefitProgramId,
+      searchType: "chat"
+    });
+
+    // Use RAG service for natural language response
+    const ragResult = await ragService.search(enhancedQuery, benefitProgramId);
+
+    // Format response for chat interface
+    const response = {
+      answer: ragResult.answer,
+      citations: ragResult.citations || [],
+      sources: ragResult.sources || [],
+      relevanceScore: ragResult.relevanceScore,
+      suggestedFollowUps: [] // TODO: Generate context-aware follow-up questions
+    };
+
+    res.json(response);
+  }));
+
   // Get benefit programs
   app.get("/api/benefit-programs", async (req, res) => {
     try {
@@ -261,7 +309,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           explanation: "This requirement is satisfied by the document"
         }))
       ),
-      officialCitations: [], // TODO: Link to policy citations
+      officialCitations: result.policyCitations || [],
       confidence: Math.round(result.confidenceScore * 100),
       verificationResult: result
     };
