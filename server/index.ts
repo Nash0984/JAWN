@@ -1,9 +1,13 @@
 import express, { type Request, Response, NextFunction } from "express";
+import session from "express-session";
+import ConnectPgSimple from "connect-pg-simple";
+import passport from "./auth";
 import { registerRoutes } from "./routes";
 import { initializeSystemData } from "./seedData";
 import { setupVite, serveStatic, log } from "./vite";
 import { errorHandler } from "./middleware/errorHandler";
 import { requestLoggerMiddleware, timingHeadersMiddleware, performanceMonitoringMiddleware } from "./middleware/requestLogger";
+import { db } from "./db";
 
 const app = express();
 
@@ -15,8 +19,39 @@ app.use(express.urlencoded({ extended: false }));
 app.use(timingHeadersMiddleware());
 app.use(performanceMonitoringMiddleware());
 
-// Add request logging middleware (replaces the basic logging below)
+// Add request logging middleware
 app.use(requestLoggerMiddleware());
+
+// Session configuration
+if (!process.env.SESSION_SECRET) {
+  console.error("❌ FATAL: SESSION_SECRET environment variable is required for secure session management");
+  process.exit(1);
+}
+
+const PgSession = ConnectPgSimple(session);
+app.use(
+  session({
+    store: new PgSession({
+      conObject: {
+        connectionString: process.env.DATABASE_URL,
+      },
+      createTableIfMissing: true,
+    }),
+    secret: process.env.SESSION_SECRET,
+    resave: false,
+    saveUninitialized: false,
+    cookie: {
+      maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+    },
+  })
+);
+
+// Initialize Passport
+app.use(passport.initialize());
+app.use(passport.session());
 
 (async () => {
   // Initialize system data (benefit programs, etc.)
