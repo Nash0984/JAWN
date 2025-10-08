@@ -34,6 +34,12 @@ AI-powered text generation service using Google Gemini (`gemini-2.0-flash`) gene
 ## Rules Extraction Pipeline
 A Google Gemini AI-powered system (`gemini-2.0-flash`) extracts structured "Rules as Code" from Maryland SNAP policy manual sections. It performs section-type detection and uses specialized extractors for income limits, deductions, allotments, categorical eligibility, and document requirements. The system includes defensive parsing and tracks extraction jobs. An Admin Interface provides a UI for section selection, batch extraction, and job history.
 
+## Feedback Collection System (Complete)
+A comprehensive feedback collection and management system enables users to report issues with AI responses, eligibility results, and policy content. The `feedback_submissions` table captures categorized feedback (incorrect_answer, missing_info, confusing, technical_error, bias_concern, accessibility_issue) with severity levels (low, medium, high, critical). Admin workflow fields track status (submitted, under_review, resolved, closed, wont_fix), priority, assignedTo, and resolution notes. A reusable `FeedbackButton` component integrates throughout the application, providing dialog-based forms with full validation. Admin review UI at `/admin/feedback` provides filtering, status management, and detailed feedback display with expandable sections. All submissions include context tracking (relatedEntityType, relatedEntityId, pageUrl) and audit trails (createdAt, updatedAt, resolvedAt).
+
+## Admin Enhancement Tools (Complete)
+Three administrative tools support system operations and DHS integration readiness: (1) **Audit Log Viewer** (`/admin/audit-logs`) displays comprehensive system activity from `audit_logs` and `rule_change_logs` tables with filtering by user, action, date range, and entity type, featuring accessible disclosure controls and CSV export; (2) **API Documentation** (`/admin/api-docs`) provides interactive endpoint catalog with request/response schemas, authentication requirements, multi-language code examples (cURL, JavaScript, Python), and DHS integration guidance; (3) **Feedback Management** (`/admin/feedback`) enables review and resolution of user-submitted issues with categorization, priority assignment, and status tracking.
+
 # External Dependencies
 
 -   **AI Services**: Google Gemini API (`@google/genai`) for language models, document analysis, embeddings, and RAG. Models used: `gemini-2.5-flash`, `text-embedding-004`.
