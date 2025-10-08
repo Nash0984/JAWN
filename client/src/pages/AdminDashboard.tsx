@@ -2,7 +2,7 @@ import { Link } from "wouter";
 import { useAuth } from "@/hooks/useAuth";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Settings, FileText, Database, Upload, Users, Shield, RefreshCw, BookOpen, Activity, Code } from "lucide-react";
+import { Settings, FileText, Database, Upload, Users, Shield, RefreshCw, BookOpen, Activity, Code, MessageSquare } from "lucide-react";
 
 export default function AdminDashboard() {
   const { user } = useAuth();
@@ -54,6 +54,14 @@ export default function AdminDashboard() {
       icon: Code,
       href: "/admin/api-docs",
       testId: "action-api-docs",
+      primary: true,
+    },
+    {
+      title: "Feedback Management",
+      description: "Review user feedback and issue reports",
+      icon: MessageSquare,
+      href: "/admin/feedback",
+      testId: "action-feedback",
       primary: true,
     },
     {

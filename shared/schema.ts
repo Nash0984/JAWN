@@ -410,6 +410,45 @@ export const auditLogs = pgTable("audit_logs", {
   indexed: boolean("indexed").default(false).notNull(), // For indexing/archival
 });
 
+// Feedback Submissions - User feedback on AI responses, eligibility results, policy content
+export const feedbackSubmissions = pgTable("feedback_submissions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id),
+  submitterName: text("submitter_name"), // For anonymous feedback
+  submitterEmail: text("submitter_email"), // For follow-up
+  
+  // Context of feedback
+  feedbackType: text("feedback_type").notNull(), // ai_response, eligibility_result, policy_content, document_verification, system_issue
+  category: text("category").notNull(), // incorrect_answer, missing_info, confusing, technical_error, bias_concern, accessibility_issue, other
+  severity: text("severity").notNull().default("medium"), // low, medium, high, critical
+  
+  // Reference to what the feedback is about
+  relatedEntityType: text("related_entity_type"), // search_query, eligibility_calculation, manual_section, document
+  relatedEntityId: varchar("related_entity_id"), // ID of related entity
+  pageUrl: text("page_url"), // URL where feedback was submitted
+  
+  // Feedback content
+  title: text("title").notNull(), // Short description
+  description: text("description").notNull(), // Detailed feedback
+  expectedBehavior: text("expected_behavior"), // What user expected
+  actualBehavior: text("actual_behavior"), // What actually happened
+  screenshotUrl: text("screenshot_url"), // Optional screenshot from object storage
+  
+  // Admin review
+  status: text("status").notNull().default("submitted"), // submitted, under_review, resolved, closed, wont_fix
+  priority: text("priority"), // low, medium, high
+  assignedTo: varchar("assigned_to").references(() => users.id), // Admin assigned to review
+  adminNotes: text("admin_notes"), // Internal notes
+  resolution: text("resolution"), // How it was resolved
+  resolvedAt: timestamp("resolved_at"),
+  resolvedBy: varchar("resolved_by").references(() => users.id),
+  
+  // Metadata
+  metadata: jsonb("metadata"), // Additional context (browser, device, etc.)
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
 // Client Cases - Track individual client cases for navigators
 export const clientCases = pgTable("client_cases", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -1081,6 +1120,12 @@ export const insertVerificationRequirementMetSchema = createInsertSchema(verific
   createdAt: true,
 });
 
+export const insertFeedbackSubmissionSchema = createInsertSchema(feedbackSubmissions).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
 // Rules as Code Types
 export type InsertPovertyLevel = z.infer<typeof insertPovertyLevelSchema>;
 export type PovertyLevel = typeof povertyLevels.$inferSelect;
@@ -1138,3 +1183,6 @@ export type DocumentVerification = typeof documentVerifications.$inferSelect;
 
 export type InsertVerificationRequirementMet = z.infer<typeof insertVerificationRequirementMetSchema>;
 export type VerificationRequirementMet = typeof verificationRequirementsMet.$inferSelect;
+
+export type InsertFeedbackSubmission = z.infer<typeof insertFeedbackSubmissionSchema>;
+export type FeedbackSubmission = typeof feedbackSubmissions.$inferSelect;

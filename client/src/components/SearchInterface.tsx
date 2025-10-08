@@ -10,6 +10,7 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { ExportButton } from "@/components/ExportButton";
+import FeedbackButton from "@/components/FeedbackButton";
 
 interface HybridSearchResult {
   answer: string;
@@ -302,7 +303,14 @@ export default function SearchInterface() {
                   <Bot className="text-accent-foreground h-4 w-4" aria-hidden="true" />
                 </div>
                 <div className="flex-1">
-                  <h3 id="results-heading" className="font-semibold text-foreground mb-2">Answer</h3>
+                  <div className="flex items-center justify-between mb-2">
+                    <h3 id="results-heading" className="font-semibold text-foreground">Answer</h3>
+                    <FeedbackButton
+                      feedbackType="ai_response"
+                      relatedEntityType="search_query"
+                      pageUrl={window.location.href}
+                    />
+                  </div>
                   <div className="prose dark:prose-invert max-w-none text-foreground">
                     <p className="whitespace-pre-wrap">{searchResult.answer}</p>
                   </div>

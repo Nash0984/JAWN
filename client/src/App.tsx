@@ -26,6 +26,7 @@ import PolicySources from "@/pages/PolicySources";
 import AIMonitoring from "@/pages/AIMonitoring";
 import AuditLogs from "@/pages/AuditLogs";
 import ApiDocs from "@/pages/ApiDocs";
+import FeedbackManagement from "@/pages/FeedbackManagement";
 
 function Router() {
   const [location] = useLocation();
@@ -164,6 +165,13 @@ function Router() {
             {() => (
               <ProtectedRoute requireAdmin>
                 <ApiDocs />
+              </ProtectedRoute>
+            )}
+          </Route>
+          <Route path="/admin/feedback">
+            {() => (
+              <ProtectedRoute requireAdmin>
+                <FeedbackManagement />
               </ProtectedRoute>
             )}
           </Route>
