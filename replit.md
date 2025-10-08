@@ -28,8 +28,8 @@ A Benefits Navigator Workspace tracks client interaction sessions, including det
 ## Conversational AI Integration
 A reusable `PolicyChatWidget` component provides RAG-powered conversational AI across various application contexts (document verification, navigator workspace, eligibility checker, policy manual). A backend API endpoint (`/api/chat/ask`) delivers context-aware responses with policy citations.
 
-## Living Policy Manual (Partial Implementation)
-AI-powered text generation service using Google Gemini (`gemini-2.0-flash`) generates human-readable policy text from database rules for income limits, deductions, allotments, categorical eligibility, and document requirements. The UI allows toggling between original and AI-generated text. Current limitation: rules tables lack `manual_section_id`, meaning text generation is program-wide, not section-specific.
+## Living Policy Manual (Complete)
+AI-powered text generation service using Google Gemini (`gemini-2.0-flash`) generates human-readable policy text from database rules for income limits, deductions, allotments, categorical eligibility, and document requirements. The UI allows toggling between original and AI-generated text. Schema enhancement complete: all rules tables now have `manual_section_id` foreign key enabling section-specific text generation. Service filters rules by section when manual_section_id is populated, falls back to program-wide generation for existing data.
 
 ## Rules Extraction Pipeline
 A Google Gemini AI-powered system (`gemini-2.0-flash`) extracts structured "Rules as Code" from Maryland SNAP policy manual sections. It performs section-type detection and uses specialized extractors for income limits, deductions, allotments, categorical eligibility, and document requirements. The system includes defensive parsing and tracks extraction jobs. An Admin Interface provides a UI for section selection, batch extraction, and job history.
