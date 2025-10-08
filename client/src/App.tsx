@@ -25,6 +25,7 @@ import AdminDashboard from "@/pages/AdminDashboard";
 import PolicySources from "@/pages/PolicySources";
 import AIMonitoring from "@/pages/AIMonitoring";
 import AuditLogs from "@/pages/AuditLogs";
+import ApiDocs from "@/pages/ApiDocs";
 
 function Router() {
   const [location] = useLocation();
@@ -156,6 +157,13 @@ function Router() {
             {() => (
               <ProtectedRoute requireAdmin>
                 <AuditLogs />
+              </ProtectedRoute>
+            )}
+          </Route>
+          <Route path="/admin/api-docs">
+            {() => (
+              <ProtectedRoute requireAdmin>
+                <ApiDocs />
               </ProtectedRoute>
             )}
           </Route>
