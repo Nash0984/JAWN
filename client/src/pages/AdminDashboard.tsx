@@ -2,7 +2,7 @@ import { Link } from "wouter";
 import { useAuth } from "@/hooks/useAuth";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Settings, FileText, Database, Upload, Users, Shield, RefreshCw, BookOpen } from "lucide-react";
+import { Settings, FileText, Database, Upload, Users, Shield, RefreshCw, BookOpen, Activity } from "lucide-react";
 
 export default function AdminDashboard() {
   const { user } = useAuth();
@@ -30,6 +30,14 @@ export default function AdminDashboard() {
       icon: Database,
       href: "/admin/rules",
       testId: "action-rules",
+      primary: true,
+    },
+    {
+      title: "AI Monitoring",
+      description: "View AI health, bias indicators, and analytics",
+      icon: Activity,
+      href: "/admin/ai-monitoring",
+      testId: "action-ai-monitoring",
       primary: true,
     },
     {

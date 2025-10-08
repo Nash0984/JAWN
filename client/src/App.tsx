@@ -23,6 +23,7 @@ import NavigatorDashboard from "@/pages/NavigatorDashboard";
 import CaseworkerDashboard from "@/pages/CaseworkerDashboard";
 import AdminDashboard from "@/pages/AdminDashboard";
 import PolicySources from "@/pages/PolicySources";
+import AIMonitoring from "@/pages/AIMonitoring";
 
 function Router() {
   const [location] = useLocation();
@@ -140,6 +141,13 @@ function Router() {
             {() => (
               <ProtectedRoute requireAdmin>
                 <PolicySources />
+              </ProtectedRoute>
+            )}
+          </Route>
+          <Route path="/admin/ai-monitoring">
+            {() => (
+              <ProtectedRoute>
+                <AIMonitoring />
               </ProtectedRoute>
             )}
           </Route>
