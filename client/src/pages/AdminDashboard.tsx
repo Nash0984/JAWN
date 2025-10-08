@@ -41,6 +41,14 @@ export default function AdminDashboard() {
       primary: true,
     },
     {
+      title: "Audit Logs",
+      description: "View system activity and rule changes",
+      icon: Shield,
+      href: "/admin/audit-logs",
+      testId: "action-audit-logs",
+      primary: true,
+    },
+    {
       title: "AI Training",
       description: "Train and manage AI models",
       icon: Settings,

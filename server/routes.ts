@@ -15,7 +15,7 @@ import { textGenerationService } from "./services/textGenerationService";
 import { asyncHandler, validationError, notFoundError, externalServiceError } from "./middleware/errorHandler";
 import { requireAuth, requireStaff, requireAdmin } from "./middleware/auth";
 import { db } from "./db";
-import { sql } from "drizzle-orm";
+import { sql, eq, and, desc, gte, lte } from "drizzle-orm";
 import { 
   insertDocumentSchema, 
   insertSearchQuerySchema, 
@@ -23,7 +23,9 @@ import {
   insertTrainingJobSchema,
   insertUserSchema,
   searchQueries,
-  auditLogs
+  auditLogs,
+  ruleChangeLogs,
+  users
 } from "@shared/schema";
 import { z } from "zod";
 import multer from "multer";
@@ -1940,6 +1942,148 @@ ${sessions.map(s => `    <session>
     });
 
     res.json({ success: true, message: "Response flagged for review" });
+  }));
+
+  // ============================================================================
+  // AUDIT LOGS - Compliance and transparency viewing
+  // ============================================================================
+
+  // Get audit logs with filtering
+  app.get("/api/audit-logs", requireAuth, requireAdmin, asyncHandler(async (req, res) => {
+    const { 
+      action, 
+      entityType, 
+      userId, 
+      startDate, 
+      endDate, 
+      limit = "100",
+      offset = "0"
+    } = req.query;
+
+    const limitNum = parseInt(limit as string);
+    const offsetNum = parseInt(offset as string);
+
+    const conditions = [];
+    
+    if (action) {
+      conditions.push(eq(auditLogs.action, action as string));
+    }
+    if (entityType) {
+      conditions.push(eq(auditLogs.entityType, entityType as string));
+    }
+    if (userId) {
+      conditions.push(eq(auditLogs.userId, userId as string));
+    }
+    if (startDate) {
+      conditions.push(gte(auditLogs.timestamp, new Date(startDate as string)));
+    }
+    if (endDate) {
+      conditions.push(lte(auditLogs.timestamp, new Date(endDate as string)));
+    }
+
+    const logs = await db
+      .select({
+        id: auditLogs.id,
+        action: auditLogs.action,
+        entityType: auditLogs.entityType,
+        entityId: auditLogs.entityId,
+        userId: auditLogs.userId,
+        metadata: auditLogs.metadata,
+        ipAddress: auditLogs.ipAddress,
+        userAgent: auditLogs.userAgent,
+        timestamp: auditLogs.timestamp,
+        username: users.username
+      })
+      .from(auditLogs)
+      .leftJoin(users, eq(auditLogs.userId, users.id))
+      .where(conditions.length > 0 ? and(...conditions) : undefined)
+      .orderBy(desc(auditLogs.timestamp))
+      .limit(limitNum)
+      .offset(offsetNum);
+
+    // Get total count for pagination
+    const totalResult = await db
+      .select({ count: sql<number>`COUNT(*)::int` })
+      .from(auditLogs)
+      .where(conditions.length > 0 ? and(...conditions) : undefined);
+
+    res.json({
+      logs,
+      total: totalResult[0]?.count || 0,
+      limit: limitNum,
+      offset: offsetNum
+    });
+  }));
+
+  // Get rule change logs with filtering
+  app.get("/api/rule-change-logs", requireAuth, requireAdmin, asyncHandler(async (req, res) => {
+    const { 
+      ruleTable, 
+      changeType, 
+      changedBy, 
+      startDate, 
+      endDate,
+      limit = "100",
+      offset = "0"
+    } = req.query;
+
+    const limitNum = parseInt(limit as string);
+    const offsetNum = parseInt(offset as string);
+
+    const conditions = [];
+    
+    if (ruleTable) {
+      conditions.push(eq(ruleChangeLogs.ruleTable, ruleTable as string));
+    }
+    if (changeType) {
+      conditions.push(eq(ruleChangeLogs.changeType, changeType as string));
+    }
+    if (changedBy) {
+      conditions.push(eq(ruleChangeLogs.changedBy, changedBy as string));
+    }
+    if (startDate) {
+      conditions.push(gte(ruleChangeLogs.createdAt, new Date(startDate as string)));
+    }
+    if (endDate) {
+      conditions.push(lte(ruleChangeLogs.createdAt, new Date(endDate as string)));
+    }
+
+    const logs = await db
+      .select({
+        id: ruleChangeLogs.id,
+        ruleTable: ruleChangeLogs.ruleTable,
+        ruleId: ruleChangeLogs.ruleId,
+        changeType: ruleChangeLogs.changeType,
+        oldValues: ruleChangeLogs.oldValues,
+        newValues: ruleChangeLogs.newValues,
+        changeReason: ruleChangeLogs.changeReason,
+        changedBy: ruleChangeLogs.changedBy,
+        approvedBy: ruleChangeLogs.approvedBy,
+        approvedAt: ruleChangeLogs.approvedAt,
+        createdAt: ruleChangeLogs.createdAt,
+        changerUsername: sql<string>`u1.username`,
+        approverUsername: sql<string>`u2.username`
+      })
+      .from(ruleChangeLogs)
+      .leftJoin(sql`users u1`, eq(ruleChangeLogs.changedBy, sql`u1.id`))
+      .leftJoin(sql`users u2`, eq(ruleChangeLogs.approvedBy, sql`u2.id`))
+      .where(conditions.length > 0 ? and(...conditions) : undefined)
+      .orderBy(desc(ruleChangeLogs.createdAt))
+      .limit(limitNum)
+      .offset(offsetNum);
+
+    // Get total count for pagination
+    const totalResult = await db
+      .select({ count: sql<number>`COUNT(*)::int` })
+      .from(ruleChangeLogs)
+      .where(conditions.length > 0 ? and(...conditions) : undefined);
+
+    res.json({
+      logs,
+      total: totalResult[0]?.count || 0,
+      limit: limitNum,
+      offset: offsetNum
+    });
   }));
 
   const httpServer = createServer(app);
