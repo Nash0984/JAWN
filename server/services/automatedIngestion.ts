@@ -16,8 +16,8 @@ export class AutomatedIngestionService {
   private timers: Map<string, NodeJS.Timeout> = new Map();
 
   constructor() {
-    // Initialize with default weekly schedule for Maryland SNAP documents
-    this.createSchedule('maryland-snap-weekly', 'weekly', true);
+    // Initialize with default weekly schedule for Maryland SNAP documents (disabled by default - admins can enable via UI)
+    this.createSchedule('maryland-snap-weekly', 'weekly', false);
   }
 
   createSchedule(
