@@ -41,17 +41,21 @@ export class TextGenerationService {
    */
   async generateIncomeLimitsText(
     benefitProgramId: string,
-    sectionNumber?: string
+    sectionId?: string
   ): Promise<GeneratedText> {
+    const whereConditions = [
+      eq(snapIncomeLimits.benefitProgramId, benefitProgramId),
+      eq(snapIncomeLimits.isActive, true)
+    ];
+    
+    if (sectionId) {
+      whereConditions.push(eq(snapIncomeLimits.manualSectionId, sectionId));
+    }
+    
     const limits = await db
       .select()
       .from(snapIncomeLimits)
-      .where(
-        and(
-          eq(snapIncomeLimits.benefitProgramId, benefitProgramId),
-          eq(snapIncomeLimits.isActive, true)
-        )
-      )
+      .where(and(...whereConditions))
       .orderBy(snapIncomeLimits.householdSize);
 
     if (limits.length === 0) {
@@ -95,17 +99,21 @@ Format the response as markdown with headers, tables, and clear paragraphs. DO N
    */
   async generateDeductionsText(
     benefitProgramId: string,
-    sectionNumber?: string
+    sectionId?: string
   ): Promise<GeneratedText> {
+    const whereConditions = [
+      eq(snapDeductions.benefitProgramId, benefitProgramId),
+      eq(snapDeductions.isActive, true)
+    ];
+    
+    if (sectionId) {
+      whereConditions.push(eq(snapDeductions.manualSectionId, sectionId));
+    }
+    
     const deductions = await db
       .select()
       .from(snapDeductions)
-      .where(
-        and(
-          eq(snapDeductions.benefitProgramId, benefitProgramId),
-          eq(snapDeductions.isActive, true)
-        )
-      )
+      .where(and(...whereConditions))
       .orderBy(snapDeductions.deductionType);
 
     if (deductions.length === 0) {
@@ -149,17 +157,21 @@ Format as markdown. DO NOT include code blocks - just return the markdown text d
    */
   async generateAllotmentsText(
     benefitProgramId: string,
-    sectionNumber?: string
+    sectionId?: string
   ): Promise<GeneratedText> {
+    const whereConditions = [
+      eq(snapAllotments.benefitProgramId, benefitProgramId),
+      eq(snapAllotments.isActive, true)
+    ];
+    
+    if (sectionId) {
+      whereConditions.push(eq(snapAllotments.manualSectionId, sectionId));
+    }
+    
     const allotments = await db
       .select()
       .from(snapAllotments)
-      .where(
-        and(
-          eq(snapAllotments.benefitProgramId, benefitProgramId),
-          eq(snapAllotments.isActive, true)
-        )
-      )
+      .where(and(...whereConditions))
       .orderBy(snapAllotments.householdSize);
 
     if (allotments.length === 0) {
@@ -202,17 +214,22 @@ Format as markdown. DO NOT include code blocks - just return the markdown text d
    * Generate categorical eligibility section text
    */
   async generateCategoricalEligibilityText(
-    benefitProgramId: string
+    benefitProgramId: string,
+    sectionId?: string
   ): Promise<GeneratedText> {
+    const whereConditions = [
+      eq(categoricalEligibilityRules.benefitProgramId, benefitProgramId),
+      eq(categoricalEligibilityRules.isActive, true)
+    ];
+    
+    if (sectionId) {
+      whereConditions.push(eq(categoricalEligibilityRules.manualSectionId, sectionId));
+    }
+    
     const rules = await db
       .select()
       .from(categoricalEligibilityRules)
-      .where(
-        and(
-          eq(categoricalEligibilityRules.benefitProgramId, benefitProgramId),
-          eq(categoricalEligibilityRules.isActive, true)
-        )
-      );
+      .where(and(...whereConditions));
 
     if (rules.length === 0) {
       return {
@@ -254,17 +271,22 @@ Format as markdown. DO NOT include code blocks - just return the markdown text d
    * Generate document requirements section text
    */
   async generateDocumentRequirementsText(
-    benefitProgramId: string
+    benefitProgramId: string,
+    sectionId?: string
   ): Promise<GeneratedText> {
+    const whereConditions = [
+      eq(documentRequirementRules.benefitProgramId, benefitProgramId),
+      eq(documentRequirementRules.isActive, true)
+    ];
+    
+    if (sectionId) {
+      whereConditions.push(eq(documentRequirementRules.manualSectionId, sectionId));
+    }
+    
     const rules = await db
       .select()
       .from(documentRequirementRules)
-      .where(
-        and(
-          eq(documentRequirementRules.benefitProgramId, benefitProgramId),
-          eq(documentRequirementRules.isActive, true)
-        )
-      );
+      .where(and(...whereConditions));
 
     if (rules.length === 0) {
       return {
@@ -325,17 +347,17 @@ Format as markdown. DO NOT include code blocks - just return the markdown text d
     // Detect section type based on section number
     if (sectionNumber.startsWith('2')) {
       // Section 200s = Income limits
-      return this.generateIncomeLimitsText(benefitProgramId, sectionNumber);
+      return this.generateIncomeLimitsText(benefitProgramId, sectionId);
     } else if (sectionNumber.startsWith('3')) {
       // Section 300s = Deductions
-      return this.generateDeductionsText(benefitProgramId, sectionNumber);
+      return this.generateDeductionsText(benefitProgramId, sectionId);
     } else if (sectionNumber.startsWith('4')) {
       // Section 400s = Allotments
-      return this.generateAllotmentsText(benefitProgramId, sectionNumber);
+      return this.generateAllotmentsText(benefitProgramId, sectionId);
     } else if (sectionNumber.includes('categorical') || sectionNumber.includes('SSI') || sectionNumber.includes('TANF')) {
-      return this.generateCategoricalEligibilityText(benefitProgramId);
+      return this.generateCategoricalEligibilityText(benefitProgramId, sectionId);
     } else if (sectionNumber.includes('verif') || sectionNumber.includes('document')) {
-      return this.generateDocumentRequirementsText(benefitProgramId);
+      return this.generateDocumentRequirementsText(benefitProgramId, sectionId);
     } else {
       // For other sections, return a note that text generation is not yet available
       return {

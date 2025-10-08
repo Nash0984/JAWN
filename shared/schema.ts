@@ -255,6 +255,7 @@ export const povertyLevels = pgTable("poverty_levels", {
 export const snapIncomeLimits = pgTable("snap_income_limits", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   benefitProgramId: varchar("benefit_program_id").references(() => benefitPrograms.id).notNull(),
+  manualSectionId: varchar("manual_section_id").references(() => manualSections.id),
   householdSize: integer("household_size").notNull(),
   grossMonthlyLimit: integer("gross_monthly_limit").notNull(), // in cents
   netMonthlyLimit: integer("net_monthly_limit").notNull(), // in cents
@@ -274,6 +275,7 @@ export const snapIncomeLimits = pgTable("snap_income_limits", {
 export const snapDeductions = pgTable("snap_deductions", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   benefitProgramId: varchar("benefit_program_id").references(() => benefitPrograms.id).notNull(),
+  manualSectionId: varchar("manual_section_id").references(() => manualSections.id),
   deductionType: text("deduction_type").notNull(), // standard, earned_income, dependent_care, shelter, medical
   deductionName: text("deduction_name").notNull(),
   calculationType: text("calculation_type").notNull(), // fixed, percentage, tiered, capped
@@ -297,6 +299,7 @@ export const snapDeductions = pgTable("snap_deductions", {
 export const snapAllotments = pgTable("snap_allotments", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   benefitProgramId: varchar("benefit_program_id").references(() => benefitPrograms.id).notNull(),
+  manualSectionId: varchar("manual_section_id").references(() => manualSections.id),
   householdSize: integer("household_size").notNull(),
   maxMonthlyBenefit: integer("max_monthly_benefit").notNull(), // in cents
   minMonthlyBenefit: integer("min_monthly_benefit"), // Minimum benefit (e.g., $23 for 1-2 person)
@@ -315,6 +318,7 @@ export const snapAllotments = pgTable("snap_allotments", {
 export const categoricalEligibilityRules = pgTable("categorical_eligibility_rules", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   benefitProgramId: varchar("benefit_program_id").references(() => benefitPrograms.id).notNull(),
+  manualSectionId: varchar("manual_section_id").references(() => manualSections.id),
   ruleName: text("rule_name").notNull(),
   ruleCode: text("rule_code").notNull().unique(), // SSI, TANF, GA, BBCE
   description: text("description"),
@@ -337,6 +341,7 @@ export const categoricalEligibilityRules = pgTable("categorical_eligibility_rule
 export const documentRequirementRules = pgTable("document_requirement_rules", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   benefitProgramId: varchar("benefit_program_id").references(() => benefitPrograms.id).notNull(),
+  manualSectionId: varchar("manual_section_id").references(() => manualSections.id),
   requirementName: text("requirement_name").notNull(),
   documentType: text("document_type").notNull(), // income, identity, residency, expenses
   requiredWhen: jsonb("required_when").notNull(), // Conditions when this document is required
@@ -438,6 +443,10 @@ export const snapIncomeLimitsRelations = relations(snapIncomeLimits, ({ one }) =
     fields: [snapIncomeLimits.benefitProgramId],
     references: [benefitPrograms.id],
   }),
+  manualSection: one(manualSections, {
+    fields: [snapIncomeLimits.manualSectionId],
+    references: [manualSections.id],
+  }),
   creator: one(users, {
     fields: [snapIncomeLimits.createdBy],
     references: [users.id],
@@ -449,12 +458,20 @@ export const snapDeductionsRelations = relations(snapDeductions, ({ one }) => ({
     fields: [snapDeductions.benefitProgramId],
     references: [benefitPrograms.id],
   }),
+  manualSection: one(manualSections, {
+    fields: [snapDeductions.manualSectionId],
+    references: [manualSections.id],
+  }),
 }));
 
 export const snapAllotmentsRelations = relations(snapAllotments, ({ one }) => ({
   benefitProgram: one(benefitPrograms, {
     fields: [snapAllotments.benefitProgramId],
     references: [benefitPrograms.id],
+  }),
+  manualSection: one(manualSections, {
+    fields: [snapAllotments.manualSectionId],
+    references: [manualSections.id],
   }),
 }));
 
@@ -463,12 +480,20 @@ export const categoricalEligibilityRulesRelations = relations(categoricalEligibi
     fields: [categoricalEligibilityRules.benefitProgramId],
     references: [benefitPrograms.id],
   }),
+  manualSection: one(manualSections, {
+    fields: [categoricalEligibilityRules.manualSectionId],
+    references: [manualSections.id],
+  }),
 }));
 
 export const documentRequirementRulesRelations = relations(documentRequirementRules, ({ one }) => ({
   benefitProgram: one(benefitPrograms, {
     fields: [documentRequirementRules.benefitProgramId],
     references: [benefitPrograms.id],
+  }),
+  manualSection: one(manualSections, {
+    fields: [documentRequirementRules.manualSectionId],
+    references: [manualSections.id],
   }),
 }));
 
