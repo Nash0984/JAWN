@@ -21,7 +21,9 @@ import {
   insertSearchQuerySchema, 
   insertPolicySourceSchema,
   insertTrainingJobSchema,
-  insertUserSchema 
+  insertUserSchema,
+  searchQueries,
+  auditLogs
 } from "@shared/schema";
 import { z } from "zod";
 import multer from "multer";
@@ -1749,6 +1751,195 @@ ${sessions.map(s => `    <session>
     const jobs = await getAllExtractionJobs();
     
     res.json(jobs);
+  }));
+
+  // ===== AI HEALTH & BIAS MONITORING ROUTES =====
+  
+  // Get AI query analytics
+  app.get("/api/ai-monitoring/query-analytics", asyncHandler(async (req, res) => {
+    const days = parseInt(req.query.days as string) || 30;
+    const startDate = new Date();
+    startDate.setDate(startDate.getDate() - days);
+
+    // Query volume and trends
+    const queries = await db
+      .select({
+        date: sql<string>`DATE(${searchQueries.createdAt})`,
+        count: sql<number>`COUNT(*)::int`,
+        avgRelevance: sql<number>`AVG(${searchQueries.relevanceScore})::real`,
+        avgResponseTime: sql<number>`AVG(${searchQueries.responseTime})::int`
+      })
+      .from(searchQueries)
+      .where(sql`${searchQueries.createdAt} >= ${startDate}`)
+      .groupBy(sql`DATE(${searchQueries.createdAt})`)
+      .orderBy(sql`DATE(${searchQueries.createdAt})`);
+
+    // Total metrics
+    const totals = await db
+      .select({
+        totalQueries: sql<number>`COUNT(*)::int`,
+        avgRelevance: sql<number>`AVG(${searchQueries.relevanceScore})::real`,
+        avgResponseTime: sql<number>`AVG(${searchQueries.responseTime})::int`,
+        withCitations: sql<number>`COUNT(*) FILTER (WHERE ${searchQueries.response}::text LIKE '%citations%')::int`
+      })
+      .from(searchQueries)
+      .where(sql`${searchQueries.createdAt} >= ${startDate}`);
+
+    // Top queries
+    const topQueries = await db
+      .select({
+        query: searchQueries.query,
+        count: sql<number>`COUNT(*)::int`,
+        avgRelevance: sql<number>`AVG(${searchQueries.relevanceScore})::real`
+      })
+      .from(searchQueries)
+      .where(sql`${searchQueries.createdAt} >= ${startDate}`)
+      .groupBy(searchQueries.query)
+      .orderBy(sql`COUNT(*) DESC`)
+      .limit(10);
+
+    res.json({
+      trends: queries,
+      totals: totals[0] || { totalQueries: 0, avgRelevance: 0, avgResponseTime: 0, withCitations: 0 },
+      topQueries,
+      period: `Last ${days} days`
+    });
+  }));
+
+  // Get AI system health metrics
+  app.get("/api/ai-monitoring/system-health", asyncHandler(async (req, res) => {
+    const days = parseInt(req.query.days as string) || 7;
+    const startDate = new Date();
+    startDate.setDate(startDate.getDate() - days);
+
+    // Error rates from audit logs
+    const errorMetrics = await db
+      .select({
+        date: sql<string>`DATE(${auditLogs.timestamp})`,
+        totalEvents: sql<number>`COUNT(*)::int`,
+        errors: sql<number>`COUNT(*) FILTER (WHERE ${auditLogs.action} = 'ERROR')::int`
+      })
+      .from(auditLogs)
+      .where(sql`${auditLogs.timestamp} >= ${startDate}`)
+      .groupBy(sql`DATE(${auditLogs.timestamp})`)
+      .orderBy(sql`DATE(${auditLogs.timestamp})`);
+
+    // External service health (Gemini API)
+    const serviceHealth = await db
+      .select({
+        service: sql<string>`${auditLogs.metadata}->>'service'`,
+        totalCalls: sql<number>`COUNT(*)::int`,
+        failures: sql<number>`COUNT(*) FILTER (WHERE ${auditLogs.metadata}->>'success' = 'false')::int`,
+        avgResponseTime: sql<number>`AVG((${auditLogs.metadata}->>'responseTime')::int)::int`
+      })
+      .from(auditLogs)
+      .where(sql`
+        ${auditLogs.timestamp} >= ${startDate} AND 
+        ${auditLogs.action} = 'EXTERNAL_SERVICE' AND
+        ${auditLogs.metadata}->>'service' IS NOT NULL
+      `)
+      .groupBy(sql`${auditLogs.metadata}->>'service'`);
+
+    res.json({
+      errorTrends: errorMetrics,
+      serviceHealth,
+      period: `Last ${days} days`
+    });
+  }));
+
+  // Get response quality metrics
+  app.get("/api/ai-monitoring/response-quality", asyncHandler(async (req, res) => {
+    const days = parseInt(req.query.days as string) || 30;
+    const startDate = new Date();
+    startDate.setDate(startDate.getDate() - days);
+
+    // Citation quality breakdown
+    const recentQueries = await db
+      .select()
+      .from(searchQueries)
+      .where(sql`${searchQueries.createdAt} >= ${startDate}`)
+      .orderBy(sql`${searchQueries.createdAt} DESC`)
+      .limit(1000);
+
+    let withCitations = 0;
+    let withoutCitations = 0;
+    let avgCitationsPerResponse = 0;
+    let totalCitations = 0;
+
+    recentQueries.forEach(q => {
+      if (q.response) {
+        const responseObj = typeof q.response === 'string' ? JSON.parse(q.response) : q.response;
+        const citations = responseObj.citations || [];
+        if (citations.length > 0) {
+          withCitations++;
+          totalCitations += citations.length;
+        } else {
+          withoutCitations++;
+        }
+      }
+    });
+
+    avgCitationsPerResponse = withCitations > 0 ? totalCitations / withCitations : 0;
+
+    // Relevance score distribution
+    const relevanceDistribution = await db
+      .select({
+        scoreRange: sql<string>`
+          CASE 
+            WHEN ${searchQueries.relevanceScore} >= 0.8 THEN 'High (0.8-1.0)'
+            WHEN ${searchQueries.relevanceScore} >= 0.6 THEN 'Medium (0.6-0.8)'
+            WHEN ${searchQueries.relevanceScore} >= 0.4 THEN 'Low (0.4-0.6)'
+            ELSE 'Very Low (<0.4)'
+          END
+        `,
+        count: sql<number>`COUNT(*)::int`
+      })
+      .from(searchQueries)
+      .where(sql`${searchQueries.createdAt} >= ${startDate} AND ${searchQueries.relevanceScore} IS NOT NULL`)
+      .groupBy(sql`
+        CASE 
+          WHEN ${searchQueries.relevanceScore} >= 0.8 THEN 'High (0.8-1.0)'
+          WHEN ${searchQueries.relevanceScore} >= 0.6 THEN 'Medium (0.6-0.8)'
+          WHEN ${searchQueries.relevanceScore} >= 0.4 THEN 'Low (0.4-0.6)'
+          ELSE 'Very Low (<0.4)'
+        END
+      `);
+
+    res.json({
+      citationMetrics: {
+        withCitations,
+        withoutCitations,
+        citationRate: recentQueries.length > 0 ? (withCitations / recentQueries.length) * 100 : 0,
+        avgCitationsPerResponse
+      },
+      relevanceDistribution,
+      period: `Last ${days} days`,
+      sampleSize: recentQueries.length
+    });
+  }));
+
+  // Flag response for bias review
+  app.post("/api/ai-monitoring/flag-response", requireAuth, asyncHandler(async (req, res) => {
+    const { queryId, reason, notes } = req.body;
+    
+    if (!queryId || !reason) {
+      return res.status(400).json({ error: "queryId and reason are required" });
+    }
+
+    // Log the flag in audit logs
+    await auditService.logEvent({
+      action: "BIAS_FLAG",
+      entityType: "search_query",
+      entityId: queryId,
+      userId: req.user?.id,
+      metadata: {
+        reason,
+        notes,
+        flaggedAt: new Date().toISOString()
+      }
+    });
+
+    res.json({ success: true, message: "Response flagged for review" });
   }));
 
   const httpServer = createServer(app);
