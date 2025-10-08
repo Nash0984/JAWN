@@ -22,9 +22,11 @@ import {
   insertPolicySourceSchema,
   insertTrainingJobSchema,
   insertUserSchema,
+  insertFeedbackSubmissionSchema,
   searchQueries,
   auditLogs,
   ruleChangeLogs,
+  feedbackSubmissions,
   users
 } from "@shared/schema";
 import { z } from "zod";
@@ -2084,6 +2086,233 @@ ${sessions.map(s => `    <session>
       limit: limitNum,
       offset: offsetNum
     });
+  }));
+
+  // Feedback Submission Endpoints
+  
+  // Submit feedback (authenticated users)
+  app.post("/api/feedback", requireAuth, asyncHandler(async (req, res) => {
+    const userId = (req as any).userId;
+    
+    // Validate the request body
+    const feedbackData = insertFeedbackSubmissionSchema.parse({
+      ...req.body,
+      userId,
+      metadata: {
+        ...(req.body.metadata ?? {}),
+        userAgent: req.headers['user-agent'],
+        ipAddress: req.ip
+      }
+    });
+    
+    const [feedback] = await db
+      .insert(feedbackSubmissions)
+      .values(feedbackData)
+      .returning();
+    
+    // Log the feedback submission
+    await auditService.logAction({
+      action: "FEEDBACK_SUBMITTED",
+      entityType: "feedback",
+      entityId: feedback.id,
+      userId,
+      metadata: {
+        feedbackType: feedback.feedbackType,
+        category: feedback.category,
+        severity: feedback.severity
+      }
+    });
+    
+    res.status(201).json(feedback);
+  }));
+
+  // Get all feedback (admin only, with filtering and pagination)
+  app.get("/api/feedback", requireAuth, requireAdmin, asyncHandler(async (req, res) => {
+    const {
+      status,
+      feedbackType,
+      category,
+      severity,
+      assignedTo,
+      startDate,
+      endDate,
+      limit = "50",
+      offset = "0"
+    } = req.query;
+    
+    const limitNum = parseInt(limit as string);
+    const offsetNum = parseInt(offset as string);
+    
+    const conditions = [];
+    
+    if (status) {
+      conditions.push(eq(feedbackSubmissions.status, status as string));
+    }
+    if (feedbackType) {
+      conditions.push(eq(feedbackSubmissions.feedbackType, feedbackType as string));
+    }
+    if (category) {
+      conditions.push(eq(feedbackSubmissions.category, category as string));
+    }
+    if (severity) {
+      conditions.push(eq(feedbackSubmissions.severity, severity as string));
+    }
+    if (assignedTo) {
+      conditions.push(eq(feedbackSubmissions.assignedTo, assignedTo as string));
+    }
+    if (startDate) {
+      conditions.push(gte(feedbackSubmissions.createdAt, new Date(startDate as string)));
+    }
+    if (endDate) {
+      conditions.push(lte(feedbackSubmissions.createdAt, new Date(endDate as string)));
+    }
+    
+    const feedbacks = await db
+      .select({
+        id: feedbackSubmissions.id,
+        userId: feedbackSubmissions.userId,
+        submitterName: feedbackSubmissions.submitterName,
+        submitterEmail: feedbackSubmissions.submitterEmail,
+        feedbackType: feedbackSubmissions.feedbackType,
+        category: feedbackSubmissions.category,
+        severity: feedbackSubmissions.severity,
+        relatedEntityType: feedbackSubmissions.relatedEntityType,
+        relatedEntityId: feedbackSubmissions.relatedEntityId,
+        pageUrl: feedbackSubmissions.pageUrl,
+        title: feedbackSubmissions.title,
+        description: feedbackSubmissions.description,
+        expectedBehavior: feedbackSubmissions.expectedBehavior,
+        actualBehavior: feedbackSubmissions.actualBehavior,
+        screenshotUrl: feedbackSubmissions.screenshotUrl,
+        status: feedbackSubmissions.status,
+        priority: feedbackSubmissions.priority,
+        assignedTo: feedbackSubmissions.assignedTo,
+        adminNotes: feedbackSubmissions.adminNotes,
+        resolution: feedbackSubmissions.resolution,
+        resolvedAt: feedbackSubmissions.resolvedAt,
+        resolvedBy: feedbackSubmissions.resolvedBy,
+        metadata: feedbackSubmissions.metadata,
+        createdAt: feedbackSubmissions.createdAt,
+        updatedAt: feedbackSubmissions.updatedAt,
+        submitterUsername: sql<string>`u1.username`,
+        assignedToUsername: sql<string>`u2.username`,
+        resolvedByUsername: sql<string>`u3.username`
+      })
+      .from(feedbackSubmissions)
+      .leftJoin(sql`users u1`, eq(feedbackSubmissions.userId, sql`u1.id`))
+      .leftJoin(sql`users u2`, eq(feedbackSubmissions.assignedTo, sql`u2.id`))
+      .leftJoin(sql`users u3`, eq(feedbackSubmissions.resolvedBy, sql`u3.id`))
+      .where(conditions.length > 0 ? and(...conditions) : undefined)
+      .orderBy(desc(feedbackSubmissions.createdAt))
+      .limit(limitNum)
+      .offset(offsetNum);
+    
+    // Get total count for pagination
+    const totalResult = await db
+      .select({ count: sql<number>`COUNT(*)::int` })
+      .from(feedbackSubmissions)
+      .where(conditions.length > 0 ? and(...conditions) : undefined);
+    
+    res.json({
+      feedbacks,
+      total: totalResult[0]?.count || 0,
+      limit: limitNum,
+      offset: offsetNum
+    });
+  }));
+
+  // Get specific feedback (admin only)
+  app.get("/api/feedback/:id", requireAuth, requireAdmin, asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    
+    const [feedback] = await db
+      .select({
+        id: feedbackSubmissions.id,
+        userId: feedbackSubmissions.userId,
+        submitterName: feedbackSubmissions.submitterName,
+        submitterEmail: feedbackSubmissions.submitterEmail,
+        feedbackType: feedbackSubmissions.feedbackType,
+        category: feedbackSubmissions.category,
+        severity: feedbackSubmissions.severity,
+        relatedEntityType: feedbackSubmissions.relatedEntityType,
+        relatedEntityId: feedbackSubmissions.relatedEntityId,
+        pageUrl: feedbackSubmissions.pageUrl,
+        title: feedbackSubmissions.title,
+        description: feedbackSubmissions.description,
+        expectedBehavior: feedbackSubmissions.expectedBehavior,
+        actualBehavior: feedbackSubmissions.actualBehavior,
+        screenshotUrl: feedbackSubmissions.screenshotUrl,
+        status: feedbackSubmissions.status,
+        priority: feedbackSubmissions.priority,
+        assignedTo: feedbackSubmissions.assignedTo,
+        adminNotes: feedbackSubmissions.adminNotes,
+        resolution: feedbackSubmissions.resolution,
+        resolvedAt: feedbackSubmissions.resolvedAt,
+        resolvedBy: feedbackSubmissions.resolvedBy,
+        metadata: feedbackSubmissions.metadata,
+        createdAt: feedbackSubmissions.createdAt,
+        updatedAt: feedbackSubmissions.updatedAt,
+        submitterUsername: sql<string>`u1.username`,
+        assignedToUsername: sql<string>`u2.username`,
+        resolvedByUsername: sql<string>`u3.username`
+      })
+      .from(feedbackSubmissions)
+      .leftJoin(sql`users u1`, eq(feedbackSubmissions.userId, sql`u1.id`))
+      .leftJoin(sql`users u2`, eq(feedbackSubmissions.assignedTo, sql`u2.id`))
+      .leftJoin(sql`users u3`, eq(feedbackSubmissions.resolvedBy, sql`u3.id`))
+      .where(eq(feedbackSubmissions.id, id));
+    
+    if (!feedback) {
+      throw notFoundError("Feedback not found");
+    }
+    
+    res.json(feedback);
+  }));
+
+  // Update feedback status (admin only)
+  app.patch("/api/feedback/:id", requireAuth, requireAdmin, asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    const userId = (req as any).userId;
+    const { status, priority, assignedTo, adminNotes, resolution } = req.body;
+    
+    const updateData: any = {
+      updatedAt: new Date()
+    };
+    
+    if (status) updateData.status = status;
+    if (priority) updateData.priority = priority;
+    if (assignedTo !== undefined) updateData.assignedTo = assignedTo;
+    if (adminNotes !== undefined) updateData.adminNotes = adminNotes;
+    if (resolution !== undefined) updateData.resolution = resolution;
+    
+    // If marking as resolved or closed, set resolvedAt and resolvedBy
+    if (status === "resolved" || status === "closed") {
+      updateData.resolvedAt = new Date();
+      updateData.resolvedBy = userId;
+    }
+    
+    const [updatedFeedback] = await db
+      .update(feedbackSubmissions)
+      .set(updateData)
+      .where(eq(feedbackSubmissions.id, id))
+      .returning();
+    
+    if (!updatedFeedback) {
+      throw notFoundError("Feedback not found");
+    }
+    
+    // Log the feedback update
+    await auditService.logAction({
+      action: "FEEDBACK_UPDATED",
+      entityType: "feedback",
+      entityId: id,
+      userId,
+      metadata: {
+        updates: updateData
+      }
+    });
+    
+    res.json(updatedFeedback);
   }));
 
   const httpServer = createServer(app);
