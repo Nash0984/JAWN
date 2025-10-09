@@ -35,7 +35,7 @@ import {
   Shield
 } from "lucide-react";
 import { motion } from "framer-motion";
-import { fadeIn, stagger } from "@/lib/animations";
+import { fadeVariants, containerVariants } from "@/lib/animations";
 import { format } from "date-fns";
 
 interface PolicyChange {
@@ -132,7 +132,7 @@ export function PolicyChanges() {
 
   return (
     <div className="container mx-auto py-8 px-4 max-w-7xl">
-      <motion.div {...fadeIn}>
+      <motion.div variants={fadeVariants} initial="hidden" animate="visible">
         <div className="mb-8">
           <h1 className="text-3xl font-bold mb-2" data-testid="heading-policy-changes">
             Policy Change Monitor
@@ -143,7 +143,7 @@ export function PolicyChanges() {
         </div>
 
         {/* Summary Cards */}
-        <motion.div {...stagger} className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+        <motion.div variants={containerVariants} initial="hidden" animate="visible" className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="text-sm font-medium flex items-center gap-2">
