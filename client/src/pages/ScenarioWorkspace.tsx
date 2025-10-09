@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useQuery, useMutation } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueries } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -13,8 +13,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Calculator, Trash2, Edit, TrendingUp, DollarSign } from "lucide-react";
+import { Plus, Calculator, Trash2, Edit, TrendingUp, DollarSign, BarChart3 } from "lucide-react";
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Checkbox } from "@/components/ui/checkbox";
 import type { HouseholdScenario, ScenarioCalculation } from "@shared/schema";
 
 const householdDataSchema = z.object({
@@ -40,11 +43,194 @@ const scenarioFormSchema = z.object({
 
 type ScenarioFormData = z.infer<typeof scenarioFormSchema>;
 
+interface ComparisonChartsProps {
+  scenarioIds: string[];
+  scenarios: HouseholdScenario[];
+}
+
+function ComparisonCharts({ scenarioIds, scenarios }: ComparisonChartsProps) {
+  const formatCurrency = (amount: number) => {
+    return new Intl.NumberFormat("en-US", {
+      style: "currency",
+      currency: "USD",
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0,
+    }).format(amount);
+  };
+
+  // Fetch calculations for all selected scenarios using useQueries for stable hook ordering
+  const calculationsQueries = useQueries({
+    queries: scenarioIds.map(id => ({
+      queryKey: ["/api/scenarios", id, "calculations"],
+      queryFn: async () => {
+        const response = await fetch(`/api/scenarios/${id}/calculations`);
+        if (!response.ok) throw new Error('Failed to fetch calculations');
+        return response.json() as Promise<ScenarioCalculation[]>;
+      },
+    })),
+  });
+
+  const isLoading = calculationsQueries.some(q => q.isLoading);
+  const hasError = calculationsQueries.some(q => q.isError);
+
+  if (isLoading) {
+    return <div className="text-center py-12">Loading comparison data...</div>;
+  }
+
+  if (hasError) {
+    return <div className="text-center py-12 text-destructive">Error loading comparison data</div>;
+  }
+
+  // Build comparison data
+  const comparisonData = scenarioIds.map((id, index) => {
+    const scenario = scenarios.find(s => s.id === id);
+    const calculations = calculationsQueries[index].data || [];
+    const latestCalc = calculations[0]; // Latest calculation
+
+    if (!latestCalc) {
+      return {
+        name: scenario?.name || `Scenario ${index + 1}`,
+        snap: 0,
+        medicaid: 0,
+        eitc: 0,
+        ctc: 0,
+        ssi: 0,
+        tanf: 0,
+        total: 0,
+        hasCalculation: false,
+      };
+    }
+
+    return {
+      name: scenario?.name || `Scenario ${index + 1}`,
+      snap: latestCalc.snapAmount || 0,
+      medicaid: latestCalc.medicaidAmount || 0,
+      eitc: latestCalc.eitcAmount || 0,
+      ctc: latestCalc.ctcAmount || 0,
+      ssi: latestCalc.ssiAmount || 0,
+      tanf: latestCalc.tanfAmount || 0,
+      total: latestCalc.totalMonthlyBenefits || 0,
+      hasCalculation: true,
+    };
+  });
+
+  const allScenariosHaveCalculations = comparisonData.every(d => d.hasCalculation);
+
+  if (!allScenariosHaveCalculations) {
+    return (
+      <div className="text-center py-12">
+        <p className="text-muted-foreground">
+          Some selected scenarios don't have benefit calculations yet.
+          Please calculate benefits for all scenarios before comparing.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      <Separator />
+      
+      {/* Total Benefits Comparison */}
+      <div>
+        <h3 className="font-semibold mb-4">Total Monthly Benefits Comparison</h3>
+        <ResponsiveContainer width="100%" height={300}>
+          <BarChart data={comparisonData} margin={{ top: 20, right: 30, left: 20, bottom: 60 }}>
+            <CartesianGrid strokeDasharray="3 3" />
+            <XAxis 
+              dataKey="name" 
+              angle={-45} 
+              textAnchor="end" 
+              height={100}
+              interval={0}
+            />
+            <YAxis 
+              tickFormatter={(value) => formatCurrency(value)}
+            />
+            <Tooltip 
+              formatter={(value) => formatCurrency(Number(value))}
+              contentStyle={{ backgroundColor: 'hsl(var(--background))', border: '1px solid hsl(var(--border))' }}
+            />
+            <Bar dataKey="total" fill="hsl(var(--primary))" name="Total Monthly Benefits" />
+          </BarChart>
+        </ResponsiveContainer>
+      </div>
+
+      {/* Individual Benefits Breakdown */}
+      <div>
+        <h3 className="font-semibold mb-4">Individual Benefits Breakdown</h3>
+        <ResponsiveContainer width="100%" height={400}>
+          <BarChart data={comparisonData} margin={{ top: 20, right: 30, left: 20, bottom: 60 }}>
+            <CartesianGrid strokeDasharray="3 3" />
+            <XAxis 
+              dataKey="name" 
+              angle={-45} 
+              textAnchor="end" 
+              height={100}
+              interval={0}
+            />
+            <YAxis 
+              tickFormatter={(value) => formatCurrency(value)}
+            />
+            <Tooltip 
+              formatter={(value) => formatCurrency(Number(value))}
+              contentStyle={{ backgroundColor: 'hsl(var(--background))', border: '1px solid hsl(var(--border))' }}
+            />
+            <Legend wrapperStyle={{ paddingTop: '20px' }} />
+            <Bar dataKey="snap" fill="#10b981" name="SNAP" />
+            <Bar dataKey="medicaid" fill="#3b82f6" name="Medicaid" />
+            <Bar dataKey="eitc" fill="#8b5cf6" name="EITC" />
+            <Bar dataKey="ctc" fill="#f59e0b" name="CTC" />
+            <Bar dataKey="ssi" fill="#6366f1" name="SSI" />
+            <Bar dataKey="tanf" fill="#ec4899" name="TANF" />
+          </BarChart>
+        </ResponsiveContainer>
+      </div>
+
+      {/* Summary Table */}
+      <div>
+        <h3 className="font-semibold mb-4">Summary Table</h3>
+        <div className="border rounded-lg overflow-hidden">
+          <table className="w-full" data-testid="comparison-table">
+            <thead className="bg-muted">
+              <tr>
+                <th className="text-left p-3 font-semibold">Scenario</th>
+                <th className="text-right p-3 font-semibold">SNAP</th>
+                <th className="text-right p-3 font-semibold">Medicaid</th>
+                <th className="text-right p-3 font-semibold">EITC</th>
+                <th className="text-right p-3 font-semibold">CTC</th>
+                <th className="text-right p-3 font-semibold">SSI</th>
+                <th className="text-right p-3 font-semibold">TANF</th>
+                <th className="text-right p-3 font-semibold bg-primary/10">Total/Month</th>
+              </tr>
+            </thead>
+            <tbody>
+              {comparisonData.map((data, index) => (
+                <tr key={index} className="border-t" data-testid={`comparison-row-${index}`}>
+                  <td className="p-3 font-medium">{data.name}</td>
+                  <td className="p-3 text-right">{formatCurrency(data.snap)}</td>
+                  <td className="p-3 text-right">{formatCurrency(data.medicaid)}</td>
+                  <td className="p-3 text-right">{formatCurrency(data.eitc)}</td>
+                  <td className="p-3 text-right">{formatCurrency(data.ctc)}</td>
+                  <td className="p-3 text-right">{formatCurrency(data.ssi)}</td>
+                  <td className="p-3 text-right">{formatCurrency(data.tanf)}</td>
+                  <td className="p-3 text-right font-bold bg-primary/5">{formatCurrency(data.total)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function ScenarioWorkspace() {
   const { toast } = useToast();
   const [selectedScenario, setSelectedScenario] = useState<HouseholdScenario | null>(null);
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+  const [selectedForComparison, setSelectedForComparison] = useState<string[]>([]);
 
   // Fetch scenarios
   const { data: scenarios = [], isLoading } = useQuery<HouseholdScenario[]>({
@@ -445,15 +631,28 @@ export default function ScenarioWorkspace() {
         </Dialog>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Scenarios List */}
-        <div className="lg:col-span-1 space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>Scenarios</CardTitle>
-              <CardDescription>{scenarios.length} total scenarios</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-2 max-h-[600px] overflow-y-auto">
+      <Tabs defaultValue="workspace" className="w-full">
+        <TabsList className="mb-6">
+          <TabsTrigger value="workspace" data-testid="tab-workspace">
+            <TrendingUp className="h-4 w-4 mr-2" />
+            Workspace
+          </TabsTrigger>
+          <TabsTrigger value="compare" data-testid="tab-compare">
+            <BarChart3 className="h-4 w-4 mr-2" />
+            Compare Scenarios ({selectedForComparison.length})
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="workspace">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            {/* Scenarios List */}
+            <div className="lg:col-span-1 space-y-4">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Scenarios</CardTitle>
+                  <CardDescription>{scenarios.length} total scenarios</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-2 max-h-[600px] overflow-y-auto">
               {isLoading ? (
                 <p className="text-sm text-muted-foreground">Loading...</p>
               ) : scenarios.length === 0 ? (
@@ -657,6 +856,72 @@ export default function ScenarioWorkspace() {
           )}
         </div>
       </div>
+        </TabsContent>
+
+        <TabsContent value="compare">
+          <Card>
+            <CardHeader>
+              <CardTitle>Scenario Comparison</CardTitle>
+              <CardDescription>
+                Select scenarios to compare their benefit outcomes side-by-side
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {scenarios.length < 2 ? (
+                <div className="text-center py-12">
+                  <p className="text-muted-foreground">
+                    Create at least 2 scenarios with calculated benefits to enable comparison
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-6">
+                  {/* Scenario Selection */}
+                  <div>
+                    <h3 className="font-semibold mb-3">Select Scenarios to Compare</h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                      {scenarios.map((scenario) => (
+                        <div
+                          key={scenario.id}
+                          className="flex items-start space-x-2 p-3 rounded-lg border"
+                          data-testid={`comparison-scenario-${scenario.id}`}
+                        >
+                          <Checkbox
+                            id={`compare-${scenario.id}`}
+                            checked={selectedForComparison.includes(scenario.id)}
+                            onCheckedChange={(checked) => {
+                              if (checked) {
+                                setSelectedForComparison([...selectedForComparison, scenario.id]);
+                              } else {
+                                setSelectedForComparison(selectedForComparison.filter(id => id !== scenario.id));
+                              }
+                            }}
+                            data-testid={`checkbox-compare-${scenario.id}`}
+                          />
+                          <label
+                            htmlFor={`compare-${scenario.id}`}
+                            className="flex-1 cursor-pointer"
+                          >
+                            <div className="font-semibold text-sm">{scenario.name}</div>
+                            {scenario.description && (
+                              <div className="text-xs text-muted-foreground line-clamp-1">
+                                {scenario.description}
+                              </div>
+                            )}
+                          </label>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {selectedForComparison.length > 0 && (
+                    <ComparisonCharts scenarioIds={selectedForComparison} scenarios={scenarios} />
+                  )}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
 
       {/* Edit Dialog */}
       <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
