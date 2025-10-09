@@ -2033,3 +2033,105 @@ export type InsertScenarioCalculation = z.infer<typeof insertScenarioCalculation
 export type ScenarioCalculation = typeof scenarioCalculations.$inferSelect;
 export type InsertScenarioComparison = z.infer<typeof insertScenarioComparisonSchema>;
 export type ScenarioComparison = typeof scenarioComparisons.$inferSelect;
+
+// Maryland-focused evaluation framework (adapted from Propel snap-eval)
+export const evaluationTestCases = pgTable("evaluation_test_cases", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  program: varchar("program", { length: 50 }).notNull(), // MD_SNAP, MD_MEDICAID, MD_TANF, etc.
+  category: varchar("category", { length: 50 }).notNull(), // 'eligibility', 'calculation', 'edge_case'
+  name: varchar("name", { length: 255 }).notNull(),
+  description: text("description").notNull(),
+  inputData: jsonb("input_data").notNull(), // Household scenario data
+  expectedResult: jsonb("expected_result").notNull(), // Expected eligibility/benefit amount
+  tolerance: real("tolerance").default(2.00), // 2% variance tolerance
+  tags: text("tags").array(), // MD-specific tags like 'md_asset_limit', 'md_drug_felony', 'bbce'
+  source: varchar("source", { length: 255 }), // Reference to policy document or regulation
+  isActive: boolean("is_active").default(true).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  createdBy: varchar("created_by").references(() => users.id),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const evaluationRuns = pgTable("evaluation_runs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  runName: varchar("run_name", { length: 255 }).notNull(),
+  program: varchar("program", { length: 50 }), // Filter by program, or null for all programs
+  totalCases: integer("total_cases").notNull(),
+  passedCases: integer("passed_cases").notNull().default(0),
+  failedCases: integer("failed_cases").notNull().default(0),
+  passRate: real("pass_rate"), // Pass@1 percentage
+  averageVariance: real("average_variance"), // Average % variance from expected
+  startedAt: timestamp("started_at").defaultNow().notNull(),
+  completedAt: timestamp("completed_at"),
+  runBy: varchar("run_by").references(() => users.id),
+  status: varchar("status", { length: 20 }).default("running").notNull(), // 'running', 'completed', 'failed'
+  metadata: jsonb("metadata"), // Store run configuration, model version, etc.
+});
+
+export const evaluationResults = pgTable("evaluation_results", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  runId: varchar("run_id").references(() => evaluationRuns.id).notNull(),
+  testCaseId: varchar("test_case_id").references(() => evaluationTestCases.id).notNull(),
+  passed: boolean("passed").notNull(),
+  actualResult: jsonb("actual_result"), // Actual eligibility/benefit amount returned by system
+  variance: real("variance"), // % variance from expected
+  executionTimeMs: integer("execution_time_ms"), // How long the test took
+  errorMessage: text("error_message"), // Error details if test failed
+  aiResponse: text("ai_response"), // Full AI response for debugging
+  citations: jsonb("citations"), // Source citations used by AI
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+// Relations
+export const evaluationTestCasesRelations = relations(evaluationTestCases, ({ one, many }) => ({
+  creator: one(users, {
+    fields: [evaluationTestCases.createdBy],
+    references: [users.id],
+  }),
+  results: many(evaluationResults),
+}));
+
+export const evaluationRunsRelations = relations(evaluationRuns, ({ one, many }) => ({
+  runner: one(users, {
+    fields: [evaluationRuns.runBy],
+    references: [users.id],
+  }),
+  results: many(evaluationResults),
+}));
+
+export const evaluationResultsRelations = relations(evaluationResults, ({ one }) => ({
+  run: one(evaluationRuns, {
+    fields: [evaluationResults.runId],
+    references: [evaluationRuns.id],
+  }),
+  testCase: one(evaluationTestCases, {
+    fields: [evaluationResults.testCaseId],
+    references: [evaluationTestCases.id],
+  }),
+}));
+
+// Insert schemas
+export const insertEvaluationTestCaseSchema = createInsertSchema(evaluationTestCases).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertEvaluationRunSchema = createInsertSchema(evaluationRuns).omit({
+  id: true,
+  startedAt: true,
+  completedAt: true,
+});
+
+export const insertEvaluationResultSchema = createInsertSchema(evaluationResults).omit({
+  id: true,
+  createdAt: true,
+});
+
+// Types
+export type InsertEvaluationTestCase = z.infer<typeof insertEvaluationTestCaseSchema>;
+export type EvaluationTestCase = typeof evaluationTestCases.$inferSelect;
+export type InsertEvaluationRun = z.infer<typeof insertEvaluationRunSchema>;
+export type EvaluationRun = typeof evaluationRuns.$inferSelect;
+export type InsertEvaluationResult = z.infer<typeof insertEvaluationResultSchema>;
+export type EvaluationResult = typeof evaluationResults.$inferSelect;

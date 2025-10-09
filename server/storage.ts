@@ -102,6 +102,15 @@ import {
   policyEngineVerifications,
   type PolicyEngineVerification,
   type InsertPolicyEngineVerification,
+  evaluationTestCases,
+  type EvaluationTestCase,
+  type InsertEvaluationTestCase,
+  evaluationRuns,
+  type EvaluationRun,
+  type InsertEvaluationRun,
+  evaluationResults,
+  type EvaluationResult,
+  type InsertEvaluationResult,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and, ilike, sql, or, isNull, lte, gte } from "drizzle-orm";
@@ -303,6 +312,23 @@ export interface IStorage {
   getPolicyEngineVerification(id: string): Promise<PolicyEngineVerification | undefined>;
   getPolicyEngineVerificationsByProgram(benefitProgramId: string): Promise<PolicyEngineVerification[]>;
   getPolicyEngineVerificationsBySession(sessionId: string): Promise<PolicyEngineVerification[]>;
+
+  // Maryland Evaluation Framework
+  createEvaluationTestCase(testCase: InsertEvaluationTestCase): Promise<EvaluationTestCase>;
+  getEvaluationTestCase(id: string): Promise<EvaluationTestCase | undefined>;
+  getEvaluationTestCases(filters?: { program?: string; category?: string; isActive?: boolean }): Promise<EvaluationTestCase[]>;
+  updateEvaluationTestCase(id: string, updates: Partial<EvaluationTestCase>): Promise<EvaluationTestCase>;
+  deleteEvaluationTestCase(id: string): Promise<void>;
+
+  createEvaluationRun(run: InsertEvaluationRun): Promise<EvaluationRun>;
+  getEvaluationRun(id: string): Promise<EvaluationRun | undefined>;
+  getEvaluationRuns(filters?: { program?: string; status?: string; limit?: number }): Promise<EvaluationRun[]>;
+  updateEvaluationRun(id: string, updates: Partial<EvaluationRun>): Promise<EvaluationRun>;
+
+  createEvaluationResult(result: InsertEvaluationResult): Promise<EvaluationResult>;
+  getEvaluationResult(id: string): Promise<EvaluationResult | undefined>;
+  getEvaluationResultsByRun(runId: string): Promise<EvaluationResult[]>;
+  getEvaluationResultsByTestCase(testCaseId: string): Promise<EvaluationResult[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1458,6 +1484,129 @@ export class DatabaseStorage implements IStorage {
       .from(policyEngineVerifications)
       .where(eq(policyEngineVerifications.sessionId, sessionId))
       .orderBy(desc(policyEngineVerifications.createdAt));
+  }
+
+  // Maryland Evaluation Framework
+  async createEvaluationTestCase(testCase: InsertEvaluationTestCase): Promise<EvaluationTestCase> {
+    const [newTestCase] = await db.insert(evaluationTestCases).values(testCase).returning();
+    return newTestCase;
+  }
+
+  async getEvaluationTestCase(id: string): Promise<EvaluationTestCase | undefined> {
+    const [testCase] = await db
+      .select()
+      .from(evaluationTestCases)
+      .where(eq(evaluationTestCases.id, id));
+    return testCase;
+  }
+
+  async getEvaluationTestCases(filters?: { program?: string; category?: string; isActive?: boolean }): Promise<EvaluationTestCase[]> {
+    let query = db.select().from(evaluationTestCases);
+
+    const conditions = [];
+    if (filters?.program) {
+      conditions.push(eq(evaluationTestCases.program, filters.program));
+    }
+    if (filters?.category) {
+      conditions.push(eq(evaluationTestCases.category, filters.category));
+    }
+    if (filters?.isActive !== undefined) {
+      conditions.push(eq(evaluationTestCases.isActive, filters.isActive));
+    }
+
+    if (conditions.length > 0) {
+      query = query.where(and(...conditions));
+    }
+
+    return await query.orderBy(desc(evaluationTestCases.createdAt));
+  }
+
+  async updateEvaluationTestCase(id: string, updates: Partial<EvaluationTestCase>): Promise<EvaluationTestCase> {
+    const [updated] = await db
+      .update(evaluationTestCases)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(evaluationTestCases.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteEvaluationTestCase(id: string): Promise<void> {
+    await db.delete(evaluationTestCases).where(eq(evaluationTestCases.id, id));
+  }
+
+  async createEvaluationRun(run: InsertEvaluationRun): Promise<EvaluationRun> {
+    const [newRun] = await db.insert(evaluationRuns).values(run).returning();
+    return newRun;
+  }
+
+  async getEvaluationRun(id: string): Promise<EvaluationRun | undefined> {
+    const [run] = await db
+      .select()
+      .from(evaluationRuns)
+      .where(eq(evaluationRuns.id, id));
+    return run;
+  }
+
+  async getEvaluationRuns(filters?: { program?: string; status?: string; limit?: number }): Promise<EvaluationRun[]> {
+    let query = db.select().from(evaluationRuns);
+
+    const conditions = [];
+    if (filters?.program) {
+      conditions.push(eq(evaluationRuns.program, filters.program));
+    }
+    if (filters?.status) {
+      conditions.push(eq(evaluationRuns.status, filters.status));
+    }
+
+    if (conditions.length > 0) {
+      query = query.where(and(...conditions));
+    }
+
+    query = query.orderBy(desc(evaluationRuns.startedAt));
+
+    if (filters?.limit) {
+      query = query.limit(filters.limit);
+    }
+
+    return await query;
+  }
+
+  async updateEvaluationRun(id: string, updates: Partial<EvaluationRun>): Promise<EvaluationRun> {
+    const [updated] = await db
+      .update(evaluationRuns)
+      .set(updates)
+      .where(eq(evaluationRuns.id, id))
+      .returning();
+    return updated;
+  }
+
+  async createEvaluationResult(result: InsertEvaluationResult): Promise<EvaluationResult> {
+    const [newResult] = await db.insert(evaluationResults).values(result).returning();
+    return newResult;
+  }
+
+  async getEvaluationResult(id: string): Promise<EvaluationResult | undefined> {
+    const [result] = await db
+      .select()
+      .from(evaluationResults)
+      .where(eq(evaluationResults.id, id));
+    return result;
+  }
+
+  async getEvaluationResultsByRun(runId: string): Promise<EvaluationResult[]> {
+    return await db
+      .select()
+      .from(evaluationResults)
+      .where(eq(evaluationResults.runId, runId))
+      .orderBy(desc(evaluationResults.createdAt));
+  }
+
+  async getEvaluationResultsByTestCase(testCaseId: string): Promise<EvaluationResult[]> {
+    return await db
+      .select()
+      .from(evaluationResults)
+      .where(eq(evaluationResults.testCaseId, testCaseId))
+      .orderBy(desc(evaluationResults.createdAt));
   }
 }
 
