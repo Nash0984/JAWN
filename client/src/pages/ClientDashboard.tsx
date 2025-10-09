@@ -9,29 +9,29 @@ export default function ClientDashboard() {
 
   const quickActions = [
     {
-      title: "Check Eligibility",
-      description: "See if you qualify for SNAP benefits",
+      title: "Check Your Eligibility",
+      description: "Find out if you qualify for SNAP benefits",
       icon: Calculator,
       href: "/eligibility",
       testId: "action-eligibility",
     },
     {
       title: "Search Policies",
-      description: "Find answers to your questions about SNAP",
+      description: "Get answers to your SNAP questions",
       icon: Search,
       href: "/search",
       testId: "action-search",
     },
     {
       title: "Policy Manual",
-      description: "Browse the full Maryland SNAP policy manual",
+      description: "Browse Maryland's complete SNAP policy manual",
       icon: BookOpen,
       href: "/manual",
       testId: "action-manual",
     },
     {
       title: "Get Help",
-      description: "Find resources and contact information",
+      description: "Find helpful resources and contact information",
       icon: HelpCircle,
       href: "/help",
       testId: "action-help",
@@ -46,7 +46,7 @@ export default function ClientDashboard() {
           Welcome{user?.fullName ? `, ${user.fullName}` : ""}
         </h1>
         <p className="text-muted-foreground">
-          Access information about Maryland's Food Supplement Program (SNAP)
+          Get information about Maryland's Food Supplement Program (SNAP)
         </p>
       </div>
 
