@@ -2816,6 +2816,111 @@ If the question cannot be answered with the available information, say so clearl
     res.json(searchResult);
   }));
 
+  // ============================================================================
+  // POLICY CHANGE MONITORING ROUTES - Phase 1 Feature
+  // ============================================================================
+
+  // Get all policy changes with filters (requires auth)
+  app.get("/api/policy-changes", requireAuth, asyncHandler(async (req, res) => {
+    const { benefitProgramId, status, limit } = req.query;
+    
+    const changes = await storage.getPolicyChanges({
+      benefitProgramId: benefitProgramId as string,
+      status: status as string,
+      limit: limit ? parseInt(limit as string) : undefined
+    });
+    
+    res.json(changes);
+  }));
+
+  // Get single policy change details (requires auth)
+  app.get("/api/policy-changes/:id", requireAuth, asyncHandler(async (req, res) => {
+    const change = await storage.getPolicyChange(req.params.id);
+    
+    if (!change) {
+      throw validationError("Policy change not found");
+    }
+    
+    res.json(change);
+  }));
+
+  // Get impacts for a policy change (staff/admin only - contains sensitive data)
+  app.get("/api/policy-changes/:id/impacts", requireStaff, asyncHandler(async (req, res) => {
+    const impacts = await storage.getPolicyChangeImpacts(req.params.id);
+    res.json(impacts);
+  }));
+
+  // Get user's policy change impacts (requires auth)
+  app.get("/api/my-policy-impacts", requireAuth, asyncHandler(async (req, res) => {
+    const unresolved = req.query.unresolved === 'true';
+    const impacts = await storage.getUserPolicyChangeImpacts(req.user!.id, unresolved);
+    res.json(impacts);
+  }));
+
+  // Create policy change (admin only)
+  app.post("/api/policy-changes", requireAdmin, asyncHandler(async (req, res) => {
+    const change = await storage.createPolicyChange({
+      ...req.body,
+      createdBy: req.user!.id
+    });
+    
+    // Invalidate cache
+    cacheService.del('policy_changes:all');
+    
+    res.status(201).json(change);
+  }));
+
+  // Update policy change (admin only)
+  app.patch("/api/policy-changes/:id", requireAdmin, asyncHandler(async (req, res) => {
+    const change = await storage.updatePolicyChange(req.params.id, req.body);
+    
+    // Invalidate cache
+    cacheService.del('policy_changes:all');
+    cacheService.del(`policy_change:${req.params.id}`);
+    
+    res.json(change);
+  }));
+
+  // Create policy change impact
+  app.post("/api/policy-change-impacts", requireAdmin, asyncHandler(async (req, res) => {
+    const impact = await storage.createPolicyChangeImpact(req.body);
+    res.status(201).json(impact);
+  }));
+
+  // Acknowledge policy change impact (user action)
+  app.patch("/api/policy-change-impacts/:id/acknowledge", requireAuth, asyncHandler(async (req, res) => {
+    // First, fetch the impact to verify ownership
+    const impact = await storage.getPolicyChangeImpact(req.params.id);
+    
+    if (!impact) {
+      throw validationError("Policy change impact not found");
+    }
+    
+    // Verify the user owns this impact
+    if (impact.affectedUserId !== req.user!.id) {
+      throw validationError("You can only acknowledge your own policy change impacts");
+    }
+    
+    const updatedImpact = await storage.updatePolicyChangeImpact(req.params.id, {
+      acknowledged: true,
+      acknowledgedAt: new Date()
+    });
+    res.json(updatedImpact);
+  }));
+
+  // Resolve policy change impact (admin action)
+  app.patch("/api/policy-change-impacts/:id/resolve", requireAdmin, asyncHandler(async (req, res) => {
+    const { resolutionNotes } = req.body;
+    
+    const impact = await storage.updatePolicyChangeImpact(req.params.id, {
+      resolved: true,
+      resolvedAt: new Date(),
+      resolutionNotes
+    });
+    
+    res.json(impact);
+  }));
+
   const httpServer = createServer(app);
   return httpServer;
 }

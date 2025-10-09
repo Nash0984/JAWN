@@ -66,6 +66,12 @@ import {
   clientConsents,
   type ClientConsent,
   type InsertClientConsent,
+  policyChanges,
+  type PolicyChange,
+  type InsertPolicyChange,
+  policyChangeImpacts,
+  type PolicyChangeImpact,
+  type InsertPolicyChangeImpact,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and, ilike, sql, or, isNull, lte, gte } from "drizzle-orm";
@@ -190,6 +196,18 @@ export interface IStorage {
   // Consent Management - Client Consents
   createClientConsent(consent: InsertClientConsent): Promise<ClientConsent>;
   getClientConsents(clientCaseId?: string): Promise<ClientConsent[]>;
+
+  // Policy Change Monitoring
+  createPolicyChange(change: InsertPolicyChange): Promise<PolicyChange>;
+  getPolicyChanges(filters?: { benefitProgramId?: string; status?: string; limit?: number }): Promise<PolicyChange[]>;
+  getPolicyChange(id: string): Promise<PolicyChange | undefined>;
+  updatePolicyChange(id: string, updates: Partial<PolicyChange>): Promise<PolicyChange>;
+  
+  createPolicyChangeImpact(impact: InsertPolicyChangeImpact): Promise<PolicyChangeImpact>;
+  getPolicyChangeImpact(id: string): Promise<PolicyChangeImpact | undefined>;
+  getPolicyChangeImpacts(policyChangeId: string): Promise<PolicyChangeImpact[]>;
+  getUserPolicyChangeImpacts(userId: string, unresolved?: boolean): Promise<PolicyChangeImpact[]>;
+  updatePolicyChangeImpact(id: string, updates: Partial<PolicyChangeImpact>): Promise<PolicyChangeImpact>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -833,6 +851,90 @@ export class DatabaseStorage implements IStorage {
     }
     
     return await query.orderBy(desc(clientConsents.consentDate));
+  }
+
+  // Policy Change Monitoring
+  async createPolicyChange(change: InsertPolicyChange): Promise<PolicyChange> {
+    const [newChange] = await db.insert(policyChanges).values(change).returning();
+    return newChange;
+  }
+
+  async getPolicyChanges(filters?: { benefitProgramId?: string; status?: string; limit?: number }): Promise<PolicyChange[]> {
+    let query = db.select().from(policyChanges);
+    
+    const conditions = [];
+    if (filters?.benefitProgramId) {
+      conditions.push(eq(policyChanges.benefitProgramId, filters.benefitProgramId));
+    }
+    if (filters?.status) {
+      conditions.push(eq(policyChanges.status, filters.status));
+    }
+    
+    if (conditions.length > 0) {
+      query = query.where(and(...conditions));
+    }
+    
+    query = query.orderBy(desc(policyChanges.effectiveDate));
+    
+    if (filters?.limit) {
+      query = query.limit(filters.limit);
+    }
+    
+    return await query;
+  }
+
+  async getPolicyChange(id: string): Promise<PolicyChange | undefined> {
+    const [change] = await db.select().from(policyChanges).where(eq(policyChanges.id, id));
+    return change;
+  }
+
+  async updatePolicyChange(id: string, updates: Partial<PolicyChange>): Promise<PolicyChange> {
+    const [updated] = await db
+      .update(policyChanges)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(policyChanges.id, id))
+      .returning();
+    return updated;
+  }
+
+  async createPolicyChangeImpact(impact: InsertPolicyChangeImpact): Promise<PolicyChangeImpact> {
+    const [newImpact] = await db.insert(policyChangeImpacts).values(impact).returning();
+    return newImpact;
+  }
+
+  async getPolicyChangeImpact(id: string): Promise<PolicyChangeImpact | undefined> {
+    const [impact] = await db.select().from(policyChangeImpacts).where(eq(policyChangeImpacts.id, id));
+    return impact;
+  }
+
+  async getPolicyChangeImpacts(policyChangeId: string): Promise<PolicyChangeImpact[]> {
+    return await db
+      .select()
+      .from(policyChangeImpacts)
+      .where(eq(policyChangeImpacts.policyChangeId, policyChangeId))
+      .orderBy(desc(policyChangeImpacts.impactSeverity));
+  }
+
+  async getUserPolicyChangeImpacts(userId: string, unresolved?: boolean): Promise<PolicyChangeImpact[]> {
+    let query = db
+      .select()
+      .from(policyChangeImpacts)
+      .where(eq(policyChangeImpacts.affectedUserId, userId));
+    
+    if (unresolved) {
+      query = query.where(eq(policyChangeImpacts.resolved, false));
+    }
+    
+    return await query.orderBy(desc(policyChangeImpacts.createdAt));
+  }
+
+  async updatePolicyChangeImpact(id: string, updates: Partial<PolicyChangeImpact>): Promise<PolicyChangeImpact> {
+    const [updated] = await db
+      .update(policyChangeImpacts)
+      .set(updates)
+      .where(eq(policyChangeImpacts.id, id))
+      .returning();
+    return updated;
   }
 }
 
