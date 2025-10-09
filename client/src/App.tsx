@@ -28,6 +28,7 @@ import AuditLogs from "@/pages/AuditLogs";
 import ApiDocs from "@/pages/ApiDocs";
 import FeedbackManagement from "@/pages/FeedbackManagement";
 import NotificationCenter from "@/pages/NotificationCenter";
+import NotificationSettings from "@/pages/NotificationSettings";
 import DocumentChecklist from "@/pages/public/DocumentChecklist";
 import NoticeExplainer from "@/pages/public/NoticeExplainer";
 import SimplifiedSearch from "@/pages/public/SimplifiedSearch";
@@ -93,6 +94,13 @@ function Router() {
             {() => (
               <ProtectedRoute>
                 <NotificationCenter />
+              </ProtectedRoute>
+            )}
+          </Route>
+          <Route path="/settings/notifications">
+            {() => (
+              <ProtectedRoute>
+                <NotificationSettings />
               </ProtectedRoute>
             )}
           </Route>
