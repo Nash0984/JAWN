@@ -28,6 +28,7 @@ import {
   insertFeedbackSubmissionSchema,
   insertComplianceRuleSchema,
   insertComplianceViolationSchema,
+  insertIntakeSessionSchema,
   searchQueries,
   auditLogs,
   ruleChangeLogs,
@@ -3127,6 +3128,146 @@ If the question cannot be answered with the available information, say so clearl
     });
     
     res.json(violation);
+  }));
+
+  // ===== ADAPTIVE INTAKE COPILOT ROUTES =====
+  
+  // Create new intake session
+  app.post("/api/intake-sessions", requireAuth, asyncHandler(async (req, res) => {
+    const validatedData = insertIntakeSessionSchema.parse(req.body);
+    
+    const session = await storage.createIntakeSession({
+      ...validatedData,
+      userId: req.user!.id,
+    });
+    
+    res.status(201).json(session);
+  }));
+  
+  // Get user's intake sessions
+  app.get("/api/intake-sessions", requireAuth, asyncHandler(async (req, res) => {
+    const { status } = req.query;
+    
+    const sessions = await storage.getIntakeSessions({
+      userId: req.user!.id,
+      status: status as string,
+      limit: 50,
+    });
+    
+    res.json(sessions);
+  }));
+  
+  // Get single intake session
+  app.get("/api/intake-sessions/:id", requireAuth, asyncHandler(async (req, res) => {
+    const session = await storage.getIntakeSession(req.params.id);
+    
+    if (!session) {
+      throw validationError("Session not found");
+    }
+    
+    // Verify ownership
+    if (session.userId !== req.user!.id && req.user!.role !== 'admin') {
+      throw validationError("Unauthorized access to session");
+    }
+    
+    res.json(session);
+  }));
+  
+  // Send message in intake session
+  app.post("/api/intake-sessions/:id/messages", requireAuth, asyncHandler(async (req, res) => {
+    const session = await storage.getIntakeSession(req.params.id);
+    
+    if (!session) {
+      throw validationError("Session not found");
+    }
+    
+    // Verify ownership
+    if (session.userId !== req.user!.id && req.user!.role !== 'admin') {
+      throw validationError("Unauthorized access to session");
+    }
+    
+    const { message } = req.body;
+    
+    if (!message || typeof message !== 'string') {
+      throw validationError("Message content is required");
+    }
+    
+    const { intakeCopilotService } = await import("./services/intakeCopilot.service");
+    const response = await intakeCopilotService.processMessage(req.params.id, message);
+    
+    res.json(response);
+  }));
+  
+  // Get session messages
+  app.get("/api/intake-sessions/:id/messages", requireAuth, asyncHandler(async (req, res) => {
+    const session = await storage.getIntakeSession(req.params.id);
+    
+    if (!session) {
+      throw validationError("Session not found");
+    }
+    
+    // Verify ownership
+    if (session.userId !== req.user!.id && req.user!.role !== 'admin') {
+      throw validationError("Unauthorized access to session");
+    }
+    
+    const messages = await storage.getIntakeMessages(req.params.id);
+    
+    res.json(messages);
+  }));
+  
+  // Generate application form from session
+  app.post("/api/intake-sessions/:id/generate-form", requireAuth, asyncHandler(async (req, res) => {
+    const session = await storage.getIntakeSession(req.params.id);
+    
+    if (!session) {
+      throw validationError("Session not found");
+    }
+    
+    // Verify ownership
+    if (session.userId !== req.user!.id && req.user!.role !== 'admin') {
+      throw validationError("Unauthorized access to session");
+    }
+    
+    const { intakeCopilotService } = await import("./services/intakeCopilot.service");
+    const form = await intakeCopilotService.generateApplicationForm(req.params.id);
+    
+    res.json(form);
+  }));
+  
+  // Get application form by session
+  app.get("/api/intake-sessions/:id/form", requireAuth, asyncHandler(async (req, res) => {
+    const session = await storage.getIntakeSession(req.params.id);
+    
+    if (!session) {
+      throw validationError("Session not found");
+    }
+    
+    // Verify ownership
+    if (session.userId !== req.user!.id && req.user!.role !== 'admin') {
+      throw validationError("Unauthorized access to session");
+    }
+    
+    const form = await storage.getApplicationFormBySession(req.params.id);
+    
+    if (!form) {
+      throw validationError("Form not found");
+    }
+    
+    res.json(form);
+  }));
+  
+  // Get all application forms for user
+  app.get("/api/application-forms", requireAuth, asyncHandler(async (req, res) => {
+    const { exportStatus } = req.query;
+    
+    const forms = await storage.getApplicationForms({
+      userId: req.user!.id,
+      exportStatus: exportStatus as string,
+      limit: 50,
+    });
+    
+    res.json(forms);
   }));
 
   const httpServer = createServer(app);
