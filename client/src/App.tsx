@@ -32,6 +32,7 @@ import NotificationSettings from "@/pages/NotificationSettings";
 import DocumentChecklist from "@/pages/public/DocumentChecklist";
 import NoticeExplainer from "@/pages/public/NoticeExplainer";
 import SimplifiedSearch from "@/pages/public/SimplifiedSearch";
+import { CommandPalette } from "@/components/CommandPalette";
 
 function Router() {
   const [location] = useLocation();
@@ -39,6 +40,9 @@ function Router() {
 
   return (
     <div className="min-h-screen bg-background">
+      {/* Command Palette - Global Cmd+K navigation */}
+      <CommandPalette />
+      
       {/* Skip link for accessibility (only on non-auth pages) */}
       {!isAuthPage && <a href="#main-content" className="skip-link">Skip to main content</a>}
       
