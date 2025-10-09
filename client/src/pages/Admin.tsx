@@ -6,6 +6,7 @@ import { AllotmentsManager } from "@/components/AllotmentsManager";
 import { CategoricalEligibilityManager } from "@/components/CategoricalEligibilityManager";
 import { PolicyEngineVerificationPanel } from "@/components/PolicyEngineVerificationPanel";
 import { VITAChatWidget } from "@/components/VITAChatWidget";
+import { BenchmarkInsightsPanel } from "@/components/BenchmarkInsightsPanel";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 
@@ -57,6 +58,8 @@ export default function Admin() {
               <VITAChatWidget compact={true} />
             </CardContent>
           </Card>
+
+          <BenchmarkInsightsPanel />
         </TabsContent>
 
         <TabsContent value="verification" className="space-y-6">
