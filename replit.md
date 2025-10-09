@@ -40,6 +40,23 @@ A comprehensive feedback collection and management system enables users to repor
 ## Admin Enhancement Tools (Complete)
 Three administrative tools support system operations and DHS integration readiness: (1) **Audit Log Viewer** (`/admin/audit-logs`) displays comprehensive system activity from `audit_logs` and `rule_change_logs` tables with filtering by user, action, date range, and entity type, featuring accessible disclosure controls and CSV export; (2) **API Documentation** (`/admin/api-docs`) provides interactive endpoint catalog with request/response schemas, authentication requirements, multi-language code examples (cURL, JavaScript, Python), and DHS integration guidance; (3) **Feedback Management** (`/admin/feedback`) enables review and resolution of user-submitted issues with categorization, priority assignment, and status tracking.
 
+## Public Applicant Portal (Complete)
+A public-facing portal provides SNAP applicants with essential tools accessible without login, designed to complement (not duplicate) existing DHS services at marylandbenefits.gov. Three core tools with dual interaction modes:
+
+1. **Document Checklist Generator** (`/public/documents`): 
+   - Smart mode: Upload photo of DHS notice letter, Gemini Vision AI extracts document requirements, converts bureaucratic language to plain language ("verification of resources" → "bank statements, vehicle title"), generates explained checklist with examples
+   - Simple mode: Browse dropdown of common document types, select items manually, view plain language explanations and acceptable examples
+
+2. **Notice Letter Explainer** (`/public/notices`):
+   - Smart mode: Upload notice image or paste text, Gemini AI extracts key information (approval/denial, benefit amounts, deadlines, required actions), provides plain language translation with highlighted action items
+   - Simple mode: Select from dropdown of common notice types (approval, denial, recertification, etc.), view template explanations with appeal rights, deadlines, and next steps
+
+3. **Simplified Policy Search** (`/public/search`):
+   - Smart mode: Natural language question input, RAG-powered search with applicant-friendly responses and policy citations
+   - Simple mode: Browse by category (income, resources, eligibility, deductions), FAQ-style answers from curated public_faq database
+
+Portal design principles: (1) Dual modes ensure accessibility for users who prefer traditional interfaces or cannot use AI features, (2) No authentication required, (3) WCAG 2.1 AA compliant with skip links and semantic HTML, (4) Mobile-first responsive design, (5) Integration with main navigation via "Applicant Tools" menu item. Backend infrastructure includes three database tables (`document_requirement_templates`, `notice_templates`, `public_faq`) with seed data, and public API endpoints for Gemini Vision analysis, text explanation, document templates, and FAQ retrieval.
+
 # External Dependencies
 
 -   **AI Services**: Google Gemini API (`@google/genai`) for language models, document analysis, embeddings, and RAG. Models used: `gemini-2.5-flash`, `text-embedding-004`.
