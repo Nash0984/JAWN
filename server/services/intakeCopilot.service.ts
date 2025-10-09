@@ -1,6 +1,8 @@
 import { GoogleGenAI } from "@google/genai";
 import { storage } from "../storage";
 import type { IntakeSession, IntakeMessage, ApplicationForm } from "@shared/schema";
+import { policyEngineService } from "./policyEngine.service";
+import type { PolicyEngineResponse } from "./policyEngine.service";
 
 interface ExtractedData {
   fields: Record<string, any>;
@@ -9,12 +11,20 @@ interface ExtractedData {
   completeness: number;
 }
 
+interface BenefitSuggestions {
+  eligible: boolean;
+  programs: string[];
+  summary: string;
+  policyEngineResults?: PolicyEngineResponse;
+}
+
 interface DialogueResponse {
   message: string;
   extractedData?: ExtractedData;
   suggestedQuestions?: string[];
   nextStep?: string;
   shouldGenerateForm?: boolean;
+  benefitSuggestions?: BenefitSuggestions;
 }
 
 export class IntakeCopilotService {
@@ -69,6 +79,12 @@ export class IntakeCopilotService {
 
     const suggestedQuestions = await this.generateFollowUpQuestions(updatedData, missingFields);
     
+    // Check for multi-benefit eligibility using PolicyEngine
+    let benefitSuggestions: BenefitSuggestions | undefined;
+    if (completeness >= 0.5) { // At least 50% complete to run PolicyEngine
+      benefitSuggestions = await this.checkMultiBenefitEligibility(updatedData);
+    }
+    
     return {
       message: assistantMessage,
       extractedData: {
@@ -80,7 +96,78 @@ export class IntakeCopilotService {
       suggestedQuestions,
       nextStep: this.determineNextStep(updatedData, session.sessionType),
       shouldGenerateForm: completeness >= 0.9,
+      benefitSuggestions,
     };
+  }
+
+  /**
+   * Check multi-benefit eligibility using PolicyEngine
+   */
+  private async checkMultiBenefitEligibility(extractedData: any): Promise<BenefitSuggestions | undefined> {
+    try {
+      // Extract household data for PolicyEngine
+      const householdSize = extractedData.householdSize || extractedData.householdMembers?.length || 1;
+      const adults = extractedData.adults || 1;
+      const children = extractedData.children || (householdSize - adults) || 0;
+      
+      // Calculate annual employment income
+      const monthlyIncome = extractedData.monthlyIncome || extractedData.employmentIncome || 0;
+      const employmentIncome = typeof monthlyIncome === 'number' ? monthlyIncome * 12 : 0;
+      
+      // Calculate unearned income
+      const unearnedIncome = (extractedData.unearnedIncome || 0) * 12;
+      
+      // Get state (default to MD)
+      const stateCode = extractedData.state || "MD";
+      
+      // Only proceed if we have basic income and household info
+      if (!adults || employmentIncome === null || employmentIncome === undefined) {
+        return undefined;
+      }
+      
+      // Call PolicyEngine
+      const result = await policyEngineService.calculateBenefits({
+        adults,
+        children,
+        employmentIncome,
+        unearnedIncome,
+        stateCode,
+        householdAssets: extractedData.assets || 0,
+        rentOrMortgage: extractedData.rent || extractedData.mortgage || 0,
+        utilityCosts: extractedData.utilities || 0,
+        medicalExpenses: extractedData.medicalExpenses || 0,
+        childcareExpenses: extractedData.childcareExpenses || 0,
+        elderlyOrDisabled: extractedData.elderlyOrDisabled || false
+      });
+      
+      if (!result.success) {
+        return undefined;
+      }
+      
+      // Identify eligible programs (excluding SNAP since they're already applying)
+      const eligiblePrograms: string[] = [];
+      if (result.benefits.medicaid) eligiblePrograms.push("Medicaid");
+      if (result.benefits.eitc > 0) eligiblePrograms.push(`EITC ($${result.benefits.eitc.toFixed(0)}/year)`);
+      if (result.benefits.childTaxCredit > 0) eligiblePrograms.push(`Child Tax Credit ($${result.benefits.childTaxCredit.toFixed(0)}/year)`);
+      if (result.benefits.ssi > 0) eligiblePrograms.push(`SSI ($${result.benefits.ssi.toFixed(0)}/month)`);
+      if (result.benefits.tanf > 0) eligiblePrograms.push(`TANF ($${result.benefits.tanf.toFixed(0)}/month)`);
+      
+      if (eligiblePrograms.length === 0) {
+        return undefined;
+      }
+      
+      const summary = policyEngineService.formatBenefitsResponse(result);
+      
+      return {
+        eligible: true,
+        programs: eligiblePrograms,
+        summary,
+        policyEngineResults: result
+      };
+    } catch (error) {
+      console.error("PolicyEngine check failed:", error);
+      return undefined;
+    }
   }
 
   private buildSystemPrompt(sessionType: string): string {
