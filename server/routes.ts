@@ -1556,6 +1556,60 @@ export async function registerRoutes(app: Express): Promise<Server> {
     });
   }));
 
+  // Search VITA knowledge base with semantic similarity
+  app.post("/api/vita/search", requireAuth, asyncHandler(async (req, res) => {
+    const { VitaSearchService } = await import("./services/vitaSearch.service");
+    const vitaSearch = new VitaSearchService(storage);
+
+    const searchSchema = z.object({
+      query: z.string().min(1, "Query is required"),
+      topK: z.number().optional().default(5),
+      minScore: z.number().optional().default(0.7),
+      topics: z.array(z.string()).optional(),
+      ruleTypes: z.array(z.string()).optional(),
+      includeAnswer: z.boolean().optional().default(true)
+    });
+
+    const validated = searchSchema.parse(req.body);
+
+    // Perform semantic search
+    const searchResults = await vitaSearch.searchVitaKnowledge(validated.query, {
+      topK: validated.topK,
+      minScore: validated.minScore,
+      topics: validated.topics,
+      ruleTypes: validated.ruleTypes
+    });
+
+    // Generate AI answer with citations if requested
+    let answer = null;
+    if (validated.includeAnswer && searchResults.length > 0) {
+      const answerResult = await vitaSearch.answerWithCitations(validated.query, searchResults);
+      answer = answerResult.answer;
+    }
+
+    res.json({
+      success: true,
+      query: validated.query,
+      answer,
+      results: searchResults,
+      count: searchResults.length
+    });
+  }));
+
+  // Get available VITA topics from knowledge base
+  app.get("/api/vita/topics", requireAuth, asyncHandler(async (req, res) => {
+    const { VitaSearchService } = await import("./services/vitaSearch.service");
+    const vitaSearch = new VitaSearchService(storage);
+
+    const topics = await vitaSearch.getAvailableTopics();
+
+    res.json({
+      success: true,
+      topics,
+      count: topics.length
+    });
+  }));
+
   // ============================================================================
   // LIVING POLICY MANUAL - Text generation from Rules as Code
   // ============================================================================

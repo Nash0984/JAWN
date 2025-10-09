@@ -3,7 +3,7 @@ import { writeFile, mkdir, readFile } from 'fs/promises';
 import { existsSync } from 'fs';
 import path from 'path';
 import pdfParse from 'pdf-parse';
-import { generateTextWithGemini, getGeminiClient } from './gemini.service';
+import { generateTextWithGemini, generateEmbedding } from './gemini.service';
 import type { IStorage } from '../storage';
 import type { InsertDocument, InsertDocumentChunk } from '@shared/schema';
 
@@ -157,21 +157,7 @@ Return ONLY valid JSON with these three fields: rules, topics, summary.
    * Generate embeddings for a text chunk using Gemini
    */
   async generateEmbeddingVector(text: string): Promise<number[]> {
-    try {
-      const genai = getGeminiClient();
-      const model = genai.getGenerativeModel({ model: "text-embedding-004" });
-      
-      // Properly format the embedding request
-      const result = await model.embedContent({
-        content: { parts: [{ text }] }
-      });
-      
-      return result.embedding.values || [];
-    } catch (error) {
-      console.error('Error generating embedding:', error);
-      // Return zero vector on failure
-      return new Array(768).fill(0);
-    }
+    return generateEmbedding(text);
   }
 
   /**
