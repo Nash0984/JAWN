@@ -78,6 +78,15 @@ import {
   complianceViolations,
   type ComplianceViolation,
   type InsertComplianceViolation,
+  intakeSessions,
+  type IntakeSession,
+  type InsertIntakeSession,
+  intakeMessages,
+  type IntakeMessage,
+  type InsertIntakeMessage,
+  applicationForms,
+  type ApplicationForm,
+  type InsertApplicationForm,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and, ilike, sql, or, isNull, lte, gte } from "drizzle-orm";
@@ -228,6 +237,23 @@ export interface IStorage {
   getComplianceViolation(id: string): Promise<ComplianceViolation | undefined>;
   updateComplianceViolation(id: string, updates: Partial<ComplianceViolation>): Promise<ComplianceViolation>;
   deleteComplianceViolation(id: string): Promise<void>;
+
+  // Adaptive Intake Copilot - Sessions
+  createIntakeSession(session: InsertIntakeSession): Promise<IntakeSession>;
+  getIntakeSession(id: string): Promise<IntakeSession | undefined>;
+  getIntakeSessions(filters?: { userId?: string; status?: string; limit?: number }): Promise<IntakeSession[]>;
+  updateIntakeSession(id: string, updates: Partial<IntakeSession>): Promise<IntakeSession>;
+  
+  // Adaptive Intake Copilot - Messages
+  createIntakeMessage(message: InsertIntakeMessage): Promise<IntakeMessage>;
+  getIntakeMessages(sessionId: string): Promise<IntakeMessage[]>;
+  
+  // Adaptive Intake Copilot - Application Forms
+  createApplicationForm(form: InsertApplicationForm): Promise<ApplicationForm>;
+  getApplicationForm(id: string): Promise<ApplicationForm | undefined>;
+  getApplicationFormBySession(sessionId: string): Promise<ApplicationForm | undefined>;
+  updateApplicationForm(id: string, updates: Partial<ApplicationForm>): Promise<ApplicationForm>;
+  getApplicationForms(filters?: { userId?: string; exportStatus?: string; limit?: number }): Promise<ApplicationForm[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1073,6 +1099,124 @@ export class DatabaseStorage implements IStorage {
 
   async deleteComplianceViolation(id: string): Promise<void> {
     await db.delete(complianceViolations).where(eq(complianceViolations.id, id));
+  }
+
+  // Adaptive Intake Copilot - Sessions
+  async createIntakeSession(session: InsertIntakeSession): Promise<IntakeSession> {
+    const [newSession] = await db.insert(intakeSessions).values(session).returning();
+    return newSession;
+  }
+
+  async getIntakeSession(id: string): Promise<IntakeSession | undefined> {
+    const [session] = await db.select().from(intakeSessions).where(eq(intakeSessions.id, id));
+    return session;
+  }
+
+  async getIntakeSessions(filters?: { userId?: string; status?: string; limit?: number }): Promise<IntakeSession[]> {
+    let query = db.select().from(intakeSessions);
+    
+    const conditions = [];
+    if (filters?.userId) {
+      conditions.push(eq(intakeSessions.userId, filters.userId));
+    }
+    if (filters?.status) {
+      conditions.push(eq(intakeSessions.status, filters.status));
+    }
+    
+    if (conditions.length > 0) {
+      query = query.where(and(...conditions));
+    }
+    
+    query = query.orderBy(desc(intakeSessions.updatedAt));
+    
+    if (filters?.limit) {
+      query = query.limit(filters.limit);
+    }
+    
+    return await query;
+  }
+
+  async updateIntakeSession(id: string, updates: Partial<IntakeSession>): Promise<IntakeSession> {
+    const [updated] = await db
+      .update(intakeSessions)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(intakeSessions.id, id))
+      .returning();
+    return updated;
+  }
+
+  // Adaptive Intake Copilot - Messages
+  async createIntakeMessage(message: InsertIntakeMessage): Promise<IntakeMessage> {
+    const [newMessage] = await db.insert(intakeMessages).values(message).returning();
+    
+    // Update session message count and last message time
+    await db
+      .update(intakeSessions)
+      .set({
+        messageCount: sql`${intakeSessions.messageCount} + 1`,
+        lastMessageAt: new Date(),
+        updatedAt: new Date(),
+      })
+      .where(eq(intakeSessions.id, message.sessionId));
+    
+    return newMessage;
+  }
+
+  async getIntakeMessages(sessionId: string): Promise<IntakeMessage[]> {
+    return await db
+      .select()
+      .from(intakeMessages)
+      .where(eq(intakeMessages.sessionId, sessionId))
+      .orderBy(intakeMessages.createdAt);
+  }
+
+  // Adaptive Intake Copilot - Application Forms
+  async createApplicationForm(form: InsertApplicationForm): Promise<ApplicationForm> {
+    const [newForm] = await db.insert(applicationForms).values(form).returning();
+    return newForm;
+  }
+
+  async getApplicationForm(id: string): Promise<ApplicationForm | undefined> {
+    const [form] = await db.select().from(applicationForms).where(eq(applicationForms.id, id));
+    return form;
+  }
+
+  async getApplicationFormBySession(sessionId: string): Promise<ApplicationForm | undefined> {
+    const [form] = await db.select().from(applicationForms).where(eq(applicationForms.sessionId, sessionId));
+    return form;
+  }
+
+  async updateApplicationForm(id: string, updates: Partial<ApplicationForm>): Promise<ApplicationForm> {
+    const [updated] = await db
+      .update(applicationForms)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(applicationForms.id, id))
+      .returning();
+    return updated;
+  }
+
+  async getApplicationForms(filters?: { userId?: string; exportStatus?: string; limit?: number }): Promise<ApplicationForm[]> {
+    let query = db.select().from(applicationForms);
+    
+    const conditions = [];
+    if (filters?.userId) {
+      conditions.push(eq(applicationForms.userId, filters.userId));
+    }
+    if (filters?.exportStatus) {
+      conditions.push(eq(applicationForms.exportStatus, filters.exportStatus));
+    }
+    
+    if (conditions.length > 0) {
+      query = query.where(and(...conditions));
+    }
+    
+    query = query.orderBy(desc(applicationForms.updatedAt));
+    
+    if (filters?.limit) {
+      query = query.limit(filters.limit);
+    }
+    
+    return await query;
   }
 }
 
