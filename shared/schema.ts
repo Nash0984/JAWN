@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, timestamp, jsonb, integer, boolean, uuid, real } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, timestamp, jsonb, integer, boolean, uuid, real, index } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
@@ -62,7 +62,11 @@ export const documents = pgTable("documents", {
   auditTrail: jsonb("audit_trail"), // detailed provenance information
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
-});
+}, (table) => ({
+  benefitProgramIdx: index("documents_benefit_program_idx").on(table.benefitProgramId),
+  statusIdx: index("documents_status_idx").on(table.status),
+  sectionNumberIdx: index("documents_section_number_idx").on(table.sectionNumber),
+}));
 
 export const documentChunks = pgTable("document_chunks", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -76,7 +80,9 @@ export const documentChunks = pgTable("document_chunks", {
   startOffset: integer("start_offset"),
   endOffset: integer("end_offset"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
-});
+}, (table) => ({
+  documentIdIdx: index("chunks_document_id_idx").on(table.documentId),
+}));
 
 export const policySources = pgTable("policy_sources", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -138,7 +144,10 @@ export const searchQueries = pgTable("search_queries", {
   responseTime: integer("response_time"), // in milliseconds
   searchType: text("search_type").default("semantic").notNull(), // semantic, keyword, hybrid
   createdAt: timestamp("created_at").defaultNow().notNull(),
-});
+}, (table) => ({
+  userIdIdx: index("search_queries_user_id_idx").on(table.userId),
+  benefitProgramIdx: index("search_queries_benefit_program_idx").on(table.benefitProgramId),
+}));
 
 export const modelVersions = pgTable("model_versions", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -447,7 +456,11 @@ export const feedbackSubmissions = pgTable("feedback_submissions", {
   metadata: jsonb("metadata"), // Additional context (browser, device, etc.)
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
-});
+}, (table) => ({
+  statusIdx: index("feedback_status_idx").on(table.status),
+  userIdIdx: index("feedback_user_id_idx").on(table.userId),
+  assignedToIdx: index("feedback_assigned_to_idx").on(table.assignedTo),
+}));
 
 // Notifications - Real-time alerts for users
 export const notifications = pgTable("notifications", {
@@ -464,7 +477,10 @@ export const notifications = pgTable("notifications", {
   actionUrl: text("action_url"), // URL to navigate to when clicked
   metadata: jsonb("metadata"), // Additional context
   createdAt: timestamp("created_at").defaultNow().notNull(),
-});
+}, (table) => ({
+  userIdReadIdx: index("notifications_user_read_idx").on(table.userId, table.isRead),
+  createdAtIdx: index("notifications_created_at_idx").on(table.createdAt),
+}));
 
 // Notification Preferences - User notification settings
 export const notificationPreferences = pgTable("notification_preferences", {

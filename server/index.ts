@@ -1,6 +1,9 @@
 import express, { type Request, Response, NextFunction } from "express";
 import session from "express-session";
 import ConnectPgSimple from "connect-pg-simple";
+import rateLimit from "express-rate-limit";
+import { doubleCsrf } from "csrf-csrf";
+import helmet from "helmet";
 import passport from "./auth";
 import { registerRoutes } from "./routes";
 import { initializeSystemData } from "./seedData";
@@ -11,9 +14,80 @@ import { db } from "./db";
 
 const app = express();
 
+// Trust proxy - Required for rate limiting and sessions behind reverse proxies/load balancers
+app.set('trust proxy', 1);
+
+// Security headers with Helmet - Environment-aware CSP
+const isDevelopment = process.env.NODE_ENV === 'development';
+
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      // Only allow unsafe-inline and unsafe-eval in development for Vite HMR
+      scriptSrc: isDevelopment 
+        ? ["'self'", "'unsafe-inline'", "'unsafe-eval'"]
+        : ["'self'"],
+      styleSrc: isDevelopment
+        ? ["'self'", "'unsafe-inline'"]
+        : ["'self'"],
+      imgSrc: ["'self'", "data:", "https:", "blob:"],
+      connectSrc: isDevelopment
+        ? ["'self'", "https:", "ws:", "wss:"] // WebSocket for Vite HMR
+        : ["'self'", "https:"],
+      fontSrc: ["'self'", "data:"],
+      objectSrc: ["'none'"],
+      mediaSrc: ["'self'"],
+      frameSrc: ["'none'"],
+    },
+  },
+  crossOriginEmbedderPolicy: false,
+  hsts: {
+    maxAge: 31536000, // 1 year
+    includeSubDomains: true,
+    preload: true,
+  },
+}));
+
 // Parse JSON and URL-encoded bodies
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
+
+// Rate limiting configuration
+// General API rate limiter - 100 requests per 15 minutes
+const generalLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100,
+  message: "Too many requests from this IP, please try again later.",
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+// Strict rate limiter for authentication endpoints - 5 attempts per 15 minutes
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 5,
+  message: "Too many authentication attempts, please try again later.",
+  standardHeaders: true,
+  legacyHeaders: false,
+  skipSuccessfulRequests: true, // Don't count successful logins against the limit
+});
+
+// AI endpoint rate limiter - 20 requests per minute
+const aiLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minute
+  max: 20,
+  message: "AI service rate limit exceeded. Please wait before making more requests.",
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+// Apply rate limiters
+app.use("/api/", generalLimiter); // General limit for all API routes
+app.use("/api/auth/login", authLimiter); // Strict limit for login
+app.use("/api/auth/signup", authLimiter); // Strict limit for signup
+app.use("/api/chat/ask", aiLimiter); // AI chat endpoint
+app.use("/api/search", aiLimiter); // AI search endpoint
 
 // Add timing headers and performance monitoring
 app.use(timingHeadersMiddleware());
