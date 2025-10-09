@@ -12,6 +12,7 @@ import { manualIngestionService } from "./services/manualIngestion";
 import { auditService } from "./services/auditService";
 import { documentVerificationService } from "./services/documentVerificationService";
 import { textGenerationService } from "./services/textGenerationService";
+import { GoogleGenAI } from "@google/genai";
 import { asyncHandler, validationError, notFoundError, externalServiceError } from "./middleware/errorHandler";
 import { requireAuth, requireStaff, requireAdmin } from "./middleware/auth";
 import { db } from "./db";
@@ -27,7 +28,10 @@ import {
   auditLogs,
   ruleChangeLogs,
   feedbackSubmissions,
-  users
+  users,
+  documentRequirementTemplates,
+  noticeTemplates,
+  publicFaq
 } from "@shared/schema";
 import { z } from "zod";
 import multer from "multer";
@@ -41,6 +45,45 @@ const upload = multer({
     fileSize: 50 * 1024 * 1024, // 50MB limit
   },
 });
+
+// Simple Gemini helper for public portal
+function getGeminiClient() {
+  const apiKey = process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY;
+  if (!apiKey) {
+    throw new Error("Gemini API key not configured");
+  }
+  return new GoogleGenAI({ apiKey });
+}
+
+async function analyzeImageWithGemini(base64Image: string, prompt: string): Promise<string> {
+  const gemini = getGeminiClient();
+  const response = await gemini.models.generateContent({
+    model: "gemini-2.0-flash",
+    contents: [
+      {
+        parts: [
+          { text: prompt },
+          {
+            inlineData: {
+              mimeType: "image/jpeg",
+              data: base64Image
+            }
+          }
+        ]
+      }
+    ]
+  });
+  return response.text || "";
+}
+
+async function generateTextWithGemini(prompt: string): Promise<string> {
+  const gemini = getGeminiClient();
+  const response = await gemini.models.generateContent({
+    model: "gemini-2.0-flash",
+    contents: prompt
+  });
+  return response.text || "";
+}
 
 export async function registerRoutes(app: Express): Promise<Server> {
   
@@ -2313,6 +2356,216 @@ ${sessions.map(s => `    <session>
     });
     
     res.json(updatedFeedback);
+  }));
+
+  // Public Portal API Routes (no auth required)
+  
+  // Get document requirement templates
+  app.get("/api/public/document-templates", asyncHandler(async (req, res) => {
+    const templates = await db
+      .select()
+      .from(documentRequirementTemplates)
+      .where(eq(documentRequirementTemplates.isActive, true))
+      .orderBy(documentRequirementTemplates.sortOrder);
+    
+    res.json(templates);
+  }));
+
+  // Get notice templates
+  app.get("/api/public/notice-templates", asyncHandler(async (req, res) => {
+    const templates = await db
+      .select()
+      .from(noticeTemplates)
+      .where(eq(noticeTemplates.isActive, true))
+      .orderBy(noticeTemplates.sortOrder);
+    
+    res.json(templates);
+  }));
+
+  // Get public FAQ
+  app.get("/api/public/faq", asyncHandler(async (req, res) => {
+    const { category } = req.query;
+    
+    let query = db
+      .select()
+      .from(publicFaq)
+      .where(eq(publicFaq.isActive, true))
+      .orderBy(publicFaq.sortOrder);
+    
+    if (category && category !== "all") {
+      query = query.where(eq(publicFaq.category, category as string));
+    }
+    
+    const faqs = await query;
+    res.json(faqs);
+  }));
+
+  // Analyze notice image with Gemini Vision
+  app.post("/api/public/analyze-notice", asyncHandler(async (req, res) => {
+    const { imageData } = req.body;
+    
+    if (!imageData) {
+      throw validationError("Image data is required");
+    }
+
+    // Extract base64 data
+    const base64Data = imageData.split(',')[1] || imageData;
+    
+    const prompt = `You are analyzing a DHS (Department of Human Services) document request notice for SNAP benefits.
+
+Extract all document requirements mentioned in this notice. For each document requirement, identify:
+1. The document type requested
+2. The category (identity, income, residence, resources, expenses, immigration, ssn)
+3. Any specific details mentioned
+
+Return a JSON array of document requirements in this format:
+{
+  "documents": [
+    {
+      "documentType": "Proof of Income",
+      "category": "income",
+      "details": "Last 4 pay stubs",
+      "confidence": 0.95
+    }
+  ]
+}
+
+If no document requirements are found, return an empty documents array.`;
+
+    const result = await analyzeImageWithGemini(base64Data, prompt);
+    
+    // Parse the result and match to templates
+    let extractedData;
+    try {
+      extractedData = JSON.parse(result);
+    } catch (e) {
+      extractedData = { documents: [] };
+    }
+
+    // Get all templates for matching
+    const templates = await db
+      .select()
+      .from(documentRequirementTemplates)
+      .where(eq(documentRequirementTemplates.isActive, true));
+
+    // Match extracted documents to templates
+    const matchedDocuments = extractedData.documents.map((doc: any) => {
+      const matchedTemplate = templates.find(
+        (t) => t.dhsCategory === doc.category || 
+               t.documentType.toLowerCase().includes(doc.documentType.toLowerCase())
+      );
+      
+      return {
+        documentType: doc.documentType,
+        category: doc.category,
+        details: doc.details,
+        confidence: doc.confidence || 0.8,
+        matchedTemplate
+      };
+    });
+
+    res.json({ documents: matchedDocuments });
+  }));
+
+  // Explain notice text with Gemini
+  app.post("/api/public/explain-notice", asyncHandler(async (req, res) => {
+    const { noticeText } = req.body;
+    
+    if (!noticeText) {
+      throw validationError("Notice text is required");
+    }
+
+    const prompt = `You are a benefits counselor helping Maryland residents understand their SNAP (Food Supplement Program) notices.
+
+Analyze this DHS notice and provide a plain language explanation:
+
+${noticeText}
+
+Return a JSON object with:
+{
+  "noticeType": "Approval" | "Denial" | "Renewal" | "Change in Benefits" | "Request for Information" | "Overpayment",
+  "keyInformation": {
+    "approved": true/false (if applicable),
+    "benefitAmount": number (if mentioned),
+    "reason": "brief reason",
+    "deadlines": [{"action": "what to do", "date": "when"}]
+  },
+  "plainLanguageExplanation": "Clear explanation in simple language of what this notice means",
+  "actionItems": ["List of things the person needs to do"],
+  "appealInformation": "How to appeal if applicable, or null"
+}`;
+
+    const result = await generateTextWithGemini(prompt);
+    
+    let explanation;
+    try {
+      explanation = JSON.parse(result);
+    } catch (e) {
+      explanation = {
+        noticeType: "Unknown",
+        plainLanguageExplanation: "Could not analyze this notice. Please contact your local DHS office for help.",
+        actionItems: []
+      };
+    }
+
+    res.json(explanation);
+  }));
+
+  // Search FAQ with AI
+  app.post("/api/public/search-faq", asyncHandler(async (req, res) => {
+    const { query } = req.body;
+    
+    if (!query) {
+      throw validationError("Search query is required");
+    }
+
+    // Get all FAQs
+    const faqs = await db
+      .select()
+      .from(publicFaq)
+      .where(eq(publicFaq.isActive, true));
+
+    // Use Gemini to find relevant FAQs and generate answer
+    const faqContext = faqs.map((faq) => `Q: ${faq.question}\nA: ${faq.answer}`).join('\n\n');
+    
+    const prompt = `You are a Maryland SNAP benefits expert. Answer this question using ONLY the information provided below. Use simple, everyday language.
+
+Question: ${query}
+
+Available Information:
+${faqContext}
+
+Provide:
+1. A direct answer to the question (2-3 sentences)
+2. Identify the 2-3 most relevant FAQs from the list above
+
+Return JSON:
+{
+  "answer": "Direct answer in plain language",
+  "sources": [
+    {
+      "question": "Relevant FAQ question",
+      "answer": "FAQ answer",
+      "relevance": 0.95
+    }
+  ]
+}
+
+If the question cannot be answered with the available information, say so clearly and suggest contacting the local DHS office.`;
+
+    const result = await generateTextWithGemini(prompt);
+    
+    let searchResult;
+    try {
+      searchResult = JSON.parse(result);
+    } catch (e) {
+      searchResult = {
+        answer: "I couldn't find a clear answer to your question. Please contact your local DHS office at 1-800-332-6347 for help.",
+        sources: []
+      };
+    }
+
+    res.json(searchResult);
   }));
 
   const httpServer = createServer(app);
