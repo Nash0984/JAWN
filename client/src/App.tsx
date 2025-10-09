@@ -37,6 +37,7 @@ import { CommandPalette } from "@/components/CommandPalette";
 import { PolicyChanges } from "@/pages/PolicyChanges";
 import { ComplianceAdmin } from "@/pages/ComplianceAdmin";
 import { IntakeCopilot } from "@/pages/IntakeCopilot";
+import ScenarioWorkspace from "@/pages/ScenarioWorkspace";
 
 function Router() {
   const [location] = useLocation();
@@ -131,6 +132,13 @@ function Router() {
             {() => (
               <ProtectedRoute>
                 <IntakeCopilot />
+              </ProtectedRoute>
+            )}
+          </Route>
+          <Route path="/scenarios">
+            {() => (
+              <ProtectedRoute>
+                <ScenarioWorkspace />
               </ProtectedRoute>
             )}
           </Route>
