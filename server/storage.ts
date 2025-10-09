@@ -60,6 +60,9 @@ import {
   eeExportBatches,
   type EEExportBatch,
   type InsertEEExportBatch,
+  clientVerificationDocuments,
+  type ClientVerificationDocument,
+  type InsertClientVerificationDocument,
   consentForms,
   type ConsentForm,
   type InsertConsentForm,
@@ -226,6 +229,13 @@ export interface IStorage {
   createEEExportBatch(batch: InsertEEExportBatch): Promise<EEExportBatch>;
   getEEExportBatches(): Promise<EEExportBatch[]>;
   getEEExportBatch(id: string): Promise<EEExportBatch | undefined>;
+
+  // Navigator Workspace - Client Verification Documents
+  createClientVerificationDocument(doc: InsertClientVerificationDocument): Promise<ClientVerificationDocument>;
+  getClientVerificationDocument(id: string): Promise<ClientVerificationDocument | undefined>;
+  getClientVerificationDocuments(filters?: { sessionId?: string; clientCaseId?: string; verificationStatus?: string }): Promise<ClientVerificationDocument[]>;
+  updateClientVerificationDocument(id: string, updates: Partial<ClientVerificationDocument>): Promise<ClientVerificationDocument>;
+  deleteClientVerificationDocument(id: string): Promise<void>;
 
   // Consent Management - Forms
   createConsentForm(form: InsertConsentForm): Promise<ConsentForm>;
@@ -938,6 +948,54 @@ export class DatabaseStorage implements IStorage {
   async getEEExportBatch(id: string): Promise<EEExportBatch | undefined> {
     const [batch] = await db.select().from(eeExportBatches).where(eq(eeExportBatches.id, id));
     return batch || undefined;
+  }
+
+  // Navigator Workspace - Client Verification Documents
+  async createClientVerificationDocument(doc: InsertClientVerificationDocument): Promise<ClientVerificationDocument> {
+    const [newDoc] = await db.insert(clientVerificationDocuments).values(doc).returning();
+    return newDoc;
+  }
+
+  async getClientVerificationDocument(id: string): Promise<ClientVerificationDocument | undefined> {
+    const [doc] = await db.select().from(clientVerificationDocuments).where(eq(clientVerificationDocuments.id, id));
+    return doc || undefined;
+  }
+
+  async getClientVerificationDocuments(filters?: { sessionId?: string; clientCaseId?: string; verificationStatus?: string }): Promise<ClientVerificationDocument[]> {
+    const conditions = [];
+    
+    if (filters?.sessionId) {
+      conditions.push(eq(clientVerificationDocuments.sessionId, filters.sessionId));
+    }
+    
+    if (filters?.clientCaseId) {
+      conditions.push(eq(clientVerificationDocuments.clientCaseId, filters.clientCaseId));
+    }
+    
+    if (filters?.verificationStatus) {
+      conditions.push(eq(clientVerificationDocuments.verificationStatus, filters.verificationStatus));
+    }
+    
+    let query = db.select().from(clientVerificationDocuments);
+    
+    if (conditions.length > 0) {
+      query = query.where(and(...conditions));
+    }
+    
+    return await query.orderBy(desc(clientVerificationDocuments.createdAt));
+  }
+
+  async updateClientVerificationDocument(id: string, updates: Partial<ClientVerificationDocument>): Promise<ClientVerificationDocument> {
+    const [updated] = await db
+      .update(clientVerificationDocuments)
+      .set(updates)
+      .where(eq(clientVerificationDocuments.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteClientVerificationDocument(id: string): Promise<void> {
+    await db.delete(clientVerificationDocuments).where(eq(clientVerificationDocuments.id, id));
   }
 
   // Consent Management - Forms
