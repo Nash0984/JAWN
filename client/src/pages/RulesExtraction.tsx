@@ -7,6 +7,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Skeleton } from "@/components/ui/skeleton";
 import { 
   Play, 
   CheckCircle, 
@@ -268,8 +269,17 @@ export default function RulesExtraction() {
             </CardHeader>
             <CardContent>
               {loadingSections ? (
-                <div className="text-center py-8 text-muted-foreground">
-                  Loading sections...
+                <div className="space-y-3">
+                  {[...Array(5)].map((_, i) => (
+                    <div key={i} className="flex items-center gap-4">
+                      <Skeleton className="h-5 w-5" />
+                      <Skeleton className="h-5 w-20" />
+                      <Skeleton className="h-5 flex-1" />
+                      <Skeleton className="h-5 w-24" />
+                      <Skeleton className="h-5 w-20" />
+                      <Skeleton className="h-9 w-24" />
+                    </div>
+                  ))}
                 </div>
               ) : sections.length === 0 ? (
                 <div className="text-center py-8 text-muted-foreground">
@@ -351,8 +361,18 @@ export default function RulesExtraction() {
             </CardHeader>
             <CardContent>
               {loadingJobs ? (
-                <div className="text-center py-8 text-muted-foreground">
-                  Loading jobs...
+                <div className="space-y-3">
+                  {[...Array(4)].map((_, i) => (
+                    <div key={i} className="flex items-center gap-4">
+                      <Skeleton className="h-5 w-32" />
+                      <Skeleton className="h-5 flex-1" />
+                      <Skeleton className="h-5 w-32" />
+                      <Skeleton className="h-5 w-24" />
+                      <Skeleton className="h-5 w-24" />
+                      <Skeleton className="h-5 w-40" />
+                      <Skeleton className="h-5 w-40" />
+                    </div>
+                  ))}
                 </div>
               ) : jobs.length === 0 ? (
                 <div className="text-center py-8 text-muted-foreground">
