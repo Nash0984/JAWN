@@ -1775,6 +1775,97 @@ export const anonymousScreeningSessions = pgTable("anonymous_screening_sessions"
   createdAtIdx: index("anonymous_screening_created_idx").on(table.createdAt),
 }));
 
+// ============================================================================
+// Household Scenario Workspace
+// ============================================================================
+
+// Household scenarios for what-if modeling and benefit comparison
+export const householdScenarios = pgTable("household_scenarios", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  
+  // Ownership and metadata
+  userId: varchar("user_id").references(() => users.id).notNull(), // Navigator who created scenario
+  name: text("name").notNull(), // e.g., "Client A - With Job", "Client A - Disabled + Child Care"
+  description: text("description"), // Notes about this scenario
+  
+  // Household configuration (input data only)
+  householdData: jsonb("household_data").notNull(), // Same structure as PolicyEngine input
+  
+  // State information
+  stateCode: text("state_code").notNull().default("MD"),
+  
+  // Tags for organization
+  tags: text("tags").array(), // e.g., ["employment-change", "disability", "high-priority"]
+  
+  // Client association (optional - for tracking which scenarios relate to which client)
+  clientIdentifier: text("client_identifier"), // Could be case number, client ID, etc.
+  
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  userIdIdx: index("household_scenarios_user_idx").on(table.userId),
+  clientIdIdx: index("household_scenarios_client_idx").on(table.clientIdentifier),
+  createdAtIdx: index("household_scenarios_created_idx").on(table.createdAt),
+}));
+
+// Scenario calculations - tracks PolicyEngine results for scenarios over time
+export const scenarioCalculations = pgTable("scenario_calculations", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  
+  // Scenario reference
+  scenarioId: varchar("scenario_id").references(() => householdScenarios.id, { onDelete: "cascade" }).notNull(),
+  
+  // PolicyEngine calculation results
+  benefitResults: jsonb("benefit_results").notNull(), // Full PolicyEngine response
+  
+  // Summary metrics (denormalized for performance)
+  totalMonthlyBenefits: real("total_monthly_benefits").default(0),
+  totalYearlyBenefits: real("total_yearly_benefits").default(0),
+  eligibleProgramCount: integer("eligible_program_count").default(0),
+  snapAmount: real("snap_amount").default(0),
+  medicaidEligible: boolean("medicaid_eligible").default(false),
+  eitcAmount: real("eitc_amount").default(0),
+  childTaxCreditAmount: real("child_tax_credit_amount").default(0),
+  ssiAmount: real("ssi_amount").default(0),
+  tanfAmount: real("tanf_amount").default(0),
+  
+  // Calculation metadata
+  calculatedAt: timestamp("calculated_at").defaultNow().notNull(),
+  calculationVersion: text("calculation_version"), // Track PolicyEngine version used
+  notes: text("notes"), // Optional notes about this calculation run
+  
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+  scenarioIdIdx: index("scenario_calculations_scenario_idx").on(table.scenarioId),
+  calculatedAtIdx: index("scenario_calculations_calculated_idx").on(table.calculatedAt),
+}));
+
+// Scenario comparisons - groups scenarios for side-by-side analysis
+export const scenarioComparisons = pgTable("scenario_comparisons", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  
+  // Ownership
+  userId: varchar("user_id").references(() => users.id).notNull(),
+  
+  // Comparison metadata
+  name: text("name").notNull(), // e.g., "Client A - Employment Options", "Family Benefits Analysis"
+  description: text("description"),
+  
+  // Scenarios to compare (array of scenario IDs)
+  scenarioIds: text("scenario_ids").array().notNull(), // References householdScenarios.id
+  
+  // Export/sharing
+  exportedAt: timestamp("exported_at"), // When this was exported as PDF/report
+  exportFormat: text("export_format"), // pdf, csv, json
+  sharedWith: text("shared_with").array(), // User IDs who have access
+  
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  userIdIdx: index("scenario_comparisons_user_idx").on(table.userId),
+  createdAtIdx: index("scenario_comparisons_created_idx").on(table.createdAt),
+}));
+
 // Relations for intake copilot
 export const intakeSessionsRelations = relations(intakeSessions, ({ one, many }) => ({
   user: one(users, {
@@ -1852,3 +1943,29 @@ export const insertAnonymousScreeningSessionSchema = createInsertSchema(anonymou
 // Types for anonymous screening
 export type InsertAnonymousScreeningSession = z.infer<typeof insertAnonymousScreeningSessionSchema>;
 export type AnonymousScreeningSession = typeof anonymousScreeningSessions.$inferSelect;
+
+// Insert schemas for household scenario workspace
+export const insertHouseholdScenarioSchema = createInsertSchema(householdScenarios).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertScenarioCalculationSchema = createInsertSchema(scenarioCalculations).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertScenarioComparisonSchema = createInsertSchema(scenarioComparisons).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+// Types for household scenario workspace
+export type InsertHouseholdScenario = z.infer<typeof insertHouseholdScenarioSchema>;
+export type HouseholdScenario = typeof householdScenarios.$inferSelect;
+export type InsertScenarioCalculation = z.infer<typeof insertScenarioCalculationSchema>;
+export type ScenarioCalculation = typeof scenarioCalculations.$inferSelect;
+export type InsertScenarioComparison = z.infer<typeof insertScenarioComparisonSchema>;
+export type ScenarioComparison = typeof scenarioComparisons.$inferSelect;
