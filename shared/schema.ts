@@ -1492,3 +1492,132 @@ export type NoticeTemplate = typeof noticeTemplates.$inferSelect;
 
 export type InsertPublicFaq = z.infer<typeof insertPublicFaqSchema>;
 export type PublicFaq = typeof publicFaq.$inferSelect;
+
+// ============================================================================
+// COMPLIANCE ASSURANCE SUITE - Phase 1, Task 4
+// ============================================================================
+
+// Compliance Rules - Regulatory requirements and validation rules
+export const complianceRules = pgTable("compliance_rules", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  ruleCode: text("rule_code").notNull().unique(), // SNAP_FED_273.2, MD_SNAP_110.1, etc.
+  title: text("title").notNull(),
+  description: text("description").notNull(),
+  ruleType: text("rule_type").notNull(), // federal_regulation, state_regulation, policy_content, data_quality, process_compliance
+  category: text("category").notNull(), // eligibility, income, deductions, reporting, verification, etc.
+  benefitProgramId: varchar("benefit_program_id").references(() => benefitPrograms.id),
+  
+  // Regulatory source
+  sourceRegulation: text("source_regulation"), // 7 CFR 273.2, COMAR 10.09.24, etc.
+  sourceSection: text("source_section"), // specific citation
+  sourceUrl: text("source_url"), // link to official regulation
+  
+  // Validation logic
+  validationPrompt: text("validation_prompt").notNull(), // Gemini prompt for validation
+  validationCriteria: jsonb("validation_criteria"), // structured validation criteria
+  severityLevel: text("severity_level").notNull().default("medium"), // low, medium, high, critical
+  
+  // Related entities
+  relatedRuleIds: text("related_rule_ids").array(), // Related rules as code
+  affectedSections: text("affected_sections").array(), // Policy manual sections this rule applies to
+  
+  // Status
+  isActive: boolean("is_active").default(true).notNull(),
+  requiresManualReview: boolean("requires_manual_review").default(false).notNull(),
+  
+  createdBy: varchar("created_by").references(() => users.id),
+  updatedBy: varchar("updated_by").references(() => users.id),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  ruleTypeIdx: index("compliance_rules_type_idx").on(table.ruleType),
+  categoryIdx: index("compliance_rules_category_idx").on(table.category),
+  benefitProgramIdx: index("compliance_rules_benefit_program_idx").on(table.benefitProgramId),
+}));
+
+// Compliance Violations - Track when compliance rules are violated
+export const complianceViolations = pgTable("compliance_violations", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  complianceRuleId: varchar("compliance_rule_id").references(() => complianceRules.id).notNull(),
+  
+  // Violation context
+  violationType: text("violation_type").notNull(), // content_mismatch, missing_data, invalid_calculation, process_deviation
+  severity: text("severity").notNull(), // low, medium, high, critical (inherited from rule or assessed)
+  
+  // What was violated
+  entityType: text("entity_type").notNull(), // rule_extraction, policy_content, user_input, calculation, document
+  entityId: varchar("entity_id"), // ID of the violated entity
+  violationContext: jsonb("violation_context").notNull(), // detailed context of the violation
+  
+  // Violation details
+  detectedValue: text("detected_value"), // what was found
+  expectedValue: text("expected_value"), // what was expected
+  aiAnalysis: text("ai_analysis"), // Gemini's analysis of the violation
+  confidenceScore: real("confidence_score"), // 0-1 confidence in the violation detection
+  
+  // Resolution
+  status: text("status").notNull().default("open"), // open, acknowledged, resolved, dismissed
+  resolution: text("resolution"), // how it was resolved
+  resolvedBy: varchar("resolved_by").references(() => users.id),
+  resolvedAt: timestamp("resolved_at"),
+  
+  // Audit
+  detectedBy: varchar("detected_by").references(() => users.id), // user who triggered the check, or 'system'
+  detectedAt: timestamp("detected_at").defaultNow().notNull(),
+  acknowledgedBy: varchar("acknowledged_by").references(() => users.id),
+  acknowledgedAt: timestamp("acknowledged_at"),
+  
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+  ruleIdIdx: index("compliance_violations_rule_idx").on(table.complianceRuleId),
+  statusIdx: index("compliance_violations_status_idx").on(table.status),
+  severityIdx: index("compliance_violations_severity_idx").on(table.severity),
+  entityIdx: index("compliance_violations_entity_idx").on(table.entityType, table.entityId),
+}));
+
+// Relations for compliance assurance
+export const complianceRulesRelations = relations(complianceRules, ({ one, many }) => ({
+  benefitProgram: one(benefitPrograms, {
+    fields: [complianceRules.benefitProgramId],
+    references: [benefitPrograms.id],
+  }),
+  createdByUser: one(users, {
+    fields: [complianceRules.createdBy],
+    references: [users.id],
+  }),
+  violations: many(complianceViolations),
+}));
+
+export const complianceViolationsRelations = relations(complianceViolations, ({ one }) => ({
+  complianceRule: one(complianceRules, {
+    fields: [complianceViolations.complianceRuleId],
+    references: [complianceRules.id],
+  }),
+  detectedByUser: one(users, {
+    fields: [complianceViolations.detectedBy],
+    references: [users.id],
+  }),
+  resolvedByUser: one(users, {
+    fields: [complianceViolations.resolvedBy],
+    references: [users.id],
+  }),
+}));
+
+// Insert schemas for compliance assurance
+export const insertComplianceRuleSchema = createInsertSchema(complianceRules).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertComplianceViolationSchema = createInsertSchema(complianceViolations).omit({
+  id: true,
+  createdAt: true,
+});
+
+// Types for compliance assurance
+export type InsertComplianceRule = z.infer<typeof insertComplianceRuleSchema>;
+export type ComplianceRule = typeof complianceRules.$inferSelect;
+
+export type InsertComplianceViolation = z.infer<typeof insertComplianceViolationSchema>;
+export type ComplianceViolation = typeof complianceViolations.$inferSelect;

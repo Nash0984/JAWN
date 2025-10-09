@@ -72,6 +72,12 @@ import {
   policyChangeImpacts,
   type PolicyChangeImpact,
   type InsertPolicyChangeImpact,
+  complianceRules,
+  type ComplianceRule,
+  type InsertComplianceRule,
+  complianceViolations,
+  type ComplianceViolation,
+  type InsertComplianceViolation,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and, ilike, sql, or, isNull, lte, gte } from "drizzle-orm";
@@ -208,6 +214,20 @@ export interface IStorage {
   getPolicyChangeImpacts(policyChangeId: string): Promise<PolicyChangeImpact[]>;
   getUserPolicyChangeImpacts(userId: string, unresolved?: boolean): Promise<PolicyChangeImpact[]>;
   updatePolicyChangeImpact(id: string, updates: Partial<PolicyChangeImpact>): Promise<PolicyChangeImpact>;
+
+  // Compliance Assurance Suite
+  createComplianceRule(rule: InsertComplianceRule): Promise<ComplianceRule>;
+  getComplianceRules(filters?: { ruleType?: string; category?: string; benefitProgramId?: string; isActive?: boolean }): Promise<ComplianceRule[]>;
+  getComplianceRule(id: string): Promise<ComplianceRule | undefined>;
+  getComplianceRuleByCode(ruleCode: string): Promise<ComplianceRule | undefined>;
+  updateComplianceRule(id: string, updates: Partial<ComplianceRule>): Promise<ComplianceRule>;
+  deleteComplianceRule(id: string): Promise<void>;
+  
+  createComplianceViolation(violation: InsertComplianceViolation): Promise<ComplianceViolation>;
+  getComplianceViolations(filters?: { complianceRuleId?: string; status?: string; severity?: string; entityType?: string }): Promise<ComplianceViolation[]>;
+  getComplianceViolation(id: string): Promise<ComplianceViolation | undefined>;
+  updateComplianceViolation(id: string, updates: Partial<ComplianceViolation>): Promise<ComplianceViolation>;
+  deleteComplianceViolation(id: string): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -935,6 +955,124 @@ export class DatabaseStorage implements IStorage {
       .where(eq(policyChangeImpacts.id, id))
       .returning();
     return updated;
+  }
+
+  // Compliance Assurance Suite
+  async createComplianceRule(rule: InsertComplianceRule): Promise<ComplianceRule> {
+    const [newRule] = await db.insert(complianceRules).values(rule).returning();
+    return newRule;
+  }
+
+  async getComplianceRules(filters?: { 
+    ruleType?: string; 
+    category?: string; 
+    benefitProgramId?: string; 
+    isActive?: boolean 
+  }): Promise<ComplianceRule[]> {
+    let query = db.select().from(complianceRules);
+    
+    const conditions = [];
+    if (filters?.ruleType) {
+      conditions.push(eq(complianceRules.ruleType, filters.ruleType));
+    }
+    if (filters?.category) {
+      conditions.push(eq(complianceRules.category, filters.category));
+    }
+    if (filters?.benefitProgramId) {
+      conditions.push(eq(complianceRules.benefitProgramId, filters.benefitProgramId));
+    }
+    if (filters?.isActive !== undefined) {
+      conditions.push(eq(complianceRules.isActive, filters.isActive));
+    }
+    
+    if (conditions.length > 0) {
+      query = query.where(and(...conditions));
+    }
+    
+    // Order by severity (critical > high > medium > low) then by creation date
+    return await query.orderBy(
+      sql`CASE ${complianceRules.severityLevel} WHEN 'critical' THEN 1 WHEN 'high' THEN 2 WHEN 'medium' THEN 3 WHEN 'low' THEN 4 ELSE 5 END`,
+      desc(complianceRules.createdAt)
+    );
+  }
+
+  async getComplianceRule(id: string): Promise<ComplianceRule | undefined> {
+    const [rule] = await db.select().from(complianceRules).where(eq(complianceRules.id, id));
+    return rule;
+  }
+
+  async getComplianceRuleByCode(ruleCode: string): Promise<ComplianceRule | undefined> {
+    const [rule] = await db.select().from(complianceRules).where(eq(complianceRules.ruleCode, ruleCode));
+    return rule;
+  }
+
+  async updateComplianceRule(id: string, updates: Partial<ComplianceRule>): Promise<ComplianceRule> {
+    const [updated] = await db
+      .update(complianceRules)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(complianceRules.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteComplianceRule(id: string): Promise<void> {
+    await db.delete(complianceRules).where(eq(complianceRules.id, id));
+  }
+
+  async createComplianceViolation(violation: InsertComplianceViolation): Promise<ComplianceViolation> {
+    const [newViolation] = await db.insert(complianceViolations).values(violation).returning();
+    return newViolation;
+  }
+
+  async getComplianceViolations(filters?: { 
+    complianceRuleId?: string; 
+    status?: string; 
+    severity?: string;
+    entityType?: string;
+  }): Promise<ComplianceViolation[]> {
+    let query = db.select().from(complianceViolations);
+    
+    const conditions = [];
+    if (filters?.complianceRuleId) {
+      conditions.push(eq(complianceViolations.complianceRuleId, filters.complianceRuleId));
+    }
+    if (filters?.status) {
+      conditions.push(eq(complianceViolations.status, filters.status));
+    }
+    if (filters?.severity) {
+      conditions.push(eq(complianceViolations.severity, filters.severity));
+    }
+    if (filters?.entityType) {
+      conditions.push(eq(complianceViolations.entityType, filters.entityType));
+    }
+    
+    if (conditions.length > 0) {
+      query = query.where(and(...conditions));
+    }
+    
+    // Order by severity (critical > high > medium > low) then by detection date
+    return await query.orderBy(
+      sql`CASE ${complianceViolations.severity} WHEN 'critical' THEN 1 WHEN 'high' THEN 2 WHEN 'medium' THEN 3 WHEN 'low' THEN 4 ELSE 5 END`,
+      desc(complianceViolations.detectedAt)
+    );
+  }
+
+  async getComplianceViolation(id: string): Promise<ComplianceViolation | undefined> {
+    const [violation] = await db.select().from(complianceViolations).where(eq(complianceViolations.id, id));
+    return violation;
+  }
+
+  async updateComplianceViolation(id: string, updates: Partial<ComplianceViolation>): Promise<ComplianceViolation> {
+    const [updated] = await db
+      .update(complianceViolations)
+      .set(updates)
+      .where(eq(complianceViolations.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteComplianceViolation(id: string): Promise<void> {
+    await db.delete(complianceViolations).where(eq(complianceViolations.id, id));
   }
 }
 
