@@ -3270,6 +3270,74 @@ If the question cannot be answered with the available information, say so clearl
     res.json(forms);
   }));
 
+  // ============================================================================
+  // PolicyEngine Multi-Benefit Screening Routes
+  // ============================================================================
+
+  // Calculate multi-benefit eligibility using PolicyEngine
+  app.post("/api/policyengine/calculate", asyncHandler(async (req, res) => {
+    const { policyEngineService } = await import("./services/policyEngine.service");
+    
+    const inputSchema = z.object({
+      adults: z.number().min(1).max(20),
+      children: z.number().min(0).max(20),
+      employmentIncome: z.number().min(0),
+      unearnedIncome: z.number().optional(),
+      stateCode: z.string().length(2),
+      year: z.number().optional(),
+      householdAssets: z.number().optional(),
+      rentOrMortgage: z.number().optional(),
+      utilityCosts: z.number().optional(),
+      medicalExpenses: z.number().optional(),
+      childcareExpenses: z.number().optional(),
+      elderlyOrDisabled: z.boolean().optional()
+    });
+    
+    const validated = inputSchema.parse(req.body);
+    
+    const result = await policyEngineService.calculateBenefits(validated);
+    
+    res.json(result);
+  }));
+
+  // Get formatted multi-benefit summary
+  app.post("/api/policyengine/summary", asyncHandler(async (req, res) => {
+    const { policyEngineService } = await import("./services/policyEngine.service");
+    
+    const inputSchema = z.object({
+      adults: z.number().min(1).max(20),
+      children: z.number().min(0).max(20),
+      employmentIncome: z.number().min(0),
+      unearnedIncome: z.number().optional(),
+      stateCode: z.string().length(2),
+      year: z.number().optional()
+    });
+    
+    const validated = inputSchema.parse(req.body);
+    
+    const result = await policyEngineService.calculateBenefits(validated);
+    const summary = policyEngineService.formatBenefitsResponse(result);
+    
+    res.json({
+      ...result,
+      summary
+    });
+  }));
+
+  // Test PolicyEngine connection
+  app.get("/api/policyengine/test", asyncHandler(async (req, res) => {
+    const { policyEngineService } = await import("./services/policyEngine.service");
+    
+    const available = await policyEngineService.testConnection();
+    
+    res.json({
+      available,
+      message: available 
+        ? "PolicyEngine is available and ready to use" 
+        : "PolicyEngine is not available. Please check the installation."
+    });
+  }));
+
   const httpServer = createServer(app);
   return httpServer;
 }
