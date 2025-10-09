@@ -449,6 +449,51 @@ export const feedbackSubmissions = pgTable("feedback_submissions", {
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
+// Notifications - Real-time alerts for users
+export const notifications = pgTable("notifications", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+  type: text("type").notNull(), // policy_change, feedback_new, rule_extraction_complete, navigator_assignment, system_alert
+  title: text("title").notNull(),
+  message: text("message").notNull(),
+  relatedEntityType: text("related_entity_type"), // feedback, rule, document, client_case
+  relatedEntityId: varchar("related_entity_id"), // ID of related entity
+  priority: text("priority").notNull().default("normal"), // low, normal, high, urgent
+  isRead: boolean("is_read").notNull().default(false),
+  readAt: timestamp("read_at"),
+  actionUrl: text("action_url"), // URL to navigate to when clicked
+  metadata: jsonb("metadata"), // Additional context
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+// Notification Preferences - User notification settings
+export const notificationPreferences = pgTable("notification_preferences", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id, { onDelete: "cascade" }).notNull().unique(),
+  emailEnabled: boolean("email_enabled").notNull().default(true),
+  inAppEnabled: boolean("in_app_enabled").notNull().default(true),
+  // Category-specific preferences
+  policyChanges: boolean("policy_changes").notNull().default(true),
+  feedbackAlerts: boolean("feedback_alerts").notNull().default(true),
+  navigatorAlerts: boolean("navigator_alerts").notNull().default(true),
+  systemAlerts: boolean("system_alerts").notNull().default(true),
+  ruleExtractionAlerts: boolean("rule_extraction_alerts").notNull().default(true),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+// Notification Templates - Reusable notification message templates
+export const notificationTemplates = pgTable("notification_templates", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  code: text("code").notNull().unique(), // FEEDBACK_NEW, RULE_EXTRACTION_COMPLETE, etc.
+  type: text("type").notNull(), // Matches notification type
+  title: text("title").notNull(),
+  messageTemplate: text("message_template").notNull(), // Template with {{placeholders}}
+  priority: text("priority").notNull().default("normal"),
+  isActive: boolean("is_active").notNull().default(true),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
 // Client Cases - Track individual client cases for navigators
 export const clientCases = pgTable("client_cases", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -1126,6 +1171,22 @@ export const insertFeedbackSubmissionSchema = createInsertSchema(feedbackSubmiss
   updatedAt: true,
 });
 
+export const insertNotificationSchema = createInsertSchema(notifications).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertNotificationPreferenceSchema = createInsertSchema(notificationPreferences).omit({
+  id: true,
+  updatedAt: true,
+});
+
+export const insertNotificationTemplateSchema = createInsertSchema(notificationTemplates).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
 // Rules as Code Types
 export type InsertPovertyLevel = z.infer<typeof insertPovertyLevelSchema>;
 export type PovertyLevel = typeof povertyLevels.$inferSelect;
@@ -1186,6 +1247,15 @@ export type VerificationRequirementMet = typeof verificationRequirementsMet.$inf
 
 export type InsertFeedbackSubmission = z.infer<typeof insertFeedbackSubmissionSchema>;
 export type FeedbackSubmission = typeof feedbackSubmissions.$inferSelect;
+
+export type InsertNotification = z.infer<typeof insertNotificationSchema>;
+export type Notification = typeof notifications.$inferSelect;
+
+export type InsertNotificationPreference = z.infer<typeof insertNotificationPreferenceSchema>;
+export type NotificationPreference = typeof notificationPreferences.$inferSelect;
+
+export type InsertNotificationTemplate = z.infer<typeof insertNotificationTemplateSchema>;
+export type NotificationTemplate = typeof notificationTemplates.$inferSelect;
 
 // Public Portal Tables
 
