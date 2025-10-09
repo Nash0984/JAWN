@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Link, useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
-import { File, Search, FileText, HelpCircle, Menu, Bell, User, Calculator, BookOpen, FileCheck, Users, Shield, LogOut, LogIn, UserPlus, Settings } from "lucide-react";
+import { File, Search, FileText, HelpCircle, Menu, Bell, User, Calculator, BookOpen, FileCheck, Users, Shield, LogOut, LogIn, UserPlus, Settings, Globe } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import LanguageSelector from "./LanguageSelector";
 import { useLanguage } from "@/hooks/useLanguage";
@@ -39,6 +39,7 @@ export default function Navigation() {
   const allNavigationItems = [
     { name: t("nav.home"), href: "/", icon: FileText, roles: ["public", "client", "navigator", "caseworker", "admin", "super_admin"] },
     { name: t("nav.search"), href: "/search", icon: Search, roles: ["public", "client", "navigator", "caseworker", "admin", "super_admin"] },
+    { name: "Applicant Tools", href: "/public/documents", icon: Globe, roles: ["public", "client", "navigator", "caseworker", "admin", "super_admin"] },
     { name: "Eligibility Check", href: "/eligibility", icon: Calculator, roles: ["client", "navigator", "caseworker", "admin", "super_admin"] },
     { name: "Verify Documents", href: "/verify", icon: FileCheck, roles: ["navigator", "caseworker", "admin", "super_admin"] },
     { name: "Navigator Workspace", href: "/navigator", icon: Users, roles: ["navigator", "caseworker", "admin", "super_admin"] },

@@ -2386,17 +2386,18 @@ ${sessions.map(s => `    <session>
   app.get("/api/public/faq", asyncHandler(async (req, res) => {
     const { category } = req.query;
     
-    let query = db
-      .select()
-      .from(publicFaq)
-      .where(eq(publicFaq.isActive, true))
-      .orderBy(publicFaq.sortOrder);
+    const conditions = [eq(publicFaq.isActive, true)];
     
     if (category && category !== "all") {
-      query = query.where(eq(publicFaq.category, category as string));
+      conditions.push(eq(publicFaq.category, category as string));
     }
     
-    const faqs = await query;
+    const faqs = await db
+      .select()
+      .from(publicFaq)
+      .where(and(...conditions))
+      .orderBy(publicFaq.sortOrder);
+    
     res.json(faqs);
   }));
 

@@ -9,6 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { FileText, Upload, AlertCircle, CheckCircle2, Sparkles, List, Calendar, Scale } from "lucide-react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
+import PublicPortalNav from "@/components/PublicPortalNav";
 
 interface NoticeTemplate {
   id: string;
@@ -87,10 +88,12 @@ export default function NoticeExplainer() {
   const selectedTemplate = templates.find((t) => t.id === selectedNoticeType);
 
   return (
-    <div className="container mx-auto px-4 py-8 max-w-6xl">
-      <a href="#explanation-content" className="skip-link">
-        Skip to explanation
-      </a>
+    <>
+      <PublicPortalNav />
+      <div className="container mx-auto px-4 py-8 max-w-6xl">
+        <a href="#explanation-content" className="skip-link">
+          Skip to explanation
+        </a>
 
       <div className="mb-8">
         <h1 className="text-3xl font-bold mb-2">Notice Letter Explainer</h1>
@@ -359,6 +362,7 @@ export default function NoticeExplainer() {
           </Alert>
         )}
       </div>
-    </div>
+      </div>
+    </>
   );
 }
