@@ -35,6 +35,7 @@ import SimplifiedSearch from "@/pages/public/SimplifiedSearch";
 import { CommandPalette } from "@/components/CommandPalette";
 import { PolicyChanges } from "@/pages/PolicyChanges";
 import { ComplianceAdmin } from "@/pages/ComplianceAdmin";
+import { IntakeCopilot } from "@/pages/IntakeCopilot";
 
 function Router() {
   const [location] = useLocation();
@@ -121,6 +122,13 @@ function Router() {
             {() => (
               <ProtectedRoute>
                 <PolicyManual />
+              </ProtectedRoute>
+            )}
+          </Route>
+          <Route path="/intake">
+            {() => (
+              <ProtectedRoute>
+                <IntakeCopilot />
               </ProtectedRoute>
             )}
           </Route>
