@@ -26,6 +26,8 @@ import {
   insertTrainingJobSchema,
   insertUserSchema,
   insertFeedbackSubmissionSchema,
+  insertComplianceRuleSchema,
+  insertComplianceViolationSchema,
   searchQueries,
   auditLogs,
   ruleChangeLogs,
@@ -2988,6 +2990,143 @@ If the question cannot be answered with the available information, say so clearl
     }
     
     res.json(impact);
+  }));
+
+  // ============================================================================
+  // COMPLIANCE ASSURANCE ROUTES - Phase 1, Task 5
+  // ============================================================================
+
+  // Get all compliance rules with filters (admin only)
+  app.get("/api/compliance-rules", requireAdmin, asyncHandler(async (req, res) => {
+    const { ruleType, category, benefitProgramId, isActive } = req.query;
+    
+    const rules = await storage.getComplianceRules({
+      ruleType: ruleType as string,
+      category: category as string,
+      benefitProgramId: benefitProgramId as string,
+      isActive: isActive === 'true' ? true : isActive === 'false' ? false : undefined
+    });
+    
+    res.json(rules);
+  }));
+
+  // Get single compliance rule (admin only)
+  app.get("/api/compliance-rules/:id", requireAdmin, asyncHandler(async (req, res) => {
+    const rule = await storage.getComplianceRule(req.params.id);
+    
+    if (!rule) {
+      throw validationError("Compliance rule not found");
+    }
+    
+    res.json(rule);
+  }));
+
+  // Create compliance rule (admin only)
+  app.post("/api/compliance-rules", requireAdmin, asyncHandler(async (req, res) => {
+    // Validate request body with Zod
+    const validatedData = insertComplianceRuleSchema.parse(req.body);
+    
+    const rule = await storage.createComplianceRule({
+      ...validatedData,
+      createdBy: req.user!.id
+    });
+    
+    cacheService.del('compliance_rules:all');
+    
+    res.status(201).json(rule);
+  }));
+
+  // Update compliance rule (admin only)
+  app.patch("/api/compliance-rules/:id", requireAdmin, asyncHandler(async (req, res) => {
+    // Validate request body with Zod (partial update allowed)
+    const validatedData = insertComplianceRuleSchema.partial().parse(req.body);
+    
+    const rule = await storage.updateComplianceRule(req.params.id, {
+      ...validatedData,
+      updatedBy: req.user!.id
+    });
+    
+    cacheService.del('compliance_rules:all');
+    cacheService.del(`compliance_rule:${req.params.id}`);
+    
+    res.json(rule);
+  }));
+
+  // Delete compliance rule (admin only)
+  app.delete("/api/compliance-rules/:id", requireAdmin, asyncHandler(async (req, res) => {
+    await storage.deleteComplianceRule(req.params.id);
+    
+    cacheService.del('compliance_rules:all');
+    
+    res.status(204).send();
+  }));
+
+  // Get all compliance violations with filters (admin only)
+  app.get("/api/compliance-violations", requireAdmin, asyncHandler(async (req, res) => {
+    const { complianceRuleId, status, severity, entityType } = req.query;
+    
+    const violations = await storage.getComplianceViolations({
+      complianceRuleId: complianceRuleId as string,
+      status: status as string,
+      severity: severity as string,
+      entityType: entityType as string
+    });
+    
+    res.json(violations);
+  }));
+
+  // Get single compliance violation (admin only)
+  app.get("/api/compliance-violations/:id", requireAdmin, asyncHandler(async (req, res) => {
+    const violation = await storage.getComplianceViolation(req.params.id);
+    
+    if (!violation) {
+      throw validationError("Compliance violation not found");
+    }
+    
+    res.json(violation);
+  }));
+
+  // Acknowledge compliance violation (admin/staff only)
+  app.patch("/api/compliance-violations/:id/acknowledge", requireAdmin, asyncHandler(async (req, res) => {
+    const violation = await storage.updateComplianceViolation(req.params.id, {
+      status: 'acknowledged',
+      acknowledgedBy: req.user!.id,
+      acknowledgedAt: new Date()
+    });
+    
+    res.json(violation);
+  }));
+
+  // Resolve compliance violation (admin only)
+  app.patch("/api/compliance-violations/:id/resolve", requireAdmin, asyncHandler(async (req, res) => {
+    const { resolution } = req.body;
+    
+    if (!resolution) {
+      throw validationError("Resolution notes are required");
+    }
+    
+    const violation = await storage.updateComplianceViolation(req.params.id, {
+      status: 'resolved',
+      resolution,
+      resolvedBy: req.user!.id,
+      resolvedAt: new Date()
+    });
+    
+    res.json(violation);
+  }));
+
+  // Dismiss compliance violation (admin only)
+  app.patch("/api/compliance-violations/:id/dismiss", requireAdmin, asyncHandler(async (req, res) => {
+    const { resolution } = req.body;
+    
+    const violation = await storage.updateComplianceViolation(req.params.id, {
+      status: 'dismissed',
+      resolution: resolution || 'Dismissed as false positive',
+      resolvedBy: req.user!.id,
+      resolvedAt: new Date()
+    });
+    
+    res.json(violation);
   }));
 
   const httpServer = createServer(app);
