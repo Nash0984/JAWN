@@ -1621,3 +1621,184 @@ export type ComplianceRule = typeof complianceRules.$inferSelect;
 
 export type InsertComplianceViolation = z.infer<typeof insertComplianceViolationSchema>;
 export type ComplianceViolation = typeof complianceViolations.$inferSelect;
+
+// ===== ADAPTIVE INTAKE COPILOT SCHEMA =====
+
+// Intake Sessions - Conversational application intake sessions
+export const intakeSessions = pgTable("intake_sessions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  
+  // Session context
+  userId: varchar("user_id").references(() => users.id),
+  sessionType: text("session_type").notNull().default("snap_application"), // snap_application, recertification, change_report
+  benefitProgramId: varchar("benefit_program_id").references(() => benefitPrograms.id),
+  
+  // Session state
+  status: text("status").notNull().default("active"), // active, completed, abandoned, exported
+  currentStep: text("current_step"), // household_info, income, expenses, etc.
+  progress: integer("progress").default(0), // 0-100 percentage
+  
+  // Conversation metadata
+  messageCount: integer("message_count").default(0),
+  lastMessageAt: timestamp("last_message_at"),
+  
+  // Extracted data summary
+  extractedData: jsonb("extracted_data"), // Accumulated structured data
+  dataCompleteness: real("data_completeness").default(0), // 0-1 score for how complete the application is
+  missingFields: text("missing_fields").array(), // Fields still needed
+  
+  // E&E export
+  exportedToEE: boolean("exported_to_ee").default(false),
+  exportedAt: timestamp("exported_at"),
+  eeApplicationId: text("ee_application_id"), // ID from E&E system
+  
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  userIdIdx: index("intake_sessions_user_idx").on(table.userId),
+  statusIdx: index("intake_sessions_status_idx").on(table.status),
+}));
+
+// Intake Messages - Conversation messages between user and AI copilot
+export const intakeMessages = pgTable("intake_messages", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  sessionId: varchar("session_id").references(() => intakeSessions.id, { onDelete: "cascade" }).notNull(),
+  
+  // Message content
+  role: text("role").notNull(), // user, assistant, system
+  content: text("content").notNull(),
+  
+  // AI context
+  promptTokens: integer("prompt_tokens"),
+  completionTokens: integer("completion_tokens"),
+  model: text("model"), // gemini-2.0-flash, etc.
+  
+  // Data extraction
+  extractedFields: jsonb("extracted_fields"), // Fields extracted from this message
+  confidenceScores: jsonb("confidence_scores"), // Confidence for each extracted field
+  
+  // Follow-up questions
+  suggestedQuestions: text("suggested_questions").array(), // Next questions to ask
+  
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+  sessionIdIdx: index("intake_messages_session_idx").on(table.sessionId),
+}));
+
+// Application Forms - Structured SNAP applications ready for E&E export
+export const applicationForms = pgTable("application_forms", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  sessionId: varchar("session_id").references(() => intakeSessions.id).notNull(),
+  userId: varchar("user_id").references(() => users.id),
+  benefitProgramId: varchar("benefit_program_id").references(() => benefitPrograms.id),
+  
+  // Applicant information
+  applicantInfo: jsonb("applicant_info").notNull(), // name, dob, ssn, contact
+  
+  // Household composition
+  householdMembers: jsonb("household_members").notNull(), // array of household members
+  householdSize: integer("household_size").notNull(),
+  
+  // Income information
+  incomeInfo: jsonb("income_info").notNull(), // sources, amounts, frequency
+  totalMonthlyIncome: real("total_monthly_income"),
+  
+  // Expense information
+  expenseInfo: jsonb("expense_info"), // rent, utilities, medical, etc.
+  totalMonthlyExpenses: real("total_monthly_expenses"),
+  
+  // Assets
+  assetInfo: jsonb("asset_info"), // bank accounts, vehicles, property
+  
+  // Special circumstances
+  categoricalEligibility: boolean("categorical_eligibility").default(false),
+  expeditedService: boolean("expedited_service").default(false),
+  specialCircumstances: jsonb("special_circumstances"),
+  
+  // Eligibility calculation
+  eligibilityResult: jsonb("eligibility_result"), // From rules engine
+  estimatedBenefit: real("estimated_benefit"),
+  
+  // E&E export
+  eeExportData: jsonb("ee_export_data"), // Formatted for E&E system
+  exportStatus: text("export_status").default("draft"), // draft, ready, exported, error
+  exportedAt: timestamp("exported_at"),
+  
+  // Verification
+  verificationStatus: text("verification_status").default("pending"), // pending, in_progress, verified, rejected
+  requiredDocuments: text("required_documents").array(),
+  
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  sessionIdIdx: index("application_forms_session_idx").on(table.sessionId),
+  userIdIdx: index("application_forms_user_idx").on(table.userId),
+  exportStatusIdx: index("application_forms_export_status_idx").on(table.exportStatus),
+}));
+
+// Relations for intake copilot
+export const intakeSessionsRelations = relations(intakeSessions, ({ one, many }) => ({
+  user: one(users, {
+    fields: [intakeSessions.userId],
+    references: [users.id],
+  }),
+  benefitProgram: one(benefitPrograms, {
+    fields: [intakeSessions.benefitProgramId],
+    references: [benefitPrograms.id],
+  }),
+  messages: many(intakeMessages),
+  applicationForm: one(applicationForms, {
+    fields: [intakeSessions.id],
+    references: [applicationForms.sessionId],
+  }),
+}));
+
+export const intakeMessagesRelations = relations(intakeMessages, ({ one }) => ({
+  session: one(intakeSessions, {
+    fields: [intakeMessages.sessionId],
+    references: [intakeSessions.id],
+  }),
+}));
+
+export const applicationFormsRelations = relations(applicationForms, ({ one }) => ({
+  session: one(intakeSessions, {
+    fields: [applicationForms.sessionId],
+    references: [intakeSessions.id],
+  }),
+  user: one(users, {
+    fields: [applicationForms.userId],
+    references: [users.id],
+  }),
+  benefitProgram: one(benefitPrograms, {
+    fields: [applicationForms.benefitProgramId],
+    references: [benefitPrograms.id],
+  }),
+}));
+
+// Insert schemas for intake copilot
+export const insertIntakeSessionSchema = createInsertSchema(intakeSessions).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertIntakeMessageSchema = createInsertSchema(intakeMessages).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertApplicationFormSchema = createInsertSchema(applicationForms).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+// Types for intake copilot
+export type InsertIntakeSession = z.infer<typeof insertIntakeSessionSchema>;
+export type IntakeSession = typeof intakeSessions.$inferSelect;
+
+export type InsertIntakeMessage = z.infer<typeof insertIntakeMessageSchema>;
+export type IntakeMessage = typeof intakeMessages.$inferSelect;
+
+export type InsertApplicationForm = z.infer<typeof insertApplicationFormSchema>;
+export type ApplicationForm = typeof applicationForms.$inferSelect;
