@@ -25,6 +25,8 @@ A basic user authentication system supports roles (user, admin, super_admin). Ob
 -   **Feedback Collection System**: Allows users to report issues with AI responses and content, with an admin interface for management.
 -   **Admin Enhancement Tools**: Includes an Audit Log Viewer, API Documentation, and Feedback Management for system operations and DHS integration readiness.
 -   **Notification System**: Provides in-app notifications for policy updates, feedback, system alerts, and workflow events with user-configurable preferences and a dedicated notification center.
+-   **Policy Change Diff Monitor**: Tracks policy document versions with automated change detection, impact analysis, and role-based notifications. Staff can review diffs, assign impact assessments, and mark changes as resolved. Integrated with notification system for real-time alerts.
+-   **Compliance Assurance Suite**: Gemini-powered validation system that checks policy documents and rules against regulatory requirements. Admin UI at `/admin/compliance` allows creating compliance rules (WCAG, LEP, federal regulations), validating documents with AI analysis, and managing violations with severity-based prioritization.
 
 ## Security & Performance
 -   **Security**: CSRF protection (double-submit cookie), multi-tier rate limiting, and security headers (Helmet, environment-aware CSP, HSTS) are implemented.
