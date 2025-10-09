@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
@@ -9,6 +10,7 @@ import { MessageSquare, AlertCircle } from "lucide-react";
 import { useMutation } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
+import { pulseVariants } from "@/lib/animations";
 
 interface FeedbackButtonProps {
   feedbackType: "ai_response" | "eligibility_result" | "policy_content" | "document_verification" | "system_issue";
@@ -42,13 +44,7 @@ export default function FeedbackButton({
 
   const submitFeedbackMutation = useMutation({
     mutationFn: async (feedbackData: any) => {
-      const response = await fetch('/api/feedback', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify(feedbackData)
-      });
-      if (!response.ok) throw new Error('Failed to submit feedback');
+      const response = await apiRequest('POST', '/api/feedback', feedbackData);
       return response.json();
     },
     onSuccess: () => {
@@ -118,15 +114,21 @@ export default function FeedbackButton({
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button
-          variant={variant}
-          size={size}
-          className={className}
-          data-testid="button-report-issue"
+        <motion.div
+          whileHover="hover"
+          whileTap="tap"
+          variants={pulseVariants}
         >
-          <AlertCircle className="h-4 w-4 mr-2" />
-          Report Issue
-        </Button>
+          <Button
+            variant={variant}
+            size={size}
+            className={className}
+            data-testid="button-report-issue"
+          >
+            <AlertCircle className="h-4 w-4 mr-2" />
+            Report Issue
+          </Button>
+        </motion.div>
       </DialogTrigger>
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>

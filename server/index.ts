@@ -127,6 +127,37 @@ app.use(
 app.use(passport.initialize());
 app.use(passport.session());
 
+// CSRF Protection - using csrf-csrf with double-submit cookie pattern
+const csrfProtection = doubleCsrf({
+  getSecret: () => process.env.SESSION_SECRET || "fallback-secret",
+  getSessionIdentifier: (req) => req.session?.id || "",
+  cookieName: "x-csrf-token",
+  cookieOptions: {
+    httpOnly: true,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+    maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
+  },
+  size: 64,
+  ignoredMethods: ["GET", "HEAD", "OPTIONS"],
+});
+
+// Endpoint to get CSRF token
+app.get("/api/csrf-token", (req, res) => {
+  const csrfToken = csrfProtection.generateCsrfToken(req, res);
+  res.json({ token: csrfToken });
+});
+
+// Apply CSRF protection to all state-changing routes
+app.use("/api/", (req, res, next) => {
+  // Skip CSRF for GET, HEAD, OPTIONS
+  if (req.method === "GET" || req.method === "HEAD" || req.method === "OPTIONS") {
+    return next();
+  }
+  // Apply CSRF protection
+  csrfProtection.doubleCsrfProtection(req, res, next);
+});
+
 (async () => {
   // Initialize system data (benefit programs, etc.)
   await initializeSystemData();

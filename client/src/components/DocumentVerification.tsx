@@ -1,4 +1,5 @@
 import { useState, useRef } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -11,12 +12,19 @@ import {
   CheckCircle, 
   AlertCircle,
   Eye,
-  X
+  X,
+  GripVertical
 } from "lucide-react";
 import { useMutation } from "@tanstack/react-query";
-import { apiRequest } from "@/lib/queryClient";
+import { apiRequest, apiUpload } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { PolicyChatWidget } from "@/components/PolicyChatWidget";
+import {
+  ResizablePanelGroup,
+  ResizablePanel,
+  ResizableHandle,
+} from "@/components/ui/resizable";
+import { cardVariants, slideUpVariants, containerVariants, itemVariants } from "@/lib/animations";
 
 interface VerificationResult {
   documentType: string;
@@ -48,15 +56,7 @@ export default function DocumentVerification() {
       const formData = new FormData();
       formData.append('document', file);
       
-      const response = await fetch('/api/verify-document', {
-        method: 'POST',
-        body: formData,
-      });
-      
-      if (!response.ok) {
-        throw new Error('Failed to verify document');
-      }
-      
+      const response = await apiUpload('/api/verify-document', formData);
       return response.json();
     },
     onSuccess: (data: VerificationResult) => {
@@ -227,9 +227,172 @@ export default function DocumentVerification() {
         </>
       )}
 
-      {/* File Preview */}
-      {selectedFile && (
-        <Card data-testid="card-file-preview">
+      {/* File Preview and Results - Resizable Split View */}
+      <AnimatePresence mode="wait">
+        {selectedFile && result ? (
+          <motion.div
+            key="results-panel"
+            initial="hidden"
+            animate="visible"
+            exit="hidden"
+            variants={cardVariants}
+          >
+            <ResizablePanelGroup
+              direction="horizontal"
+              className="min-h-[600px] rounded-lg border"
+            >
+          {/* Left Panel - Document Preview */}
+          <ResizablePanel defaultSize={40} minSize={30}>
+            <div className="h-full p-6 overflow-auto">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-semibold">Document Preview</h3>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={clearSelection}
+                  data-testid="button-clear-selection"
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
+              
+              <div className="flex items-center space-x-3 mb-6 p-3 bg-muted rounded-lg">
+                <FileText className="h-5 w-5 text-muted-foreground" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium truncate" data-testid="text-filename">
+                    {selectedFile.name}
+                  </p>
+                  <p className="text-xs text-muted-foreground" data-testid="text-filesize">
+                    {(selectedFile.size / 1024 / 1024).toFixed(1)} MB
+                  </p>
+                </div>
+              </div>
+
+              {previewUrl && (
+                <div className="border rounded-lg p-4 bg-white dark:bg-gray-950">
+                  <img 
+                    src={previewUrl} 
+                    alt="Document preview" 
+                    className="w-full h-auto object-contain"
+                    data-testid="img-preview"
+                  />
+                </div>
+              )}
+            </div>
+          </ResizablePanel>
+
+          <ResizableHandle withHandle>
+            <GripVertical className="h-4 w-4" />
+          </ResizableHandle>
+
+          {/* Right Panel - Verification Results */}
+          <ResizablePanel defaultSize={60} minSize={40}>
+            <div className="h-full p-6 overflow-auto">
+              <div className="flex items-center space-x-3 mb-6">
+                {result.meetsCriteria ? (
+                  <CheckCircle className="h-6 w-6 text-green-600" />
+                ) : (
+                  <AlertCircle className="h-6 w-6 text-amber-600" />
+                )}
+                <div>
+                  <h3 className={`text-xl font-semibold ${result.meetsCriteria ? "text-green-700" : "text-amber-700"}`}>
+                    {result.meetsCriteria ? "Document Approved" : "Issues Found"}
+                  </h3>
+                  <p className="text-sm text-muted-foreground">
+                    {result.documentType} • {result.confidence}% confidence
+                  </p>
+                </div>
+              </div>
+
+              <div className="space-y-6">
+                {/* Summary */}
+                <div>
+                  <h4 className="font-semibold mb-2">Summary</h4>
+                  <p className="text-sm leading-relaxed" data-testid="text-summary">
+                    {result.summary}
+                  </p>
+                </div>
+
+                <Separator />
+                
+                {/* Requirements Check */}
+                <motion.div
+                  initial="hidden"
+                  animate="visible"
+                  variants={containerVariants}
+                >
+                  <h4 className="font-semibold mb-3">Requirements Check</h4>
+                  <div className="space-y-3">
+                    {result.requirements.map((req, index) => (
+                      <motion.div 
+                        key={index} 
+                        className="flex items-start space-x-3" 
+                        data-testid={`requirement-${index}`}
+                        variants={itemVariants}
+                      >
+                        {req.met ? (
+                          <CheckCircle className="h-5 w-5 text-green-600 mt-0.5 flex-shrink-0" />
+                        ) : (
+                          <AlertCircle className="h-5 w-5 text-red-600 mt-0.5 flex-shrink-0" />
+                        )}
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium">{req.requirement}</p>
+                          <p className="text-xs text-muted-foreground mt-1">{req.explanation}</p>
+                        </div>
+                      </motion.div>
+                    ))}
+                  </div>
+                </motion.div>
+
+                <Separator />
+
+                {/* Official Citations */}
+                <div>
+                  <h4 className="font-semibold mb-3">Official Policy Citations</h4>
+                  <div className="space-y-3">
+                    {result.officialCitations.map((citation, index) => (
+                      <div key={index} className="bg-muted/50 p-4 rounded-lg" data-testid={`citation-${index}`}>
+                        <div className="flex items-center space-x-2 mb-2">
+                          <Badge variant="outline" className="text-xs">
+                            {citation.section}
+                          </Badge>
+                          <Badge variant="outline" className="text-xs">
+                            {citation.regulation}
+                          </Badge>
+                        </div>
+                        <p className="text-xs text-muted-foreground leading-relaxed">
+                          {citation.text}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="pt-4 border-t">
+                  <Button 
+                    variant="outline" 
+                    onClick={clearSelection} 
+                    className="w-full"
+                    data-testid="button-verify-another"
+                  >
+                    Verify Another Document
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </ResizablePanel>
+        </ResizablePanelGroup>
+          </motion.div>
+        ) : selectedFile && !result ? (
+        /* File Preview - No Results Yet */
+        <motion.div
+          key="file-preview"
+          initial="hidden"
+          animate="visible"
+          exit="hidden"
+          variants={slideUpVariants}
+        >
+          <Card data-testid="card-file-preview">
           <CardHeader>
             <div className="flex items-center justify-between">
               <CardTitle className="text-lg">Document Ready</CardTitle>
@@ -287,96 +450,9 @@ export default function DocumentVerification() {
             </Button>
           </CardContent>
         </Card>
-      )}
-
-      {/* Verification Results */}
-      {result && (
-        <Card className="border-2 border-border" data-testid="card-verification-result">
-          <CardHeader>
-            <div className="flex items-center space-x-3">
-              {result.meetsCriteria ? (
-                <CheckCircle className="h-6 w-6 text-green-600" />
-              ) : (
-                <AlertCircle className="h-6 w-6 text-amber-600" />
-              )}
-              <div>
-                <CardTitle className={result.meetsCriteria ? "text-green-700" : "text-amber-700"}>
-                  {result.meetsCriteria ? "Document Approved" : "Issues Found"}
-                </CardTitle>
-                <p className="text-sm text-muted-foreground">
-                  {result.documentType} • {result.confidence}% confidence
-                </p>
-              </div>
-            </div>
-          </CardHeader>
-          <CardContent>
-            {/* Summary */}
-            <div className="mb-6">
-              <h3 className="font-semibold mb-2">Summary</h3>
-              <p className="text-sm leading-relaxed" data-testid="text-summary">
-                {result.summary}
-              </p>
-            </div>
-
-            <Separator className="my-6" />
-
-            {/* Requirements Check */}
-            <div className="mb-6">
-              <h3 className="font-semibold mb-3">Requirements Check</h3>
-              <div className="space-y-3">
-                {result.requirements.map((req, index) => (
-                  <div key={index} className="flex items-start space-x-3" data-testid={`requirement-${index}`}>
-                    {req.met ? (
-                      <CheckCircle className="h-5 w-5 text-green-600 mt-0.5 flex-shrink-0" />
-                    ) : (
-                      <AlertCircle className="h-5 w-5 text-red-600 mt-0.5 flex-shrink-0" />
-                    )}
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium">{req.requirement}</p>
-                      <p className="text-xs text-muted-foreground mt-1">{req.explanation}</p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <Separator className="my-6" />
-
-            {/* Official Citations */}
-            <div>
-              <h3 className="font-semibold mb-3">Official Policy Citations</h3>
-              <div className="space-y-3">
-                {result.officialCitations.map((citation, index) => (
-                  <div key={index} className="bg-muted/50 p-4 rounded-lg" data-testid={`citation-${index}`}>
-                    <div className="flex items-center space-x-2 mb-2">
-                      <Badge variant="outline" className="text-xs">
-                        {citation.section}
-                      </Badge>
-                      <Badge variant="outline" className="text-xs">
-                        {citation.regulation}
-                      </Badge>
-                    </div>
-                    <p className="text-xs text-muted-foreground leading-relaxed">
-                      {citation.text}
-                    </p>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <div className="mt-6 pt-4 border-t">
-              <Button 
-                variant="outline" 
-                onClick={clearSelection} 
-                className="w-full"
-                data-testid="button-verify-another"
-              >
-                Verify Another Document
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-      )}
+        </motion.div>
+        ) : null}
+      </AnimatePresence>
 
       {/* Policy Chat Widget - Always available */}
       <PolicyChatWidget 
