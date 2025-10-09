@@ -13,6 +13,7 @@ import { auditService } from "./services/auditService";
 import { documentVerificationService } from "./services/documentVerificationService";
 import { textGenerationService } from "./services/textGenerationService";
 import { notificationService } from "./services/notification.service";
+import { cacheService, CACHE_KEYS, invalidateRulesCache } from "./services/cacheService";
 import { GoogleGenAI } from "@google/genai";
 import { asyncHandler, validationError, notFoundError, externalServiceError } from "./middleware/errorHandler";
 import { requireAuth, requireStaff, requireAdmin } from "./middleware/auth";
@@ -1107,13 +1108,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
         programId = snapProgram.id;
       }
 
+      // Check cache first
+      const cacheKey = CACHE_KEYS.INCOME_LIMITS(Number(programId));
+      const cached = cacheService.get(cacheKey);
+      if (cached) {
+        return res.json(cached);
+      }
+
       const limits = await storage.getSnapIncomeLimits(programId);
 
-      res.json({
+      const response = {
         success: true,
         data: limits,
         count: limits.length,
-      });
+      };
+
+      // Cache for 5 minutes
+      cacheService.set(cacheKey, response);
+
+      res.json(response);
     } catch (error) {
       console.error("Error fetching income limits:", error);
       res.status(500).json({ error: "Failed to fetch income limits" });
@@ -1141,6 +1154,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         notes: manualSection ? `Manual Section: ${manualSection}` : null,
       });
 
+      // Invalidate cache
+      invalidateRulesCache(Number(benefitProgramId));
+
       res.json({
         success: true,
         data: limit,
@@ -1167,6 +1183,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const limit = await storage.updateSnapIncomeLimit(id, updates);
 
+      // Get the limit to find benefitProgramId for cache invalidation
+      const updatedLimit = await storage.getSnapIncomeLimits(limit.benefitProgramId);
+      if (updatedLimit.length > 0) {
+        invalidateRulesCache(Number(updatedLimit[0].benefitProgramId));
+      }
+
       res.json({
         success: true,
         data: limit,
@@ -1187,14 +1209,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(500).json({ error: "Maryland SNAP program not found" });
       }
 
+      // Check cache first
+      const cacheKey = CACHE_KEYS.DEDUCTIONS(Number(snapProgram.id));
+      const cached = cacheService.get(cacheKey);
+      if (cached) {
+        return res.json(cached);
+      }
+
       const deductions = await storage.getSnapDeductions(snapProgram.id);
       const activeDeductions = deductions.filter(d => d.isActive);
 
-      res.json({
+      const response = {
         success: true,
         data: activeDeductions,
         count: activeDeductions.length,
-      });
+      };
+
+      // Cache for 5 minutes
+      cacheService.set(cacheKey, response);
+
+      res.json(response);
     } catch (error) {
       console.error("Error fetching deductions:", error);
       res.status(500).json({ error: "Failed to fetch deductions" });
@@ -1211,14 +1245,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(500).json({ error: "Maryland SNAP program not found" });
       }
 
+      // Check cache first
+      const cacheKey = CACHE_KEYS.ALLOTMENTS(Number(snapProgram.id));
+      const cached = cacheService.get(cacheKey);
+      if (cached) {
+        return res.json(cached);
+      }
+
       const allotments = await storage.getSnapAllotments(snapProgram.id);
       const activeAllotments = allotments.filter(a => a.isActive);
 
-      res.json({
+      const response = {
         success: true,
         data: activeAllotments,
         count: activeAllotments.length,
-      });
+      };
+
+      // Cache for 5 minutes
+      cacheService.set(cacheKey, response);
+
+      res.json(response);
     } catch (error) {
       console.error("Error fetching allotments:", error);
       res.status(500).json({ error: "Failed to fetch allotments" });
@@ -1300,12 +1346,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Get all manual sections (table of contents)
   app.get("/api/manual/sections", requireAuth, async (req, res) => {
     try {
+      // Check cache first - use a static key for all sections
+      const cacheKey = 'manual_sections:all';
+      const cached = cacheService.get(cacheKey);
+      if (cached) {
+        return res.json(cached);
+      }
+
       const sections = await storage.getManualSections();
-      res.json({
+      const response = {
         success: true,
         data: sections,
         count: sections.length,
-      });
+      };
+
+      // Cache for 5 minutes
+      cacheService.set(cacheKey, response);
+
+      res.json(response);
     } catch (error) {
       console.error("Error fetching manual sections:", error);
       res.status(500).json({ error: "Failed to fetch manual sections" });
@@ -1317,6 +1375,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { id } = req.params;
       
+      // Check cache first
+      const cacheKey = CACHE_KEYS.MANUAL_SECTION(Number(id));
+      const cached = cacheService.get(cacheKey);
+      if (cached) {
+        return res.json(cached);
+      }
+
       // Get section details, cross-references, and chunks in parallel
       const [section, crossReferences, chunks] = await Promise.all([
         storage.getManualSection(id),
@@ -1328,14 +1393,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ error: "Section not found" });
       }
 
-      res.json({
+      const response = {
         success: true,
         data: {
           section,
           crossReferences,
           chunks,
         },
-      });
+      };
+
+      // Cache for 5 minutes
+      cacheService.set(cacheKey, response);
+
+      res.json(response);
     } catch (error) {
       console.error("Error fetching section details:", error);
       res.status(500).json({ error: "Failed to fetch section details" });
@@ -1388,6 +1458,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const status = await manualIngestionService.getIngestionStatus();
 
+      // Invalidate manual sections cache
+      cacheService.del('manual_sections:all');
+      cacheService.invalidatePattern('manual_section');
+
       res.json({
         success: true,
         message: "Manual metadata ingested successfully",
@@ -1410,6 +1484,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Run the complete ingestion
       const result = await ingestCompleteManual();
       
+      // Invalidate manual sections cache
+      cacheService.del('manual_sections:all');
+      cacheService.invalidatePattern('manual_section');
+
       res.json({
         success: true,
         message: "Manual ingestion completed successfully",
@@ -1770,6 +1848,13 @@ ${sessions.map(s => `    <session>
       req.user?.id
     );
     
+    // Invalidate all rules caches - extraction affects all rule types
+    const programs = await storage.getBenefitPrograms();
+    const snapProgram = programs.find(p => p.code === "MD_SNAP");
+    if (snapProgram) {
+      invalidateRulesCache(Number(snapProgram.id));
+    }
+    
     res.json(result);
   }));
 
@@ -1780,6 +1865,13 @@ ${sessions.map(s => `    <session>
     const validatedData = extractBatchSchema.parse(req.body);
     
     const result = await batchExtractRules(validatedData.manualSectionIds, req.user?.id);
+    
+    // Invalidate all rules caches - extraction affects all rule types
+    const programs = await storage.getBenefitPrograms();
+    const snapProgram = programs.find(p => p.code === "MD_SNAP");
+    if (snapProgram) {
+      invalidateRulesCache(Number(snapProgram.id));
+    }
     
     res.json(result);
   }));
