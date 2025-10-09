@@ -13,8 +13,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Calculator, Trash2, Edit, TrendingUp, DollarSign, BarChart3 } from "lucide-react";
+import { Plus, Calculator, Trash2, Edit, TrendingUp, DollarSign, BarChart3, Download } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
+import { jsPDF } from "jspdf";
+import "jspdf-autotable";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -397,6 +399,102 @@ export default function ScenarioWorkspace() {
     }).format(amount);
   };
 
+  // Export scenario as PDF
+  const exportScenarioPDF = (scenario: HouseholdScenario, calculation: ScenarioCalculation | null) => {
+    const doc = new jsPDF();
+    const householdData = scenario.householdData as any;
+    
+    // Title
+    doc.setFontSize(20);
+    doc.text("Benefits Scenario Report", 20, 20);
+    
+    // Scenario Information
+    doc.setFontSize(12);
+    doc.text(`Scenario: ${scenario.name}`, 20, 35);
+    if (scenario.description) {
+      doc.setFontSize(10);
+      doc.text(`Description: ${scenario.description}`, 20, 45);
+    }
+    if (scenario.clientIdentifier) {
+      doc.text(`Client ID: ${scenario.clientIdentifier}`, 20, 55);
+    }
+    doc.text(`Generated: ${new Date().toLocaleDateString()}`, 20, 65);
+    
+    // Household Composition
+    doc.setFontSize(14);
+    doc.text("Household Composition", 20, 80);
+    doc.setFontSize(10);
+    (doc as any).autoTable({
+      startY: 85,
+      head: [['Category', 'Value']],
+      body: [
+        ['Adults', householdData.adults?.toString() || '0'],
+        ['Children', householdData.children?.toString() || '0'],
+        ['Elderly or Disabled', householdData.elderlyOrDisabled ? 'Yes' : 'No'],
+      ],
+      theme: 'grid',
+      headStyles: { fillColor: [66, 139, 202] },
+    });
+    
+    // Income and Expenses
+    const finalY1 = (doc as any).lastAutoTable.finalY + 10;
+    doc.setFontSize(14);
+    doc.text("Income and Expenses", 20, finalY1);
+    doc.setFontSize(10);
+    (doc as any).autoTable({
+      startY: finalY1 + 5,
+      head: [['Category', 'Monthly Amount']],
+      body: [
+        ['Employment Income', formatCurrency(householdData.employmentIncome || 0)],
+        ['Unearned Income', formatCurrency(householdData.unearnedIncome || 0)],
+        ['Rent/Mortgage', formatCurrency(householdData.rentOrMortgage || 0)],
+        ['Utility Costs', formatCurrency(householdData.utilityCosts || 0)],
+        ['Medical Expenses', formatCurrency(householdData.medicalExpenses || 0)],
+        ['Childcare Expenses', formatCurrency(householdData.childcareExpenses || 0)],
+        ['Household Assets', formatCurrency(householdData.householdAssets || 0)],
+      ],
+      theme: 'grid',
+      headStyles: { fillColor: [66, 139, 202] },
+    });
+    
+    // Benefits Calculation (if available)
+    if (calculation) {
+      const finalY2 = (doc as any).lastAutoTable.finalY + 10;
+      doc.setFontSize(14);
+      doc.text("Benefit Calculations", 20, finalY2);
+      doc.setFontSize(10);
+      (doc as any).autoTable({
+        startY: finalY2 + 5,
+        head: [['Benefit Program', 'Monthly Amount', 'Yearly Amount']],
+        body: [
+          ['SNAP', formatCurrency(calculation.snapAmount || 0), formatCurrency((calculation.snapAmount || 0) * 12)],
+          ['Medicaid', formatCurrency(calculation.medicaidAmount || 0), formatCurrency((calculation.medicaidAmount || 0) * 12)],
+          ['EITC', '—', formatCurrency(calculation.eitcAmount || 0)],
+          ['CTC', '—', formatCurrency(calculation.ctcAmount || 0)],
+          ['SSI', formatCurrency(calculation.ssiAmount || 0), formatCurrency((calculation.ssiAmount || 0) * 12)],
+          ['TANF', formatCurrency(calculation.tanfAmount || 0), formatCurrency((calculation.tanfAmount || 0) * 12)],
+        ],
+        theme: 'grid',
+        headStyles: { fillColor: [66, 139, 202] },
+        foot: [['Total Benefits', formatCurrency(calculation.totalMonthlyBenefits || 0), formatCurrency(calculation.totalYearlyBenefits || 0)]],
+        footStyles: { fillColor: [40, 167, 69], fontStyle: 'bold' },
+      });
+      
+      doc.setFontSize(8);
+      const finalY3 = (doc as any).lastAutoTable.finalY + 5;
+      doc.text(`Calculation Date: ${new Date(calculation.calculatedAt).toLocaleString()}`, 20, finalY3);
+    }
+    
+    // Save PDF
+    const filename = `scenario-${scenario.name.replace(/[^a-z0-9]/gi, '_').toLowerCase()}-${new Date().getTime()}.pdf`;
+    doc.save(filename);
+    
+    toast({
+      title: "Export Successful",
+      description: `Scenario exported as ${filename}`,
+    });
+  };
+
   return (
     <div className="container mx-auto py-8 px-4 max-w-7xl">
       <div className="flex justify-between items-center mb-6">
@@ -720,6 +818,15 @@ export default function ScenarioWorkspace() {
                       >
                         <Calculator className="h-4 w-4 mr-2" />
                         {calculateScenarioMutation.isPending ? "Calculating..." : "Calculate"}
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => exportScenarioPDF(selectedScenario, latestCalculation || null)}
+                        data-testid="button-export-scenario"
+                      >
+                        <Download className="h-4 w-4 mr-2" />
+                        Export
                       </Button>
                       <Button
                         variant="destructive"
