@@ -32,6 +32,7 @@ import NotificationSettings from "@/pages/NotificationSettings";
 import DocumentChecklist from "@/pages/public/DocumentChecklist";
 import NoticeExplainer from "@/pages/public/NoticeExplainer";
 import SimplifiedSearch from "@/pages/public/SimplifiedSearch";
+import BenefitScreener from "@/pages/public/BenefitScreener";
 import { CommandPalette } from "@/components/CommandPalette";
 import { PolicyChanges } from "@/pages/PolicyChanges";
 import { ComplianceAdmin } from "@/pages/ComplianceAdmin";
@@ -65,6 +66,7 @@ function Router() {
           <Route path="/public/documents" component={DocumentChecklist} />
           <Route path="/public/notices" component={NoticeExplainer} />
           <Route path="/public/search" component={SimplifiedSearch} />
+          <Route path="/screener" component={BenefitScreener} />
           
           {/* Role-specific dashboards */}
           <Route path="/dashboard/client">
