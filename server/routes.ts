@@ -1845,6 +1845,101 @@ ${sessions.map(s => `    <session>
   }));
 
   // ============================================================================
+  // SMART VERIFICATION - Document verification for Navigator Workspace
+  // ============================================================================
+
+  // Upload and analyze verification document (rent receipt, utility bill, pay stub, etc.)
+  app.post("/api/navigator/sessions/:sessionId/documents", requireStaff, upload.single("document"), asyncHandler(async (req, res) => {
+    const { sessionId } = req.params;
+    const { documentType, clientCaseId } = req.body;
+    
+    if (!req.file) {
+      throw validationError("No document uploaded");
+    }
+    
+    if (!documentType || !clientCaseId) {
+      throw validationError("documentType and clientCaseId are required");
+    }
+    
+    // Convert buffer to base64 for Gemini Vision
+    const base64Image = req.file.buffer.toString('base64');
+    
+    // Lazy load verification service
+    const { verifyDocument } = await import("./services/documentVerification.service");
+    
+    // Analyze document with Gemini Vision
+    const analysisResult = await verifyDocument(base64Image, documentType);
+    
+    // Upload to object storage
+    const uploadUrl = await objectStorageService.getObjectEntityUploadURL();
+    const uploadResponse = await fetch(uploadUrl, {
+      method: 'PUT',
+      body: req.file.buffer,
+      headers: { 'Content-Type': req.file.mimetype }
+    });
+    
+    if (!uploadResponse.ok) {
+      throw new Error(`Upload failed: ${uploadResponse.statusText}`);
+    }
+    
+    const objectMetadata = await uploadResponse.json();
+    
+    // Create verification document record
+    const verificationDoc = await storage.createClientVerificationDocument({
+      sessionId,
+      clientCaseId,
+      documentType,
+      fileName: req.file.originalname,
+      filePath: objectMetadata.url || objectMetadata.id,
+      fileSize: req.file.size,
+      mimeType: req.file.mimetype,
+      uploadedBy: req.user?.id || 'system',
+      visionAnalysisStatus: analysisResult.errors.length > 0 ? 'failed' : 'completed',
+      visionAnalysisError: analysisResult.errors.join('; ') || null,
+      extractedData: analysisResult.extractedData,
+      rawVisionResponse: { response: analysisResult.rawResponse },
+      confidenceScore: analysisResult.confidenceScore,
+      verificationStatus: analysisResult.errors.length > 0 ? 'needs_more_info' : 'pending_review',
+      validationWarnings: analysisResult.warnings,
+      validationErrors: analysisResult.errors
+    });
+    
+    res.json(verificationDoc);
+  }));
+
+  // Get all verification documents for a session
+  app.get("/api/navigator/sessions/:sessionId/documents", requireStaff, asyncHandler(async (req, res) => {
+    const { sessionId } = req.params;
+    const documents = await storage.getClientVerificationDocuments({ sessionId });
+    res.json(documents);
+  }));
+
+  // Update verification document status (approve/reject/edit)
+  app.patch("/api/navigator/documents/:id", requireStaff, asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    const { verificationStatus, reviewNotes, manuallyEditedData } = req.body;
+    
+    const updates: any = {
+      reviewedBy: req.user?.id,
+      reviewedAt: new Date()
+    };
+    
+    if (verificationStatus) updates.verificationStatus = verificationStatus;
+    if (reviewNotes) updates.reviewNotes = reviewNotes;
+    if (manuallyEditedData) updates.manuallyEditedData = manuallyEditedData;
+    
+    const updated = await storage.updateClientVerificationDocument(id, updates);
+    res.json(updated);
+  }));
+
+  // Delete verification document
+  app.delete("/api/navigator/documents/:id", requireStaff, asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    await storage.deleteClientVerificationDocument(id);
+    res.json({ success: true });
+  }));
+
+  // ============================================================================
   // CONSENT MANAGEMENT - Forms and client consents
   // ============================================================================
 
