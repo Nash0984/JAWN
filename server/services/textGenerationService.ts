@@ -16,13 +16,24 @@ import {
 } from "@shared/schema";
 import { eq, and, or, isNull, lte, gte } from "drizzle-orm";
 
-const geminiApiKey = process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY;
+let genAI: GoogleGenAI | null = null;
 
-if (!geminiApiKey) {
-  console.warn("Warning: No Gemini API key found for text generation");
+function getGemini(): GoogleGenAI | null {
+  if (!genAI) {
+    const apiKey = process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY;
+    if (!apiKey) {
+      console.warn("Warning: No Gemini API key found for text generation");
+      return null;
+    }
+    try {
+      genAI = new GoogleGenAI({ apiKey });
+    } catch (error) {
+      console.error('Failed to initialize Gemini API:', error);
+      return null;
+    }
+  }
+  return genAI;
 }
-
-const genAI = new GoogleGenAI({ apiKey: geminiApiKey || "" });
 
 interface GeneratedText {
   content: string;
@@ -82,16 +93,39 @@ Generate clear, accessible policy text that:
 
 Format the response as markdown with headers, tables, and clear paragraphs. DO NOT include code blocks - just return the markdown text directly.`;
 
-    const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash-exp" });
-    const result = await model.generateContent(prompt);
-    const text = result.response.text();
+    try {
+      const ai = getGemini();
+      if (!ai) {
+        console.error("Gemini API not available for text generation");
+        return {
+          content: "⚠️ AI text generation is temporarily unavailable. Please view the original policy manual section or try again later.",
+          ruleCount: limits.length,
+          generatedAt: new Date(),
+          sourceRules: limits.map(l => `income_limit_${l.id}`)
+        };
+      }
 
-    return {
-      content: text,
-      ruleCount: limits.length,
-      generatedAt: new Date(),
-      sourceRules: limits.map(l => `income_limit_${l.id}`)
-    };
+      const result = await ai.models.generateContent({
+        model: "gemini-2.0-flash-exp",
+        contents: prompt
+      });
+      const text = result.text || "";
+
+      return {
+        content: text,
+        ruleCount: limits.length,
+        generatedAt: new Date(),
+        sourceRules: limits.map(l => `income_limit_${l.id}`)
+      };
+    } catch (error) {
+      console.error("Error generating income limits text:", error);
+      return {
+        content: "⚠️ Error generating policy text. Please try again or view the original policy manual section.",
+        ruleCount: limits.length,
+        generatedAt: new Date(),
+        sourceRules: limits.map(l => `income_limit_${l.id}`)
+      };
+    }
   }
 
   /**
@@ -140,16 +174,39 @@ Generate clear, accessible policy text that:
 
 Format as markdown. DO NOT include code blocks - just return the markdown text directly.`;
 
-    const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash-exp" });
-    const result = await model.generateContent(prompt);
-    const text = result.response.text();
+    try {
+      const ai = getGemini();
+      if (!ai) {
+        console.error("Gemini API not available for text generation");
+        return {
+          content: "⚠️ AI text generation is temporarily unavailable. Please view the original policy manual section or try again later.",
+          ruleCount: deductions.length,
+          generatedAt: new Date(),
+          sourceRules: deductions.map(d => `deduction_${d.id}`)
+        };
+      }
 
-    return {
-      content: text,
-      ruleCount: deductions.length,
-      generatedAt: new Date(),
-      sourceRules: deductions.map(d => `deduction_${d.id}`)
-    };
+      const result = await ai.models.generateContent({
+        model: "gemini-2.0-flash-exp",
+        contents: prompt
+      });
+      const text = result.text || "";
+
+      return {
+        content: text,
+        ruleCount: deductions.length,
+        generatedAt: new Date(),
+        sourceRules: deductions.map(d => `deduction_${d.id}`)
+      };
+    } catch (error) {
+      console.error("Error generating deductions text:", error);
+      return {
+        content: "⚠️ Error generating policy text. Please try again or view the original policy manual section.",
+        ruleCount: deductions.length,
+        generatedAt: new Date(),
+        sourceRules: deductions.map(d => `deduction_${d.id}`)
+      };
+    }
   }
 
   /**
@@ -198,16 +255,39 @@ Generate clear, accessible policy text that:
 
 Format as markdown. DO NOT include code blocks - just return the markdown text directly.`;
 
-    const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash-exp" });
-    const result = await model.generateContent(prompt);
-    const text = result.response.text();
+    try {
+      const ai = getGemini();
+      if (!ai) {
+        console.error("Gemini API not available for text generation");
+        return {
+          content: "⚠️ AI text generation is temporarily unavailable. Please view the original policy manual section or try again later.",
+          ruleCount: allotments.length,
+          generatedAt: new Date(),
+          sourceRules: allotments.map(a => `allotment_${a.id}`)
+        };
+      }
 
-    return {
-      content: text,
-      ruleCount: allotments.length,
-      generatedAt: new Date(),
-      sourceRules: allotments.map(a => `allotment_${a.id}`)
-    };
+      const result = await ai.models.generateContent({
+        model: "gemini-2.0-flash-exp",
+        contents: prompt
+      });
+      const text = result.text || "";
+
+      return {
+        content: text,
+        ruleCount: allotments.length,
+        generatedAt: new Date(),
+        sourceRules: allotments.map(a => `allotment_${a.id}`)
+      };
+    } catch (error) {
+      console.error("Error generating allotments text:", error);
+      return {
+        content: "⚠️ Error generating policy text. Please try again or view the original policy manual section.",
+        ruleCount: allotments.length,
+        generatedAt: new Date(),
+        sourceRules: allotments.map(a => `allotment_${a.id}`)
+      };
+    }
   }
 
   /**
@@ -255,16 +335,39 @@ Generate clear, accessible policy text that:
 
 Format as markdown. DO NOT include code blocks - just return the markdown text directly.`;
 
-    const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash-exp" });
-    const result = await model.generateContent(prompt);
-    const text = result.response.text();
+    try {
+      const ai = getGemini();
+      if (!ai) {
+        console.error("Gemini API not available for text generation");
+        return {
+          content: "⚠️ AI text generation is temporarily unavailable. Please view the original policy manual section or try again later.",
+          ruleCount: rules.length,
+          generatedAt: new Date(),
+          sourceRules: rules.map(r => `categorical_${r.id}`)
+        };
+      }
 
-    return {
-      content: text,
-      ruleCount: rules.length,
-      generatedAt: new Date(),
-      sourceRules: rules.map(r => `categorical_${r.id}`)
-    };
+      const result = await ai.models.generateContent({
+        model: "gemini-2.0-flash-exp",
+        contents: prompt
+      });
+      const text = result.text || "";
+
+      return {
+        content: text,
+        ruleCount: rules.length,
+        generatedAt: new Date(),
+        sourceRules: rules.map(r => `categorical_${r.id}`)
+      };
+    } catch (error) {
+      console.error("Error generating categorical eligibility text:", error);
+      return {
+        content: "⚠️ Error generating policy text. Please try again or view the original policy manual section.",
+        ruleCount: rules.length,
+        generatedAt: new Date(),
+        sourceRules: rules.map(r => `categorical_${r.id}`)
+      };
+    }
   }
 
   /**
@@ -312,16 +415,39 @@ Generate clear, accessible policy text that:
 
 Format as markdown. DO NOT include code blocks - just return the markdown text directly.`;
 
-    const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash-exp" });
-    const result = await model.generateContent(prompt);
-    const text = result.response.text();
+    try {
+      const ai = getGemini();
+      if (!ai) {
+        console.error("Gemini API not available for text generation");
+        return {
+          content: "⚠️ AI text generation is temporarily unavailable. Please view the original policy manual section or try again later.",
+          ruleCount: rules.length,
+          generatedAt: new Date(),
+          sourceRules: rules.map(r => `document_req_${r.id}`)
+        };
+      }
 
-    return {
-      content: text,
-      ruleCount: rules.length,
-      generatedAt: new Date(),
-      sourceRules: rules.map(r => `document_req_${r.id}`)
-    };
+      const result = await ai.models.generateContent({
+        model: "gemini-2.0-flash-exp",
+        contents: prompt
+      });
+      const text = result.text || "";
+
+      return {
+        content: text,
+        ruleCount: rules.length,
+        generatedAt: new Date(),
+        sourceRules: rules.map(r => `document_req_${r.id}`)
+      };
+    } catch (error) {
+      console.error("Error generating document requirements text:", error);
+      return {
+        content: "⚠️ Error generating policy text. Please try again or view the original policy manual section.",
+        ruleCount: rules.length,
+        generatedAt: new Date(),
+        sourceRules: rules.map(r => `document_req_${r.id}`)
+      };
+    }
   }
 
   /**

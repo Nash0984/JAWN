@@ -312,6 +312,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     // Log the user in automatically after signup
     req.login(user, (err) => {
       if (err) {
+        console.error("Failed to log in after signup:", err);
         return next(new Error("Failed to log in after signup"));
       }
 
@@ -325,15 +326,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/auth/login", (req, res, next) => {
     passport.authenticate("local", (err: any, user: any, info: any) => {
       if (err) {
+        console.error("Login authentication error:", err);
         return next(err);
       }
       
       if (!user) {
+        console.warn("Login failed for username:", req.body?.username, "- Reason:", info?.message);
         return res.status(401).json({ error: info?.message || "Invalid credentials" });
       }
 
       req.login(user, (err) => {
         if (err) {
+          console.error("Session creation error after login:", err);
           return next(err);
         }
 
@@ -348,6 +352,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/auth/logout", (req, res) => {
     req.logout((err) => {
       if (err) {
+        console.error("Logout error:", err);
         return res.status(500).json({ error: "Failed to logout" });
       }
       res.json({ message: "Logged out successfully" });
