@@ -1186,3 +1186,84 @@ export type VerificationRequirementMet = typeof verificationRequirementsMet.$inf
 
 export type InsertFeedbackSubmission = z.infer<typeof insertFeedbackSubmissionSchema>;
 export type FeedbackSubmission = typeof feedbackSubmissions.$inferSelect;
+
+// Public Portal Tables
+
+// Document Requirement Templates - Plain language explanations for DHS documents
+export const documentRequirementTemplates = pgTable("document_requirement_templates", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  documentType: text("document_type").notNull(), // e.g., "Proof of Income", "Identity Verification"
+  dhsCategory: text("dhs_category").notNull(), // matches DHS notice categories
+  plainLanguageTitle: text("plain_language_title").notNull(),
+  explanation: text("explanation").notNull(), // What this document is
+  examples: text("examples").array().notNull(), // List of example documents
+  whereToGet: text("where_to_get"), // How/where to obtain
+  commonMistakes: text("common_mistakes").array(), // What to avoid
+  keywords: text("keywords").array(), // for matching AI-extracted text
+  sortOrder: integer("sort_order").default(0),
+  isActive: boolean("is_active").default(true).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+// Notice Templates - Common DHS notices explained
+export const noticeTemplates = pgTable("notice_templates", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  noticeType: text("notice_type").notNull(), // e.g., "Approval", "Denial", "Renewal"
+  noticeCode: text("notice_code"), // DHS notice code if available
+  plainLanguageTitle: text("plain_language_title").notNull(),
+  whatItMeans: text("what_it_means").notNull(), // Plain language explanation
+  whatToDoNext: text("what_to_do_next"), // Required actions
+  importantDeadlines: jsonb("important_deadlines"), // Array of {description, daysFrom}
+  appealRights: text("appeal_rights"), // How to appeal if applicable
+  keywords: text("keywords").array(), // for AI matching
+  exampleText: text("example_text"), // Sample notice text
+  sortOrder: integer("sort_order").default(0),
+  isActive: boolean("is_active").default(true).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+// Public FAQ - Pre-written Q&A for simple mode
+export const publicFaq = pgTable("public_faq", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  category: text("category").notNull(), // income, resources, eligibility, deductions, etc.
+  question: text("question").notNull(),
+  answer: text("answer").notNull(),
+  relatedQuestions: text("related_questions").array(), // IDs of related FAQs
+  keywords: text("keywords").array(), // for search
+  sortOrder: integer("sort_order").default(0),
+  viewCount: integer("view_count").default(0),
+  isActive: boolean("is_active").default(true).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+// Insert schemas for public portal
+export const insertDocumentRequirementTemplateSchema = createInsertSchema(documentRequirementTemplates).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertNoticeTemplateSchema = createInsertSchema(noticeTemplates).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertPublicFaqSchema = createInsertSchema(publicFaq).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+// Types for public portal
+export type InsertDocumentRequirementTemplate = z.infer<typeof insertDocumentRequirementTemplateSchema>;
+export type DocumentRequirementTemplate = typeof documentRequirementTemplates.$inferSelect;
+
+export type InsertNoticeTemplate = z.infer<typeof insertNoticeTemplateSchema>;
+export type NoticeTemplate = typeof noticeTemplates.$inferSelect;
+
+export type InsertPublicFaq = z.infer<typeof insertPublicFaqSchema>;
+export type PublicFaq = typeof publicFaq.$inferSelect;
