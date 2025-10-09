@@ -822,6 +822,47 @@ export const verificationRequirementsMet = pgTable("verification_requirements_me
 });
 
 // ============================================================================
+// CLIENT VERIFICATION DOCUMENTS - Navigator workspace document uploads
+// ============================================================================
+
+export const clientVerificationDocuments = pgTable("client_verification_documents", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  sessionId: varchar("session_id").references(() => clientInteractionSessions.id, { onDelete: "cascade" }).notNull(),
+  clientCaseId: varchar("client_case_id").references(() => clientCases.id).notNull(),
+  documentType: text("document_type").notNull(), // rent_receipt, utility_bill, pay_stub, bank_statement, medical_bill, childcare_receipt
+  fileName: text("file_name").notNull(),
+  filePath: text("file_path").notNull(), // Path in object storage
+  fileSize: integer("file_size"), // in bytes
+  mimeType: text("mime_type").notNull(),
+  uploadedBy: varchar("uploaded_by").references(() => users.id).notNull(),
+  
+  // Gemini Vision Analysis Results
+  visionAnalysisStatus: text("vision_analysis_status").notNull().default("pending"), // pending, processing, completed, failed
+  visionAnalysisError: text("vision_analysis_error"),
+  extractedData: jsonb("extracted_data"), // Structured data: {amount, date, address, payee, etc.}
+  rawVisionResponse: jsonb("raw_vision_response"), // Full Gemini Vision API response
+  confidenceScore: real("confidence_score"), // 0-1 confidence in extraction accuracy
+  
+  // Validation and Review
+  verificationStatus: text("verification_status").notNull().default("pending_review"), // pending_review, approved, rejected, needs_more_info
+  validationWarnings: jsonb("validation_warnings"), // Array of warning messages
+  validationErrors: jsonb("validation_errors"), // Array of error messages
+  
+  // Manual Review
+  reviewedBy: varchar("reviewed_by").references(() => users.id),
+  reviewedAt: timestamp("reviewed_at"),
+  reviewNotes: text("review_notes"),
+  manuallyEditedData: jsonb("manually_edited_data"), // If navigator corrects extracted data
+  
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  sessionIdIdx: index("client_verif_docs_session_idx").on(table.sessionId),
+  clientCaseIdIdx: index("client_verif_docs_case_idx").on(table.clientCaseId),
+  verificationStatusIdx: index("client_verif_docs_status_idx").on(table.verificationStatus),
+}));
+
+// ============================================================================
 // CONSENT MANAGEMENT - Admin-Configurable Consent Forms
 // ============================================================================
 
@@ -1191,6 +1232,12 @@ export const insertVerificationRequirementMetSchema = createInsertSchema(verific
   createdAt: true,
 });
 
+export const insertClientVerificationDocumentSchema = createInsertSchema(clientVerificationDocuments).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
 export const insertFeedbackSubmissionSchema = createInsertSchema(feedbackSubmissions).omit({
   id: true,
   createdAt: true,
@@ -1270,6 +1317,9 @@ export type DocumentVerification = typeof documentVerifications.$inferSelect;
 
 export type InsertVerificationRequirementMet = z.infer<typeof insertVerificationRequirementMetSchema>;
 export type VerificationRequirementMet = typeof verificationRequirementsMet.$inferSelect;
+
+export type InsertClientVerificationDocument = z.infer<typeof insertClientVerificationDocumentSchema>;
+export type ClientVerificationDocument = typeof clientVerificationDocuments.$inferSelect;
 
 export type InsertFeedbackSubmission = z.infer<typeof insertFeedbackSubmissionSchema>;
 export type FeedbackSubmission = typeof feedbackSubmissions.$inferSelect;
