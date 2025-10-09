@@ -90,6 +90,15 @@ import {
   anonymousScreeningSessions,
   type AnonymousScreeningSession,
   type InsertAnonymousScreeningSession,
+  householdScenarios,
+  type HouseholdScenario,
+  type InsertHouseholdScenario,
+  scenarioCalculations,
+  type ScenarioCalculation,
+  type InsertScenarioCalculation,
+  scenarioComparisons,
+  type ScenarioComparison,
+  type InsertScenarioComparison,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and, ilike, sql, or, isNull, lte, gte } from "drizzle-orm";
@@ -265,6 +274,26 @@ export interface IStorage {
   updateAnonymousScreeningSession(id: string, updates: Partial<AnonymousScreeningSession>): Promise<AnonymousScreeningSession>;
   claimAnonymousScreeningSession(sessionId: string, userId: string): Promise<AnonymousScreeningSession>;
   deleteOldAnonymousSessions(daysOld: number): Promise<number>;
+
+  // Household Scenarios
+  createHouseholdScenario(scenario: InsertHouseholdScenario): Promise<HouseholdScenario>;
+  getHouseholdScenario(id: string): Promise<HouseholdScenario | undefined>;
+  getHouseholdScenariosByUser(userId: string): Promise<HouseholdScenario[]>;
+  updateHouseholdScenario(id: string, updates: Partial<HouseholdScenario>): Promise<HouseholdScenario>;
+  deleteHouseholdScenario(id: string): Promise<void>;
+
+  // Scenario Calculations
+  createScenarioCalculation(calculation: InsertScenarioCalculation): Promise<ScenarioCalculation>;
+  getScenarioCalculation(id: string): Promise<ScenarioCalculation | undefined>;
+  getScenarioCalculationsByScenario(scenarioId: string): Promise<ScenarioCalculation[]>;
+  getLatestScenarioCalculation(scenarioId: string): Promise<ScenarioCalculation | undefined>;
+
+  // Scenario Comparisons
+  createScenarioComparison(comparison: InsertScenarioComparison): Promise<ScenarioComparison>;
+  getScenarioComparison(id: string): Promise<ScenarioComparison | undefined>;
+  getScenarioComparisonsByUser(userId: string): Promise<ScenarioComparison[]>;
+  updateScenarioComparison(id: string, updates: Partial<ScenarioComparison>): Promise<ScenarioComparison>;
+  deleteScenarioComparison(id: string): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1288,6 +1317,108 @@ export class DatabaseStorage implements IStorage {
       );
     
     return result.rowCount || 0;
+  }
+
+  // Household Scenarios
+  async createHouseholdScenario(scenario: InsertHouseholdScenario): Promise<HouseholdScenario> {
+    const [newScenario] = await db.insert(householdScenarios).values(scenario).returning();
+    return newScenario;
+  }
+
+  async getHouseholdScenario(id: string): Promise<HouseholdScenario | undefined> {
+    const [scenario] = await db
+      .select()
+      .from(householdScenarios)
+      .where(eq(householdScenarios.id, id));
+    return scenario;
+  }
+
+  async getHouseholdScenariosByUser(userId: string): Promise<HouseholdScenario[]> {
+    return await db
+      .select()
+      .from(householdScenarios)
+      .where(eq(householdScenarios.userId, userId))
+      .orderBy(desc(householdScenarios.createdAt));
+  }
+
+  async updateHouseholdScenario(id: string, updates: Partial<HouseholdScenario>): Promise<HouseholdScenario> {
+    const [updated] = await db
+      .update(householdScenarios)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(householdScenarios.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteHouseholdScenario(id: string): Promise<void> {
+    await db.delete(householdScenarios).where(eq(householdScenarios.id, id));
+  }
+
+  // Scenario Calculations
+  async createScenarioCalculation(calculation: InsertScenarioCalculation): Promise<ScenarioCalculation> {
+    const [newCalculation] = await db.insert(scenarioCalculations).values(calculation).returning();
+    return newCalculation;
+  }
+
+  async getScenarioCalculation(id: string): Promise<ScenarioCalculation | undefined> {
+    const [calculation] = await db
+      .select()
+      .from(scenarioCalculations)
+      .where(eq(scenarioCalculations.id, id));
+    return calculation;
+  }
+
+  async getScenarioCalculationsByScenario(scenarioId: string): Promise<ScenarioCalculation[]> {
+    return await db
+      .select()
+      .from(scenarioCalculations)
+      .where(eq(scenarioCalculations.scenarioId, scenarioId))
+      .orderBy(desc(scenarioCalculations.calculatedAt));
+  }
+
+  async getLatestScenarioCalculation(scenarioId: string): Promise<ScenarioCalculation | undefined> {
+    const [calculation] = await db
+      .select()
+      .from(scenarioCalculations)
+      .where(eq(scenarioCalculations.scenarioId, scenarioId))
+      .orderBy(desc(scenarioCalculations.calculatedAt))
+      .limit(1);
+    return calculation;
+  }
+
+  // Scenario Comparisons
+  async createScenarioComparison(comparison: InsertScenarioComparison): Promise<ScenarioComparison> {
+    const [newComparison] = await db.insert(scenarioComparisons).values(comparison).returning();
+    return newComparison;
+  }
+
+  async getScenarioComparison(id: string): Promise<ScenarioComparison | undefined> {
+    const [comparison] = await db
+      .select()
+      .from(scenarioComparisons)
+      .where(eq(scenarioComparisons.id, id));
+    return comparison;
+  }
+
+  async getScenarioComparisonsByUser(userId: string): Promise<ScenarioComparison[]> {
+    return await db
+      .select()
+      .from(scenarioComparisons)
+      .where(eq(scenarioComparisons.userId, userId))
+      .orderBy(desc(scenarioComparisons.createdAt));
+  }
+
+  async updateScenarioComparison(id: string, updates: Partial<ScenarioComparison>): Promise<ScenarioComparison> {
+    const [updated] = await db
+      .update(scenarioComparisons)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(scenarioComparisons.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteScenarioComparison(id: string): Promise<void> {
+    await db.delete(scenarioComparisons).where(eq(scenarioComparisons.id, id));
   }
 }
 

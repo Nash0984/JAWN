@@ -3473,6 +3473,314 @@ If the question cannot be answered with the available information, say so clearl
     res.json(sessions);
   }));
 
+  // ============================================================================
+  // Household Scenario Workspace Routes
+  // ============================================================================
+
+  // Create household scenario
+  app.post("/api/scenarios", requireAuth, asyncHandler(async (req, res) => {
+    const schema = z.object({
+      name: z.string().min(1),
+      description: z.string().optional(),
+      householdData: z.object({
+        adults: z.number(),
+        children: z.number(),
+        employmentIncome: z.number(),
+        unearnedIncome: z.number().optional(),
+        stateCode: z.string(),
+        householdAssets: z.number().optional(),
+        rentOrMortgage: z.number().optional(),
+        utilityCosts: z.number().optional(),
+        medicalExpenses: z.number().optional(),
+        childcareExpenses: z.number().optional(),
+        elderlyOrDisabled: z.boolean().optional()
+      }),
+      stateCode: z.string().default("MD"),
+      tags: z.array(z.string()).optional(),
+      clientIdentifier: z.string().optional()
+    });
+
+    const validated = schema.parse(req.body);
+    
+    const scenario = await storage.createHouseholdScenario({
+      ...validated,
+      userId: req.user!.id
+    });
+
+    res.json(scenario);
+  }));
+
+  // Get all scenarios for user
+  app.get("/api/scenarios", requireAuth, asyncHandler(async (req, res) => {
+    const scenarios = await storage.getHouseholdScenariosByUser(req.user!.id);
+    res.json(scenarios);
+  }));
+
+  // Get single scenario
+  app.get("/api/scenarios/:id", requireAuth, asyncHandler(async (req, res) => {
+    const scenario = await storage.getHouseholdScenario(req.params.id);
+    
+    if (!scenario) {
+      throw notFoundError("Scenario not found");
+    }
+    
+    if (scenario.userId !== req.user!.id) {
+      throw unauthorizedError();
+    }
+    
+    res.json(scenario);
+  }));
+
+  // Update scenario
+  app.patch("/api/scenarios/:id", requireAuth, asyncHandler(async (req, res) => {
+    const scenario = await storage.getHouseholdScenario(req.params.id);
+    
+    if (!scenario) {
+      throw notFoundError("Scenario not found");
+    }
+    
+    if (scenario.userId !== req.user!.id) {
+      throw unauthorizedError();
+    }
+
+    const schema = z.object({
+      name: z.string().min(1).optional(),
+      description: z.string().optional(),
+      householdData: z.object({
+        adults: z.number(),
+        children: z.number(),
+        employmentIncome: z.number(),
+        unearnedIncome: z.number().optional(),
+        stateCode: z.string(),
+        householdAssets: z.number().optional(),
+        rentOrMortgage: z.number().optional(),
+        utilityCosts: z.number().optional(),
+        medicalExpenses: z.number().optional(),
+        childcareExpenses: z.number().optional(),
+        elderlyOrDisabled: z.boolean().optional()
+      }).optional(),
+      tags: z.array(z.string()).optional(),
+      clientIdentifier: z.string().optional()
+    });
+
+    const validated = schema.parse(req.body);
+    const updated = await storage.updateHouseholdScenario(req.params.id, validated);
+    
+    res.json(updated);
+  }));
+
+  // Delete scenario
+  app.delete("/api/scenarios/:id", requireAuth, asyncHandler(async (req, res) => {
+    const scenario = await storage.getHouseholdScenario(req.params.id);
+    
+    if (!scenario) {
+      throw notFoundError("Scenario not found");
+    }
+    
+    if (scenario.userId !== req.user!.id) {
+      throw unauthorizedError();
+    }
+    
+    await storage.deleteHouseholdScenario(req.params.id);
+    res.json({ success: true });
+  }));
+
+  // Calculate scenario using PolicyEngine
+  app.post("/api/scenarios/:id/calculate", requireAuth, asyncHandler(async (req, res) => {
+    const scenario = await storage.getHouseholdScenario(req.params.id);
+    
+    if (!scenario) {
+      throw notFoundError("Scenario not found");
+    }
+    
+    if (scenario.userId !== req.user!.id) {
+      throw unauthorizedError();
+    }
+
+    const schema = z.object({
+      notes: z.string().optional(),
+      calculationVersion: z.string().optional()
+    });
+
+    const { notes, calculationVersion } = schema.parse(req.body);
+
+    // Calculate benefits using PolicyEngine
+    const benefitResults = await policyEngineService.calculateMultiBenefits(scenario.householdData);
+
+    if (!benefitResults.success) {
+      throw validationError("Failed to calculate benefits");
+    }
+
+    // Extract summary metrics
+    const totalMonthlyBenefits = 
+      benefitResults.benefits.snap + 
+      benefitResults.benefits.ssi + 
+      benefitResults.benefits.tanf;
+    
+    const totalYearlyBenefits = 
+      benefitResults.benefits.eitc + 
+      benefitResults.benefits.childTaxCredit;
+    
+    const eligibleProgramCount = [
+      benefitResults.benefits.snap > 0,
+      benefitResults.benefits.medicaid,
+      benefitResults.benefits.eitc > 0,
+      benefitResults.benefits.childTaxCredit > 0,
+      benefitResults.benefits.ssi > 0,
+      benefitResults.benefits.tanf > 0
+    ].filter(Boolean).length;
+
+    // Create calculation record
+    const calculation = await storage.createScenarioCalculation({
+      scenarioId: scenario.id,
+      benefitResults,
+      totalMonthlyBenefits,
+      totalYearlyBenefits,
+      eligibleProgramCount,
+      snapAmount: benefitResults.benefits.snap,
+      medicaidEligible: benefitResults.benefits.medicaid,
+      eitcAmount: benefitResults.benefits.eitc,
+      childTaxCreditAmount: benefitResults.benefits.childTaxCredit,
+      ssiAmount: benefitResults.benefits.ssi,
+      tanfAmount: benefitResults.benefits.tanf,
+      notes,
+      calculationVersion
+    });
+
+    res.json(calculation);
+  }));
+
+  // Get calculations for a scenario
+  app.get("/api/scenarios/:id/calculations", requireAuth, asyncHandler(async (req, res) => {
+    const scenario = await storage.getHouseholdScenario(req.params.id);
+    
+    if (!scenario) {
+      throw notFoundError("Scenario not found");
+    }
+    
+    if (scenario.userId !== req.user!.id) {
+      throw unauthorizedError();
+    }
+    
+    const calculations = await storage.getScenarioCalculationsByScenario(req.params.id);
+    res.json(calculations);
+  }));
+
+  // Get latest calculation for a scenario
+  app.get("/api/scenarios/:id/calculations/latest", requireAuth, asyncHandler(async (req, res) => {
+    const scenario = await storage.getHouseholdScenario(req.params.id);
+    
+    if (!scenario) {
+      throw notFoundError("Scenario not found");
+    }
+    
+    if (scenario.userId !== req.user!.id) {
+      throw unauthorizedError();
+    }
+    
+    const calculation = await storage.getLatestScenarioCalculation(req.params.id);
+    res.json(calculation || null);
+  }));
+
+  // Create scenario comparison
+  app.post("/api/comparisons", requireAuth, asyncHandler(async (req, res) => {
+    const schema = z.object({
+      name: z.string().min(1),
+      description: z.string().optional(),
+      scenarioIds: z.array(z.string()).min(2, "Must compare at least 2 scenarios"),
+      sharedWith: z.array(z.string()).optional()
+    });
+
+    const validated = schema.parse(req.body);
+
+    // Verify all scenarios belong to user
+    for (const scenarioId of validated.scenarioIds) {
+      const scenario = await storage.getHouseholdScenario(scenarioId);
+      if (!scenario || scenario.userId !== req.user!.id) {
+        throw validationError(`Invalid scenario ID: ${scenarioId}`);
+      }
+    }
+
+    const comparison = await storage.createScenarioComparison({
+      ...validated,
+      userId: req.user!.id
+    });
+
+    res.json(comparison);
+  }));
+
+  // Get all comparisons for user
+  app.get("/api/comparisons", requireAuth, asyncHandler(async (req, res) => {
+    const comparisons = await storage.getScenarioComparisonsByUser(req.user!.id);
+    res.json(comparisons);
+  }));
+
+  // Get single comparison
+  app.get("/api/comparisons/:id", requireAuth, asyncHandler(async (req, res) => {
+    const comparison = await storage.getScenarioComparison(req.params.id);
+    
+    if (!comparison) {
+      throw notFoundError("Comparison not found");
+    }
+    
+    if (comparison.userId !== req.user!.id) {
+      throw unauthorizedError();
+    }
+    
+    res.json(comparison);
+  }));
+
+  // Update comparison
+  app.patch("/api/comparisons/:id", requireAuth, asyncHandler(async (req, res) => {
+    const comparison = await storage.getScenarioComparison(req.params.id);
+    
+    if (!comparison) {
+      throw notFoundError("Comparison not found");
+    }
+    
+    if (comparison.userId !== req.user!.id) {
+      throw unauthorizedError();
+    }
+
+    const schema = z.object({
+      name: z.string().min(1).optional(),
+      description: z.string().optional(),
+      scenarioIds: z.array(z.string()).min(2).optional(),
+      sharedWith: z.array(z.string()).optional()
+    });
+
+    const validated = schema.parse(req.body);
+
+    // Verify all scenarios belong to user if scenarioIds provided
+    if (validated.scenarioIds) {
+      for (const scenarioId of validated.scenarioIds) {
+        const scenario = await storage.getHouseholdScenario(scenarioId);
+        if (!scenario || scenario.userId !== req.user!.id) {
+          throw validationError(`Invalid scenario ID: ${scenarioId}`);
+        }
+      }
+    }
+
+    const updated = await storage.updateScenarioComparison(req.params.id, validated);
+    res.json(updated);
+  }));
+
+  // Delete comparison
+  app.delete("/api/comparisons/:id", requireAuth, asyncHandler(async (req, res) => {
+    const comparison = await storage.getScenarioComparison(req.params.id);
+    
+    if (!comparison) {
+      throw notFoundError("Comparison not found");
+    }
+    
+    if (comparison.userId !== req.user!.id) {
+      throw unauthorizedError();
+    }
+    
+    await storage.deleteScenarioComparison(req.params.id);
+    res.json({ success: true });
+  }));
+
   const httpServer = createServer(app);
   return httpServer;
 }
