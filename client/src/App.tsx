@@ -34,6 +34,7 @@ import NoticeExplainer from "@/pages/public/NoticeExplainer";
 import SimplifiedSearch from "@/pages/public/SimplifiedSearch";
 import { CommandPalette } from "@/components/CommandPalette";
 import { PolicyChanges } from "@/pages/PolicyChanges";
+import { ComplianceAdmin } from "@/pages/ComplianceAdmin";
 
 function Router() {
   const [location] = useLocation();
@@ -194,6 +195,13 @@ function Router() {
             {() => (
               <ProtectedRoute>
                 <PolicyChanges />
+              </ProtectedRoute>
+            )}
+          </Route>
+          <Route path="/admin/compliance">
+            {() => (
+              <ProtectedRoute requireAdmin>
+                <ComplianceAdmin />
               </ProtectedRoute>
             )}
           </Route>
