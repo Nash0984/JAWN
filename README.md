@@ -40,7 +40,44 @@ An AI-powered platform for Maryland's Food Supplement Program (SNAP) that helps 
 
 The application will be available at `http://localhost:5000`
 
+## 🔑 Demo Accounts
+
+The system includes pre-configured demo accounts for testing all role-based features. On the login page, click **"Use Demo Account"** to see all available credentials:
+
+| Role | Username | Password | Description |
+|------|----------|----------|-------------|
+| **Applicant** | `demo.applicant` | `Demo2024!` | Test the applicant experience |
+| **Navigator** | `demo.navigator` | `Demo2024!` | Benefits navigator tools and client management |
+| **Caseworker** | `demo.caseworker` | `Demo2024!` | Case management features and DHS tools |
+| **Admin** | `demo.admin` | `Demo2024!` | Full system administration and analytics |
+
+> 💡 **Tip**: These accounts are automatically seeded on system startup, making preview and testing instant without manual setup.
+
 ## 🌟 Key Features
+
+### PolicyEngine Integration
+- **Multi-Benefit Calculations**: Accurate federal and state-specific benefit estimates for SNAP, Medicaid, EITC, CTC, SSI, and TANF
+- **Household Modeling**: Calculate benefits based on family composition, income, and expenses
+- **What-If Scenarios**: Test different income or expense changes to optimize benefits
+- **Real-Time Results**: Instant benefit calculations powered by PolicyEngine's policy engine
+
+### Adaptive Intake Copilot
+- **Conversational Application**: AI-powered dialogue guides applicants through the SNAP application process
+- **Smart Data Extraction**: Automatically structures household information from natural conversation
+- **Progress Tracking**: Visual indicators show application completeness
+- **Integrated Calculations**: Real-time benefit estimates during intake using PolicyEngine
+
+### Household Scenario Workspace
+- **What-If Modeling**: Create and compare multiple household scenarios with different income/expense profiles
+- **Visual Comparisons**: Side-by-side benefit outcome charts using Recharts
+- **PDF Reports**: Export client counseling reports with household details and benefit calculations
+- **Optimization Tools**: Help navigators identify strategies to maximize client benefits
+
+### Anonymous Benefit Screener
+- **No Login Required**: Public access at `/screener` for immediate eligibility checks
+- **Privacy-First**: Anonymous sessions protect applicant privacy
+- **Save Results**: Option to create account and migrate screening data
+- **Multi-Benefit Output**: Check eligibility for all Maryland programs at once
 
 ### Document Verification
 - **Upload Documents**: Mobile photos or PDF files
@@ -57,7 +94,7 @@ The application will be available at `http://localhost:5000`
 ### Maryland Integration
 - **Official Branding**: Maryland Digital Style Guide compliance
 - **State Seal Integration**: Official Maryland state seal
-- **Mobile-First Design**: Optimized for mobile users
+- **Mobile-First Design**: Fully responsive, works on phones, tablets, and desktops
 - **Accessibility Compliant**: WCAG 2.1 AA standards
 
 ## 🏗️ Architecture Overview
@@ -78,25 +115,52 @@ The application will be available at `http://localhost:5000`
 
 ### Key Services
 - **RAG Service**: Retrieval-Augmented Generation for policy search
+- **PolicyEngine Service**: Multi-benefit calculations and eligibility determinations
 - **Document Processor**: OCR and AI-powered document analysis
 - **Reading Level Service**: Plain language compliance validation
 - **Language Service**: Multi-language translation system
 - **Cache Service**: Server-side caching with 5-minute TTL for performance
 - **Security Services**: CSRF protection, rate limiting, and security headers
+- **PDF Export Service**: Client counseling reports and scenario analysis exports
+
+## 📱 Mobile Compatibility
+
+This application is **fully mobile-responsive** and works seamlessly across all devices:
+
+### ✅ Supported Platforms
+- **Mobile Browsers**: iOS Safari, Chrome, Firefox on smartphones
+- **Tablet Browsers**: iPad Safari, Android Chrome
+- **Desktop Browsers**: Chrome, Firefox, Safari, Edge
+
+### 📐 Responsive Features
+- **Touch-Optimized**: All buttons, forms, and controls are sized appropriately for touch interaction
+- **Mobile-First Design**: UI adapts from 320px (small phones) to 4K displays
+- **Flexible Layouts**: Components reflow and resize based on screen size
+- **Camera Integration**: Direct photo upload from mobile device cameras for document verification
+
+### 🎯 Mobile-Specific Optimizations
+- **Benefit Screener**: Optimized for on-the-go eligibility checks
+- **Intake Copilot**: Works great for field interviews on tablets
+- **Scenario Workspace**: Responsive charts and PDF generation on all devices
+- **Demo Login**: One-tap demo account access on mobile login screen
 
 ## 📱 Usage Guide
 
 ### For Benefit Recipients
-1. **Ask Questions**: Use the main search interface to ask about SNAP benefits
-2. **Verify Documents**: Upload photos of paystubs, bank statements, or other documents
-3. **Get Plain English Answers**: Receive clear, easy-to-understand responses
-4. **Multi-Language Support**: Switch to your preferred language
+1. **Check Eligibility**: Use the anonymous screener at `/screener` - no login needed
+2. **Ask Questions**: Use the main search interface to ask about SNAP benefits
+3. **Apply Online**: Guided intake copilot walks you through the application at `/intake`
+4. **Verify Documents**: Upload photos of paystubs, bank statements, or other documents
+5. **Get Plain English Answers**: Receive clear, easy-to-understand responses
+6. **Multi-Language Support**: Switch to your preferred language
 
 ### For Navigators
-1. **Policy Search**: Find specific SNAP policy information quickly
-2. **Document Guidance**: Help clients understand document requirements  
-3. **Training Resources**: Access system training and help materials
-4. **Administrative Tools**: Manage policy sources and system configuration
+1. **Client Screening**: Quick benefit calculations using PolicyEngine
+2. **Scenario Modeling**: Create what-if scenarios to optimize client benefits at `/scenarios`
+3. **Policy Search**: Find specific SNAP policy information quickly
+4. **Document Guidance**: Help clients understand document requirements  
+5. **Export Reports**: Generate PDF counseling reports for client meetings
+6. **Training Resources**: Access system training and help materials
 
 ## 🛠️ Development Guide
 
