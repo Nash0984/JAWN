@@ -33,6 +33,7 @@ import DocumentChecklist from "@/pages/public/DocumentChecklist";
 import NoticeExplainer from "@/pages/public/NoticeExplainer";
 import SimplifiedSearch from "@/pages/public/SimplifiedSearch";
 import { CommandPalette } from "@/components/CommandPalette";
+import { PolicyChanges } from "@/pages/PolicyChanges";
 
 function Router() {
   const [location] = useLocation();
@@ -186,6 +187,13 @@ function Router() {
             {() => (
               <ProtectedRoute requireAdmin>
                 <AuditLogs />
+              </ProtectedRoute>
+            )}
+          </Route>
+          <Route path="/admin/policy-changes">
+            {() => (
+              <ProtectedRoute>
+                <PolicyChanges />
               </ProtectedRoute>
             )}
           </Route>

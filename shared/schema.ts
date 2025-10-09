@@ -1325,6 +1325,145 @@ export const publicFaq = pgTable("public_faq", {
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
+// ============================================================================
+// POLICY CHANGE MONITORING - Phase 1 Feature
+// ============================================================================
+
+// Policy Changes - Aggregates related rule changes into coherent policy updates
+export const policyChanges = pgTable("policy_changes", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  benefitProgramId: varchar("benefit_program_id").references(() => benefitPrograms.id).notNull(),
+  changeTitle: text("change_title").notNull(), // e.g., "2025 COLA Adjustment"
+  changeType: text("change_type").notNull(), // income_limit, deduction, allotment, categorical, document_requirement, multiple
+  changeCategory: text("change_category").notNull(), // federal_mandate, state_policy, correction, clarification
+  severity: text("severity").notNull().default("medium"), // low, medium, high, critical
+  
+  // Change details
+  summary: text("summary").notNull(), // Plain language summary
+  technicalDescription: text("technical_description"), // Technical details for staff
+  impactAnalysis: text("impact_analysis"), // Who/what is affected
+  effectiveDate: timestamp("effective_date").notNull(),
+  
+  // Related changes
+  affectedRuleTables: text("affected_rule_tables").array(), // Which rule tables changed
+  ruleChangeIds: text("rule_change_ids").array(), // Related rule_change_logs IDs
+  documentVersionId: varchar("document_version_id").references(() => documentVersions.id), // Related document version
+  
+  // Diff information
+  changesDiff: jsonb("changes_diff"), // Structured diff of what changed
+  beforeSnapshot: jsonb("before_snapshot"), // State before change
+  afterSnapshot: jsonb("after_snapshot"), // State after change
+  
+  // Notification & review
+  status: text("status").notNull().default("pending"), // pending, reviewed, published, archived
+  reviewedBy: varchar("reviewed_by").references(() => users.id),
+  reviewedAt: timestamp("reviewed_at"),
+  publishedAt: timestamp("published_at"),
+  notificationsSent: boolean("notifications_sent").notNull().default(false),
+  
+  createdBy: varchar("created_by").references(() => users.id),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  benefitProgramIdx: index("policy_changes_benefit_program_idx").on(table.benefitProgramId),
+  effectiveDateIdx: index("policy_changes_effective_date_idx").on(table.effectiveDate),
+  statusIdx: index("policy_changes_status_idx").on(table.status),
+}));
+
+// Policy Change Impacts - Tracks affected entities and users
+export const policyChangeImpacts = pgTable("policy_change_impacts", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  policyChangeId: varchar("policy_change_id").references(() => policyChanges.id, { onDelete: "cascade" }).notNull(),
+  
+  // Impact scope
+  impactType: text("impact_type").notNull(), // case, calculation, navigator, system
+  impactSeverity: text("impact_severity").notNull(), // minimal, moderate, significant, major
+  
+  // Affected entities
+  affectedEntityType: text("affected_entity_type"), // user, eligibility_calculation, navigator_session
+  affectedEntityId: varchar("affected_entity_id"), // ID of affected entity
+  affectedUserId: varchar("affected_user_id").references(() => users.id), // Direct user reference
+  
+  // Impact details
+  impactDescription: text("impact_description").notNull(), // How this entity is affected
+  actionRequired: boolean("action_required").notNull().default(false), // Does user need to take action?
+  actionDescription: text("action_description"), // What action is needed
+  actionDeadline: timestamp("action_deadline"), // When action must be taken
+  
+  // Notification tracking
+  notified: boolean("notified").notNull().default(false),
+  notifiedAt: timestamp("notified_at"),
+  notificationId: varchar("notification_id").references(() => notifications.id),
+  
+  // Resolution tracking
+  acknowledged: boolean("acknowledged").notNull().default(false),
+  acknowledgedAt: timestamp("acknowledged_at"),
+  resolved: boolean("resolved").notNull().default(false),
+  resolvedAt: timestamp("resolved_at"),
+  resolutionNotes: text("resolution_notes"),
+  
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+  policyChangeIdx: index("policy_change_impacts_policy_change_idx").on(table.policyChangeId),
+  affectedUserIdx: index("policy_change_impacts_user_idx").on(table.affectedUserId),
+  notifiedIdx: index("policy_change_impacts_notified_idx").on(table.notified),
+}));
+
+// Relations for policy changes
+export const policyChangesRelations = relations(policyChanges, ({ one, many }) => ({
+  benefitProgram: one(benefitPrograms, {
+    fields: [policyChanges.benefitProgramId],
+    references: [benefitPrograms.id],
+  }),
+  documentVersion: one(documentVersions, {
+    fields: [policyChanges.documentVersionId],
+    references: [documentVersions.id],
+  }),
+  createdByUser: one(users, {
+    fields: [policyChanges.createdBy],
+    references: [users.id],
+  }),
+  reviewedByUser: one(users, {
+    fields: [policyChanges.reviewedBy],
+    references: [users.id],
+  }),
+  impacts: many(policyChangeImpacts),
+}));
+
+export const policyChangeImpactsRelations = relations(policyChangeImpacts, ({ one }) => ({
+  policyChange: one(policyChanges, {
+    fields: [policyChangeImpacts.policyChangeId],
+    references: [policyChanges.id],
+  }),
+  affectedUser: one(users, {
+    fields: [policyChangeImpacts.affectedUserId],
+    references: [users.id],
+  }),
+  notification: one(notifications, {
+    fields: [policyChangeImpacts.notificationId],
+    references: [notifications.id],
+  }),
+}));
+
+// Insert schemas for policy changes
+export const insertPolicyChangeSchema = createInsertSchema(policyChanges).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertPolicyChangeImpactSchema = createInsertSchema(policyChangeImpacts).omit({
+  id: true,
+  createdAt: true,
+});
+
+// Types for policy changes
+export type InsertPolicyChange = z.infer<typeof insertPolicyChangeSchema>;
+export type PolicyChange = typeof policyChanges.$inferSelect;
+
+export type InsertPolicyChangeImpact = z.infer<typeof insertPolicyChangeImpactSchema>;
+export type PolicyChangeImpact = typeof policyChangeImpacts.$inferSelect;
+
 // Insert schemas for public portal
 export const insertDocumentRequirementTemplateSchema = createInsertSchema(documentRequirementTemplates).omit({
   id: true,
