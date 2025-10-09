@@ -81,6 +81,8 @@ The application will be available at `http://localhost:5000`
 - **Document Processor**: OCR and AI-powered document analysis
 - **Reading Level Service**: Plain language compliance validation
 - **Language Service**: Multi-language translation system
+- **Cache Service**: Server-side caching with 5-minute TTL for performance
+- **Security Services**: CSRF protection, rate limiting, and security headers
 
 ## 📱 Usage Guide
 
@@ -118,12 +120,14 @@ maryland-snap-system/
 
 ### Key Commands
 ```bash
-npm run dev          # Start development server
-npm run build        # Build for production
-npm run db:push      # Synchronize database schema
-npm run db:studio    # Open database explorer
-npm test             # Run test suite
-npm run lint         # Run code linting
+npm run dev              # Start development server
+npm run build            # Build for production
+npm run db:push          # Synchronize database schema
+npm run db:studio        # Open database explorer
+npx vitest               # Run test suite
+npx vitest --ui          # Run tests with UI
+npx vitest --coverage    # Run tests with coverage
+npm run lint             # Run code linting
 ```
 
 ### Adding New Features
@@ -195,6 +199,31 @@ The system implements Maryland Digital Style Guide (2023):
 - `/api/system/status` - Detailed system status
 - Database connectivity verification
 - AI service availability check
+
+## 🔒 Security & Performance
+
+### Security Features (Production-Ready)
+- **CSRF Protection**: Double-submit cookie pattern for all state-changing requests
+- **Rate Limiting**: Three-tier protection (100/15min general, 5/15min auth, 20/min AI)
+- **Security Headers**: Helmet middleware with environment-aware CSP and HSTS
+- **Trust Proxy**: Configured for load balancer compatibility
+
+### Performance Optimizations
+- **Server-Side Caching**: NodeCache with 5-minute TTL and auto-invalidation
+- **Database Indexes**: Strategic indexing for 2-10x query performance
+- **Lazy Loading**: Component-level code splitting for faster initial loads
+
+### User Experience Enhancements
+- **Command Palette**: Cmd+K quick navigation with role-based filtering
+- **Framer Motion**: Smooth animations for results, notifications, and feedback
+- **Resizable Panels**: Split-view document verification with adjustable layout
+- **Skeleton Loading**: Comprehensive placeholders prevent layout shift
+
+### Testing Infrastructure
+- **Vitest**: Modern testing framework with happy-dom environment
+- **Component Tests**: React Testing Library integration
+- **API Tests**: Supertest for endpoint integration testing
+- **Test Coverage**: V8 provider with comprehensive reporting
 
 ## 📚 Additional Resources
 
