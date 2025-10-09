@@ -1509,6 +1509,54 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // ============================================================================
+  // VITA TAX PROGRAM - IRS Publication 4012 Ingestion
+  // ============================================================================
+
+  // Trigger IRS Pub 4012 ingestion
+  app.post("/api/vita/ingest-pub4012", requireAdmin, asyncHandler(async (req, res) => {
+    const { VitaIngestionService } = await import("./services/vitaIngestion.service");
+    const vitaService = new VitaIngestionService(storage);
+    
+    // Get VITA program
+    const programs = await storage.getBenefitPrograms();
+    const vitaProgram = programs.find(p => p.code === "VITA");
+    
+    if (!vitaProgram) {
+      return res.status(500).json({ error: "VITA program not found. Please seed benefit programs first." });
+    }
+    
+    console.log("Starting IRS Publication 4012 ingestion...");
+    
+    const result = await vitaService.ingestPub4012(vitaProgram.id);
+    
+    res.json({
+      success: true,
+      message: "IRS Publication 4012 ingested successfully",
+      ...result
+    });
+  }));
+
+  // Get VITA documents status
+  app.get("/api/vita/documents", requireAuth, asyncHandler(async (req, res) => {
+    const programs = await storage.getBenefitPrograms();
+    const vitaProgram = programs.find(p => p.code === "VITA");
+    
+    if (!vitaProgram) {
+      return res.status(404).json({ error: "VITA program not found" });
+    }
+    
+    const documents = await storage.getDocuments({
+      benefitProgramId: vitaProgram.id,
+      limit: 50
+    });
+    
+    res.json({
+      program: vitaProgram,
+      documents
+    });
+  }));
+
+  // ============================================================================
   // LIVING POLICY MANUAL - Text generation from Rules as Code
   // ============================================================================
 
