@@ -27,6 +27,9 @@ import AIMonitoring from "@/pages/AIMonitoring";
 import AuditLogs from "@/pages/AuditLogs";
 import ApiDocs from "@/pages/ApiDocs";
 import FeedbackManagement from "@/pages/FeedbackManagement";
+import DocumentChecklist from "@/pages/public/DocumentChecklist";
+import NoticeExplainer from "@/pages/public/NoticeExplainer";
+import SimplifiedSearch from "@/pages/public/SimplifiedSearch";
 
 function Router() {
   const [location] = useLocation();
@@ -48,6 +51,11 @@ function Router() {
           <Route path="/help" component={Home} />
           <Route path="/login" component={Login} />
           <Route path="/signup" component={Signup} />
+          
+          {/* Public Portal - No login required */}
+          <Route path="/public/documents" component={DocumentChecklist} />
+          <Route path="/public/notices" component={NoticeExplainer} />
+          <Route path="/public/search" component={SimplifiedSearch} />
           
           {/* Role-specific dashboards */}
           <Route path="/dashboard/client">
