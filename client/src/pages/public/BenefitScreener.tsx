@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -14,7 +14,8 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
 import { apiRequest } from "@/lib/queryClient";
-import { CheckCircle2, DollarSign, Heart, Baby, Home, Users, Calculator, Info, ArrowRight } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
+import { CheckCircle2, DollarSign, Heart, Baby, Home, Users, Calculator, Info, ArrowRight, Save } from "lucide-react";
 
 const screenerSchema = z.object({
   adults: z.coerce.number().min(1, "At least 1 adult required").max(20),
@@ -52,9 +53,22 @@ interface ScreenerResponse {
   error?: string;
 }
 
+// Generate or retrieve session ID
+function getSessionId(): string {
+  let sessionId = localStorage.getItem('screener_session_id');
+  if (!sessionId) {
+    sessionId = `screener_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    localStorage.setItem('screener_session_id', sessionId);
+  }
+  return sessionId;
+}
+
 export default function BenefitScreener() {
   const [, setLocation] = useLocation();
   const [results, setResults] = useState<ScreenerResponse | null>(null);
+  const [sessionId] = useState(getSessionId());
+  const [savedSessionId, setSavedSessionId] = useState<string | null>(null);
+  const { toast } = useToast();
 
   const form = useForm<ScreenerFormData>({
     resolver: zodResolver(screenerSchema),
@@ -83,9 +97,63 @@ export default function BenefitScreener() {
     }
   });
 
+  // Auto-save mutation - saves results after calculation
+  const saveMutation = useMutation({
+    mutationFn: async (data: { householdData: ScreenerFormData; benefitResults: ScreenerResponse }) => {
+      const response = await apiRequest("POST", "/api/screener/save", {
+        sessionId,
+        householdData: data.householdData,
+        benefitResults: data.benefitResults
+      });
+      return await response.json();
+    },
+    onSuccess: (data) => {
+      setSavedSessionId(data.id);
+      toast({
+        title: "Results Saved",
+        description: "Your screening results have been saved. Create an account to keep them permanently.",
+      });
+    }
+  });
+
+  // Claim session mutation - associates anonymous session with user account
+  const claimMutation = useMutation({
+    mutationFn: async () => {
+      const response = await apiRequest("POST", `/api/screener/sessions/${sessionId}/claim`, {});
+      return await response.json();
+    },
+    onSuccess: () => {
+      toast({
+        title: "Results Saved to Account",
+        description: "Your screening results are now saved to your account!",
+      });
+      setLocation("/dashboard/client");
+    },
+    onError: (error: any) => {
+      if (error.message?.includes("401")) {
+        // Not logged in - redirect to signup with return path
+        setLocation(`/signup?return=/screener`);
+      } else {
+        toast({
+          title: "Error",
+          description: error.message || "Failed to save results to account",
+          variant: "destructive"
+        });
+      }
+    }
+  });
+
   const onSubmit = (data: ScreenerFormData) => {
     calculateMutation.mutate(data);
   };
+
+  // Auto-save results when calculation succeeds
+  useEffect(() => {
+    if (results?.success && !savedSessionId) {
+      const householdData = form.getValues();
+      saveMutation.mutate({ householdData, benefitResults: results });
+    }
+  }, [results]);
 
   const totalMonthlyBenefits = results?.benefits ? 
     (results.benefits.snap + results.benefits.ssi + results.benefits.tanf) : 0;
@@ -524,17 +592,33 @@ export default function BenefitScreener() {
                 {/* Call to Action */}
                 <Card className="bg-gradient-to-r from-blue-600 to-purple-600 text-white" data-testid="card-cta">
                   <CardContent className="pt-6">
-                    <h3 className="text-xl font-bold mb-2">Want to Apply?</h3>
+                    <h3 className="text-xl font-bold mb-2">Ready to Apply?</h3>
                     <p className="text-sm opacity-90 mb-4">
-                      Create a free account to start your application and save your results
+                      {savedSessionId 
+                        ? "Your results are saved! Create an account or log in to keep them permanently and start your application."
+                        : "Create a free account to save your results and start your application"
+                      }
                     </p>
-                    <Button 
-                      variant="secondary" 
-                      onClick={() => setLocation("/signup")}
-                      data-testid="button-signup"
-                    >
-                      Create Free Account
-                    </Button>
+                    <div className="flex flex-col sm:flex-row gap-3">
+                      <Button 
+                        variant="secondary" 
+                        onClick={() => setLocation("/signup")}
+                        data-testid="button-signup"
+                        className="flex-1"
+                      >
+                        Create Free Account
+                      </Button>
+                      <Button 
+                        variant="outline" 
+                        onClick={() => claimMutation.mutate()}
+                        disabled={claimMutation.isPending || !savedSessionId}
+                        data-testid="button-save-to-account"
+                        className="flex-1 bg-white/10 hover:bg-white/20 border-white/30"
+                      >
+                        <Save className="w-4 h-4 mr-2" />
+                        {claimMutation.isPending ? "Saving..." : "I Have an Account"}
+                      </Button>
+                    </div>
                   </CardContent>
                 </Card>
               </>

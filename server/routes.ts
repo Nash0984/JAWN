@@ -3338,6 +3338,141 @@ If the question cannot be answered with the available information, say so clearl
     });
   }));
 
+  // ============================================================================
+  // Anonymous Screening Session Routes
+  // ============================================================================
+
+  // Save anonymous screening session (no auth required)
+  app.post("/api/screener/save", asyncHandler(async (req, res) => {
+    const schema = z.object({
+      sessionId: z.string(),
+      householdData: z.object({
+        adults: z.number(),
+        children: z.number(),
+        employmentIncome: z.number(),
+        unearnedIncome: z.number().optional(),
+        stateCode: z.string(),
+        householdAssets: z.number().optional(),
+        rentOrMortgage: z.number().optional(),
+        utilityCosts: z.number().optional(),
+        medicalExpenses: z.number().optional(),
+        childcareExpenses: z.number().optional(),
+        elderlyOrDisabled: z.boolean().optional()
+      }),
+      benefitResults: z.object({
+        success: z.boolean(),
+        benefits: z.object({
+          snap: z.number(),
+          medicaid: z.boolean(),
+          eitc: z.number(),
+          childTaxCredit: z.number(),
+          ssi: z.number(),
+          tanf: z.number(),
+          householdNetIncome: z.number(),
+          householdTax: z.number(),
+          householdBenefits: z.number(),
+          marginalTaxRate: z.number()
+        })
+      })
+    });
+    
+    const validated = schema.parse(req.body);
+    
+    // Calculate summary metrics
+    const totalMonthlyBenefits = 
+      validated.benefitResults.benefits.snap + 
+      validated.benefitResults.benefits.ssi + 
+      validated.benefitResults.benefits.tanf;
+    
+    const totalYearlyBenefits = 
+      validated.benefitResults.benefits.eitc + 
+      validated.benefitResults.benefits.childTaxCredit;
+    
+    const eligibleProgramCount = [
+      validated.benefitResults.benefits.snap > 0,
+      validated.benefitResults.benefits.medicaid,
+      validated.benefitResults.benefits.eitc > 0,
+      validated.benefitResults.benefits.childTaxCredit > 0,
+      validated.benefitResults.benefits.ssi > 0,
+      validated.benefitResults.benefits.tanf > 0
+    ].filter(Boolean).length;
+    
+    // Get IP and user agent for metadata
+    const ipAddress = req.ip || req.socket.remoteAddress || null;
+    const userAgent = req.get('user-agent') || null;
+    
+    // Check if session already exists (upsert logic)
+    const existingSession = await storage.getAnonymousScreeningSession(validated.sessionId);
+    
+    let session;
+    if (existingSession) {
+      // Update existing session
+      session = await storage.updateAnonymousScreeningSession(existingSession.id, {
+        householdData: validated.householdData,
+        benefitResults: validated.benefitResults,
+        totalMonthlyBenefits,
+        totalYearlyBenefits,
+        eligibleProgramCount,
+        stateCode: validated.householdData.stateCode,
+        updatedAt: new Date()
+      });
+    } else {
+      // Create new session
+      session = await storage.createAnonymousScreeningSession({
+        sessionId: validated.sessionId,
+        householdData: validated.householdData,
+        benefitResults: validated.benefitResults,
+        totalMonthlyBenefits,
+        totalYearlyBenefits,
+        eligibleProgramCount,
+        stateCode: validated.householdData.stateCode,
+        ipAddress,
+        userAgent,
+        userId: null,
+        claimedAt: null
+      });
+    }
+    
+    res.json(session);
+  }));
+
+  // Get anonymous screening session (no auth required)
+  app.get("/api/screener/sessions/:sessionId", asyncHandler(async (req, res) => {
+    const session = await storage.getAnonymousScreeningSession(req.params.sessionId);
+    
+    if (!session) {
+      throw validationError("Session not found");
+    }
+    
+    res.json(session);
+  }));
+
+  // Claim anonymous screening session (requires auth)
+  app.post("/api/screener/sessions/:sessionId/claim", requireAuth, asyncHandler(async (req, res) => {
+    const session = await storage.getAnonymousScreeningSession(req.params.sessionId);
+    
+    if (!session) {
+      throw validationError("Session not found");
+    }
+    
+    if (session.userId) {
+      throw validationError("Session has already been claimed");
+    }
+    
+    const claimedSession = await storage.claimAnonymousScreeningSession(
+      req.params.sessionId,
+      req.user!.id
+    );
+    
+    res.json(claimedSession);
+  }));
+
+  // Get user's claimed screening sessions
+  app.get("/api/screener/my-sessions", requireAuth, asyncHandler(async (req, res) => {
+    const sessions = await storage.getAnonymousScreeningSessionsByUser(req.user!.id);
+    res.json(sessions);
+  }));
+
   const httpServer = createServer(app);
   return httpServer;
 }

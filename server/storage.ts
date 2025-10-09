@@ -87,6 +87,9 @@ import {
   applicationForms,
   type ApplicationForm,
   type InsertApplicationForm,
+  anonymousScreeningSessions,
+  type AnonymousScreeningSession,
+  type InsertAnonymousScreeningSession,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and, ilike, sql, or, isNull, lte, gte } from "drizzle-orm";
@@ -254,6 +257,14 @@ export interface IStorage {
   getApplicationFormBySession(sessionId: string): Promise<ApplicationForm | undefined>;
   updateApplicationForm(id: string, updates: Partial<ApplicationForm>): Promise<ApplicationForm>;
   getApplicationForms(filters?: { userId?: string; exportStatus?: string; limit?: number }): Promise<ApplicationForm[]>;
+
+  // Anonymous Screening Sessions
+  createAnonymousScreeningSession(session: InsertAnonymousScreeningSession): Promise<AnonymousScreeningSession>;
+  getAnonymousScreeningSession(sessionId: string): Promise<AnonymousScreeningSession | undefined>;
+  getAnonymousScreeningSessionsByUser(userId: string): Promise<AnonymousScreeningSession[]>;
+  updateAnonymousScreeningSession(id: string, updates: Partial<AnonymousScreeningSession>): Promise<AnonymousScreeningSession>;
+  claimAnonymousScreeningSession(sessionId: string, userId: string): Promise<AnonymousScreeningSession>;
+  deleteOldAnonymousSessions(daysOld: number): Promise<number>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1217,6 +1228,66 @@ export class DatabaseStorage implements IStorage {
     }
     
     return await query;
+  }
+
+  // Anonymous Screening Sessions
+  async createAnonymousScreeningSession(session: InsertAnonymousScreeningSession): Promise<AnonymousScreeningSession> {
+    const [newSession] = await db.insert(anonymousScreeningSessions).values(session).returning();
+    return newSession;
+  }
+
+  async getAnonymousScreeningSession(sessionId: string): Promise<AnonymousScreeningSession | undefined> {
+    const [session] = await db
+      .select()
+      .from(anonymousScreeningSessions)
+      .where(eq(anonymousScreeningSessions.sessionId, sessionId));
+    return session;
+  }
+
+  async getAnonymousScreeningSessionsByUser(userId: string): Promise<AnonymousScreeningSession[]> {
+    return await db
+      .select()
+      .from(anonymousScreeningSessions)
+      .where(eq(anonymousScreeningSessions.userId, userId))
+      .orderBy(desc(anonymousScreeningSessions.createdAt));
+  }
+
+  async updateAnonymousScreeningSession(id: string, updates: Partial<AnonymousScreeningSession>): Promise<AnonymousScreeningSession> {
+    const [updated] = await db
+      .update(anonymousScreeningSessions)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(anonymousScreeningSessions.id, id))
+      .returning();
+    return updated;
+  }
+
+  async claimAnonymousScreeningSession(sessionId: string, userId: string): Promise<AnonymousScreeningSession> {
+    const [updated] = await db
+      .update(anonymousScreeningSessions)
+      .set({ 
+        userId, 
+        claimedAt: new Date(),
+        updatedAt: new Date()
+      })
+      .where(eq(anonymousScreeningSessions.sessionId, sessionId))
+      .returning();
+    return updated;
+  }
+
+  async deleteOldAnonymousSessions(daysOld: number): Promise<number> {
+    const cutoffDate = new Date();
+    cutoffDate.setDate(cutoffDate.getDate() - daysOld);
+    
+    const result = await db
+      .delete(anonymousScreeningSessions)
+      .where(
+        and(
+          lte(anonymousScreeningSessions.createdAt, cutoffDate),
+          isNull(anonymousScreeningSessions.userId) // Only delete unclaimed sessions
+        )
+      );
+    
+    return result.rowCount || 0;
   }
 }
 

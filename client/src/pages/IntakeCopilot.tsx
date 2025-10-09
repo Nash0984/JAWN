@@ -46,6 +46,12 @@ interface IntakeMessage {
   createdAt: string;
 }
 
+interface BenefitSuggestions {
+  eligible: boolean;
+  programs: string[];
+  summary: string;
+}
+
 interface DialogueResponse {
   message: string;
   extractedData?: {
@@ -57,6 +63,7 @@ interface DialogueResponse {
   suggestedQuestions?: string[];
   nextStep?: string;
   shouldGenerateForm?: boolean;
+  benefitSuggestions?: BenefitSuggestions;
 }
 
 export function IntakeCopilot() {
@@ -65,6 +72,7 @@ export function IntakeCopilot() {
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [userMessage, setUserMessage] = useState("");
   const [showFormDialog, setShowFormDialog] = useState(false);
+  const [benefitSuggestions, setBenefitSuggestions] = useState<BenefitSuggestions | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const { data: sessions = [], isLoading: sessionsLoading } = useQuery<IntakeSession[]>({
@@ -120,6 +128,13 @@ export function IntakeCopilot() {
       queryClient.invalidateQueries({ queryKey: ["/api/intake-sessions", activeSessionId, "messages"] });
       queryClient.invalidateQueries({ queryKey: ["/api/intake-sessions", activeSessionId] });
       
+      // Update or clear benefit suggestions based on response
+      if (response.benefitSuggestions) {
+        setBenefitSuggestions(response.benefitSuggestions);
+      } else {
+        setBenefitSuggestions(null); // Clear stale suggestions
+      }
+      
       if (response.shouldGenerateForm) {
         setShowFormDialog(true);
       }
@@ -161,6 +176,11 @@ export function IntakeCopilot() {
     sendMessageMutation.mutate(userMessage);
     setUserMessage("");
   };
+
+  // Clear benefit suggestions when session changes
+  useEffect(() => {
+    setBenefitSuggestions(null);
+  }, [activeSessionId]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -335,6 +355,42 @@ export function IntakeCopilot() {
                             </div>
                           </div>
                         ))}
+                        
+                        {/* Benefit Suggestions Card */}
+                        {benefitSuggestions && benefitSuggestions.eligible && (
+                          <motion.div
+                            initial={{ opacity: 0, y: 20 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            className="mt-4"
+                          >
+                            <Alert className="border-green-200 bg-green-50 dark:bg-green-950 dark:border-green-800">
+                              <CheckCircle2 className="h-5 w-5 text-green-600 dark:text-green-400" />
+                              <div className="ml-2">
+                                <h4 className="text-sm font-semibold text-green-900 dark:text-green-100 mb-2">
+                                  You may also qualify for additional benefits!
+                                </h4>
+                                <p className="text-sm text-green-800 dark:text-green-200 mb-3">
+                                  Based on the information you've shared, you may be eligible for:
+                                </p>
+                                <div className="flex flex-wrap gap-2 mb-3">
+                                  {benefitSuggestions.programs.map((program, idx) => (
+                                    <Badge 
+                                      key={idx} 
+                                      className="bg-green-600 dark:bg-green-700 text-white"
+                                      data-testid={`badge-benefit-${idx}`}
+                                    >
+                                      {program}
+                                    </Badge>
+                                  ))}
+                                </div>
+                                <p className="text-xs text-green-700 dark:text-green-300">
+                                  We'll help you apply for these benefits after completing your SNAP application.
+                                </p>
+                              </div>
+                            </Alert>
+                          </motion.div>
+                        )}
+                        
                         <div ref={messagesEndRef} />
                       </motion.div>
                     )}

@@ -1736,6 +1736,45 @@ export const applicationForms = pgTable("application_forms", {
   exportStatusIdx: index("application_forms_export_status_idx").on(table.exportStatus),
 }));
 
+// ===== ANONYMOUS SCREENING SESSIONS SCHEMA =====
+
+// Anonymous Screening Sessions - Store results from /screener for anonymous users
+export const anonymousScreeningSessions = pgTable("anonymous_screening_sessions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  
+  // Session identifier (used for retrieval before account creation)
+  sessionId: varchar("session_id").notNull().unique(), // Browser session ID or generated ID
+  
+  // User association (null for anonymous, set when claimed)
+  userId: varchar("user_id").references(() => users.id),
+  claimedAt: timestamp("claimed_at"), // When user saved by creating account
+  
+  // Household input data
+  householdData: jsonb("household_data").notNull(), // All form inputs from screener
+  
+  // PolicyEngine calculation results
+  benefitResults: jsonb("benefit_results").notNull(), // Full PolicyEngine response
+  
+  // Summary metrics
+  totalMonthlyBenefits: real("total_monthly_benefits").default(0),
+  totalYearlyBenefits: real("total_yearly_benefits").default(0),
+  eligibleProgramCount: integer("eligible_program_count").default(0),
+  
+  // State information
+  stateCode: text("state_code").notNull(),
+  
+  // Metadata
+  ipAddress: text("ip_address"), // For rate limiting/fraud detection
+  userAgent: text("user_agent"),
+  
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  sessionIdIdx: index("anonymous_screening_session_idx").on(table.sessionId),
+  userIdIdx: index("anonymous_screening_user_idx").on(table.userId),
+  createdAtIdx: index("anonymous_screening_created_idx").on(table.createdAt),
+}));
+
 // Relations for intake copilot
 export const intakeSessionsRelations = relations(intakeSessions, ({ one, many }) => ({
   user: one(users, {
@@ -1802,3 +1841,14 @@ export type IntakeMessage = typeof intakeMessages.$inferSelect;
 
 export type InsertApplicationForm = z.infer<typeof insertApplicationFormSchema>;
 export type ApplicationForm = typeof applicationForms.$inferSelect;
+
+// Insert schemas for anonymous screening
+export const insertAnonymousScreeningSessionSchema = createInsertSchema(anonymousScreeningSessions).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+// Types for anonymous screening
+export type InsertAnonymousScreeningSession = z.infer<typeof insertAnonymousScreeningSessionSchema>;
+export type AnonymousScreeningSession = typeof anonymousScreeningSessions.$inferSelect;
