@@ -33,9 +33,9 @@ import { useToast } from "@/hooks/use-toast";
 import { Loader2 } from "lucide-react";
 
 const signupSchema = z.object({
-  username: z.string().min(3, "Username must be at least 3 characters"),
-  password: z.string().min(6, "Password must be at least 6 characters"),
-  email: z.string().email("Please enter a valid email").optional().or(z.literal("")),
+  username: z.string().min(3, "Your username needs to be at least 3 characters"),
+  password: z.string().min(6, "Your password needs to be at least 6 characters"),
+  email: z.string().email("Enter a valid email address").optional().or(z.literal("")),
   fullName: z.string().optional(),
   role: z.enum(["client", "navigator", "caseworker", "admin"]).default("client"),
 });
@@ -87,8 +87,8 @@ export default function Signup() {
     },
     onError: (error: Error) => {
       toast({
-        title: "Signup failed",
-        description: error.message || "Could not create account",
+        title: "Couldn't create your account",
+        description: error.message || "We couldn't create your account. Please try again.",
         variant: "destructive",
       });
     },

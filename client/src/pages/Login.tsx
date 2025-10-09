@@ -25,8 +25,8 @@ import { useToast } from "@/hooks/use-toast";
 import { Loader2 } from "lucide-react";
 
 const loginSchema = z.object({
-  username: z.string().min(3, "Username must be at least 3 characters"),
-  password: z.string().min(6, "Password must be at least 6 characters"),
+  username: z.string().min(3, "Your username needs to be at least 3 characters"),
+  password: z.string().min(6, "Your password needs to be at least 6 characters"),
 });
 
 type LoginFormData = z.infer<typeof loginSchema>;
@@ -73,8 +73,8 @@ export default function Login() {
     },
     onError: (error: Error) => {
       toast({
-        title: "Login failed",
-        description: error.message || "Invalid username or password",
+        title: "Couldn't log you in",
+        description: error.message || "Your username or password isn't correct. Please try again.",
         variant: "destructive",
       });
     },
