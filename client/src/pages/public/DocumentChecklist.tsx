@@ -9,6 +9,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Camera, FileText, Upload, CheckCircle2, AlertCircle, Sparkles, List } from "lucide-react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
+import PublicPortalNav from "@/components/PublicPortalNav";
 
 interface DocumentTemplate {
   id: string;
@@ -98,10 +99,12 @@ export default function DocumentChecklist() {
   const selectedTemplates = templates.filter((t) => selectedDocuments.includes(t.id));
 
   return (
-    <div className="container mx-auto px-4 py-8 max-w-6xl">
-      <a href="#checklist-content" className="skip-link">
-        Skip to checklist
-      </a>
+    <>
+      <PublicPortalNav />
+      <div className="container mx-auto px-4 py-8 max-w-6xl">
+        <a href="#checklist-content" className="skip-link">
+          Skip to checklist
+        </a>
 
       <div className="mb-8">
         <h1 className="text-3xl font-bold mb-2">Document Checklist Generator</h1>
@@ -343,6 +346,7 @@ export default function DocumentChecklist() {
           </AlertDescription>
         </Alert>
       )}
-    </div>
+      </div>
+    </>
   );
 }

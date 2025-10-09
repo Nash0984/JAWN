@@ -8,6 +8,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Search, Sparkles, List, ChevronDown, ChevronUp } from "lucide-react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
+import PublicPortalNav from "@/components/PublicPortalNav";
 
 interface PublicFaq {
   id: string;
@@ -94,10 +95,12 @@ export default function SimplifiedSearch() {
   };
 
   return (
-    <div className="container mx-auto px-4 py-8 max-w-6xl">
-      <a href="#content" className="skip-link">
-        Skip to content
-      </a>
+    <>
+      <PublicPortalNav />
+      <div className="container mx-auto px-4 py-8 max-w-6xl">
+        <a href="#content" className="skip-link">
+          Skip to content
+        </a>
 
       <div className="mb-8">
         <h1 className="text-3xl font-bold mb-2">SNAP Policy Search</h1>
@@ -243,6 +246,7 @@ export default function SimplifiedSearch() {
           </Card>
         </TabsContent>
       </Tabs>
-    </div>
+      </div>
+    </>
   );
 }
