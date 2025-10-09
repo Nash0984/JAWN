@@ -27,7 +27,11 @@ A basic user authentication system supports roles (user, admin, super_admin). Ob
 -   **Notification System**: Provides in-app notifications for policy updates, feedback, system alerts, and workflow events with user-configurable preferences and a dedicated notification center.
 -   **Policy Change Diff Monitor**: Tracks policy document versions with automated change detection, impact analysis, and role-based notifications. Staff can review diffs, assign impact assessments, and mark changes as resolved. Integrated with notification system for real-time alerts.
 -   **Compliance Assurance Suite**: Gemini-powered validation system that checks policy documents and rules against regulatory requirements. Admin UI at `/admin/compliance` allows creating compliance rules (WCAG, LEP, federal regulations), validating documents with AI analysis, and managing violations with severity-based prioritization.
--   **Adaptive Intake Copilot**: Gemini-powered conversational intake assistant at `/intake` that guides applicants through SNAP application process using multi-turn dialogue. Tracks session progress, extracts structured data from conversations, visualizes extracted fields, and generates application forms when data completeness threshold is reached. Features dual-pane UI with session management sidebar and chat interface with progress indicators.
+-   **Adaptive Intake Copilot**: Gemini-powered conversational intake assistant at `/intake` that guides applicants through SNAP application process using multi-turn dialogue. Tracks session progress, extracts structured data from conversations, visualizes extracted fields, and generates application forms when data completeness threshold is reached. Features dual-pane UI with session management sidebar and chat interface with progress indicators. Integrated with PolicyEngine for real-time benefit calculations during intake.
+-   **PolicyEngine Integration**: Python-based PolicyEngine API integration for multi-benefit calculations (SNAP, Medicaid, EITC, CTC, SSI, TANF). Provides accurate federal and state-specific benefit estimates based on household composition, income, and expenses. Integrated throughout the platform for eligibility screening, intake copilot, and scenario modeling.
+-   **Anonymous Benefit Screener**: Public-facing eligibility screener at `/screener` requiring no login. Allows Maryland residents to check benefit eligibility anonymously using PolicyEngine calculations. Features session management for tracking anonymous screening history and "Save Results" functionality to migrate data when user creates an account.
+-   **Household Scenario Workspace**: Advanced what-if modeling tool at `/scenarios` for navigators and caseworkers. Allows creation of multiple household scenarios with varying income, expenses, and composition. Features PolicyEngine-powered benefit calculations per scenario, Recharts-based comparison visualizations showing side-by-side benefit outcomes, and PDF export for client counseling reports. Supports data-driven benefit counseling and optimization strategies.
+-   **Demo Environment**: Four pre-seeded demo users (applicant, navigator, caseworker, admin) with credentials displayed on login page via collapsible "Use Demo Account" helper. Enables instant preview and testing of role-based features without manual account creation. Credentials: demo.applicant, demo.navigator, demo.caseworker, demo.admin (all use password: Demo2024!).
 
 ## Security & Performance
 -   **Security**: CSRF protection (double-submit cookie), multi-tier rate limiting, and security headers (Helmet, environment-aware CSP, HSTS) are implemented.
@@ -39,7 +43,10 @@ Vitest, @testing-library/react, and supertest are used for unit, component, and 
 # External Dependencies
 
 -   **AI Services**: Google Gemini API (`@google/genai`) for language models, document analysis, embeddings, and RAG. Models used: `gemini-2.5-flash`, `text-embedding-004`.
+-   **Benefit Calculations**: PolicyEngine (`policyengine-us`) Python package for accurate multi-benefit eligibility and amount calculations (SNAP, Medicaid, EITC, CTC, SSI, TANF).
 -   **Database**: PostgreSQL via Drizzle ORM (`drizzle-orm`) with Neon Database.
 -   **Object Storage**: Google Cloud Storage.
 -   **Document Processing**: Tesseract OCR engine and Google Gemini Vision API.
 -   **UI Components**: Radix UI primitives via shadcn/ui.
+-   **Data Visualization**: Recharts for benefit comparison charts and analytics dashboards.
+-   **PDF Generation**: jsPDF and jspdf-autotable for client counseling reports and scenario exports.
