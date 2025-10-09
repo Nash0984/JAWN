@@ -3300,6 +3300,116 @@ If the question cannot be answered with the available information, say so clearl
     res.json(result);
   }));
 
+  // Verify a calculation against PolicyEngine (admin/testing tool)
+  app.post("/api/policyengine/verify", requireAuth, asyncHandler(async (req, res) => {
+    const { PolicyEngineVerificationService } = await import("./services/policyEngineVerification.service");
+    const verificationService = new PolicyEngineVerificationService(storage);
+    
+    const inputSchema = z.object({
+      programCode: z.string(), // 'MD_SNAP', 'VITA', etc.
+      verificationType: z.enum(['benefit_amount', 'tax_calculation', 'eligibility_check']),
+      householdData: z.object({
+        adults: z.number(),
+        children: z.number(),
+        employmentIncome: z.number(),
+        unearnedIncome: z.number().optional(),
+        stateCode: z.string(),
+        householdAssets: z.number().optional(),
+        rentOrMortgage: z.number().optional(),
+        utilityCosts: z.number().optional(),
+        medicalExpenses: z.number().optional(),
+        childcareExpenses: z.number().optional(),
+        elderlyOrDisabled: z.boolean().optional()
+      }),
+      ourCalculation: z.any(), // The result from our Rules as Code
+      sessionId: z.string().optional()
+    });
+    
+    const validated = inputSchema.parse(req.body);
+    
+    // Get the benefit program
+    const program = await storage.getBenefitProgramByCode(validated.programCode);
+    if (!program) {
+      return res.status(404).json({ error: `Program ${validated.programCode} not found` });
+    }
+    
+    // Run verification based on type
+    let verification;
+    if (validated.verificationType === 'benefit_amount' && validated.programCode === 'MD_SNAP') {
+      verification = await verificationService.verifySNAPCalculation(
+        validated.householdData,
+        validated.ourCalculation,
+        {
+          benefitProgramId: program.id,
+          sessionId: validated.sessionId,
+          performedBy: req.user!.id
+        }
+      );
+    } else if (validated.verificationType === 'tax_calculation' && validated.programCode === 'VITA') {
+      verification = await verificationService.verifyTaxCalculation(
+        validated.householdData,
+        validated.ourCalculation,
+        {
+          benefitProgramId: program.id,
+          sessionId: validated.sessionId,
+          performedBy: req.user!.id
+        }
+      );
+    } else if (validated.verificationType === 'eligibility_check') {
+      verification = await verificationService.verifyEligibility(
+        validated.householdData,
+        validated.ourCalculation,
+        validated.programCode,
+        {
+          benefitProgramId: program.id,
+          sessionId: validated.sessionId,
+          performedBy: req.user!.id
+        }
+      );
+    } else {
+      return res.status(400).json({ 
+        error: `Unsupported verification type: ${validated.verificationType} for program ${validated.programCode}` 
+      });
+    }
+    
+    res.json(verification);
+  }));
+
+  // Get verification statistics for a program (admin only)
+  app.get("/api/policyengine/verify/stats/:programCode", requireAdmin, asyncHandler(async (req, res) => {
+    const { PolicyEngineVerificationService } = await import("./services/policyEngineVerification.service");
+    const verificationService = new PolicyEngineVerificationService(storage);
+    
+    const program = await storage.getBenefitProgramByCode(req.params.programCode);
+    if (!program) {
+      return res.status(404).json({ error: `Program ${req.params.programCode} not found` });
+    }
+    
+    const stats = await verificationService.getVerificationStats(program.id);
+    
+    res.json({
+      programCode: req.params.programCode,
+      programName: program.name,
+      ...stats
+    });
+  }));
+
+  // Get verification history for a program (admin only)
+  app.get("/api/policyengine/verify/history/:programCode", requireAdmin, asyncHandler(async (req, res) => {
+    const program = await storage.getBenefitProgramByCode(req.params.programCode);
+    if (!program) {
+      return res.status(404).json({ error: `Program ${req.params.programCode} not found` });
+    }
+    
+    const verifications = await storage.getPolicyEngineVerificationsByProgram(program.id);
+    
+    res.json({
+      programCode: req.params.programCode,
+      programName: program.name,
+      verifications
+    });
+  }));
+
   // Get formatted multi-benefit summary
   app.post("/api/policyengine/summary", asyncHandler(async (req, res) => {
     const { policyEngineService } = await import("./services/policyEngine.service");

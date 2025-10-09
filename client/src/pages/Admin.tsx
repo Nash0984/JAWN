@@ -4,6 +4,7 @@ import { IncomeLimitsManager } from "@/components/IncomeLimitsManager";
 import { DeductionsManager } from "@/components/DeductionsManager";
 import { AllotmentsManager } from "@/components/AllotmentsManager";
 import { CategoricalEligibilityManager } from "@/components/CategoricalEligibilityManager";
+import { PolicyEngineVerificationPanel } from "@/components/PolicyEngineVerificationPanel";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 export default function Admin() {
@@ -19,9 +20,10 @@ export default function Admin() {
       </div>
 
       <Tabs defaultValue="overview" className="space-y-6">
-        <TabsList className="grid grid-cols-3 md:grid-cols-6 w-full">
+        <TabsList className="grid grid-cols-4 md:grid-cols-7 w-full">
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="documents">Documents</TabsTrigger>
+          <TabsTrigger value="verification">Verification</TabsTrigger>
           <TabsTrigger value="income">Income Limits</TabsTrigger>
           <TabsTrigger value="deductions">Deductions</TabsTrigger>
           <TabsTrigger value="allotments">Allotments</TabsTrigger>
@@ -34,6 +36,10 @@ export default function Admin() {
         
         <TabsContent value="documents" className="space-y-6">
           <DocumentIngestionPanel />
+        </TabsContent>
+
+        <TabsContent value="verification" className="space-y-6">
+          <PolicyEngineVerificationPanel />
         </TabsContent>
 
         <TabsContent value="income" className="space-y-6">
