@@ -2867,6 +2867,28 @@ If the question cannot be answered with the available information, say so clearl
     // Invalidate cache
     cacheService.del('policy_changes:all');
     
+    // Notify all users about the new policy change (async - don't wait)
+    if (change.severity === 'critical' || change.severity === 'high') {
+      // Get all users to notify
+      const allUsers = await db.select({ id: users.id }).from(users);
+      const userIds = allUsers.map(u => u.id);
+      
+      notificationService.createBulkNotifications(userIds, {
+        type: "policy_change",
+        title: `New Policy Change: ${change.title}`,
+        message: change.description || `A ${change.severity} severity policy change has been implemented.`,
+        priority: change.severity === 'critical' ? 'urgent' : 'high',
+        relatedEntityType: "policy_change",
+        relatedEntityId: change.id,
+        actionUrl: "/admin/policy-changes",
+        metadata: {
+          policyChangeId: change.id,
+          severity: change.severity,
+          effectiveDate: change.effectiveDate
+        }
+      }).catch(err => console.error('Failed to send policy change notifications:', err));
+    }
+    
     res.status(201).json(change);
   }));
 
@@ -2884,6 +2906,29 @@ If the question cannot be answered with the available information, say so clearl
   // Create policy change impact
   app.post("/api/policy-change-impacts", requireAdmin, asyncHandler(async (req, res) => {
     const impact = await storage.createPolicyChangeImpact(req.body);
+    
+    // Notify the affected user about the impact (async - don't wait)
+    if (impact.affectedUserId) {
+      const policyChange = await storage.getPolicyChange(impact.policyChangeId);
+      
+      notificationService.createNotification({
+        userId: impact.affectedUserId,
+        type: "policy_change",
+        title: "Policy Change Impact - Action Required",
+        message: impact.impactDescription || `A policy change may affect your case. Review and acknowledge by ${impact.actionRequiredBy ? new Date(impact.actionRequiredBy).toLocaleDateString() : 'the deadline'}.`,
+        priority: impact.requiresAction ? 'high' : 'normal',
+        relatedEntityType: "policy_change_impact",
+        relatedEntityId: impact.id,
+        actionUrl: "/admin/policy-changes",
+        metadata: {
+          policyChangeId: impact.policyChangeId,
+          policyChangeTitle: policyChange?.title,
+          requiresAction: impact.requiresAction,
+          actionRequiredBy: impact.actionRequiredBy
+        }
+      }).catch(err => console.error('Failed to send impact notification:', err));
+    }
+    
     res.status(201).json(impact);
   }));
 
@@ -2912,11 +2957,35 @@ If the question cannot be answered with the available information, say so clearl
   app.patch("/api/policy-change-impacts/:id/resolve", requireAdmin, asyncHandler(async (req, res) => {
     const { resolutionNotes } = req.body;
     
+    // Get the impact before updating to access affectedUserId
+    const existingImpact = await storage.getPolicyChangeImpact(req.params.id);
+    
     const impact = await storage.updatePolicyChangeImpact(req.params.id, {
       resolved: true,
       resolvedAt: new Date(),
       resolutionNotes
     });
+    
+    // Notify the affected user that their impact has been resolved (async - don't wait)
+    if (existingImpact?.affectedUserId) {
+      const policyChange = await storage.getPolicyChange(existingImpact.policyChangeId);
+      
+      notificationService.createNotification({
+        userId: existingImpact.affectedUserId,
+        type: "policy_change",
+        title: "Policy Change Impact Resolved",
+        message: resolutionNotes || `Your policy change impact for "${policyChange?.title || 'a policy change'}" has been resolved.`,
+        priority: 'normal',
+        relatedEntityType: "policy_change_impact",
+        relatedEntityId: impact.id,
+        actionUrl: "/admin/policy-changes",
+        metadata: {
+          policyChangeId: existingImpact.policyChangeId,
+          policyChangeTitle: policyChange?.title,
+          resolvedBy: req.user!.id
+        }
+      }).catch(err => console.error('Failed to send resolution notification:', err));
+    }
     
     res.json(impact);
   }));
