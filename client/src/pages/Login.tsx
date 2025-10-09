@@ -22,7 +22,12 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2 } from "lucide-react";
+import { Loader2, UserCircle } from "lucide-react";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 
 const loginSchema = z.object({
   username: z.string().min(3, "Your username needs to be at least 3 characters"),
@@ -30,6 +35,33 @@ const loginSchema = z.object({
 });
 
 type LoginFormData = z.infer<typeof loginSchema>;
+
+const demoAccounts = [
+  {
+    username: "demo.applicant",
+    password: "Demo2024!",
+    role: "Applicant",
+    description: "Test the applicant experience",
+  },
+  {
+    username: "demo.navigator",
+    password: "Demo2024!",
+    role: "Navigator",
+    description: "Benefits navigator tools",
+  },
+  {
+    username: "demo.caseworker",
+    password: "Demo2024!",
+    role: "Caseworker",
+    description: "Case management features",
+  },
+  {
+    username: "demo.admin",
+    password: "Demo2024!",
+    role: "Admin",
+    description: "Full system administration",
+  },
+];
 
 export default function Login() {
   const [, setLocation] = useLocation();
@@ -82,6 +114,12 @@ export default function Login() {
 
   const onSubmit = (data: LoginFormData) => {
     loginMutation.mutate(data);
+  };
+
+  const useDemoAccount = (username: string, password: string) => {
+    form.setValue("username", username);
+    form.setValue("password", password);
+    loginMutation.mutate({ username, password });
   };
 
   return (
@@ -153,6 +191,45 @@ export default function Login() {
               </Button>
             </form>
           </Form>
+
+          <Collapsible className="mt-6">
+            <CollapsibleTrigger asChild>
+              <Button
+                variant="outline"
+                className="w-full"
+                data-testid="button-toggle-demo"
+              >
+                <UserCircle className="mr-2 h-4 w-4" />
+                Use Demo Account
+              </Button>
+            </CollapsibleTrigger>
+            <CollapsibleContent className="mt-4 space-y-2">
+              <p className="text-xs text-muted-foreground mb-3">
+                Quick login for testing different roles:
+              </p>
+              {demoAccounts.map((account) => (
+                <Button
+                  key={account.username}
+                  variant="ghost"
+                  className="w-full justify-start text-left h-auto py-2"
+                  onClick={() => useDemoAccount(account.username, account.password)}
+                  disabled={loginMutation.isPending}
+                  data-testid={`button-demo-${account.role.toLowerCase()}`}
+                >
+                  <div className="flex flex-col items-start">
+                    <span className="font-medium text-sm">{account.role}</span>
+                    <span className="text-xs text-muted-foreground">{account.description}</span>
+                    <span className="text-xs text-muted-foreground mt-1">
+                      {account.username}
+                    </span>
+                  </div>
+                </Button>
+              ))}
+              <p className="text-xs text-muted-foreground mt-3 pt-3 border-t">
+                All demo accounts use password: <code className="bg-muted px-1 py-0.5 rounded">Demo2024!</code>
+              </p>
+            </CollapsibleContent>
+          </Collapsible>
 
           <div className="mt-6 text-center text-sm">
             <span className="text-muted-foreground">Don't have an account? </span>
