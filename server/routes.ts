@@ -12,11 +12,12 @@ import { manualIngestionService } from "./services/manualIngestion";
 import { auditService } from "./services/auditService";
 import { documentVerificationService } from "./services/documentVerificationService";
 import { textGenerationService } from "./services/textGenerationService";
+import { notificationService } from "./services/notification.service";
 import { GoogleGenAI } from "@google/genai";
 import { asyncHandler, validationError, notFoundError, externalServiceError } from "./middleware/errorHandler";
 import { requireAuth, requireStaff, requireAdmin } from "./middleware/auth";
 import { db } from "./db";
-import { sql, eq, and, desc, gte, lte } from "drizzle-orm";
+import { sql, eq, and, desc, gte, lte, or, ilike } from "drizzle-orm";
 import { 
   insertDocumentSchema, 
   insertSearchQuerySchema, 
@@ -31,7 +32,8 @@ import {
   users,
   documentRequirementTemplates,
   noticeTemplates,
-  publicFaq
+  publicFaq,
+  notifications
 } from "@shared/schema";
 import { z } from "zod";
 import multer from "multer";
@@ -2166,6 +2168,9 @@ ${sessions.map(s => `    <session>
       }
     });
     
+    // Notify admins of new feedback
+    await notificationService.notifyAdminsOfFeedback(feedback.id, feedback.title);
+    
     res.status(201).json(feedback);
   }));
 
@@ -2356,6 +2361,151 @@ ${sessions.map(s => `    <session>
     });
     
     res.json(updatedFeedback);
+  }));
+
+  // Notification API Routes
+
+  // Get user notifications (with pagination, search, and filtering)
+  app.get("/api/notifications", requireAuth, asyncHandler(async (req, res) => {
+    const userId = (req as any).userId;
+    const { limit = "20", offset = "0", unreadOnly = "false", search = "", type = "" } = req.query;
+    
+    const limitNum = parseInt(limit as string);
+    const offsetNum = parseInt(offset as string);
+    
+    const conditions = [eq(notifications.userId, userId)];
+    
+    if (unreadOnly === "true") {
+      conditions.push(eq(notifications.isRead, false));
+    }
+    
+    if (type && type !== "all") {
+      conditions.push(eq(notifications.type, type as string));
+    }
+    
+    // Apply search filter using ilike for case-insensitive matching
+    if (search && search !== "") {
+      const searchPattern = `%${search}%`;
+      conditions.push(
+        or(
+          ilike(notifications.title, searchPattern),
+          ilike(notifications.message, searchPattern)
+        )!
+      );
+    }
+    
+    // Fetch notifications with all filters applied
+    const userNotifications = await db
+      .select()
+      .from(notifications)
+      .where(and(...conditions))
+      .orderBy(desc(notifications.createdAt))
+      .limit(limitNum)
+      .offset(offsetNum);
+    
+    // Get total count with all filters applied
+    const [{ totalCount }] = await db
+      .select({ totalCount: count() })
+      .from(notifications)
+      .where(and(...conditions));
+    
+    res.json({
+      notifications: userNotifications,
+      total: Number(totalCount),
+      limit: limitNum,
+      offset: offsetNum
+    });
+  }));
+
+  // Get unread notification count
+  app.get("/api/notifications/unread-count", requireAuth, asyncHandler(async (req, res) => {
+    const userId = (req as any).userId;
+    
+    const [{ unreadCount }] = await db
+      .select({ unreadCount: count() })
+      .from(notifications)
+      .where(and(
+        eq(notifications.userId, userId),
+        eq(notifications.isRead, false)
+      ));
+    
+    res.json({ count: Number(unreadCount) });
+  }));
+
+  // Mark notification as read
+  app.patch("/api/notifications/:id/read", requireAuth, asyncHandler(async (req, res) => {
+    const userId = (req as any).userId;
+    const { id } = req.params;
+    
+    const [updated] = await db
+      .update(notifications)
+      .set({
+        isRead: true,
+        readAt: new Date()
+      })
+      .where(and(
+        eq(notifications.id, id),
+        eq(notifications.userId, userId)
+      ))
+      .returning();
+    
+    if (!updated) {
+      throw notFoundError("Notification not found");
+    }
+    
+    res.json(updated);
+  }));
+
+  // Mark all notifications as read
+  app.patch("/api/notifications/read-all", requireAuth, asyncHandler(async (req, res) => {
+    const userId = (req as any).userId;
+    
+    await db
+      .update(notifications)
+      .set({
+        isRead: true,
+        readAt: new Date()
+      })
+      .where(and(
+        eq(notifications.userId, userId),
+        eq(notifications.isRead, false)
+      ));
+    
+    res.json({ success: true });
+  }));
+
+  // Get user notification preferences
+  app.get("/api/notifications/preferences", requireAuth, asyncHandler(async (req, res) => {
+    const userId = (req as any).userId;
+    const prefs = await notificationService.getUserPreferences(userId);
+    res.json(prefs);
+  }));
+
+  // Update user notification preferences
+  app.patch("/api/notifications/preferences", requireAuth, asyncHandler(async (req, res) => {
+    const userId = (req as any).userId;
+    const {
+      emailEnabled,
+      inAppEnabled,
+      policyChanges,
+      feedbackAlerts,
+      navigatorAlerts,
+      systemAlerts,
+      ruleExtractionAlerts
+    } = req.body;
+    
+    await notificationService.updateUserPreferences(userId, {
+      emailEnabled,
+      inAppEnabled,
+      policyChanges,
+      feedbackAlerts,
+      navigatorAlerts,
+      systemAlerts,
+      ruleExtractionAlerts
+    });
+    
+    const updatedPrefs = await notificationService.getUserPreferences(userId);
+    res.json(updatedPrefs);
   }));
 
   // Public Portal API Routes (no auth required)

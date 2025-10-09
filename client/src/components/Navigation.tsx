@@ -2,9 +2,10 @@ import { useState } from "react";
 import { Link, useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
-import { File, Search, FileText, HelpCircle, Menu, Bell, User, Calculator, BookOpen, FileCheck, Users, Shield, LogOut, LogIn, UserPlus, Settings, Globe } from "lucide-react";
+import { File, Search, FileText, HelpCircle, Menu, User, Calculator, BookOpen, FileCheck, Users, Shield, LogOut, LogIn, UserPlus, Settings, Globe } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import LanguageSelector from "./LanguageSelector";
+import NotificationBell from "./NotificationBell";
 import { useLanguage } from "@/hooks/useLanguage";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
@@ -132,9 +133,7 @@ export default function Navigation() {
             
             {isAuthenticated ? (
               <>
-                <Button variant="ghost" size="sm" data-testid="nav-notifications">
-                  <Bell className="h-4 w-4" />
-                </Button>
+                <NotificationBell />
                 
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>

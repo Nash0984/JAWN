@@ -27,6 +27,7 @@ import AIMonitoring from "@/pages/AIMonitoring";
 import AuditLogs from "@/pages/AuditLogs";
 import ApiDocs from "@/pages/ApiDocs";
 import FeedbackManagement from "@/pages/FeedbackManagement";
+import NotificationCenter from "@/pages/NotificationCenter";
 import DocumentChecklist from "@/pages/public/DocumentChecklist";
 import NoticeExplainer from "@/pages/public/NoticeExplainer";
 import SimplifiedSearch from "@/pages/public/SimplifiedSearch";
@@ -88,6 +89,13 @@ function Router() {
           </Route>
           
           {/* Protected routes - require authentication */}
+          <Route path="/notifications">
+            {() => (
+              <ProtectedRoute>
+                <NotificationCenter />
+              </ProtectedRoute>
+            )}
+          </Route>
           <Route path="/eligibility">
             {() => (
               <ProtectedRoute>
