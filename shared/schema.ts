@@ -23,10 +23,20 @@ export const users = pgTable("users", {
 export const benefitPrograms = pgTable("benefit_programs", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   name: text("name").notNull(),
-  code: text("code").notNull().unique(), // SNAP, MEDICAID, etc.
+  code: text("code").notNull().unique(), // SNAP, MEDICAID, VITA, etc.
   description: text("description"),
+  programType: text("program_type").notNull().default("benefit"), // benefit, tax, hybrid
+  // Program capabilities flags
+  hasRulesEngine: boolean("has_rules_engine").default(false).notNull(), // supports deterministic rules extraction
+  hasPolicyEngineValidation: boolean("has_policy_engine_validation").default(false).notNull(), // can verify with PolicyEngine
+  hasConversationalAI: boolean("has_conversational_ai").default(true).notNull(), // supports RAG chat
+  // Source configuration
+  primarySourceUrl: text("primary_source_url"), // main policy manual/document URL
+  sourceType: text("source_type"), // pdf, web_scraping, api
+  scrapingConfig: jsonb("scraping_config"), // configuration for scraping expandable sections, etc.
   isActive: boolean("is_active").default(true).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
 export const documentTypes = pgTable("document_types", {
@@ -1943,6 +1953,60 @@ export const insertAnonymousScreeningSessionSchema = createInsertSchema(anonymou
 // Types for anonymous screening
 export type InsertAnonymousScreeningSession = z.infer<typeof insertAnonymousScreeningSessionSchema>;
 export type AnonymousScreeningSession = typeof anonymousScreeningSessions.$inferSelect;
+
+// PolicyEngine verification tracking
+export const policyEngineVerifications = pgTable("policy_engine_verifications", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  benefitProgramId: varchar("benefit_program_id").references(() => benefitPrograms.id).notNull(),
+  
+  // What we're verifying
+  verificationType: text("verification_type").notNull(), // rules_calculation, eligibility_check, benefit_amount
+  inputData: jsonb("input_data").notNull(), // household data used for calculation
+  
+  // Our system's result (from Rules as Code)
+  ourResult: jsonb("our_result"),
+  ourCalculationMethod: text("our_calculation_method"), // which rule/logic we used
+  
+  // PolicyEngine's result
+  policyEngineResult: jsonb("policy_engine_result"),
+  policyEngineVersion: text("policy_engine_version"),
+  
+  // Comparison
+  variance: real("variance"), // numeric difference if applicable
+  variancePercentage: real("variance_percentage"),
+  isMatch: boolean("is_match"), // true if results match within tolerance
+  confidenceScore: real("confidence_score"), // 0-1 confidence in our result
+  
+  // Metadata
+  sessionId: text("session_id"), // link to intake session, scenario, etc.
+  performedBy: varchar("performed_by").references(() => users.id),
+  errorDetails: text("error_details"), // if verification failed
+  
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+  benefitProgramIdx: index("pe_verifications_program_idx").on(table.benefitProgramId),
+  isMatchIdx: index("pe_verifications_match_idx").on(table.isMatch),
+  createdAtIdx: index("pe_verifications_created_idx").on(table.createdAt),
+}));
+
+export const policyEngineVerificationsRelations = relations(policyEngineVerifications, ({ one }) => ({
+  benefitProgram: one(benefitPrograms, {
+    fields: [policyEngineVerifications.benefitProgramId],
+    references: [benefitPrograms.id],
+  }),
+  user: one(users, {
+    fields: [policyEngineVerifications.performedBy],
+    references: [users.id],
+  }),
+}));
+
+export const insertPolicyEngineVerificationSchema = createInsertSchema(policyEngineVerifications).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertPolicyEngineVerification = z.infer<typeof insertPolicyEngineVerificationSchema>;
+export type PolicyEngineVerification = typeof policyEngineVerifications.$inferSelect;
 
 // Insert schemas for household scenario workspace
 export const insertHouseholdScenarioSchema = createInsertSchema(householdScenarios).omit({

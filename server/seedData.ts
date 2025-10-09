@@ -79,27 +79,117 @@ export async function seedDemoUsers() {
 
 export async function seedMarylandBenefitPrograms() {
   try {
-    // Check if Maryland SNAP program already exists
     const programs = await storage.getBenefitPrograms();
-    const marylandSnap = programs.find(p => p.code === 'MD_SNAP');
     
-    if (marylandSnap) {
-      console.log('Maryland SNAP program already exists:', marylandSnap.name);
-      return marylandSnap;
+    // Define all Maryland benefit programs + VITA
+    const programsToSeed = [
+      {
+        name: 'Maryland SNAP (Food Supplement Program)',
+        code: 'MD_SNAP',
+        description: 'Maryland Supplemental Nutrition Assistance Program (SNAP), also known as Food Supplement Program (FSP), administered by the Maryland Department of Human Services',
+        programType: 'benefit',
+        hasRulesEngine: true,
+        hasPolicyEngineValidation: true,
+        hasConversationalAI: true,
+        primarySourceUrl: 'https://dhs.maryland.gov/supplemental-nutrition-assistance-program/food-supplement-program-manual/',
+        sourceType: 'web_scraping',
+        scrapingConfig: {
+          type: 'expandable_sections',
+          baseUrl: 'https://dhs.maryland.gov/supplemental-nutrition-assistance-program/food-supplement-program-manual/',
+          sectionPattern: 'folder links with numeric identifiers'
+        },
+        isActive: true
+      },
+      {
+        name: 'IRS VITA Tax Assistance',
+        code: 'VITA',
+        description: 'Volunteer Income Tax Assistance program providing free tax help to low-income taxpayers. Integrates IRS Publication 4012 and Form 13614-C for Maryland navigators.',
+        programType: 'tax',
+        hasRulesEngine: true,
+        hasPolicyEngineValidation: true, // can verify EITC, CTC, etc. with PolicyEngine
+        hasConversationalAI: true,
+        primarySourceUrl: 'https://www.irs.gov/pub/irs-pdf/p4012.pdf',
+        sourceType: 'pdf',
+        scrapingConfig: {
+          type: 'pdf_download',
+          publicationNumber: '4012',
+          relatedForms: ['13614-C', 'Form 1040']
+        },
+        isActive: true
+      },
+      {
+        name: 'Maryland Medicaid',
+        code: 'MD_MEDICAID',
+        description: 'Maryland Medical Assistance Program providing health coverage, administered by Maryland Department of Health',
+        programType: 'benefit',
+        hasRulesEngine: true,
+        hasPolicyEngineValidation: true,
+        hasConversationalAI: true,
+        primarySourceUrl: 'https://health.maryland.gov/mmcp/pages/MedicaidManual.aspx',
+        sourceType: 'web_scraping',
+        scrapingConfig: {
+          type: 'expandable_sections',
+          baseUrl: 'https://health.maryland.gov/mmcp/pages/MedicaidManual.aspx',
+          sectionPattern: 'dropdown sections with document links'
+        },
+        isActive: false // not yet implemented
+      },
+      {
+        name: 'Maryland TCA (TANF)',
+        code: 'MD_TANF',
+        description: 'Temporary Cash Assistance program (Maryland TANF implementation), administered by Maryland DHS Family Investment Administration',
+        programType: 'benefit',
+        hasRulesEngine: true,
+        hasPolicyEngineValidation: true,
+        hasConversationalAI: true,
+        primarySourceUrl: 'https://dsd.maryland.gov/pages/COMARHome.aspx',
+        sourceType: 'web_scraping',
+        scrapingConfig: {
+          type: 'comar_regulations',
+          comarTitle: '07.03.03',
+          regulationName: 'Family Investment Program'
+        },
+        isActive: false // not yet implemented
+      },
+      {
+        name: 'Maryland Energy Assistance (OHEP)',
+        code: 'MD_OHEP',
+        description: 'Office of Home Energy Programs providing MEAP and EUSP assistance, administered by Maryland DHS',
+        programType: 'benefit',
+        hasRulesEngine: true,
+        hasPolicyEngineValidation: false,
+        hasConversationalAI: true,
+        primarySourceUrl: 'https://dhs.maryland.gov/documents/OHEP/OHEP-MANUAL-MASTER-2015.pdf',
+        sourceType: 'pdf',
+        scrapingConfig: {
+          type: 'pdf_download',
+          supplementalRegulations: 'COMAR 07.03.22'
+        },
+        isActive: false // not yet implemented
+      },
+    ];
+
+    let createdCount = 0;
+    for (const programData of programsToSeed) {
+      const existing = programs.find(p => p.code === programData.code);
+      if (!existing) {
+        try {
+          await storage.createBenefitProgram(programData);
+          createdCount++;
+          console.log(`✓ Created program: ${programData.name} (${programData.code})`);
+        } catch (error) {
+          console.error(`  Error creating program ${programData.code}:`, error);
+        }
+      } else {
+        console.log(`  Program already exists: ${programData.code}`);
+      }
     }
 
-    // Create Maryland SNAP program
-    const newProgram = await storage.createBenefitProgram({
-      name: 'Maryland SNAP (Food Supplement Program)',
-      code: 'MD_SNAP',
-      description: 'Maryland Supplemental Nutrition Assistance Program (SNAP), also known as Food Supplement Program (FSP), administered by the Maryland Department of Human Services',
-      isActive: true
-    });
-
-    console.log('✓ Created Maryland SNAP benefit program:', newProgram.name);
-    return newProgram;
+    if (createdCount > 0) {
+      console.log(`✓ Seeded ${createdCount} benefit programs`);
+    }
   } catch (error) {
-    console.error('Error seeding Maryland SNAP program:', error);
+    console.error('Error seeding benefit programs:', error);
     throw error;
   }
 }
