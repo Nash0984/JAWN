@@ -33,7 +33,7 @@ export interface TrainingMetrics {
 class AIService {
   async analyzeDocumentForFieldExtraction(text: string, documentType: string) {
     try {
-      const prompt = `You are an AI assistant specialized in extracting structured information from government benefit documents.
+      const prompt = `You are an AI assistant specialized in extracting structured information from government publications, with an emphasis on public benefit programs and federal and state EITC and CTC
       
       For the document type "${documentType}", extract relevant fields such as:
       - Eligibility requirements
