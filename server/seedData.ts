@@ -1,5 +1,6 @@
 import { storage } from "./storage";
 import bcrypt from "bcryptjs";
+import { seedMarylandTestCases } from "./seedMarylandTestCases";
 
 export async function seedDemoUsers() {
   try {
@@ -489,6 +490,7 @@ export async function initializeSystemData() {
     await seedMarylandBenefitPrograms();
     await seedDocumentTypes();
     await seedMarylandDemoScenarios();
+    await seedMarylandTestCases();
     
     console.log('✓ System data initialization complete');
   } catch (error) {

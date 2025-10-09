@@ -13,8 +13,10 @@ export async function seedMarylandTestCases() {
     {
       program: "MD_SNAP",
       category: "work_requirements",
+      name: "MD_SNAP_DEP_CARE_001",
+      description: "MD_SNAP: Dependent care exemption for caretaker of child under 14",
       tags: ["exemption", "dependent_care", "md_specific"],
-      input: {
+      inputData: {
         householdSize: 2,
         hasChildUnder14: true,
         responsibleForCareOfChild: true,
@@ -29,17 +31,17 @@ export async function seedMarylandTestCases() {
         verificationRequired: true,
         notes: "Check whether SNAP and Medicaid language are parallel"
       },
-      tolerance: 0.0, // Boolean result, no variance
-      description: "MD_SNAP: Dependent care exemption for caretaker of child under 14",
-      createdBy: "system"
+      tolerance: 0.0 // Boolean result, no variance
     },
 
     // Test Case 2: Education Exemption (MD_SNAP work requirement)
     {
       program: "MD_SNAP",
       category: "work_requirements",
+      name: "MD_SNAP_EDUCATION_001",
+      description: "MD_SNAP: Education exemption for half-time student enrollment",
       tags: ["exemption", "education", "md_specific", "bbce"],
-      input: {
+      inputData: {
         householdSize: 1,
         inSchoolHalfTime: true,
         educationLevel: "college",
@@ -57,9 +59,7 @@ export async function seedMarylandTestCases() {
         topic: "Education",
         notes: "MD SNAP E&E System; WIOA reporting (if available on an individual level)"
       },
-      tolerance: 0.0, // Boolean result, no variance
-      description: "MD_SNAP: Education exemption for half-time student enrollment",
-      createdBy: "system"
+      tolerance: 0.0 // Boolean result, no variance
     }
   ];
 
