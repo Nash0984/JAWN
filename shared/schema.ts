@@ -735,6 +735,13 @@ export const clientInteractionSessions = pgTable("client_interaction_sessions", 
   actionItems: jsonb("action_items"), // Follow-up tasks
   notes: text("notes"),
   outcomeStatus: text("outcome_status"), // completed, needs_follow_up, referred, application_submitted
+  
+  // Accountability Pathway - Track client's progress through stages
+  pathwayStage: text("pathway_stage"), // unaware, blame_others, wait_and_hope, acknowledge_reality, own_action, find_solutions, make_it_happen
+  previousPathwayStage: text("previous_pathway_stage"), // Previous stage before transition
+  pathwayTransitionedAt: timestamp("pathway_transitioned_at"), // When stage last changed
+  pathwayNotes: text("pathway_notes"), // Navigator notes about pathway progress
+  
   exportedToEE: boolean("exported_to_ee").default(false).notNull(),
   exportedAt: timestamp("exported_at"),
   exportBatchId: varchar("export_batch_id"),
