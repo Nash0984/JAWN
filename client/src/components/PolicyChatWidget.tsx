@@ -1,10 +1,11 @@
 import { useState } from 'react';
-import { Send, Loader2, MessageCircle, X, BookOpen, ChevronDown, ChevronUp } from 'lucide-react';
+import { Send, Loader2, MessageCircle, X, BookOpen, ChevronDown, ChevronUp, Info, Database, Brain, CheckCircle, AlertCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { useMutation } from '@tanstack/react-query';
 import { apiRequest } from '@/lib/queryClient';
 
@@ -39,6 +40,7 @@ interface PolicyChatWidgetProps {
 export function PolicyChatWidget({ context, initialQuestion, compact = false }: PolicyChatWidgetProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [isExpanded, setIsExpanded] = useState(true);
+  const [showExplainer, setShowExplainer] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputValue, setInputValue] = useState('');
 
@@ -170,6 +172,14 @@ export function PolicyChatWidget({ context, initialQuestion, compact = false }: 
               <Button
                 variant="ghost"
                 size="sm"
+                onClick={() => setShowExplainer(!showExplainer)}
+                data-testid="button-toggle-explainer"
+              >
+                <Info className="h-4 w-4" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
                 onClick={() => setIsExpanded(!isExpanded)}
                 data-testid="button-toggle-expand"
               >
@@ -185,6 +195,69 @@ export function PolicyChatWidget({ context, initialQuestion, compact = false }: 
               </Button>
             </div>
           </div>
+
+          {/* How This Works Explainer */}
+          {showExplainer && (
+            <div className="mt-3 pt-3 border-t space-y-3 text-sm" data-testid="explainer-section">
+              <div>
+                <h3 className="font-semibold mb-2 flex items-center gap-2">
+                  <Brain className="h-4 w-4 text-primary" />
+                  How This Works
+                </h3>
+                <p className="text-muted-foreground">
+                  This assistant uses a hybrid approach combining AI-powered search with verified policy rules to give you accurate answers about Maryland SNAP benefits.
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <div className="flex items-start gap-2">
+                  <Database className="h-4 w-4 text-primary mt-0.5" />
+                  <div>
+                    <p className="font-medium">Data Sources</p>
+                    <ul className="text-xs text-muted-foreground space-y-1 mt-1">
+                      <li>• Maryland SNAP Policy Manual (official DHS documents)</li>
+                      <li>• PolicyEngine (third-party benefit calculator)</li>
+                      <li>• Federal regulations and state guidelines</li>
+                    </ul>
+                  </div>
+                </div>
+
+                <div className="flex items-start gap-2">
+                  <Brain className="h-4 w-4 text-primary mt-0.5" />
+                  <div>
+                    <p className="font-medium">AI + Rules Approach</p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      The AI searches through policy documents to find relevant information (RAG), while verified rules ensure calculations and procedures are accurate.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-start gap-2">
+                  <CheckCircle className="h-4 w-4 text-green-600 dark:text-green-400 mt-0.5" />
+                  <div>
+                    <p className="font-medium">What It Can Do</p>
+                    <ul className="text-xs text-muted-foreground space-y-1 mt-1">
+                      <li>• Answer policy questions with official citations</li>
+                      <li>• Explain eligibility requirements and benefit calculations</li>
+                      <li>• Guide you through application procedures</li>
+                    </ul>
+                  </div>
+                </div>
+
+                <div className="flex items-start gap-2">
+                  <AlertCircle className="h-4 w-4 text-amber-600 dark:text-amber-400 mt-0.5" />
+                  <div>
+                    <p className="font-medium">Limitations</p>
+                    <ul className="text-xs text-muted-foreground space-y-1 mt-1">
+                      <li>• Cannot make official eligibility determinations</li>
+                      <li>• May not have the most recent policy updates</li>
+                      <li>• Always verify critical information with DHS staff</li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
         </CardHeader>
 
         {isExpanded && (
@@ -237,13 +310,34 @@ export function PolicyChatWidget({ context, initialQuestion, compact = false }: 
                           <div className="mt-2 pt-2 border-t border-border/50 space-y-1">
                             <p className="text-xs font-medium">Policy References:</p>
                             {message.citations.map((citation, idx) => (
-                              <div key={idx} className="text-xs">
-                                <Badge variant="outline" className="mr-1">
-                                  {citation.sectionNumber}
-                                </Badge>
-                                <span className="text-muted-foreground">
-                                  {citation.sectionTitle}
-                                </span>
+                              <div key={idx} className="text-xs space-y-1">
+                                <div className="flex items-center gap-1">
+                                  <Badge variant="outline" className="mr-1">
+                                    {citation.sectionNumber}
+                                  </Badge>
+                                  <span className="text-muted-foreground">
+                                    {citation.sectionTitle}
+                                  </span>
+                                </div>
+                                {citation.relevanceScore !== undefined && (
+                                  <div className="flex items-center gap-2 ml-1">
+                                    <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden">
+                                      <div 
+                                        className={`h-full transition-all ${
+                                          citation.relevanceScore >= 0.8 
+                                            ? 'bg-green-600 dark:bg-green-400' 
+                                            : citation.relevanceScore >= 0.6 
+                                            ? 'bg-amber-600 dark:bg-amber-400' 
+                                            : 'bg-red-600 dark:bg-red-400'
+                                        }`}
+                                        style={{ width: `${citation.relevanceScore * 100}%` }}
+                                      />
+                                    </div>
+                                    <span className="text-[10px] text-muted-foreground">
+                                      {Math.round(citation.relevanceScore * 100)}% match
+                                    </span>
+                                  </div>
+                                )}
                               </div>
                             ))}
                           </div>
