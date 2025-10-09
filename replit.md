@@ -57,6 +57,19 @@ A public-facing portal provides SNAP applicants with essential tools accessible 
 
 Portal design principles: (1) Dual modes ensure accessibility for users who prefer traditional interfaces or cannot use AI features, (2) No authentication required, (3) WCAG 2.1 AA compliant with skip links and semantic HTML, (4) Mobile-first responsive design, (5) Integration with main navigation via "Applicant Tools" menu item. Backend infrastructure includes three database tables (`document_requirement_templates`, `notice_templates`, `public_faq`) with seed data, and public API endpoints for Gemini Vision analysis, text explanation, document templates, and FAQ retrieval.
 
+## Notification System (Complete)
+A comprehensive in-app notification system keeps users informed about policy updates, feedback submissions, system alerts, and workflow events. The system provides:
+
+**Core Infrastructure**: Three-table database schema including `notifications` (id, userId, type, title, message, relatedEntityType, relatedEntityId, priority, isRead, actionUrl, createdAt), `notification_preferences` (userId, emailEnabled, inAppEnabled, category-specific toggles), and `notification_templates` (code, type, title, messageTemplate for reusable templates).
+
+**Backend Services**: `NotificationService` provides methods for creating notifications with automatic user preference checks, batch mark-as-read operations, preference upsert patterns, and convenience methods for common scenarios (feedback submissions, policy changes, rule extractions). API endpoints support pagination, filtering by type/read status, search using `ilike` for case-insensitive matching, and preference management.
+
+**Frontend Components**: (1) `NotificationBell` component in navigation displays unread count badge and dropdown with recent notifications; (2) `NotificationCenter` page (`/notifications`) provides full notification list with pagination controls, search, type filtering, and mark-as-read actions; (3) `NotificationSettings` page (`/settings/notifications`) enables users to configure delivery methods (email, in-app) and category preferences (policy changes, feedback alerts, navigator alerts, system alerts, rule extraction alerts) with proper unsaved changes tracking.
+
+**Integration Triggers**: Automatic notification creation on key events including feedback submissions (notify admins), policy rule extractions (notify staff), and navigator workspace updates. Additional triggers can be added for audit log critical events and other workflow milestones.
+
+**Technical Implementation**: Database-level filtering applied BEFORE pagination using `ilike` for search terms and `eq` for type filters, ensuring correct results across all pages. React Query keys include all filter parameters (limit, offset, search, type, unreadOnly) to trigger refetch on any control change. Unsaved changes tracking compares local state against server preferences using JSON.stringify equality check.
+
 # External Dependencies
 
 -   **AI Services**: Google Gemini API (`@google/genai`) for language models, document analysis, embeddings, and RAG. Models used: `gemini-2.5-flash`, `text-embedding-004`.
