@@ -99,6 +99,9 @@ import {
   scenarioComparisons,
   type ScenarioComparison,
   type InsertScenarioComparison,
+  policyEngineVerifications,
+  type PolicyEngineVerification,
+  type InsertPolicyEngineVerification,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and, ilike, sql, or, isNull, lte, gte } from "drizzle-orm";
@@ -294,6 +297,12 @@ export interface IStorage {
   getScenarioComparisonsByUser(userId: string): Promise<ScenarioComparison[]>;
   updateScenarioComparison(id: string, updates: Partial<ScenarioComparison>): Promise<ScenarioComparison>;
   deleteScenarioComparison(id: string): Promise<void>;
+
+  // PolicyEngine Verifications
+  createPolicyEngineVerification(verification: InsertPolicyEngineVerification): Promise<PolicyEngineVerification>;
+  getPolicyEngineVerification(id: string): Promise<PolicyEngineVerification | undefined>;
+  getPolicyEngineVerificationsByProgram(benefitProgramId: string): Promise<PolicyEngineVerification[]>;
+  getPolicyEngineVerificationsBySession(sessionId: string): Promise<PolicyEngineVerification[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1419,6 +1428,36 @@ export class DatabaseStorage implements IStorage {
 
   async deleteScenarioComparison(id: string): Promise<void> {
     await db.delete(scenarioComparisons).where(eq(scenarioComparisons.id, id));
+  }
+
+  // PolicyEngine Verifications
+  async createPolicyEngineVerification(verification: InsertPolicyEngineVerification): Promise<PolicyEngineVerification> {
+    const [newVerification] = await db.insert(policyEngineVerifications).values(verification).returning();
+    return newVerification;
+  }
+
+  async getPolicyEngineVerification(id: string): Promise<PolicyEngineVerification | undefined> {
+    const [verification] = await db
+      .select()
+      .from(policyEngineVerifications)
+      .where(eq(policyEngineVerifications.id, id));
+    return verification;
+  }
+
+  async getPolicyEngineVerificationsByProgram(benefitProgramId: string): Promise<PolicyEngineVerification[]> {
+    return await db
+      .select()
+      .from(policyEngineVerifications)
+      .where(eq(policyEngineVerifications.benefitProgramId, benefitProgramId))
+      .orderBy(desc(policyEngineVerifications.createdAt));
+  }
+
+  async getPolicyEngineVerificationsBySession(sessionId: string): Promise<PolicyEngineVerification[]> {
+    return await db
+      .select()
+      .from(policyEngineVerifications)
+      .where(eq(policyEngineVerifications.sessionId, sessionId))
+      .orderBy(desc(policyEngineVerifications.createdAt));
   }
 }
 
