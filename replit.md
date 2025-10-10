@@ -1,6 +1,20 @@
 # Overview
 
-This project is the Maryland SNAP Policy Manual System, an AI-powered platform assisting users in understanding government benefit policies for Maryland's Food Supplement Program (SNAP). It uses Retrieval-Augmented Generation (RAG) technology, primarily powered by the Google Gemini API, to process policy documents, extract information, and provide accurate answers regarding SNAP benefits, eligibility, and program requirements. The system aims to address the "benefits navigation problem" by reducing information asymmetry and processing costs, thereby improving access to SNAP benefits. Key capabilities include document upload, real-time search, administrative tools, and AI model training interfaces. It adheres to the Maryland Digital Style Guide and is designed for integration with marylandbenefits.gov.
+This project is the Maryland Multi-Program Benefits Navigator System, an AI-powered platform assisting users in understanding government benefit policies across 7 major Maryland programs. It uses Retrieval-Augmented Generation (RAG) technology combined with Rules as Code, primarily powered by the Google Gemini API, to process policy documents, extract information, and provide accurate answers regarding benefits, eligibility, and program requirements. The system aims to address the "benefits navigation problem" by reducing information asymmetry and processing costs, thereby improving access to public benefits. Key capabilities include document upload, real-time semantic search, deterministic eligibility calculations via PolicyEngine, administrative tools, and AI model training interfaces. It adheres to the Maryland Digital Style Guide and is designed for integration with marylandbenefits.gov.
+
+## Active Benefit Programs
+
+The system currently supports 7 Maryland benefit programs with full RAG + Rules as Code capabilities:
+
+1. **Maryland SNAP (Food Supplement Program)** - Supplemental nutrition assistance with PolicyEngine validation
+2. **Maryland Medicaid** - Health coverage through Maryland Medical Assistance Program  
+3. **Maryland TCA (TANF)** - Temporary Cash Assistance with PolicyEngine integration
+4. **Maryland OHEP (Energy Assistance)** - Home energy programs (MEAP, EUSP)
+5. **Maryland WIC** - Special nutrition for Women, Infants, and Children
+6. **Maryland Children's Health Program (MCHP)** - Health insurance for children under 19
+7. **IRS VITA Tax Assistance** - Federal tax help with EITC/CTC verification
+
+All programs feature conversational AI search, automated document processing, and integration with the Navigator Workspace for client assistance.
 
 # User Preferences
 
