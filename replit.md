@@ -88,10 +88,52 @@ Vitest, @testing-library/react, and supertest are used for unit, component, and 
 4. **Intake Copilot**: Real-time benefit estimates during intake
 5. **Evaluation Framework**: PolicyEngine validation and accuracy testing
 
+### Alternative Benefit Calculation Services (Research Findings)
+
+**Evaluated Alternatives**:
+
+1. **PolicyEngine REST API** (Recommended if Python fails)
+   - URL: `https://api.policyengine.org/us/calculate`
+   - Same calculation engine via HTTP REST API instead of Python package
+   - Bypasses local library dependencies
+   - Free, open-source, actively maintained
+   - **Action**: Implement HTTP wrapper to replace Python calls
+
+2. **State-Specific SNAP Calculators** (State-level accuracy)
+   - Illinois: `fscalc.dhs.illinois.gov/FSCalc`
+   - Oregon: `snapestimate.dhsoha.state.or.us`
+   - New York: `benefitsplus.cssny.org`
+   - No official APIs but logic can be reverse-engineered
+   - **Use case**: Maryland-specific rules validation
+
+3. **mRelief** (Multi-benefit screener)
+   - Open-source: `github.com/mRelief`
+   - Covers SNAP, Medicaid, WIC, TANF
+   - Text/web-based benefit screening
+   - **Use case**: Reference implementation for multi-program logic
+
+4. **Custom USDA Tables Implementation**
+   - Build calculator using official FY 2026 SNAP tables
+   - Source: `fns.usda.gov/snap/recipient/eligibility`
+   - State FPL thresholds for Medicaid from KFF data
+   - **Use case**: Full control, Maryland customization
+
+5. **OpenFisca Framework** (Advanced)
+   - PolicyEngine's underlying rules-as-code engine
+   - URL: `openfisca.org`
+   - Build custom US benefit engine from scratch
+   - **Use case**: Long-term custom policy modeling
+
+**Recommended Next Steps**:
+1. **Immediate**: Implement PolicyEngine REST API wrapper (bypasses Python dependency issue)
+2. **Short-term**: Test HTTP API calls for SNAP/Medicaid calculations
+3. **Medium-term**: Build Maryland-specific calculation fallbacks using USDA tables
+4. **Long-term**: Consider OpenFisca if custom policy logic needed
+
 ### Workaround Options
 1. **Use RAG-only Mode**: Conversational AI and document search remain fully functional
 2. **Manual Calculations**: Navigators can use external tools for benefit amounts
-3. **Fallback Integration**: Consider alternative benefit calculation APIs (e.g., Column Tax API, Benefits Data Trust API)
+3. **PolicyEngine REST API**: Switch from Python package to HTTP API calls (bypasses library issue)
 
 ### Resolution Path
 **Short-term**: Document limitation, enable RAG-only features  
