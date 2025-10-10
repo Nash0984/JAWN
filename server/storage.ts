@@ -114,6 +114,12 @@ import {
   evaluationResults,
   type EvaluationResult,
   type InsertEvaluationResult,
+  abawdExemptionVerifications,
+  type AbawdExemptionVerification,
+  type InsertAbawdExemptionVerification,
+  programEnrollments,
+  type ProgramEnrollment,
+  type InsertProgramEnrollment,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and, ilike, sql, or, isNull, lte, gte } from "drizzle-orm";
@@ -329,6 +335,34 @@ export interface IStorage {
   getEvaluationTestCases(filters?: { program?: string; category?: string; isActive?: boolean }): Promise<EvaluationTestCase[]>;
   updateEvaluationTestCase(id: string, updates: Partial<EvaluationTestCase>): Promise<EvaluationTestCase>;
   deleteEvaluationTestCase(id: string): Promise<void>;
+
+  // ABAWD Exemption Verification
+  createAbawdExemptionVerification(verification: InsertAbawdExemptionVerification): Promise<AbawdExemptionVerification>;
+  getAbawdExemptionVerification(id: string): Promise<AbawdExemptionVerification | undefined>;
+  getAbawdExemptionVerifications(filters?: { 
+    clientCaseId?: string; 
+    exemptionStatus?: string; 
+    exemptionType?: string; 
+    verifiedBy?: string;
+  }): Promise<AbawdExemptionVerification[]>;
+  updateAbawdExemptionVerification(id: string, updates: Partial<AbawdExemptionVerification>): Promise<AbawdExemptionVerification>;
+  deleteAbawdExemptionVerification(id: string): Promise<void>;
+
+  // Cross-Enrollment Analysis
+  createProgramEnrollment(enrollment: InsertProgramEnrollment): Promise<ProgramEnrollment>;
+  getProgramEnrollment(id: string): Promise<ProgramEnrollment | undefined>;
+  getProgramEnrollments(filters?: {
+    clientIdentifier?: string;
+    benefitProgramId?: string;
+    enrollmentStatus?: string;
+    isEligibleForOtherPrograms?: boolean;
+  }): Promise<ProgramEnrollment[]>;
+  getProgramEnrollmentsByClient(clientIdentifier: string): Promise<ProgramEnrollment[]>;
+  updateProgramEnrollment(id: string, updates: Partial<ProgramEnrollment>): Promise<ProgramEnrollment>;
+  analyzeCrossEnrollmentOpportunities(clientIdentifier: string): Promise<{ 
+    enrolledPrograms: ProgramEnrollment[]; 
+    suggestedPrograms: { programId: string; programName: string; reason: string }[];
+  }>;
 
   createEvaluationRun(run: InsertEvaluationRun): Promise<EvaluationRun>;
   getEvaluationRun(id: string): Promise<EvaluationRun | undefined>;
@@ -1665,6 +1699,192 @@ export class DatabaseStorage implements IStorage {
       .from(evaluationResults)
       .where(eq(evaluationResults.testCaseId, testCaseId))
       .orderBy(desc(evaluationResults.createdAt));
+  }
+
+  // ABAWD Exemption Verification
+  async createAbawdExemptionVerification(verification: InsertAbawdExemptionVerification): Promise<AbawdExemptionVerification> {
+    const [newVerification] = await db.insert(abawdExemptionVerifications).values(verification).returning();
+    return newVerification;
+  }
+
+  async getAbawdExemptionVerification(id: string): Promise<AbawdExemptionVerification | undefined> {
+    const [verification] = await db
+      .select()
+      .from(abawdExemptionVerifications)
+      .where(eq(abawdExemptionVerifications.id, id));
+    return verification;
+  }
+
+  async getAbawdExemptionVerifications(filters?: { 
+    clientCaseId?: string; 
+    exemptionStatus?: string; 
+    exemptionType?: string; 
+    verifiedBy?: string;
+  }): Promise<AbawdExemptionVerification[]> {
+    let query = db.select().from(abawdExemptionVerifications);
+
+    const conditions = [];
+    if (filters?.clientCaseId) {
+      conditions.push(eq(abawdExemptionVerifications.clientCaseId, filters.clientCaseId));
+    }
+    if (filters?.exemptionStatus) {
+      conditions.push(eq(abawdExemptionVerifications.exemptionStatus, filters.exemptionStatus));
+    }
+    if (filters?.exemptionType) {
+      conditions.push(eq(abawdExemptionVerifications.exemptionType, filters.exemptionType));
+    }
+    if (filters?.verifiedBy) {
+      conditions.push(eq(abawdExemptionVerifications.verifiedBy, filters.verifiedBy));
+    }
+
+    if (conditions.length > 0) {
+      query = query.where(and(...conditions));
+    }
+
+    return await query.orderBy(desc(abawdExemptionVerifications.createdAt));
+  }
+
+  async updateAbawdExemptionVerification(id: string, updates: Partial<AbawdExemptionVerification>): Promise<AbawdExemptionVerification> {
+    const [updated] = await db
+      .update(abawdExemptionVerifications)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(abawdExemptionVerifications.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteAbawdExemptionVerification(id: string): Promise<void> {
+    await db.delete(abawdExemptionVerifications).where(eq(abawdExemptionVerifications.id, id));
+  }
+
+  // Cross-Enrollment Analysis
+  async createProgramEnrollment(enrollment: InsertProgramEnrollment): Promise<ProgramEnrollment> {
+    const [newEnrollment] = await db.insert(programEnrollments).values(enrollment).returning();
+    return newEnrollment;
+  }
+
+  async getProgramEnrollment(id: string): Promise<ProgramEnrollment | undefined> {
+    const [enrollment] = await db
+      .select()
+      .from(programEnrollments)
+      .where(eq(programEnrollments.id, id));
+    return enrollment;
+  }
+
+  async getProgramEnrollments(filters?: {
+    clientIdentifier?: string;
+    benefitProgramId?: string;
+    enrollmentStatus?: string;
+    isEligibleForOtherPrograms?: boolean;
+  }): Promise<ProgramEnrollment[]> {
+    let query = db.select().from(programEnrollments);
+
+    const conditions = [];
+    if (filters?.clientIdentifier) {
+      conditions.push(eq(programEnrollments.clientIdentifier, filters.clientIdentifier));
+    }
+    if (filters?.benefitProgramId) {
+      conditions.push(eq(programEnrollments.benefitProgramId, filters.benefitProgramId));
+    }
+    if (filters?.enrollmentStatus) {
+      conditions.push(eq(programEnrollments.enrollmentStatus, filters.enrollmentStatus));
+    }
+    if (filters?.isEligibleForOtherPrograms !== undefined) {
+      conditions.push(eq(programEnrollments.isEligibleForOtherPrograms, filters.isEligibleForOtherPrograms));
+    }
+
+    if (conditions.length > 0) {
+      query = query.where(and(...conditions));
+    }
+
+    return await query.orderBy(desc(programEnrollments.createdAt));
+  }
+
+  async getProgramEnrollmentsByClient(clientIdentifier: string): Promise<ProgramEnrollment[]> {
+    return await db
+      .select()
+      .from(programEnrollments)
+      .where(eq(programEnrollments.clientIdentifier, clientIdentifier))
+      .orderBy(desc(programEnrollments.createdAt));
+  }
+
+  async updateProgramEnrollment(id: string, updates: Partial<ProgramEnrollment>): Promise<ProgramEnrollment> {
+    const [updated] = await db
+      .update(programEnrollments)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(programEnrollments.id, id))
+      .returning();
+    return updated;
+  }
+
+  async analyzeCrossEnrollmentOpportunities(clientIdentifier: string): Promise<{ 
+    enrolledPrograms: ProgramEnrollment[]; 
+    suggestedPrograms: { programId: string; programName: string; reason: string }[];
+  }> {
+    // Get all enrollments for this client
+    const enrolledPrograms = await this.getProgramEnrollmentsByClient(clientIdentifier);
+    
+    // Get all active benefit programs
+    const allPrograms = await this.getBenefitPrograms();
+    
+    // Find programs client is NOT enrolled in
+    const enrolledProgramIds = new Set(enrolledPrograms.map(e => e.benefitProgramId));
+    const notEnrolledPrograms = allPrograms.filter(p => !enrolledProgramIds.has(p.id) && p.isActive);
+    
+    // Build suggestions based on household data from existing enrollments
+    const suggestedPrograms: { programId: string; programName: string; reason: string }[] = [];
+    
+    if (enrolledPrograms.length > 0) {
+      const sampleEnrollment = enrolledPrograms[0];
+      const householdSize = sampleEnrollment.householdSize || 0;
+      const householdIncome = sampleEnrollment.householdIncome || 0;
+      
+      for (const program of notEnrolledPrograms) {
+        let reason = '';
+        
+        // SNAP eligibility logic
+        if (program.code === 'MD_SNAP' && householdIncome < 200000) { // Rough SNAP threshold
+          reason = 'Household income may qualify for food assistance';
+        }
+        // Medicaid eligibility logic
+        else if (program.code === 'MD_MEDICAID' && householdIncome < 300000) { // Rough Medicaid threshold
+          reason = 'Household income may qualify for health coverage';
+        }
+        // WIC eligibility (pregnant/infants/children)
+        else if (program.code === 'MD_WIC' && householdSize > 0) {
+          reason = 'Households with children may qualify for nutrition assistance';
+        }
+        // TANF eligibility
+        else if (program.code === 'MD_TANF' && householdIncome < 150000) {
+          reason = 'Household may qualify for temporary cash assistance';
+        }
+        // Energy assistance
+        else if (program.code === 'MD_OHEP' && householdIncome < 250000) {
+          reason = 'Household may qualify for energy bill assistance';
+        }
+        // Children's Health Program
+        else if (program.code === 'MD_MCHP' && householdSize > 1) {
+          reason = 'Children in household may qualify for health coverage';
+        }
+        // VITA tax assistance
+        else if (program.code === 'VITA' && householdIncome < 600000) {
+          reason = 'Free tax preparation available for lower-income households';
+        }
+        
+        if (reason) {
+          suggestedPrograms.push({
+            programId: program.id,
+            programName: program.name,
+            reason
+          });
+        }
+      }
+    }
+    
+    return {
+      enrolledPrograms,
+      suggestedPrograms
+    };
   }
 }
 
