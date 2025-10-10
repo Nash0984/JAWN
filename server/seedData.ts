@@ -133,7 +133,7 @@ export async function seedMarylandBenefitPrograms() {
           baseUrl: 'https://health.maryland.gov/mmcp/pages/MedicaidManual.aspx',
           sectionPattern: 'dropdown sections with document links'
         },
-        isActive: false // not yet implemented
+        isActive: true
       },
       {
         name: 'Maryland TCA (TANF)',
@@ -150,7 +150,7 @@ export async function seedMarylandBenefitPrograms() {
           comarTitle: '07.03.03',
           regulationName: 'Family Investment Program'
         },
-        isActive: false // not yet implemented
+        isActive: true
       },
       {
         name: 'Maryland Energy Assistance (OHEP)',
@@ -166,7 +166,42 @@ export async function seedMarylandBenefitPrograms() {
           type: 'pdf_download',
           supplementalRegulations: 'COMAR 07.03.22'
         },
-        isActive: false // not yet implemented
+        isActive: true
+      },
+      {
+        name: 'Maryland WIC (Women, Infants, and Children)',
+        code: 'MD_WIC',
+        description: 'Special Supplemental Nutrition Program for Women, Infants, and Children, administered by Maryland Department of Health',
+        programType: 'benefit',
+        hasRulesEngine: true,
+        hasPolicyEngineValidation: true,
+        hasConversationalAI: true,
+        primarySourceUrl: 'https://health.maryland.gov/phpa/wic/Pages/wic-policy.aspx',
+        sourceType: 'web_scraping',
+        scrapingConfig: {
+          type: 'expandable_sections',
+          baseUrl: 'https://health.maryland.gov/phpa/wic/Documents/policy/2%20Chapter%20File_Cert%20and%20Eligibility.pdf',
+          sectionPattern: 'chapter-based policy documents'
+        },
+        isActive: true
+      },
+      {
+        name: 'Maryland Children\'s Health Program (MCHP)',
+        code: 'MD_MCHP',
+        description: 'Health insurance for uninsured Maryland children under age 19, administered by Maryland Department of Health',
+        programType: 'benefit',
+        hasRulesEngine: true,
+        hasPolicyEngineValidation: true,
+        hasConversationalAI: true,
+        primarySourceUrl: 'https://health.maryland.gov/mmcp/chp/pages/home.aspx',
+        sourceType: 'web_scraping',
+        scrapingConfig: {
+          type: 'comar_regulations',
+          comarTitle: '10.09.11',
+          regulationName: 'Maryland Children\'s Health Program',
+          supplementalUrl: 'https://www.marylandhealthconnection.gov/faq/maryland-childrens-health-program-mchp/'
+        },
+        isActive: true
       },
     ];
 
