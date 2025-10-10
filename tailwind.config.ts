@@ -41,6 +41,13 @@ export default {
           DEFAULT: "var(--destructive)",
           foreground: "var(--destructive-foreground)",
         },
+        success: {
+          DEFAULT: "var(--success)",
+          foreground: "var(--success-foreground)",
+        },
+        "md-blue": "var(--maryland-dhs-blue)",
+        "md-red": "var(--maryland-dhs-red)",
+        "md-gold": "var(--maryland-dhs-gold)",
         border: "var(--border)",
         input: "var(--input)",
         ring: "var(--ring)",
