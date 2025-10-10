@@ -2,6 +2,7 @@ import { Link } from "wouter";
 import { useAuth } from "@/hooks/useAuth";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { MDAlert } from "@/components/ui/md-alert";
 import { Settings, FileText, Database, Upload, Users, Shield, RefreshCw, BookOpen, Activity, Code, MessageSquare, UserCheck, Network } from "lucide-react";
 
 export default function AdminDashboard() {
@@ -130,7 +131,7 @@ export default function AdminDashboard() {
   return (
     <div className="container mx-auto px-4 py-8 max-w-6xl">
       {/* Welcome Header */}
-      <div className="mb-8">
+      <div className="mb-6">
         <h1 className="text-3xl font-bold text-foreground mb-2" data-testid="dashboard-title">
           System Administration
         </h1>
@@ -139,6 +140,14 @@ export default function AdminDashboard() {
           {user?.dhsEmployeeId && ` • Employee ID: ${user.dhsEmployeeId}`}
         </p>
       </div>
+
+      {/* Restricted Access Alert */}
+      <MDAlert variant="restricted" title="For Authorized Personnel Only" className="mb-8">
+        This administrative dashboard contains sensitive Maryland DHS system controls and confidential 
+        benefit program data. Unauthorized access or disclosure of information is strictly prohibited 
+        and may result in disciplinary action and legal consequences. All actions are logged and monitored 
+        for security and compliance purposes.
+      </MDAlert>
 
       {/* Admin Actions */}
       <div className="mb-8">
