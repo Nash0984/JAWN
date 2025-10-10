@@ -12,7 +12,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
-import { CheckCircle2, XCircle, Clock, FileCheck, AlertCircle, FileText, Search } from "lucide-react";
+import { CheckCircle2, XCircle, Clock, FileCheck, AlertCircle, FileText, Search, Download, FileDown } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { format } from "date-fns";
 import { useForm } from "react-hook-form";
@@ -256,13 +256,153 @@ export default function DocumentReviewQueue() {
     );
   };
 
+  // Export to CSV
+  const exportToCSV = () => {
+    import('papaparse').then(Papa => {
+      const csvData = documents.map(doc => ({
+        'Document ID': doc.id,
+        'Requirement Type': doc.requirementType.replace(/_/g, ' '),
+        'Status': doc.verificationStatus,
+        'Valid': doc.isValid ? 'Yes' : 'No',
+        'Confidence': doc.confidenceScore ? `${Math.round(doc.confidenceScore * 100)}%` : 'N/A',
+        'Case ID': doc.clientCaseId || 'N/A',
+        'Submitted Date': format(new Date(doc.createdAt), 'MMM d, yyyy h:mm a'),
+        'Reviewed Date': doc.reviewedAt ? format(new Date(doc.reviewedAt), 'MMM d, yyyy h:mm a') : 'N/A',
+        'Review Notes': doc.reviewNotes || 'N/A'
+      }));
+
+      const csv = Papa.default.unparse(csvData);
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+      const link = document.createElement('a');
+      const url = URL.createObjectURL(blob);
+      link.setAttribute('href', url);
+      link.setAttribute('download', `document-review-history-${format(new Date(), 'yyyy-MM-dd')}.csv`);
+      link.style.visibility = 'hidden';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+
+      toast({
+        title: "Export Complete",
+        description: `Exported ${documents.length} documents to CSV`
+      });
+    });
+  };
+
+  // Export to PDF
+  const exportToPDF = () => {
+    import('jspdf').then(jsPDF => {
+      import('jspdf-autotable').then(() => {
+        const doc = new jsPDF.default();
+        
+        // Maryland DHS Header
+        doc.setFillColor(13, 79, 139); // MD Blue
+        doc.rect(0, 0, 210, 30, 'F');
+        
+        doc.setTextColor(255, 255, 255);
+        doc.setFontSize(20);
+        doc.text('Maryland Benefits Navigator', 105, 15, { align: 'center' });
+        
+        doc.setFontSize(12);
+        doc.text('Document Review History Report', 105, 23, { align: 'center' });
+        
+        // Reset colors
+        doc.setTextColor(0, 0, 0);
+        doc.setFontSize(10);
+        doc.text(`Generated: ${format(new Date(), 'MMM d, yyyy h:mm a')}`, 14, 38);
+        doc.text(`Status Filter: ${filterStatus ? filterStatus.replace(/_/g, ' ') : 'All Statuses'}`, 14, 44);
+        doc.text(`Case ID Filter: ${filterCaseId || 'All Cases'}`, 14, 50);
+        doc.text(`Total Documents: ${documents.length}`, 14, 56);
+        
+        // Table data
+        const tableData = documents.map(d => [
+          d.requirementType.replace(/_/g, ' '),
+          d.verificationStatus.replace(/_/g, ' '),
+          d.isValid ? 'Yes' : 'No',
+          d.confidenceScore ? `${Math.round(d.confidenceScore * 100)}%` : 'N/A',
+          format(new Date(d.createdAt), 'MM/dd/yy'),
+          d.reviewedAt ? format(new Date(d.reviewedAt), 'MM/dd/yy') : 'N/A'
+        ]);
+
+        (doc as any).autoTable({
+          startY: 64,
+          head: [['Requirement', 'Status', 'Valid', 'Confidence', 'Submitted', 'Reviewed']],
+          body: tableData,
+          theme: 'striped',
+          headStyles: {
+            fillColor: [13, 79, 139], // MD Blue
+            textColor: [255, 255, 255],
+            fontStyle: 'bold'
+          },
+          styles: {
+            fontSize: 8,
+            cellPadding: 2
+          },
+          columnStyles: {
+            0: { cellWidth: 40 },
+            1: { cellWidth: 30 },
+            2: { cellWidth: 15 },
+            3: { cellWidth: 25 },
+            4: { cellWidth: 25 },
+            5: { cellWidth: 25 }
+          }
+        });
+
+        // Footer
+        const pageCount = (doc as any).internal.getNumberOfPages();
+        for (let i = 1; i <= pageCount; i++) {
+          doc.setPage(i);
+          doc.setFontSize(8);
+          doc.setTextColor(128, 128, 128);
+          doc.text(
+            `Maryland Department of Human Services - Page ${i} of ${pageCount}`,
+            105,
+            285,
+            { align: 'center' }
+          );
+        }
+
+        doc.save(`document-review-history-${format(new Date(), 'yyyy-MM-dd')}.pdf`);
+
+        toast({
+          title: "Export Complete",
+          description: `Exported ${documents.length} documents to PDF`
+        });
+      });
+    });
+  };
+
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">Document Review Queue</h1>
-        <p className="text-muted-foreground mt-2">
-          Review and approve client verification documents for benefit applications
-        </p>
+      <div className="flex items-start justify-between">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">Document Review Queue</h1>
+          <p className="text-muted-foreground mt-2">
+            Review and approve client verification documents for benefit applications
+          </p>
+        </div>
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={exportToCSV}
+            disabled={documents.length === 0}
+            data-testid="button-export-csv"
+          >
+            <Download className="h-4 w-4 mr-2" />
+            Export CSV
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={exportToPDF}
+            disabled={documents.length === 0}
+            data-testid="button-export-pdf"
+          >
+            <FileDown className="h-4 w-4 mr-2" />
+            Export PDF
+          </Button>
+        </div>
       </div>
 
       {/* Filters */}
