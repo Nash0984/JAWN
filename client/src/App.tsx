@@ -40,6 +40,7 @@ import { IntakeCopilot } from "@/pages/IntakeCopilot";
 import ScenarioWorkspace from "@/pages/ScenarioWorkspace";
 import AbawdVerificationAdmin from "@/pages/AbawdVerificationAdmin";
 import CrossEnrollmentAdmin from "@/pages/CrossEnrollmentAdmin";
+import DocumentReviewQueue from "@/pages/DocumentReviewQueue";
 
 function Router() {
   const [location] = useLocation();
@@ -250,6 +251,13 @@ function Router() {
             {() => (
               <ProtectedRoute requireStaff>
                 <CrossEnrollmentAdmin />
+              </ProtectedRoute>
+            )}
+          </Route>
+          <Route path="/navigator/document-review">
+            {() => (
+              <ProtectedRoute requireStaff>
+                <DocumentReviewQueue />
               </ProtectedRoute>
             )}
           </Route>

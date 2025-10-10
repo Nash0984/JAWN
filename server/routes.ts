@@ -4261,6 +4261,68 @@ If the question cannot be answered with the available information, say so clearl
     res.json(analysis);
   }));
 
+  // ==========================================
+  // Document Review Queue Routes (Navigator)
+  // ==========================================
+
+  // Get client verification documents for review
+  app.get("/api/document-review/queue", requireStaff, asyncHandler(async (req, res) => {
+    const filters: any = {};
+    
+    if (req.query.verificationStatus) {
+      filters.verificationStatus = req.query.verificationStatus as string;
+    }
+    if (req.query.sessionId) {
+      filters.sessionId = req.query.sessionId as string;
+    }
+    if (req.query.clientCaseId) {
+      filters.clientCaseId = req.query.clientCaseId as string;
+    }
+
+    const documents = await storage.getClientVerificationDocuments(filters);
+    res.json(documents);
+  }));
+
+  // Get single document for review
+  app.get("/api/document-review/:id", requireStaff, asyncHandler(async (req, res) => {
+    const document = await storage.getClientVerificationDocument(req.params.id);
+    
+    if (!document) {
+      throw notFoundError("Document not found");
+    }
+
+    res.json(document);
+  }));
+
+  // Approve or reject a document
+  app.put("/api/document-review/:id/status", requireStaff, asyncHandler(async (req, res) => {
+    const document = await storage.getClientVerificationDocument(req.params.id);
+    
+    if (!document) {
+      throw notFoundError("Document not found");
+    }
+
+    const schema = z.object({
+      verificationStatus: z.enum(['pending_review', 'approved', 'rejected', 'needs_more_info']),
+      reviewNotes: z.string().optional()
+    });
+
+    const validated = schema.parse(req.body);
+    
+    const updates: any = {
+      verificationStatus: validated.verificationStatus,
+      reviewedBy: req.user!.id,
+      reviewedAt: new Date()
+    };
+
+    if (validated.reviewNotes) {
+      updates.reviewNotes = validated.reviewNotes;
+    }
+
+    const updated = await storage.updateClientVerificationDocument(req.params.id, updates);
+    res.json(updated);
+  }));
+
   const httpServer = createServer(app);
   return httpServer;
 }

@@ -2,7 +2,7 @@ import { Link } from "wouter";
 import { useAuth } from "@/hooks/useAuth";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Users, Shield, FileCheck, Search, Calculator, BookOpen } from "lucide-react";
+import { Users, Shield, FileCheck, Search, Calculator, BookOpen, ClipboardCheck } from "lucide-react";
 
 export default function NavigatorDashboard() {
   const { user } = useAuth();
@@ -14,6 +14,14 @@ export default function NavigatorDashboard() {
       icon: Users,
       href: "/navigator",
       testId: "action-sessions",
+      primary: true,
+    },
+    {
+      title: "Document Review Queue",
+      description: "Review and approve client verification documents",
+      icon: ClipboardCheck,
+      href: "/navigator/document-review",
+      testId: "action-document-review",
       primary: true,
     },
     {
