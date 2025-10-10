@@ -2,7 +2,7 @@ import { Link } from "wouter";
 import { useAuth } from "@/hooks/useAuth";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Settings, FileText, Database, Upload, Users, Shield, RefreshCw, BookOpen, Activity, Code, MessageSquare } from "lucide-react";
+import { Settings, FileText, Database, Upload, Users, Shield, RefreshCw, BookOpen, Activity, Code, MessageSquare, UserCheck, Network } from "lucide-react";
 
 export default function AdminDashboard() {
   const { user } = useAuth();
@@ -62,6 +62,22 @@ export default function AdminDashboard() {
       icon: MessageSquare,
       href: "/admin/feedback",
       testId: "action-feedback",
+      primary: true,
+    },
+    {
+      title: "ABAWD Exemption Verification",
+      description: "Manage SNAP work requirement exemptions",
+      icon: UserCheck,
+      href: "/admin/abawd-verifications",
+      testId: "action-abawd",
+      primary: true,
+    },
+    {
+      title: "Cross-Enrollment Analysis",
+      description: "Identify multi-program enrollment opportunities",
+      icon: Network,
+      href: "/admin/cross-enrollment",
+      testId: "action-cross-enrollment",
       primary: true,
     },
     {
