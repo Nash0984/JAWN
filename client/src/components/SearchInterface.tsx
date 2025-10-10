@@ -1,11 +1,11 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Separator } from "@/components/ui/separator";
-import { Loader2, Search, Bot, Calculator, BookOpen, CheckCircle2, Info } from "lucide-react";
+import { Loader2, Search, Bot, Calculator, BookOpen, CheckCircle2, Info, Clock, Sparkles, X } from "lucide-react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -55,10 +55,48 @@ interface HybridSearchResult {
   responseTime: number;
 }
 
+const RECENT_SEARCHES_KEY = "md-benefits-recent-searches";
+const MAX_RECENT_SEARCHES = 5;
+
 export default function SearchInterface() {
   const [query, setQuery] = useState("");
   const [searchResult, setSearchResult] = useState<HybridSearchResult | null>(null);
+  const [recentSearches, setRecentSearches] = useState<string[]>([]);
   const { toast } = useToast();
+
+  // Load recent searches from localStorage
+  useEffect(() => {
+    const stored = localStorage.getItem(RECENT_SEARCHES_KEY);
+    if (stored) {
+      try {
+        setRecentSearches(JSON.parse(stored));
+      } catch (e) {
+        console.error("Failed to load recent searches:", e);
+      }
+    }
+  }, []);
+
+  // Save recent searches to localStorage
+  const addRecentSearch = (searchQuery: string) => {
+    const trimmedQuery = searchQuery.trim();
+    if (!trimmedQuery) return;
+
+    setRecentSearches(prev => {
+      // Remove duplicate if exists, add to front, limit to MAX_RECENT_SEARCHES
+      const filtered = prev.filter(q => q !== trimmedQuery);
+      const updated = [trimmedQuery, ...filtered].slice(0, MAX_RECENT_SEARCHES);
+      localStorage.setItem(RECENT_SEARCHES_KEY, JSON.stringify(updated));
+      return updated;
+    });
+  };
+
+  const removeRecentSearch = (searchQuery: string) => {
+    setRecentSearches(prev => {
+      const updated = prev.filter(q => q !== searchQuery);
+      localStorage.setItem(RECENT_SEARCHES_KEY, JSON.stringify(updated));
+      return updated;
+    });
+  };
 
   const { data: benefitPrograms = [] } = useQuery({
     queryKey: ["/api/benefit-programs"],
@@ -92,6 +130,7 @@ export default function SearchInterface() {
       });
       return;
     }
+    addRecentSearch(queryToSearch);
     searchMutation.mutate({ query: queryToSearch });
   };
 
@@ -160,9 +199,50 @@ export default function SearchInterface() {
               </Button>
             </div>
           
+          {/* Recent Searches */}
+          {recentSearches.length > 0 && (
+            <div className="mt-4 pb-4 border-b border-border">
+              <div className="flex items-center gap-2 mb-2">
+                <Clock className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
+                <p className="text-sm font-medium text-foreground" id="recent-searches-label">Recent Searches</p>
+              </div>
+              <div className="flex flex-wrap gap-2" role="group" aria-labelledby="recent-searches-label">
+                {recentSearches.map((search, index) => (
+                  <div key={index} className="flex items-center gap-1 bg-muted rounded-md">
+                    <Button 
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => handleQuickSearch(search)}
+                      className="rounded-r-none hover:bg-accent/50"
+                      data-testid={`button-recent-search-${index}`}
+                      aria-label={`Search again for: ${search}`}
+                      disabled={searchMutation.isPending}
+                    >
+                      {search}
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => removeRecentSearch(search)}
+                      className="px-2 rounded-l-none border-l border-border/50"
+                      data-testid={`button-remove-recent-${index}`}
+                      aria-label={`Remove from recent searches: ${search}`}
+                    >
+                      <X className="h-3 w-3" aria-hidden="true" />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Suggested For You */}
           <div className="mt-4">
-            <p className="text-sm text-muted-foreground mb-2" id="quick-search-label">Try asking:</p>
-            <div className="flex flex-wrap gap-2" role="group" aria-labelledby="quick-search-label">
+            <div className="flex items-center gap-2 mb-2">
+              <Sparkles className="h-4 w-4 text-md-gold" aria-hidden="true" />
+              <p className="text-sm font-medium text-foreground" id="suggested-label">Suggested For You</p>
+            </div>
+            <div className="flex flex-wrap gap-2" role="group" aria-labelledby="suggested-label">
               {quickSearches.map((search, index) => (
                 <Button 
                   key={search}
