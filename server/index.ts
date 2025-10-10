@@ -103,25 +103,25 @@ if (!process.env.SESSION_SECRET) {
 }
 
 const PgSession = ConnectPgSimple(session);
-app.use(
-  session({
-    store: new PgSession({
-      conObject: {
-        connectionString: process.env.DATABASE_URL,
-      },
-      createTableIfMissing: true,
-    }),
-    secret: process.env.SESSION_SECRET,
-    resave: false,
-    saveUninitialized: false,
-    cookie: {
-      maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
+const sessionMiddleware = session({
+  store: new PgSession({
+    conObject: {
+      connectionString: process.env.DATABASE_URL,
     },
-  })
-);
+    createTableIfMissing: true,
+  }),
+  secret: process.env.SESSION_SECRET,
+  resave: false,
+  saveUninitialized: false,
+  cookie: {
+    maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax",
+  },
+});
+
+app.use(sessionMiddleware);
 
 // Initialize Passport
 app.use(passport.initialize());
@@ -162,7 +162,7 @@ app.use("/api/", (req, res, next) => {
   // Initialize system data (benefit programs, etc.)
   await initializeSystemData();
   
-  const server = await registerRoutes(app);
+  const server = await registerRoutes(app, sessionMiddleware);
 
   // importantly only setup vite in development and after
   // setting up all the other routes so the catch-all route

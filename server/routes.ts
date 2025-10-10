@@ -92,7 +92,7 @@ async function generateTextWithGemini(prompt: string): Promise<string> {
   return response.text || "";
 }
 
-export async function registerRoutes(app: Express): Promise<Server> {
+export async function registerRoutes(app: Express, sessionMiddleware?: any): Promise<Server> {
   
   // Comprehensive health check endpoint
   app.get("/api/health", asyncHandler(async (req, res) => {
@@ -4352,7 +4352,11 @@ If the question cannot be answered with the available information, say so clearl
   const httpServer = createServer(app);
   
   // Initialize WebSocket service for real-time notifications
-  initializeWebSocketService(httpServer);
+  if (sessionMiddleware) {
+    initializeWebSocketService(httpServer, sessionMiddleware);
+  } else {
+    console.warn("Warning: WebSocket service not initialized - session middleware not provided");
+  }
   
   return httpServer;
 }

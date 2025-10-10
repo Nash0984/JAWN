@@ -34,7 +34,7 @@ export function useRealtimeNotifications() {
     }
 
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsUrl = `${protocol}//${window.location.host}/ws/notifications?userId=${user.id}`;
+    const wsUrl = `${protocol}//${window.location.host}/ws/notifications`;
 
     console.log("Connecting to WebSocket:", wsUrl);
 
