@@ -11,7 +11,12 @@ import {
   CheckCircle, 
   AlertCircle,
   Eye,
-  X
+  X,
+  ZoomIn,
+  ZoomOut,
+  Maximize,
+  RotateCw,
+  RotateCcw
 } from "lucide-react";
 import { useMutation } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
@@ -37,6 +42,8 @@ export default function DocumentVerificationInterface() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [result, setResult] = useState<VerificationResult | null>(null);
+  const [zoom, setZoom] = useState(100);
+  const [rotation, setRotation] = useState(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
@@ -136,9 +143,17 @@ export default function DocumentVerificationInterface() {
     setSelectedFile(null);
     setPreviewUrl(null);
     setResult(null);
+    setZoom(100);
+    setRotation(0);
     if (fileInputRef.current) fileInputRef.current.value = '';
     if (cameraInputRef.current) cameraInputRef.current.value = '';
   };
+
+  const handleZoomIn = () => setZoom(prev => Math.min(prev + 25, 200));
+  const handleZoomOut = () => setZoom(prev => Math.max(prev - 25, 50));
+  const handleFitToWidth = () => setZoom(100);
+  const handleRotateLeft = () => setRotation(prev => (prev - 90) % 360);
+  const handleRotateRight = () => setRotation(prev => (prev + 90) % 360);
 
   return (
     <div className="space-y-6">
@@ -256,12 +271,83 @@ export default function DocumentVerificationInterface() {
 
             {previewUrl && (
               <div className="mb-4">
-                <img 
-                  src={previewUrl} 
-                  alt="Document preview" 
-                  className="max-w-full h-32 object-contain rounded border"
-                  data-testid="img-preview"
-                />
+                {/* Document Viewer Controls */}
+                <div className="flex items-center justify-between mb-2 p-2 bg-muted/50 rounded-md">
+                  <div className="flex items-center space-x-1">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={handleZoomOut}
+                      disabled={zoom <= 50}
+                      data-testid="button-zoom-out"
+                      title="Zoom Out"
+                      aria-label="Zoom out document preview"
+                    >
+                      <ZoomOut className="h-4 w-4" aria-hidden="true" />
+                    </Button>
+                    <span className="text-xs text-muted-foreground px-2" data-testid="text-zoom-level" aria-live="polite">
+                      {zoom}%
+                    </span>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={handleZoomIn}
+                      disabled={zoom >= 200}
+                      data-testid="button-zoom-in"
+                      title="Zoom In"
+                      aria-label="Zoom in document preview"
+                    >
+                      <ZoomIn className="h-4 w-4" aria-hidden="true" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={handleFitToWidth}
+                      data-testid="button-fit-width"
+                      title="Fit to Width"
+                      aria-label="Fit document to width"
+                    >
+                      <Maximize className="h-4 w-4" aria-hidden="true" />
+                    </Button>
+                  </div>
+                  <div className="flex items-center space-x-1">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={handleRotateLeft}
+                      data-testid="button-rotate-left"
+                      title="Rotate Left"
+                      aria-label="Rotate document left 90 degrees"
+                    >
+                      <RotateCcw className="h-4 w-4" aria-hidden="true" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={handleRotateRight}
+                      data-testid="button-rotate-right"
+                      title="Rotate Right"
+                      aria-label="Rotate document right 90 degrees"
+                    >
+                      <RotateCw className="h-4 w-4" aria-hidden="true" />
+                    </Button>
+                  </div>
+                </div>
+                
+                {/* Document Preview with transformations */}
+                <div className="overflow-auto max-h-96 border rounded bg-gray-50 dark:bg-gray-900 flex items-center justify-center p-4">
+                  <img 
+                    src={previewUrl} 
+                    alt="Document preview" 
+                    className="transition-transform duration-200"
+                    style={{
+                      transform: `scale(${zoom / 100}) rotate(${rotation}deg)`,
+                      maxWidth: '100%',
+                      height: 'auto'
+                    }}
+                    data-testid="img-preview"
+                  />
+                </div>
               </div>
             )}
 
