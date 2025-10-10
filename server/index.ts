@@ -33,8 +33,8 @@ app.use(helmet({
         : ["'self'"],
       imgSrc: ["'self'", "data:", "https:", "blob:"],
       connectSrc: isDevelopment
-        ? ["'self'", "https:", "ws:", "wss:"] // WebSocket for Vite HMR
-        : ["'self'", "https:"],
+        ? ["'self'", "https:", "ws:", "wss:"] // WebSocket for Vite HMR + real-time notifications
+        : ["'self'", "https:", "wss:"], // WebSocket for real-time notifications
       fontSrc: ["'self'", "data:"],
       objectSrc: ["'none'"],
       mediaSrc: ["'self'"],
