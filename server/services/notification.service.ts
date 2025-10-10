@@ -9,6 +9,7 @@ import {
 } from "@shared/schema";
 import { eq, and, desc, isNull, count, or } from "drizzle-orm";
 import { getWebSocketService } from "./websocket.service";
+import { emailService } from "./email.service";
 
 export interface CreateNotificationParams {
   userId: string;
@@ -87,8 +88,32 @@ class NotificationService implements NotificationServiceInterface {
 
     // Send real-time notification via WebSocket
     const wsService = getWebSocketService();
+    let sentViaWebSocket = false;
+    
     if (wsService && notification) {
-      wsService.notifyUser(userId, notification);
+      sentViaWebSocket = wsService.notifyUser(userId, notification);
+    }
+
+    // Email backup for offline users
+    if (!sentViaWebSocket && prefs?.emailEnabled) {
+      // User is offline and has email enabled - send email notification
+      const user = await db.query.users.findFirst({
+        where: eq(users.id, userId)
+      });
+
+      if (user?.email) {
+        try {
+          await emailService.sendNotificationEmail(
+            user.email,
+            title,
+            message,
+            actionUrl
+          );
+          console.log(`📧 Email backup sent to offline user: ${user.email}`);
+        } catch (error) {
+          console.error('Failed to send email backup:', error);
+        }
+      }
     }
   }
 
