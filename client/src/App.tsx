@@ -41,6 +41,7 @@ import ScenarioWorkspace from "@/pages/ScenarioWorkspace";
 import AbawdVerificationAdmin from "@/pages/AbawdVerificationAdmin";
 import CrossEnrollmentAdmin from "@/pages/CrossEnrollmentAdmin";
 import DocumentReviewQueue from "@/pages/DocumentReviewQueue";
+import MobileBottomNav from "@/components/MobileBottomNav";
 
 function Router() {
   const [location] = useLocation();
@@ -57,7 +58,7 @@ function Router() {
       {/* Show navigation only on non-auth pages */}
       {!isAuthPage && <Navigation />}
       
-      <main id="main-content" role="main">
+      <main id="main-content" role="main" className="pb-20 md:pb-0">
         <Switch>
           {/* Public routes */}
           <Route path="/" component={Home} />
@@ -273,6 +274,9 @@ function Router() {
           <Route component={NotFound} />
         </Switch>
       </main>
+      
+      {/* Mobile Bottom Navigation - Only shown on small screens and non-auth pages */}
+      {!isAuthPage && <MobileBottomNav />}
     </div>
   );
 }
