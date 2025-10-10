@@ -66,3 +66,39 @@ Vitest, @testing-library/react, and supertest are used for unit, component, and 
 -   **UI Components**: Radix UI primitives via shadcn/ui.
 -   **Data Visualization**: Recharts for benefit comparison charts and analytics dashboards.
 -   **PDF Generation**: jsPDF and jspdf-autotable for client counseling reports and scenario exports.
+
+# Known Issues & Resolution Plans
+
+## PolicyEngine Python Library - System Dependency Issue
+
+**Status**: BLOCKED - Requires environment-level fix  
+**Impact**: PolicyEngine benefit calculations unavailable across all programs  
+**Root Cause**: Missing `libstdc++.so.6` shared library for numpy C-extensions  
+
+### Technical Details
+- **Error**: `ImportError: libstdc++.so.6: cannot open shared object file: No such file or directory`
+- **Affected Component**: `policyengine-us` Python package and its numpy dependency
+- **Environment**: NixOS/Replit environment with Python 3.11
+- **Attempts Made**: Installed gcc, libstdcxx5 system dependencies - issue persists
+
+### Impacted Features
+1. **Benefit Calculations**: All PolicyEngine-powered calculations (SNAP, Medicaid, TANF, EITC, CTC, SSI)
+2. **Scenario Workspace**: Household modeling and what-if analysis
+3. **Benefit Screener**: Anonymous eligibility screening
+4. **Intake Copilot**: Real-time benefit estimates during intake
+5. **Evaluation Framework**: PolicyEngine validation and accuracy testing
+
+### Workaround Options
+1. **Use RAG-only Mode**: Conversational AI and document search remain fully functional
+2. **Manual Calculations**: Navigators can use external tools for benefit amounts
+3. **Fallback Integration**: Consider alternative benefit calculation APIs (e.g., Column Tax API, Benefits Data Trust API)
+
+### Resolution Path
+**Short-term**: Document limitation, enable RAG-only features  
+**Medium-term**: Investigate alternative deployment strategies:
+- Docker containerization with proper libraries
+- Python virtual environment with pre-compiled wheels
+- Alternative benefit calculation services
+- Cloud function deployment for PolicyEngine
+
+**Long-term**: Work with Replit support to resolve NixOS library dependencies for Python scientific packages
