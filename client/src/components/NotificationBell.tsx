@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { motion, AnimatePresence } from "framer-motion";
-import { Bell } from "lucide-react";
+import { Bell, Wifi, WifiOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Popover,
@@ -16,6 +16,7 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { formatDistanceToNow } from "date-fns";
 import { Link } from "wouter";
 import { notificationVariants, containerVariants, itemVariants } from "@/lib/animations";
+import { useRealtimeNotifications } from "@/hooks/useRealtimeNotifications";
 
 interface Notification {
   id: string;
@@ -31,11 +32,12 @@ interface Notification {
 export default function NotificationBell() {
   const [open, setOpen] = useState(false);
   const { toast } = useToast();
+  const { isConnected } = useRealtimeNotifications();
 
   // Fetch unread count
   const { data: unreadData } = useQuery({
     queryKey: ["/api/notifications/unread-count"],
-    refetchInterval: 30000, // Poll every 30 seconds
+    // No polling needed - real-time updates via WebSocket
   });
 
   // Fetch recent notifications
@@ -101,7 +103,14 @@ export default function NotificationBell() {
           data-testid="button-notification-bell"
           aria-label={`Notifications${unreadCount > 0 ? ` (${unreadCount} unread)` : ""}`}
         >
-          <Bell className="h-5 w-5" />
+          <div className="relative">
+            <Bell className="h-5 w-5" />
+            {isConnected ? (
+              <Wifi className="h-2 w-2 text-green-500 absolute -bottom-0.5 -right-0.5" />
+            ) : (
+              <WifiOff className="h-2 w-2 text-gray-400 absolute -bottom-0.5 -right-0.5" />
+            )}
+          </div>
           <AnimatePresence>
             {unreadCount > 0 && (
               <motion.div

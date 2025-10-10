@@ -8,6 +8,7 @@ import {
   type NotificationPreference
 } from "@shared/schema";
 import { eq, and, desc, isNull, count, or } from "drizzle-orm";
+import { getWebSocketService } from "./websocket.service";
 
 export interface CreateNotificationParams {
   userId: string;
@@ -71,7 +72,7 @@ class NotificationService implements NotificationServiceInterface {
       if (type === "rule_extraction_complete" && !prefs.ruleExtractionAlerts) return;
     }
 
-    await db.insert(notifications).values({
+    const [notification] = await db.insert(notifications).values({
       userId,
       type,
       title,
@@ -82,7 +83,13 @@ class NotificationService implements NotificationServiceInterface {
       actionUrl,
       metadata,
       isRead: false
-    });
+    }).returning();
+
+    // Send real-time notification via WebSocket
+    const wsService = getWebSocketService();
+    if (wsService && notification) {
+      wsService.notifyUser(userId, notification);
+    }
   }
 
   async createNotificationFromTemplate(

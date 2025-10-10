@@ -1,5 +1,6 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
+import { initializeWebSocketService } from "./services/websocket.service";
 import { storage } from "./storage";
 import { ragService } from "./services/ragService";
 import { documentProcessor } from "./services/documentProcessor";
@@ -4320,9 +4321,38 @@ If the question cannot be answered with the available information, say so clearl
     }
 
     const updated = await storage.updateClientVerificationDocument(req.params.id, updates);
+
+    // Send real-time notification to the document owner/submitter
+    if (document.sessionId) {
+      const session = await storage.getClientInteractionSession(document.sessionId);
+      if (session?.clientCaseId) {
+        const clientCase = await storage.getClientCase(session.clientCaseId);
+        if (clientCase) {
+          // Notify the client about document review status
+          const statusText = validated.verificationStatus === 'approved' ? 'approved' : 
+                           validated.verificationStatus === 'rejected' ? 'rejected' : 'requires more information';
+          
+          await notificationService.createNotification({
+            userId: clientCase.applicantId || clientCase.navigatorId,
+            type: 'document_review',
+            title: `Document ${statusText}`,
+            message: `Your ${document.requirementType.replace(/_/g, ' ')} document has been ${statusText}${validated.reviewNotes ? ': ' + validated.reviewNotes : ''}`,
+            priority: validated.verificationStatus === 'rejected' ? 'high' : 'normal',
+            relatedEntityType: 'client_verification_document',
+            relatedEntityId: document.id,
+            actionUrl: `/verify`
+          });
+        }
+      }
+    }
+
     res.json(updated);
   }));
 
   const httpServer = createServer(app);
+  
+  // Initialize WebSocket service for real-time notifications
+  initializeWebSocketService(httpServer);
+  
   return httpServer;
 }
