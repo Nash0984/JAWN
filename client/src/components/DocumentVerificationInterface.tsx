@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
+import { VerificationStamp } from "@/components/ui/verification-stamp";
 import { 
   Camera, 
   FileText, 
@@ -335,7 +336,7 @@ export default function DocumentVerificationInterface() {
                 </div>
                 
                 {/* Document Preview with transformations */}
-                <div className="overflow-auto max-h-96 border rounded bg-gray-50 dark:bg-gray-900 flex items-center justify-center p-4">
+                <div className="overflow-auto max-h-96 border rounded bg-gray-50 dark:bg-gray-900 flex items-center justify-center p-4 relative">
                   <img 
                     src={previewUrl} 
                     alt="Document preview" 
@@ -347,6 +348,11 @@ export default function DocumentVerificationInterface() {
                     }}
                     data-testid="img-preview"
                   />
+                  
+                  {/* Verification Stamp Overlay */}
+                  {result && (
+                    <VerificationStamp status={result.meetsCriteria ? "approved" : "rejected"} />
+                  )}
                 </div>
               </div>
             )}
