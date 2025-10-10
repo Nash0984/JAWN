@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Textarea } from "@/components/ui/textarea";
@@ -57,6 +58,7 @@ export default function DocumentReviewQueue() {
   const [selectedDoc, setSelectedDoc] = useState<ClientVerificationDocument | null>(null);
   const [reviewDialogOpen, setReviewDialogOpen] = useState(false);
   const [reviewAction, setReviewAction] = useState<'approved' | 'rejected' | 'needs_more_info'>('approved');
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   // Form with validation
   const form = useForm<ReviewFormValues>({
@@ -118,6 +120,68 @@ export default function DocumentReviewQueue() {
       });
     }
   });
+
+  // Bulk update mutation
+  const bulkUpdateMutation = useMutation({
+    mutationFn: async ({ ids, status }: { ids: string[]; status: string }) => {
+      const response = await fetch('/api/document-review/bulk-update', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          documentIds: ids,
+          verificationStatus: status
+        })
+      });
+      if (!response.ok) throw new Error("Failed to bulk update documents");
+      return response.json();
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/document-review/queue"] });
+      toast({
+        title: "Bulk Update Complete",
+        description: `Successfully updated ${data.updated} document(s).`
+      });
+      setSelectedIds(new Set());
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive"
+      });
+    }
+  });
+
+  // Selection handlers
+  const toggleSelection = (id: string) => {
+    const newSelected = new Set(selectedIds);
+    if (newSelected.has(id)) {
+      newSelected.delete(id);
+    } else {
+      newSelected.add(id);
+    }
+    setSelectedIds(newSelected);
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedIds.size === pendingDocuments.length && pendingDocuments.length > 0) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(pendingDocuments.map(doc => doc.id)));
+    }
+  };
+
+  const handleBulkAction = (status: 'approved' | 'rejected') => {
+    if (selectedIds.size === 0) return;
+    bulkUpdateMutation.mutate({
+      ids: Array.from(selectedIds),
+      status
+    });
+  };
+
+  // Filter pending documents for bulk actions
+  const pendingDocuments = documents.filter(doc => doc.verificationStatus === 'pending_review');
 
   const handleReviewSubmit = (data: ReviewFormValues) => {
     if (!selectedDoc) return;
@@ -210,6 +274,54 @@ export default function DocumentReviewQueue() {
         </CardContent>
       </Card>
 
+      {/* Bulk Actions */}
+      {pendingDocuments.length > 0 && (
+        <Card className="bg-md-blue/5 dark:bg-md-blue/10 border-md-blue/20">
+          <CardContent className="py-4">
+            <div className="flex items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <Checkbox
+                  id="select-all"
+                  checked={selectedIds.size === pendingDocuments.length && pendingDocuments.length > 0}
+                  onCheckedChange={toggleSelectAll}
+                  data-testid="checkbox-select-all"
+                  aria-label="Select all documents"
+                />
+                <Label htmlFor="select-all" className="text-sm font-medium cursor-pointer">
+                  {selectedIds.size > 0 
+                    ? `${selectedIds.size} document${selectedIds.size > 1 ? 's' : ''} selected`
+                    : 'Select all pending documents'}
+                </Label>
+              </div>
+              {selectedIds.size > 0 && (
+                <div className="flex items-center gap-2">
+                  <Button
+                    size="sm"
+                    variant="default"
+                    onClick={() => handleBulkAction('approved')}
+                    disabled={bulkUpdateMutation.isPending}
+                    data-testid="button-bulk-approve"
+                  >
+                    <CheckCircle2 className="h-4 w-4 mr-1" />
+                    Approve Selected ({selectedIds.size})
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="destructive"
+                    onClick={() => handleBulkAction('rejected')}
+                    disabled={bulkUpdateMutation.isPending}
+                    data-testid="button-bulk-reject"
+                  >
+                    <XCircle className="h-4 w-4 mr-1" />
+                    Reject Selected ({selectedIds.size})
+                  </Button>
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Documents List */}
       <div className="space-y-4">
         {isLoading ? (
@@ -237,19 +349,29 @@ export default function DocumentReviewQueue() {
           documents.map((doc) => (
             <Card key={doc.id} data-testid={`card-document-${doc.id}`}>
               <CardHeader>
-                <div className="flex items-start justify-between">
-                  <div className="space-y-1 flex-1">
-                    <CardTitle className="flex items-center gap-2">
-                      <FileText className="h-5 w-5" />
-                      {doc.requirementType.replace(/_/g, ' ').toUpperCase()}
-                      {getStatusBadge(doc.verificationStatus)}
-                    </CardTitle>
-                    <CardDescription>
-                      {doc.clientCaseId && `Case ID: ${doc.clientCaseId}`}
-                      {doc.sessionId && ` • Session: ${doc.sessionId.slice(0, 8)}...`}
-                    </CardDescription>
-                  </div>
+                <div className="flex items-start gap-3">
                   {doc.verificationStatus === 'pending_review' && (
+                    <Checkbox
+                      checked={selectedIds.has(doc.id)}
+                      onCheckedChange={() => toggleSelection(doc.id)}
+                      data-testid={`checkbox-document-${doc.id}`}
+                      aria-label={`Select document ${doc.requirementType}`}
+                      className="mt-1"
+                    />
+                  )}
+                  <div className="flex items-start justify-between flex-1">
+                    <div className="space-y-1 flex-1">
+                      <CardTitle className="flex items-center gap-2">
+                        <FileText className="h-5 w-5" />
+                        {doc.requirementType.replace(/_/g, ' ').toUpperCase()}
+                        {getStatusBadge(doc.verificationStatus)}
+                      </CardTitle>
+                      <CardDescription>
+                        {doc.clientCaseId && `Case ID: ${doc.clientCaseId}`}
+                        {doc.sessionId && ` • Session: ${doc.sessionId.slice(0, 8)}...`}
+                      </CardDescription>
+                    </div>
+                    {doc.verificationStatus === 'pending_review' && (
                     <div className="flex gap-2">
                       <Button
                         size="sm"
@@ -280,6 +402,7 @@ export default function DocumentReviewQueue() {
                       </Button>
                     </div>
                   )}
+                  </div>
                 </div>
               </CardHeader>
               <CardContent>

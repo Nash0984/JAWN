@@ -4349,6 +4349,75 @@ If the question cannot be answered with the available information, say so clearl
     res.json(updated);
   }));
 
+  // Bulk update multiple documents
+  app.put("/api/document-review/bulk-update", requireStaff, asyncHandler(async (req, res) => {
+    const schema = z.object({
+      documentIds: z.array(z.string()).min(1, "At least one document ID is required"),
+      verificationStatus: z.enum(['approved', 'rejected']), // Only allow approved/rejected for bulk
+      reviewNotes: z.string().optional()
+    });
+
+    const validated = schema.parse(req.body);
+    
+    const updates: any = {
+      verificationStatus: validated.verificationStatus,
+      reviewedBy: req.user!.id,
+      reviewedAt: new Date()
+    };
+
+    if (validated.reviewNotes) {
+      updates.reviewNotes = validated.reviewNotes;
+    }
+
+    let updatedCount = 0;
+
+    // Update each document and send notifications
+    for (const documentId of validated.documentIds) {
+      try {
+        const document = await storage.getClientVerificationDocument(documentId);
+        
+        if (!document || document.verificationStatus !== 'pending_review') {
+          // Skip documents that don't exist or are not pending review
+          continue;
+        }
+
+        await storage.updateClientVerificationDocument(documentId, updates);
+        updatedCount++;
+
+        // Send notification
+        if (document.sessionId) {
+          const session = await storage.getClientInteractionSession(document.sessionId);
+          if (session?.clientCaseId) {
+            const clientCase = await storage.getClientCase(session.clientCaseId);
+            if (clientCase) {
+              const statusText = validated.verificationStatus === 'approved' ? 'approved' : 'rejected';
+              
+              await notificationService.createNotification({
+                userId: clientCase.applicantId || clientCase.navigatorId,
+                type: 'document_review',
+                title: `Document ${statusText}`,
+                message: `Your ${document.requirementType.replace(/_/g, ' ')} document has been ${statusText}${validated.reviewNotes ? ': ' + validated.reviewNotes : ''}`,
+                priority: validated.verificationStatus === 'rejected' ? 'high' : 'normal',
+                relatedEntityType: 'client_verification_document',
+                relatedEntityId: document.id,
+                actionUrl: `/verify`
+              });
+            }
+          }
+        }
+      } catch (error) {
+        console.error(`Error updating document ${documentId}:`, error);
+        // Continue with next document
+      }
+    }
+
+    res.json({ 
+      updated: updatedCount,
+      requested: validated.documentIds.length,
+      status: validated.verificationStatus
+    });
+  }));
+
   const httpServer = createServer(app);
   
   // Initialize WebSocket service for real-time notifications
