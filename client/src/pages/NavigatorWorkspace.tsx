@@ -11,13 +11,17 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { useToast } from "@/hooks/use-toast";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { z } from "zod";
-import { Users, FileText, Download, Plus, Calendar, Clock, CheckCircle2, AlertCircle } from "lucide-react";
+import { Users, FileText, Download, Plus, Calendar, Clock, CheckCircle2, AlertCircle, FileDown, BarChart } from "lucide-react";
 import { PolicyChatWidget } from "@/components/PolicyChatWidget";
+import { DataCompletenessChecker } from "@/components/DataCompletenessChecker";
+import { DataQualityDashboard } from "@/components/DataQualityDashboard";
+import { exportToJSON, exportToCSV, exportToPDF, exportClientIntakeSummary, exportEEDataFormat } from "@/lib/exportUtils";
 import { format } from "date-fns";
 
 interface ClientInteractionSession {
@@ -247,6 +251,10 @@ export default function NavigatorWorkspace() {
           <TabsTrigger value="exports" data-testid="tab-exports">
             <Download className="w-4 h-4 mr-2" />
             E&E Exports
+          </TabsTrigger>
+          <TabsTrigger value="quality" data-testid="tab-quality">
+            <BarChart className="w-4 h-4 mr-2" />
+            Data Quality
           </TabsTrigger>
         </TabsList>
 
@@ -644,9 +652,16 @@ export default function NavigatorWorkspace() {
             </CardContent>
           </Card>
         </TabsContent>
+
+        <TabsContent value="quality" className="space-y-6">
+          <DataQualityDashboard 
+            sessions={sessions} 
+            timeframe="week"
+          />
+        </TabsContent>
       </Tabs>
 
-      <PolicyChatWidget context="navigator-workspace" />
+      <PolicyChatWidget />
     </div>
   );
 }
