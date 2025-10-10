@@ -1,6 +1,7 @@
 import { WebSocket, WebSocketServer } from "ws";
 import { IncomingMessage, Server } from "http";
 import { parse } from "url";
+import session from "express-session";
 
 interface AuthenticatedWebSocket extends WebSocket {
   userId?: string;
@@ -11,11 +12,15 @@ export class WebSocketService {
   private wss: WebSocketServer;
   private clients: Map<string, Set<AuthenticatedWebSocket>> = new Map();
   private heartbeatInterval: NodeJS.Timeout | null = null;
+  private sessionParser: any;
 
-  constructor(server: Server) {
+  constructor(server: Server, sessionMiddleware: any) {
+    this.sessionParser = sessionMiddleware;
+    
     this.wss = new WebSocketServer({ 
       server,
-      path: "/ws/notifications"
+      path: "/ws/notifications",
+      verifyClient: this.verifyClient.bind(this)
     });
 
     this.wss.on("connection", this.handleConnection.bind(this));
@@ -24,13 +29,29 @@ export class WebSocketService {
     console.log("WebSocket server initialized on /ws/notifications");
   }
 
+  private verifyClient(info: any, callback: (result: boolean, code?: number, message?: string) => void) {
+    // Parse the session from the request
+    this.sessionParser(info.req, {} as any, () => {
+      const session = (info.req as any).session;
+      
+      if (!session || !session.passport?.user) {
+        console.error("WebSocket connection rejected: not authenticated");
+        callback(false, 401, "Unauthorized");
+        return;
+      }
+
+      // Store the authenticated user ID on the request for later use
+      (info.req as any).authenticatedUserId = session.passport.user;
+      callback(true);
+    });
+  }
+
   private handleConnection(ws: AuthenticatedWebSocket, req: IncomingMessage) {
-    const { query } = parse(req.url || "", true);
-    const userId = query.userId as string;
+    const userId = (req as any).authenticatedUserId;
 
     if (!userId) {
-      console.error("WebSocket connection rejected: missing userId");
-      ws.close(1008, "User ID required");
+      console.error("WebSocket connection rejected: missing authenticated userId");
+      ws.close(1008, "Authentication required");
       return;
     }
 
@@ -203,9 +224,9 @@ export class WebSocketService {
 // Singleton instance
 let wsService: WebSocketService | null = null;
 
-export function initializeWebSocketService(server: Server): WebSocketService {
+export function initializeWebSocketService(server: Server, sessionMiddleware: any): WebSocketService {
   if (!wsService) {
-    wsService = new WebSocketService(server);
+    wsService = new WebSocketService(server, sessionMiddleware);
   }
   return wsService;
 }
