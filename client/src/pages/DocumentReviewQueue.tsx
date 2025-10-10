@@ -226,6 +226,36 @@ export default function DocumentReviewQueue() {
     );
   };
 
+  // Document thumbnail component
+  const DocumentThumbnail = ({ doc }: { doc: ClientVerificationDocument }) => {
+    const [imageError, setImageError] = useState(false);
+    const isPDF = doc.documentUrl?.toLowerCase().endsWith('.pdf');
+    const isImage = doc.documentUrl?.match(/\.(jpg|jpeg|png|gif|webp)$/i);
+    
+    return (
+      <div className="w-20 h-24 flex-shrink-0 bg-muted rounded-md overflow-hidden border border-border flex items-center justify-center" data-testid={`thumbnail-${doc.id}`}>
+        {doc.documentUrl && isImage && !imageError ? (
+          <img
+            src={doc.documentUrl}
+            alt={`${doc.requirementType} preview`}
+            className="w-full h-full object-cover"
+            onError={() => setImageError(true)}
+          />
+        ) : isPDF ? (
+          <div className="flex flex-col items-center justify-center text-muted-foreground">
+            <FileText className="h-8 w-8 mb-1" />
+            <span className="text-xs font-medium">PDF</span>
+          </div>
+        ) : (
+          <div className="flex flex-col items-center justify-center text-muted-foreground">
+            <FileText className="h-8 w-8 mb-1" />
+            <span className="text-xs font-medium">DOC</span>
+          </div>
+        )}
+      </div>
+    );
+  };
+
   return (
     <div className="space-y-6">
       <div>
@@ -349,7 +379,8 @@ export default function DocumentReviewQueue() {
           documents.map((doc) => (
             <Card key={doc.id} data-testid={`card-document-${doc.id}`}>
               <CardHeader>
-                <div className="flex items-start gap-3">
+                <div className="flex items-start gap-4">
+                  <DocumentThumbnail doc={doc} />
                   {doc.verificationStatus === 'pending_review' && (
                     <Checkbox
                       checked={selectedIds.has(doc.id)}
