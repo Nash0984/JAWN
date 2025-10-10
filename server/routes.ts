@@ -15,7 +15,7 @@ import { textGenerationService } from "./services/textGenerationService";
 import { notificationService } from "./services/notification.service";
 import { cacheService, CACHE_KEYS, invalidateRulesCache } from "./services/cacheService";
 import { GoogleGenAI } from "@google/genai";
-import { asyncHandler, validationError, notFoundError, externalServiceError } from "./middleware/errorHandler";
+import { asyncHandler, validationError, notFoundError, externalServiceError, authorizationError } from "./middleware/errorHandler";
 import { requireAuth, requireStaff, requireAdmin } from "./middleware/auth";
 import { db } from "./db";
 import { sql, eq, and, desc, gte, lte, or, ilike } from "drizzle-orm";
@@ -3832,7 +3832,7 @@ If the question cannot be answered with the available information, say so clearl
     }
     
     if (scenario.userId !== req.user!.id) {
-      throw unauthorizedError();
+      throw authorizationError();
     }
     
     res.json(scenario);
@@ -3847,7 +3847,7 @@ If the question cannot be answered with the available information, say so clearl
     }
     
     if (scenario.userId !== req.user!.id) {
-      throw unauthorizedError();
+      throw authorizationError();
     }
 
     const schema = z.object({
@@ -3885,7 +3885,7 @@ If the question cannot be answered with the available information, say so clearl
     }
     
     if (scenario.userId !== req.user!.id) {
-      throw unauthorizedError();
+      throw authorizationError();
     }
     
     await storage.deleteHouseholdScenario(req.params.id);
@@ -3901,7 +3901,7 @@ If the question cannot be answered with the available information, say so clearl
     }
     
     if (scenario.userId !== req.user!.id) {
-      throw unauthorizedError();
+      throw authorizationError();
     }
 
     const schema = z.object({
@@ -3966,7 +3966,7 @@ If the question cannot be answered with the available information, say so clearl
     }
     
     if (scenario.userId !== req.user!.id) {
-      throw unauthorizedError();
+      throw authorizationError();
     }
     
     const calculations = await storage.getScenarioCalculationsByScenario(req.params.id);
@@ -3982,7 +3982,7 @@ If the question cannot be answered with the available information, say so clearl
     }
     
     if (scenario.userId !== req.user!.id) {
-      throw unauthorizedError();
+      throw authorizationError();
     }
     
     const calculation = await storage.getLatestScenarioCalculation(req.params.id);
@@ -4031,7 +4031,7 @@ If the question cannot be answered with the available information, say so clearl
     }
     
     if (comparison.userId !== req.user!.id) {
-      throw unauthorizedError();
+      throw authorizationError();
     }
     
     res.json(comparison);
@@ -4046,7 +4046,7 @@ If the question cannot be answered with the available information, say so clearl
     }
     
     if (comparison.userId !== req.user!.id) {
-      throw unauthorizedError();
+      throw authorizationError();
     }
 
     const schema = z.object({
@@ -4081,11 +4081,184 @@ If the question cannot be answered with the available information, say so clearl
     }
     
     if (comparison.userId !== req.user!.id) {
-      throw unauthorizedError();
+      throw authorizationError();
     }
     
     await storage.deleteScenarioComparison(req.params.id);
     res.json({ success: true });
+  }));
+
+  // ==========================================
+  // ABAWD Exemption Verification Routes
+  // ==========================================
+
+  // Create ABAWD exemption verification
+  app.post("/api/abawd-verifications", requireStaff, asyncHandler(async (req, res) => {
+    const schema = z.object({
+      clientCaseId: z.string(),
+      exemptionType: z.enum(['homeless', 'disabled', 'student', 'caregiver', 'employed_20hrs', 'training_program', 'medically_certified', 'other']),
+      exemptionStatus: z.enum(['verified', 'pending', 'denied', 'expired']),
+      verificationMethod: z.enum(['document_review', 'third_party_verification', 'self_attestation', 'database_check']),
+      documentIds: z.array(z.string()).optional(),
+      verificationNotes: z.string().optional(),
+      expirationDate: z.string().optional(),
+      renewalRequired: z.boolean().optional()
+    });
+
+    const validated = schema.parse(req.body);
+    
+    const verification = await storage.createAbawdExemptionVerification({
+      ...validated,
+      verifiedBy: req.user!.id,
+      verificationDate: new Date()
+    });
+
+    res.json(verification);
+  }));
+
+  // Get all ABAWD verifications with filters
+  app.get("/api/abawd-verifications", requireStaff, asyncHandler(async (req, res) => {
+    const filters: any = {};
+    
+    if (req.query.clientCaseId) filters.clientCaseId = req.query.clientCaseId as string;
+    if (req.query.exemptionStatus) filters.exemptionStatus = req.query.exemptionStatus as string;
+    if (req.query.exemptionType) filters.exemptionType = req.query.exemptionType as string;
+    if (req.query.verifiedBy) filters.verifiedBy = req.query.verifiedBy as string;
+
+    const verifications = await storage.getAbawdExemptionVerifications(filters);
+    res.json(verifications);
+  }));
+
+  // Get single ABAWD verification
+  app.get("/api/abawd-verifications/:id", requireStaff, asyncHandler(async (req, res) => {
+    const verification = await storage.getAbawdExemptionVerification(req.params.id);
+    
+    if (!verification) {
+      throw notFoundError("Verification not found");
+    }
+
+    res.json(verification);
+  }));
+
+  // Update ABAWD verification
+  app.put("/api/abawd-verifications/:id", requireStaff, asyncHandler(async (req, res) => {
+    const verification = await storage.getAbawdExemptionVerification(req.params.id);
+    
+    if (!verification) {
+      throw notFoundError("Verification not found");
+    }
+
+    const schema = z.object({
+      exemptionType: z.enum(['homeless', 'disabled', 'student', 'caregiver', 'employed_20hrs', 'training_program', 'medically_certified', 'other']).optional(),
+      exemptionStatus: z.enum(['verified', 'pending', 'denied', 'expired']).optional(),
+      verificationMethod: z.enum(['document_review', 'third_party_verification', 'self_attestation', 'database_check']).optional(),
+      documentIds: z.array(z.string()).optional(),
+      verificationNotes: z.string().optional(),
+      expirationDate: z.string().optional(),
+      renewalRequired: z.boolean().optional()
+    });
+
+    const validated = schema.parse(req.body);
+    const updated = await storage.updateAbawdExemptionVerification(req.params.id, validated);
+    res.json(updated);
+  }));
+
+  // Delete ABAWD verification
+  app.delete("/api/abawd-verifications/:id", requireAdmin, asyncHandler(async (req, res) => {
+    const verification = await storage.getAbawdExemptionVerification(req.params.id);
+    
+    if (!verification) {
+      throw notFoundError("Verification not found");
+    }
+
+    await storage.deleteAbawdExemptionVerification(req.params.id);
+    res.json({ success: true });
+  }));
+
+  // ==========================================
+  // Cross-Enrollment Analysis Routes
+  // ==========================================
+
+  // Create program enrollment
+  app.post("/api/program-enrollments", requireStaff, asyncHandler(async (req, res) => {
+    const schema = z.object({
+      clientIdentifier: z.string(),
+      benefitProgramId: z.string(),
+      enrollmentStatus: z.enum(['enrolled', 'pending', 'denied', 'terminated', 'suspended']),
+      enrollmentDate: z.string().optional(),
+      terminationDate: z.string().optional(),
+      terminationReason: z.string().optional(),
+      householdSize: z.number().optional(),
+      householdIncome: z.number().optional(),
+      isEligibleForOtherPrograms: z.boolean().optional(),
+      crossEnrollmentNotes: z.string().optional()
+    });
+
+    const validated = schema.parse(req.body);
+    const enrollment = await storage.createProgramEnrollment(validated);
+    res.json(enrollment);
+  }));
+
+  // Get all program enrollments with filters
+  app.get("/api/program-enrollments", requireStaff, asyncHandler(async (req, res) => {
+    const filters: any = {};
+    
+    if (req.query.clientIdentifier) filters.clientIdentifier = req.query.clientIdentifier as string;
+    if (req.query.benefitProgramId) filters.benefitProgramId = req.query.benefitProgramId as string;
+    if (req.query.enrollmentStatus) filters.enrollmentStatus = req.query.enrollmentStatus as string;
+    if (req.query.isEligibleForOtherPrograms !== undefined) {
+      filters.isEligibleForOtherPrograms = req.query.isEligibleForOtherPrograms === 'true';
+    }
+
+    const enrollments = await storage.getProgramEnrollments(filters);
+    res.json(enrollments);
+  }));
+
+  // Get enrollments by client
+  app.get("/api/program-enrollments/client/:clientIdentifier", requireStaff, asyncHandler(async (req, res) => {
+    const enrollments = await storage.getProgramEnrollmentsByClient(req.params.clientIdentifier);
+    res.json(enrollments);
+  }));
+
+  // Get single program enrollment
+  app.get("/api/program-enrollments/:id", requireStaff, asyncHandler(async (req, res) => {
+    const enrollment = await storage.getProgramEnrollment(req.params.id);
+    
+    if (!enrollment) {
+      throw notFoundError("Enrollment not found");
+    }
+
+    res.json(enrollment);
+  }));
+
+  // Update program enrollment
+  app.put("/api/program-enrollments/:id", requireStaff, asyncHandler(async (req, res) => {
+    const enrollment = await storage.getProgramEnrollment(req.params.id);
+    
+    if (!enrollment) {
+      throw notFoundError("Enrollment not found");
+    }
+
+    const schema = z.object({
+      enrollmentStatus: z.enum(['enrolled', 'pending', 'denied', 'terminated', 'suspended']).optional(),
+      enrollmentDate: z.string().optional(),
+      terminationDate: z.string().optional(),
+      terminationReason: z.string().optional(),
+      householdSize: z.number().optional(),
+      householdIncome: z.number().optional(),
+      isEligibleForOtherPrograms: z.boolean().optional(),
+      crossEnrollmentNotes: z.string().optional()
+    });
+
+    const validated = schema.parse(req.body);
+    const updated = await storage.updateProgramEnrollment(req.params.id, validated);
+    res.json(updated);
+  }));
+
+  // Analyze cross-enrollment opportunities
+  app.get("/api/cross-enrollment/analyze/:clientIdentifier", requireStaff, asyncHandler(async (req, res) => {
+    const analysis = await storage.analyzeCrossEnrollmentOpportunities(req.params.clientIdentifier);
+    res.json(analysis);
   }));
 
   const httpServer = createServer(app);
