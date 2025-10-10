@@ -6,25 +6,18 @@ import { File, Search, FileText, HelpCircle, Menu, User, Calculator, BookOpen, F
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import LanguageSelector from "./LanguageSelector";
 import NotificationBell from "./NotificationBell";
+import { MarylandFlag } from "./MarylandFlag";
 import { useLanguage } from "@/hooks/useLanguage";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 
-// Maryland State Seal Component (official seal)
-const MarylandSeal = ({ className = "h-8 w-auto", t }: { className?: string; t: any }) => (
-  <div className="flex items-center space-x-3">
-    <img 
-      src="/maryland-seal.svg" 
-      alt="Maryland State Seal" 
-      className={`${className} flex-shrink-0`}
-      onError={(e) => {
-        console.log('Failed to load Maryland seal:', e);
-        (e.target as HTMLImageElement).style.display = 'none';
-      }}
-    />
+// Maryland DHS Header Component matching official style guide
+const MarylandDHSHeader = ({ t }: { t: any }) => (
+  <div className="flex items-center gap-3">
+    <MarylandFlag className="h-10 w-10 flex-shrink-0" />
     <div className="hidden sm:block">
-      <h1 className="text-lg font-semibold text-foreground leading-tight">{t("nav.title")}</h1>
-      <p className="text-xs text-muted-foreground">{t("nav.subtitle")}</p>
+      <div className="text-sm font-semibold text-white leading-tight">Maryland</div>
+      <div className="text-xs text-white/90">Department of Human Services</div>
     </div>
   </div>
 );
@@ -91,11 +84,11 @@ export default function Navigation() {
             href={item.href}
             onClick={() => mobile && setMobileMenuOpen(false)}
             className={`${
-              mobile ? "w-full justify-start" : ""
+              mobile ? "w-full justify-start text-foreground hover:bg-accent" : "text-white hover:text-white"
             } ${
               item.current
-                ? "bg-primary text-primary-foreground"
-                : "text-foreground hover:text-primary"
+                ? mobile ? "bg-accent text-accent-foreground" : "bg-white/20 text-white"
+                : mobile ? "" : "hover:bg-white/10"
             } inline-flex items-center px-3 py-2 rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50`}
             data-testid={`nav-${item.href === "/" ? "home" : item.href.slice(1)}`}
             aria-current={item.current ? "page" : undefined}
@@ -109,14 +102,14 @@ export default function Navigation() {
   );
 
   return (
-    <nav className="bg-card border-b border-border sticky top-0 z-50" role="navigation" aria-label="Main navigation">
+    <nav className="bg-md-blue border-b-4 border-md-gold sticky top-0 z-50" role="navigation" aria-label="Main navigation">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between items-center h-16">
-          {/* Logo */}
+          {/* Maryland DHS Logo/Branding */}
           <div className="flex items-center">
             <Link href="/">
               <div className="cursor-pointer" data-testid="nav-logo">
-                <MarylandSeal className="h-12 w-auto" t={t} />
+                <MarylandDHSHeader t={t} />
               </div>
             </Link>
             
@@ -124,23 +117,23 @@ export default function Navigation() {
             <NavItems />
           </div>
 
-          {/* Right side items */}
-          <div className="flex items-center space-x-4">
-            <LanguageSelector 
-              currentLanguage={currentLanguage} 
-              onLanguageChange={changeLanguage} 
-            />
-            
-            {isAuthenticated ? (
-              <>
-                <NotificationBell />
-                
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button variant="ghost" size="sm" data-testid="nav-profile">
-                      <User className="h-4 w-4" />
-                      <span className="ml-2 hidden lg:inline">{user?.fullName || user?.username}</span>
-                    </Button>
+            {/* Right side items */}
+            <div className="flex items-center space-x-4">
+              <LanguageSelector 
+                currentLanguage={currentLanguage} 
+                onLanguageChange={changeLanguage} 
+              />
+              
+              {isAuthenticated ? (
+                <>
+                  <NotificationBell />
+                  
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="ghost" size="sm" className="text-white hover:text-white hover:bg-white/20" data-testid="nav-profile">
+                        <User className="h-4 w-4" />
+                        <span className="ml-2 hidden lg:inline">{user?.fullName || user?.username}</span>
+                      </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end" className="w-56">
                     <DropdownMenuLabel>
@@ -174,13 +167,13 @@ export default function Navigation() {
               </>
             ) : (
               <>
-                <Button variant="ghost" size="sm" asChild data-testid="nav-login">
+                <Button variant="ghost" size="sm" className="text-white hover:text-white hover:bg-white/20" asChild data-testid="nav-login">
                   <Link href="/login">
                     <LogIn className="h-4 w-4 mr-2" />
                     <span className="hidden sm:inline">Log in</span>
                   </Link>
                 </Button>
-                <Button size="sm" asChild data-testid="nav-signup">
+                <Button size="sm" className="bg-md-gold text-black hover:bg-md-gold/90" asChild data-testid="nav-signup">
                   <Link href="/signup">
                     <UserPlus className="h-4 w-4 mr-2" />
                     <span className="hidden sm:inline">Sign up</span>
@@ -189,14 +182,14 @@ export default function Navigation() {
               </>
             )}
             
-            {/* Mobile menu button */}
-            <div className="md:hidden">
-              <Sheet open={mobileMenuOpen} onOpenChange={setMobileMenuOpen}>
-                <SheetTrigger asChild>
-                  <Button variant="ghost" size="sm" data-testid="nav-mobile-menu">
-                    <Menu className="h-4 w-4" />
-                  </Button>
-                </SheetTrigger>
+              {/* Mobile menu button */}
+              <div className="md:hidden">
+                <Sheet open={mobileMenuOpen} onOpenChange={setMobileMenuOpen}>
+                  <SheetTrigger asChild>
+                    <Button variant="ghost" size="sm" className="text-white hover:text-white hover:bg-white/20" data-testid="nav-mobile-menu">
+                      <Menu className="h-4 w-4" />
+                    </Button>
+                  </SheetTrigger>
                 <SheetContent side="right" className="w-[300px] sm:w-[400px]">
                   <div className="flex flex-col space-y-4 mt-6">
                     <div className="flex items-center space-x-3 pb-4 border-b border-border">
