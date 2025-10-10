@@ -1,6 +1,9 @@
 import { storage } from "./storage";
 import bcrypt from "bcryptjs";
 import { seedMarylandTestCases } from "./seedMarylandTestCases";
+import { db } from "./db";
+import { eq } from "drizzle-orm";
+import { benefitPrograms } from "@shared/schema";
 
 export async function seedDemoUsers() {
   try {
@@ -12,7 +15,7 @@ export async function seedDemoUsers() {
         password: await bcrypt.hash('Demo2024!', 10),
         email: 'applicant@demo.md.gov',
         fullName: 'Maria Rodriguez',
-        role: 'client',
+        role: 'client' as const,
         isActive: true,
       },
       {
@@ -20,7 +23,7 @@ export async function seedDemoUsers() {
         password: await bcrypt.hash('Demo2024!', 10),
         email: 'navigator@demo.md.gov',
         fullName: 'James Chen',
-        role: 'navigator',
+        role: 'navigator' as const,
         dhsEmployeeId: 'NAV-2024-001',
         officeLocation: 'Baltimore City DHS Office',
         isActive: true,
@@ -30,7 +33,7 @@ export async function seedDemoUsers() {
         password: await bcrypt.hash('Demo2024!', 10),
         email: 'caseworker@demo.md.gov',
         fullName: 'Sarah Johnson',
-        role: 'caseworker',
+        role: 'caseworker' as const,
         dhsEmployeeId: 'CW-2024-001',
         officeLocation: 'Montgomery County DHS Office',
         isActive: true,
@@ -40,7 +43,7 @@ export async function seedDemoUsers() {
         password: await bcrypt.hash('Demo2024!', 10),
         email: 'admin@demo.md.gov',
         fullName: 'Administrator',
-        role: 'admin',
+        role: 'admin' as const,
         dhsEmployeeId: 'ADM-2024-001',
         officeLocation: 'Maryland DHS Central Office',
         isActive: true,
@@ -206,6 +209,7 @@ export async function seedMarylandBenefitPrograms() {
     ];
 
     let createdCount = 0;
+    let updatedCount = 0;
     for (const programData of programsToSeed) {
       const existing = programs.find(p => p.code === programData.code);
       if (!existing) {
@@ -217,12 +221,35 @@ export async function seedMarylandBenefitPrograms() {
           console.error(`  Error creating program ${programData.code}:`, error);
         }
       } else {
-        console.log(`  Program already exists: ${programData.code}`);
+        // Update existing program to match seed data
+        try {
+          await db.update(benefitPrograms)
+            .set({
+              name: programData.name,
+              description: programData.description,
+              programType: programData.programType,
+              hasRulesEngine: programData.hasRulesEngine,
+              hasPolicyEngineValidation: programData.hasPolicyEngineValidation,
+              hasConversationalAI: programData.hasConversationalAI,
+              primarySourceUrl: programData.primarySourceUrl,
+              sourceType: programData.sourceType,
+              scrapingConfig: programData.scrapingConfig,
+              isActive: programData.isActive,
+            })
+            .where(eq(benefitPrograms.code, programData.code));
+          updatedCount++;
+          console.log(`✓ Updated program: ${programData.name} (${programData.code})`);
+        } catch (error) {
+          console.error(`  Error updating program ${programData.code}:`, error);
+        }
       }
     }
 
     if (createdCount > 0) {
       console.log(`✓ Seeded ${createdCount} benefit programs`);
+    }
+    if (updatedCount > 0) {
+      console.log(`✓ Updated ${updatedCount} benefit programs to match seed configuration`);
     }
   } catch (error) {
     console.error('Error seeding benefit programs:', error);
