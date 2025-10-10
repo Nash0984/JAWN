@@ -38,6 +38,8 @@ import { PolicyChanges } from "@/pages/PolicyChanges";
 import { ComplianceAdmin } from "@/pages/ComplianceAdmin";
 import { IntakeCopilot } from "@/pages/IntakeCopilot";
 import ScenarioWorkspace from "@/pages/ScenarioWorkspace";
+import AbawdVerificationAdmin from "@/pages/AbawdVerificationAdmin";
+import CrossEnrollmentAdmin from "@/pages/CrossEnrollmentAdmin";
 
 function Router() {
   const [location] = useLocation();
@@ -234,6 +236,20 @@ function Router() {
             {() => (
               <ProtectedRoute requireAdmin>
                 <FeedbackManagement />
+              </ProtectedRoute>
+            )}
+          </Route>
+          <Route path="/admin/abawd-verifications">
+            {() => (
+              <ProtectedRoute requireStaff>
+                <AbawdVerificationAdmin />
+              </ProtectedRoute>
+            )}
+          </Route>
+          <Route path="/admin/cross-enrollment">
+            {() => (
+              <ProtectedRoute requireStaff>
+                <CrossEnrollmentAdmin />
               </ProtectedRoute>
             )}
           </Route>
