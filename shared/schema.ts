@@ -2091,6 +2091,98 @@ export type ScenarioCalculation = typeof scenarioCalculations.$inferSelect;
 export type InsertScenarioComparison = z.infer<typeof insertScenarioComparisonSchema>;
 export type ScenarioComparison = typeof scenarioComparisons.$inferSelect;
 
+// ============================================================================
+// ABAWD EXEMPTION VERIFICATION - SNAP Work Requirements
+// ============================================================================
+
+// ABAWD Exemption Verifications - Track Able-Bodied Adults Without Dependents exemptions
+export const abawdExemptionVerifications = pgTable("abawd_exemption_verifications", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  clientCaseId: varchar("client_case_id").references(() => clientCases.id, { onDelete: "cascade" }),
+  clientName: text("client_name").notNull(), // Denormalized for easy access
+  clientIdentifier: text("client_identifier"), // Last 4 SSN or case number
+  
+  // Exemption details
+  exemptionType: text("exemption_type").notNull(), // medical, disability, pregnancy, homeless, student, caretaker_under_6, caretaker_disabled, employed_20hrs, workfare_participant, unable_to_work
+  exemptionStatus: text("exemption_status").notNull().default("pending"), // pending, verified, denied, expired
+  
+  // Supporting information
+  verificationMethod: text("verification_method"), // doctor_note, homeless_verification, school_enrollment, disability_determination, work_verification
+  supportingDocuments: jsonb("supporting_documents"), // Array of {documentId, documentName, uploadDate}
+  verificationNotes: text("verification_notes"),
+  
+  // Dates
+  exemptionStartDate: timestamp("exemption_start_date"),
+  exemptionEndDate: timestamp("exemption_end_date"), // For temporary exemptions
+  verificationDate: timestamp("verification_date"),
+  nextReviewDate: timestamp("next_review_date"), // When to re-verify
+  
+  // Staff tracking
+  verifiedBy: varchar("verified_by").references(() => users.id), // Navigator or caseworker who verified
+  reviewedBy: varchar("reviewed_by").references(() => users.id), // Supervisor review
+  
+  // Metadata
+  policyReference: text("policy_reference"), // SNAP Section 106 citation
+  createdBy: varchar("created_by").references(() => users.id).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  clientCaseIdx: index("abawd_client_case_idx").on(table.clientCaseId),
+  statusIdx: index("abawd_status_idx").on(table.exemptionStatus),
+  exemptionTypeIdx: index("abawd_exemption_type_idx").on(table.exemptionType),
+}));
+
+// ============================================================================
+// CROSS-ENROLLMENT ANALYSIS - Multi-Program Participation Tracking
+// ============================================================================
+
+// Program Enrollments - Track client enrollment across all benefit programs
+export const programEnrollments = pgTable("program_enrollments", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  
+  // Client identification (allows tracking across programs)
+  clientIdentifier: text("client_identifier").notNull(), // Shared identifier (last 4 SSN, case number, etc.)
+  clientName: text("client_name").notNull(),
+  dateOfBirth: timestamp("date_of_birth"), // For age-based program eligibility
+  
+  // Program enrollment details
+  benefitProgramId: varchar("benefit_program_id").references(() => benefitPrograms.id).notNull(),
+  clientCaseId: varchar("client_case_id").references(() => clientCases.id), // Link to specific case if exists
+  
+  // Enrollment status
+  enrollmentStatus: text("enrollment_status").notNull().default("screening"), // screening, enrolled, denied, terminated, suspended
+  enrollmentDate: timestamp("enrollment_date"),
+  terminationDate: timestamp("termination_date"),
+  terminationReason: text("termination_reason"),
+  
+  // Household composition (for eligibility cross-check)
+  householdSize: integer("household_size"),
+  householdIncome: integer("household_income"), // Monthly income in cents
+  householdAssets: integer("household_assets"), // Total assets in cents
+  
+  // Cross-enrollment flags
+  isEligibleForOtherPrograms: boolean("is_eligible_for_other_programs").default(false), // AI/rules flagged
+  suggestedPrograms: jsonb("suggested_programs"), // Array of {programId, programName, eligibilityScore, reason}
+  crossEnrollmentReviewedAt: timestamp("cross_enrollment_reviewed_at"),
+  crossEnrollmentReviewedBy: varchar("cross_enrollment_reviewed_by").references(() => users.id),
+  
+  // Metadata
+  notes: text("notes"),
+  assignedNavigator: varchar("assigned_navigator").references(() => users.id),
+  createdBy: varchar("created_by").references(() => users.id).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  clientIdentifierIdx: index("enrollments_client_identifier_idx").on(table.clientIdentifier),
+  programIdx: index("enrollments_program_idx").on(table.benefitProgramId),
+  statusIdx: index("enrollments_status_idx").on(table.enrollmentStatus),
+  eligibilityFlagIdx: index("enrollments_eligibility_flag_idx").on(table.isEligibleForOtherPrograms),
+}));
+
+// ============================================================================
+// EVALUATION FRAMEWORK
+// ============================================================================
+
 // Maryland-focused evaluation framework (adapted from Propel snap-eval)
 export const evaluationTestCases = pgTable("evaluation_test_cases", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -2167,6 +2259,48 @@ export const evaluationResultsRelations = relations(evaluationResults, ({ one })
   }),
 }));
 
+export const abawdExemptionVerificationsRelations = relations(abawdExemptionVerifications, ({ one }) => ({
+  clientCase: one(clientCases, {
+    fields: [abawdExemptionVerifications.clientCaseId],
+    references: [clientCases.id],
+  }),
+  verifier: one(users, {
+    fields: [abawdExemptionVerifications.verifiedBy],
+    references: [users.id],
+  }),
+  reviewer: one(users, {
+    fields: [abawdExemptionVerifications.reviewedBy],
+    references: [users.id],
+  }),
+  creator: one(users, {
+    fields: [abawdExemptionVerifications.createdBy],
+    references: [users.id],
+  }),
+}));
+
+export const programEnrollmentsRelations = relations(programEnrollments, ({ one }) => ({
+  benefitProgram: one(benefitPrograms, {
+    fields: [programEnrollments.benefitProgramId],
+    references: [benefitPrograms.id],
+  }),
+  clientCase: one(clientCases, {
+    fields: [programEnrollments.clientCaseId],
+    references: [clientCases.id],
+  }),
+  navigator: one(users, {
+    fields: [programEnrollments.assignedNavigator],
+    references: [users.id],
+  }),
+  reviewer: one(users, {
+    fields: [programEnrollments.crossEnrollmentReviewedBy],
+    references: [users.id],
+  }),
+  creator: one(users, {
+    fields: [programEnrollments.createdBy],
+    references: [users.id],
+  }),
+}));
+
 // Insert schemas
 export const insertEvaluationTestCaseSchema = createInsertSchema(evaluationTestCases).omit({
   id: true,
@@ -2185,6 +2319,18 @@ export const insertEvaluationResultSchema = createInsertSchema(evaluationResults
   createdAt: true,
 });
 
+export const insertAbawdExemptionVerificationSchema = createInsertSchema(abawdExemptionVerifications).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertProgramEnrollmentSchema = createInsertSchema(programEnrollments).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
 // Types
 export type InsertEvaluationTestCase = z.infer<typeof insertEvaluationTestCaseSchema>;
 export type EvaluationTestCase = typeof evaluationTestCases.$inferSelect;
@@ -2192,3 +2338,9 @@ export type InsertEvaluationRun = z.infer<typeof insertEvaluationRunSchema>;
 export type EvaluationRun = typeof evaluationRuns.$inferSelect;
 export type InsertEvaluationResult = z.infer<typeof insertEvaluationResultSchema>;
 export type EvaluationResult = typeof evaluationResults.$inferSelect;
+
+export type InsertAbawdExemptionVerification = z.infer<typeof insertAbawdExemptionVerificationSchema>;
+export type AbawdExemptionVerification = typeof abawdExemptionVerifications.$inferSelect;
+
+export type InsertProgramEnrollment = z.infer<typeof insertProgramEnrollmentSchema>;
+export type ProgramEnrollment = typeof programEnrollments.$inferSelect;
