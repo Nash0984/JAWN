@@ -92,12 +92,12 @@ Vitest, @testing-library/react, and supertest are used for unit, component, and 
 
 **Evaluated Alternatives**:
 
-1. **PolicyEngine REST API** (Recommended if Python fails)
-   - URL: `https://api.policyengine.org/us/calculate`
-   - Same calculation engine via HTTP REST API instead of Python package
-   - Bypasses local library dependencies
-   - Free, open-source, actively maintained
-   - **Action**: Implement HTTP wrapper to replace Python calls
+1. **PolicyEngine REST API** (NOT VIABLE - Free Endpoint Non-Functional)
+   - Unauthenticated API: `https://api.policyengine.org/us/calculate` (returns empty results)
+   - Authenticated API: `https://household.api.policyengine.org/us/calculate` (requires Client ID/Secret)
+   - **LIMITATION**: Free endpoint returns `{"result": {}, "status": "ok"}` with no benefit values
+   - Paid endpoint requires Client ID & Client Secret (contact hello@policyengine.org)
+   - **Status**: HTTP client implemented calling unauthenticated endpoint, gets no usable data
 
 2. **State-Specific SNAP Calculators** (State-level accuracy)
    - Illinois: `fscalc.dhs.illinois.gov/FSCalc`
@@ -124,11 +124,11 @@ Vitest, @testing-library/react, and supertest are used for unit, component, and 
    - Build custom US benefit engine from scratch
    - **Use case**: Long-term custom policy modeling
 
-**Recommended Next Steps**:
-1. **Immediate**: Implement PolicyEngine REST API wrapper (bypasses Python dependency issue)
-2. **Short-term**: Test HTTP API calls for SNAP/Medicaid calculations
-3. **Medium-term**: Build Maryland-specific calculation fallbacks using USDA tables
-4. **Long-term**: Consider OpenFisca if custom policy logic needed
+**Recommended Next Steps** (Updated October 2025):
+1. **Immediate**: ✅ COMPLETED - PolicyEngine REST API wrapper implemented but requires paid auth (Client ID/Secret)
+2. **Short-term**: Build Maryland SNAP calculator using USDA FY 2026 tables for basic benefit estimates
+3. **Medium-term**: Implement mRelief open-source logic for multi-benefit screening (SNAP, Medicaid, WIC, TANF)
+4. **Long-term**: Either (a) acquire PolicyEngine API credentials, or (b) build custom OpenFisca-based engine
 
 ### Workaround Options
 1. **Use RAG-only Mode**: Conversational AI and document search remain fully functional
