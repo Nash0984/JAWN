@@ -1,20 +1,8 @@
 # Overview
 
-This project is the Maryland Multi-Program Benefits Navigator System, an AI-powered platform assisting users in understanding government benefit policies across 7 major Maryland programs. It uses Retrieval-Augmented Generation (RAG) technology combined with Rules as Code, primarily powered by the Google Gemini API, to process policy documents, extract information, and provide accurate answers regarding benefits, eligibility, and program requirements. The system aims to address the "benefits navigation problem" by reducing information asymmetry and processing costs, thereby improving access to public benefits. Key capabilities include document upload, real-time semantic search, deterministic eligibility calculations via PolicyEngine, administrative tools, and AI model training interfaces. It adheres to the Maryland Digital Style Guide and is designed for integration with marylandbenefits.gov.
+The Maryland Multi-Program Benefits Navigator System is an AI-powered platform designed to help users understand government benefit policies across seven major Maryland programs. It leverages Retrieval-Augmented Generation (RAG) and Rules as Code, primarily powered by the Google Gemini API, to process policy documents, extract information, and provide accurate answers regarding benefits, eligibility, and program requirements. The system aims to mitigate the "benefits navigation problem" by reducing information asymmetry and processing costs, thereby improving access to public benefits. Key capabilities include document upload, real-time semantic search, deterministic eligibility calculations via PolicyEngine, administrative tools, and AI model training interfaces. The project adheres to the Maryland Digital Style Guide and is intended for integration with marylandbenefits.gov.
 
-## Active Benefit Programs
-
-The system currently supports 7 Maryland benefit programs with full RAG + Rules as Code capabilities:
-
-1. **Maryland SNAP (Food Supplement Program)** - Supplemental nutrition assistance with PolicyEngine validation
-2. **Maryland Medicaid** - Health coverage through Maryland Medical Assistance Program  
-3. **Maryland TCA (TANF)** - Temporary Cash Assistance with PolicyEngine integration
-4. **Maryland OHEP (Energy Assistance)** - Home energy programs (MEAP, EUSP)
-5. **Maryland WIC** - Special nutrition for Women, Infants, and Children
-6. **Maryland Children's Health Program (MCHP)** - Health insurance for children under 19
-7. **IRS VITA Tax Assistance** - Federal tax help with EITC/CTC verification
-
-All programs feature conversational AI search, automated document processing, and integration with the Navigator Workspace for client assistance.
+Supported programs include Maryland SNAP, Medicaid, TCA (TANF), OHEP (Energy Assistance), WIC, Children's Health Program (MCHP), and IRS VITA Tax Assistance.
 
 # User Preferences
 
@@ -23,124 +11,66 @@ Preferred communication style: Simple, everyday language.
 # System Architecture
 
 ## Frontend
-The frontend uses React 18, TypeScript, Vite, shadcn/ui (Radix UI), and Tailwind CSS. Wouter handles client-side routing, and TanStack Query manages server state. It emphasizes modularity, accessibility (WCAG, semantic HTML, ARIA), and mobile-first responsive design. Features include a `PolicyChatWidget` for conversational AI, a Command Palette for navigation, Framer Motion for animations, resizable split views, and skeleton loading states. A public applicant portal offers document checklist generation, notice letter explanation, and simplified policy search, all with dual "smart" (AI-powered) and "simple" (manual) modes.
+The frontend is built with React 18, TypeScript, Vite, shadcn/ui (Radix UI), and Tailwind CSS. It uses Wouter for routing and TanStack Query for server state management. The design emphasizes modularity, accessibility (WCAG, semantic HTML, ARIA), and mobile-first responsiveness. Key features include a `PolicyChatWidget`, a Command Palette, Framer Motion animations, resizable split views, and skeleton loading states. A public applicant portal offers document checklist generation, notice letter explanation, and simplified policy search, supporting both AI-powered ("smart") and manual ("simple") modes.
 
 ## Backend
-The backend uses Express.js with TypeScript, providing RESTful API endpoints. Data is persisted using PostgreSQL via Drizzle ORM on Neon Database. A multi-stage document processing pipeline includes OCR, classification, quality assessment, semantic chunking, and embedding generation. Google Gemini API (`gemini-2.5-flash` for text, `text-embedding-004` for embeddings) is central for analysis, query processing, and RAG. A "Living Policy Manual" generates human-readable policy text from database rules, and a "Rules Extraction Pipeline" uses Gemini to extract structured "Rules as Code" from policy documents.
+The backend utilizes Express.js with TypeScript, providing RESTful API endpoints. Data is stored in PostgreSQL via Drizzle ORM on Neon Database. A multi-stage document processing pipeline handles OCR, classification, quality assessment, semantic chunking, and embedding generation. The Google Gemini API (`gemini-2.5-flash` for text, `text-embedding-004` for embeddings) is central for analysis, query processing, and RAG. The system also features a "Living Policy Manual" for generating human-readable policy text and a "Rules Extraction Pipeline" to derive structured "Rules as Code" from policy documents using Gemini.
 
 ## Data Management
-PostgreSQL stores core data (users, documents, chunks), "Rules as Code," citation tracking, navigator workspace data, audit logs, and document integrity information. Google Cloud Storage handles document file storage with custom ACLs. Vector embeddings are stored within document chunks. An automated scraping infrastructure ingests documents from official sources, ensuring integrity and version management.
+PostgreSQL stores core data such as users, documents, chunks, "Rules as Code," citation tracking, navigator workspace data, audit logs, and document integrity information. Google Cloud Storage is used for document file storage with custom ACLs. Vector embeddings are stored within document chunks. An automated scraping infrastructure ensures integrity and version management of documents from official sources.
 
 ## Authentication and Authorization
-A basic user authentication system supports roles (user, admin, super_admin). Object-level security uses custom ACLs for Google Cloud Storage. Session management employs `connect-pg-simple` with PostgreSQL.
+A basic user authentication system supports roles (user, admin, super_admin). Object-level security is enforced using custom ACLs for Google Cloud Storage. Session management uses `connect-pg-simple` with PostgreSQL.
 
 ## Core Features
--   **Navigator Workspace**: Tracks client interaction sessions and provides an E&E (Eligibility & Enrollment) export infrastructure for future DHS integration.
--   **Feedback Collection System**: Allows users to report issues with AI responses and content, with an admin interface for management.
--   **Admin Enhancement Tools**: Includes an Audit Log Viewer, API Documentation, and Feedback Management for system operations and DHS integration readiness.
--   **Notification System**: Provides in-app notifications for policy updates, feedback, system alerts, and workflow events with user-configurable preferences and a dedicated notification center.
--   **Policy Change Diff Monitor**: Tracks policy document versions with automated change detection, impact analysis, and role-based notifications. Staff can review diffs, assign impact assessments, and mark changes as resolved. Integrated with notification system for real-time alerts.
--   **Compliance Assurance Suite**: Gemini-powered validation system that checks policy documents and rules against regulatory requirements. Admin UI at `/admin/compliance` allows creating compliance rules (WCAG, LEP, federal regulations), validating documents with AI analysis, and managing violations with severity-based prioritization.
--   **Adaptive Intake Copilot**: Gemini-powered conversational intake assistant at `/intake` that guides applicants through SNAP application process using multi-turn dialogue. Tracks session progress, extracts structured data from conversations, visualizes extracted fields, and generates application forms when data completeness threshold is reached. Features dual-pane UI with session management sidebar and chat interface with progress indicators. Integrated with PolicyEngine for real-time benefit calculations during intake.
--   **PolicyEngine Integration**: Python-based PolicyEngine API integration for multi-benefit calculations (SNAP, Medicaid, EITC, CTC, SSI, TANF). Provides accurate federal and state-specific benefit estimates based on household composition, income, and expenses. Integrated throughout the platform for eligibility screening, intake copilot, and scenario modeling.
--   **Anonymous Benefit Screener**: Public-facing eligibility screener at `/screener` requiring no login. Allows Maryland residents to check benefit eligibility anonymously using PolicyEngine calculations. Features session management for tracking anonymous screening history and "Save Results" functionality to migrate data when user creates an account.
--   **Household Scenario Workspace**: Advanced what-if modeling tool at `/scenarios` for navigators and caseworkers. Allows creation of multiple household scenarios with varying income, expenses, and composition. Features PolicyEngine-powered benefit calculations per scenario, Recharts-based comparison visualizations showing side-by-side benefit outcomes, and PDF export for client counseling reports. Supports data-driven benefit counseling and optimization strategies.
--   **Demo Environment**: Four pre-seeded demo users (applicant, navigator, caseworker, admin) with credentials displayed on login page via collapsible "Use Demo Account" helper. Enables instant preview and testing of role-based features without manual account creation. Credentials: demo.applicant, demo.navigator, demo.caseworker, demo.admin (all use password: Demo2024!).
--   **VITA Tax Assistant**: Federal tax assistance knowledge base using IRS Publication 4012. Hybrid three-layer architecture: (1) RAG semantic search using Gemini embeddings with cosine similarity, (2) Extracted federal tax rules displayed in formatted blocks by type (eligibility, calculation, requirement, exception, procedure), (3) IRS Pub 4012 citations with relevance scores. Accessible via VITAChatWidget in Admin → VITA tab. Federal program applies to all Maryland residents.
--   **Maryland Evaluation Framework**: Accuracy testing system adapted from Propel's snap-eval structure. Database tables track test cases (evaluation_test_cases), evaluation runs (evaluation_runs with pass@1 scoring), and individual results (evaluation_results with variance tracking). Supports MD-specific test case tags (md_asset_limit, md_drug_felony, bbce, md_recertification). 2% variance tolerance for PolicyEngine validation. Designed for 25-case test structure: 8 eligibility rules, 12 benefit calculations, 5 edge cases. Benchmark insights panel documents Column Tax accuracy baseline (41% GPT-5 strict, 61% lenient) and industry research-backed design decisions.
+-   **Navigator Workspace**: Tracks client interaction sessions and supports E&E (Eligibility & Enrollment) export.
+-   **Feedback Collection System**: Allows users to report issues with AI responses, with an admin interface for management.
+-   **Admin Enhancement Tools**: Includes an Audit Log Viewer, API Documentation, and Feedback Management.
+-   **Notification System**: Provides in-app notifications for policy updates, feedback, system alerts, and workflow events.
+-   **Policy Change Diff Monitor**: Tracks policy document versions, detects changes, performs impact analysis, and sends role-based notifications.
+-   **Compliance Assurance Suite**: A Gemini-powered system to validate policy documents against regulatory requirements (WCAG, LEP, federal regulations), managed via an admin UI.
+-   **Adaptive Intake Copilot**: A Gemini-powered conversational assistant guiding applicants through processes like SNAP applications, extracting structured data, and generating forms. Integrates with PolicyEngine for real-time benefit calculations.
+-   **PolicyEngine Integration**: Provides accurate multi-benefit calculations (SNAP, Medicaid, EITC, CTC, SSI, TANF) based on household data, integrated throughout the platform.
+-   **Anonymous Benefit Screener**: A public-facing tool for anonymous eligibility checks using PolicyEngine, with session management and data migration features.
+-   **Household Scenario Workspace**: A modeling tool for navigators to create and compare household scenarios with PolicyEngine-powered benefit calculations and visualizations.
+-   **VITA Tax Assistant**: A federal tax assistance knowledge base using IRS Publication 4012, featuring RAG semantic search, extracted tax rules, and citations.
+-   **Maryland Evaluation Framework**: An accuracy testing system for policy rules and calculations, adapted from Propel's snap-eval, tracking test cases, evaluation runs, and results with variance tolerance.
 
 ## Security & Performance
--   **Security**: CSRF protection (double-submit cookie), multi-tier rate limiting, and security headers (Helmet, environment-aware CSP, HSTS) are implemented.
--   **Performance**: Server-side caching (NodeCache with TTL and invalidation) for frequently accessed data and strategic database indexing optimize query performance.
+CSRF protection, multi-tier rate limiting, and security headers (Helmet, CSP, HSTS) are implemented for security. Server-side caching (NodeCache) and strategic database indexing are used for performance optimization.
 
 ## Testing
 Vitest, @testing-library/react, and supertest are used for unit, component, and API integration tests respectively.
 
+## Developer Documentation
+
+The `ai-context/` directory contains comprehensive technical documentation for developers and AI agents working on the system:
+
+-   **system-architecture.json**: JSON schema defining the complete system architecture including technology stack (Node.js, React, TypeScript), database structure (PostgreSQL/Drizzle ORM), AI services (Google Gemini models), external dependencies, security configuration, deployment model, and all 7 benefit programs. Serves as single source of truth for architectural decisions and system capabilities.
+
+-   **code-patterns.md**: Reusable code examples and best practices from the codebase covering React component patterns, API routes, data fetching with TanStack Query, form validation with react-hook-form and Zod, authentication with Passport.js, database patterns with Drizzle ORM, AI integration with Gemini API, error handling, TypeScript patterns, and testing patterns.
+
+-   **api-contracts.ts**: TypeScript interface definitions for 160+ API endpoints organized by domain (authentication, documents, RAG, PolicyEngine, admin, etc.). Provides type safety and API reference. Note: Reference template only - production should use tRPC or automated contract tests.
+
+-   **task-templates.md**: Reusable workflow templates for common development tasks including document upload/processing, RAG search implementation, rules extraction, PolicyEngine integration, navigator workspace operations, compliance validation, admin dashboard features, testing workflows, document version management, and security audits.
+
+-   **performance-optimization.md**: Performance tuning strategies covering database query optimization (indexing, Drizzle best practices), caching strategies (NodeCache with TTLs), frontend optimization (code splitting, lazy loading), API performance (pagination, rate limiting), and RAG search optimization.
+
+-   **testing-guide.md**: Comprehensive testing patterns including unit testing (storage, utilities), integration testing (API routes, RAG service), component testing (React, forms), E2E testing (Playwright), AI/Gemini testing (mocking, embeddings), test setup (vitest.config.ts), and CI/CD integration.
+
+-   **deployment-checklist.md**: Production deployment guide including pre-deployment validation, environment configuration (all required env vars), database migration (Drizzle commands), security hardening (CSP, rate limiting), performance optimization (accurate schema indexes, caching), monitoring/logging (winston, health checks, Sentry), post-deployment verification (all 7 Maryland programs), and rollback procedures.
+
+-   **troubleshooting-guide.md**: Common issues and debugging solutions for application startup, database problems, authentication (session persistence with connect-pg-simple, CSRF), AI/Gemini integration, PolicyEngine issues, document upload/processing (GCS, OCR), RAG search debugging, performance optimization, frontend issues, and API errors.
+
+All documentation aligns with actual codebase implementation (schema.ts, server modules, service files) and provides executable examples where applicable.
+
 # External Dependencies
 
 -   **AI Services**: Google Gemini API (`@google/genai`) for language models, document analysis, embeddings, and RAG. Models used: `gemini-2.5-flash`, `text-embedding-004`.
--   **Benefit Calculations**: PolicyEngine (`policyengine-us`) Python package for accurate multi-benefit eligibility and amount calculations (SNAP, Medicaid, EITC, CTC, SSI, TANF).
+-   **Benefit Calculations**: PolicyEngine (`policyengine-us`) Python package for multi-benefit eligibility and amount calculations.
 -   **Database**: PostgreSQL via Drizzle ORM (`drizzle-orm`) with Neon Database.
 -   **Object Storage**: Google Cloud Storage.
 -   **Document Processing**: Tesseract OCR engine and Google Gemini Vision API.
 -   **UI Components**: Radix UI primitives via shadcn/ui.
 -   **Data Visualization**: Recharts for benefit comparison charts and analytics dashboards.
 -   **PDF Generation**: jsPDF and jspdf-autotable for client counseling reports and scenario exports.
-
-# Known Issues & Resolution Plans
-
-## PolicyEngine Python Library - System Dependency Issue
-
-**Status**: BLOCKED - Requires environment-level fix  
-**Impact**: PolicyEngine benefit calculations unavailable across all programs  
-**Root Cause**: Missing `libstdc++.so.6` shared library for numpy C-extensions  
-
-### Technical Details
-- **Error**: `ImportError: libstdc++.so.6: cannot open shared object file: No such file or directory`
-- **Affected Component**: `policyengine-us` Python package and its numpy dependency
-- **Environment**: NixOS/Replit environment with Python 3.11
-- **Attempts Made**: Installed gcc, libstdcxx5 system dependencies - issue persists
-
-### Impacted Features
-1. **Benefit Calculations**: All PolicyEngine-powered calculations (SNAP, Medicaid, TANF, EITC, CTC, SSI)
-2. **Scenario Workspace**: Household modeling and what-if analysis
-3. **Benefit Screener**: Anonymous eligibility screening
-4. **Intake Copilot**: Real-time benefit estimates during intake
-5. **Evaluation Framework**: PolicyEngine validation and accuracy testing
-
-### Alternative Benefit Calculation Services (Research Findings)
-
-**Evaluated Alternatives**:
-
-1. **PolicyEngine REST API** (NOT VIABLE - Free Endpoint Non-Functional)
-   - Unauthenticated API: `https://api.policyengine.org/us/calculate` (returns empty results)
-   - Authenticated API: `https://household.api.policyengine.org/us/calculate` (requires Client ID/Secret)
-   - **LIMITATION**: Free endpoint returns `{"result": {}, "status": "ok"}` with no benefit values
-   - Paid endpoint requires Client ID & Client Secret (contact hello@policyengine.org)
-   - **Status**: HTTP client implemented calling unauthenticated endpoint, gets no usable data
-
-2. **State-Specific SNAP Calculators** (State-level accuracy)
-   - Illinois: `fscalc.dhs.illinois.gov/FSCalc`
-   - Oregon: `snapestimate.dhsoha.state.or.us`
-   - New York: `benefitsplus.cssny.org`
-   - No official APIs but logic can be reverse-engineered
-   - **Use case**: Maryland-specific rules validation
-
-3. **mRelief** (Multi-benefit screener)
-   - Open-source: `github.com/mRelief`
-   - Covers SNAP, Medicaid, WIC, TANF
-   - Text/web-based benefit screening
-   - **Use case**: Reference implementation for multi-program logic
-
-4. **Custom USDA Tables Implementation**
-   - Build calculator using official FY 2026 SNAP tables
-   - Source: `fns.usda.gov/snap/recipient/eligibility`
-   - State FPL thresholds for Medicaid from KFF data
-   - **Use case**: Full control, Maryland customization
-
-5. **OpenFisca Framework** (Advanced)
-   - PolicyEngine's underlying rules-as-code engine
-   - URL: `openfisca.org`
-   - Build custom US benefit engine from scratch
-   - **Use case**: Long-term custom policy modeling
-
-**Recommended Next Steps** (Updated October 2025):
-1. **Immediate**: ✅ COMPLETED - PolicyEngine REST API wrapper implemented but requires paid auth (Client ID/Secret)
-2. **Short-term**: Build Maryland SNAP calculator using USDA FY 2026 tables for basic benefit estimates
-3. **Medium-term**: Implement mRelief open-source logic for multi-benefit screening (SNAP, Medicaid, WIC, TANF)
-4. **Long-term**: Either (a) acquire PolicyEngine API credentials, or (b) build custom OpenFisca-based engine
-
-### Workaround Options
-1. **Use RAG-only Mode**: Conversational AI and document search remain fully functional
-2. **Manual Calculations**: Navigators can use external tools for benefit amounts
-3. **PolicyEngine REST API**: Switch from Python package to HTTP API calls (bypasses library issue)
-
-### Resolution Path
-**Short-term**: Document limitation, enable RAG-only features  
-**Medium-term**: Investigate alternative deployment strategies:
-- Docker containerization with proper libraries
-- Python virtual environment with pre-compiled wheels
-- Alternative benefit calculation services
-- Cloud function deployment for PolicyEngine
-
-**Long-term**: Work with Replit support to resolve NixOS library dependencies for Python scientific packages
