@@ -2301,6 +2301,277 @@ export const programEnrollmentsRelations = relations(programEnrollments, ({ one 
   }),
 }));
 
+// ============================================================================
+// E&E CROSS-ENROLLMENT INTELLIGENCE - Dataset Management & Analysis
+// ============================================================================
+
+// E&E Datasets - Track uploaded E&E report files
+export const eeDatasets = pgTable("ee_datasets", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull(),
+  description: text("description"),
+  dataSource: text("data_source").notNull(), // dhs_snap, dhs_medicaid, dhs_tanf, external_agency, etc.
+  reportPeriodStart: timestamp("report_period_start"),
+  reportPeriodEnd: timestamp("report_period_end"),
+  
+  // Dataset activation and access control
+  isActive: boolean("is_active").default(false).notNull(), // Admin can activate/deactivate
+  isProcessed: boolean("is_processed").default(false).notNull(),
+  
+  // Processing metadata
+  totalRecords: integer("total_records").default(0),
+  validRecords: integer("valid_records").default(0),
+  invalidRecords: integer("invalid_records").default(0),
+  duplicateRecords: integer("duplicate_records").default(0),
+  processingStatus: text("processing_status").default("pending"), // pending, processing, completed, failed
+  processingError: text("processing_error"),
+  processingStartedAt: timestamp("processing_started_at"),
+  processingCompletedAt: timestamp("processing_completed_at"),
+  
+  // Data retention and compliance
+  retentionPolicyDays: integer("retention_policy_days").default(90), // Days before auto-purge
+  purgeScheduledAt: timestamp("purge_scheduled_at"),
+  
+  // Audit
+  uploadedBy: varchar("uploaded_by").references(() => users.id).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  dataSourceIdx: index("ee_datasets_data_source_idx").on(table.dataSource),
+  isActiveIdx: index("ee_datasets_is_active_idx").on(table.isActive),
+  processingStatusIdx: index("ee_datasets_processing_status_idx").on(table.processingStatus),
+}));
+
+// E&E Dataset Files - Track uploaded files in GCS
+export const eeDatasetFiles = pgTable("ee_dataset_files", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  datasetId: varchar("dataset_id").references(() => eeDatasets.id, { onDelete: "cascade" }).notNull(),
+  filename: text("filename").notNull(),
+  originalName: text("original_name").notNull(),
+  objectPath: text("object_path").notNull(), // GCS path
+  fileSize: integer("file_size"), // bytes
+  mimeType: text("mime_type"),
+  fileHash: text("file_hash"), // SHA-256 for integrity
+  uploadedBy: varchar("uploaded_by").references(() => users.id).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+  datasetIdIdx: index("ee_dataset_files_dataset_id_idx").on(table.datasetId),
+}));
+
+// E&E Clients - Encrypted client data from E&E datasets with matching
+export const eeClients = pgTable("ee_clients", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  datasetId: varchar("dataset_id").references(() => eeDatasets.id, { onDelete: "cascade" }).notNull(),
+  
+  // Encrypted PII (stored encrypted at rest)
+  clientName: text("client_name").notNull(), // Encrypted
+  ssnLast4: text("ssn_last_4").notNull(), // Encrypted
+  dateOfBirth: timestamp("date_of_birth"), // Encrypted
+  
+  // Hashed identifiers for matching (not reversible)
+  clientNameHash: text("client_name_hash"), // Phonetic hash (Double Metaphone)
+  clientIdentifierHash: text("client_identifier_hash"), // Hash of SSN4+DOB for deterministic matching
+  
+  // Enrollment data from E&E
+  enrolledProgramId: varchar("enrolled_program_id").references(() => benefitPrograms.id),
+  enrollmentStatus: text("enrollment_status"), // from E&E: active, pending, denied, terminated
+  caseNumber: text("case_number"), // E&E case number
+  
+  // Household data for eligibility analysis
+  householdSize: integer("household_size"),
+  householdIncome: integer("household_income"), // Monthly in cents
+  householdAssets: integer("household_assets"), // Total in cents
+  householdComposition: jsonb("household_composition"), // Array of household members
+  
+  // Matching status
+  matchStatus: text("match_status").default("pending"), // pending, matched, no_match, needs_review
+  matchedClientCaseId: varchar("matched_client_case_id").references(() => clientCases.id),
+  matchConfidenceScore: real("match_confidence_score"), // 0-1
+  matchMethod: text("match_method"), // deterministic, fuzzy, manual
+  
+  // Raw data preservation
+  rawDataRow: jsonb("raw_data_row"), // Original CSV row data
+  
+  // Metadata
+  reviewedBy: varchar("reviewed_by").references(() => users.id), // Admin who reviewed fuzzy match
+  reviewedAt: timestamp("reviewed_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  datasetIdIdx: index("ee_clients_dataset_id_idx").on(table.datasetId),
+  matchStatusIdx: index("ee_clients_match_status_idx").on(table.matchStatus),
+  clientIdentifierHashIdx: index("ee_clients_identifier_hash_idx").on(table.clientIdentifierHash),
+  clientNameHashIdx: index("ee_clients_name_hash_idx").on(table.clientNameHash),
+  enrolledProgramIdx: index("ee_clients_enrolled_program_idx").on(table.enrolledProgramId),
+}));
+
+// Cross-Enrollment Opportunities - Identified cross-enrollment possibilities
+export const crossEnrollmentOpportunities = pgTable("cross_enrollment_opportunities", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  
+  // Client reference (either from E&E or existing case)
+  eeClientId: varchar("ee_client_id").references(() => eeClients.id, { onDelete: "cascade" }),
+  clientCaseId: varchar("client_case_id").references(() => clientCases.id),
+  
+  // Program pairing
+  currentProgramId: varchar("current_program_id").references(() => benefitPrograms.id).notNull(), // Program they're enrolled in
+  targetProgramId: varchar("target_program_id").references(() => benefitPrograms.id).notNull(), // Program they may be eligible for
+  
+  // Eligibility analysis
+  eligibilityScore: real("eligibility_score"), // 0-1 confidence score
+  eligibilityReason: text("eligibility_reason"), // AI-generated explanation
+  policyEngineResult: jsonb("policy_engine_result"), // Full PolicyEngine calculation
+  estimatedBenefitAmount: integer("estimated_benefit_amount"), // Monthly benefit in cents
+  
+  // Opportunity prioritization
+  priority: text("priority").default("medium"), // high, medium, low
+  potentialImpact: text("potential_impact"), // financial, health, stability
+  
+  // Outreach tracking
+  outreachStatus: text("outreach_status").default("identified"), // identified, pending_contact, contacted, enrolled, declined, ineligible
+  contactAttempts: integer("contact_attempts").default(0),
+  lastContactedAt: timestamp("last_contacted_at"),
+  contactedBy: varchar("contacted_by").references(() => users.id), // Navigator who contacted
+  
+  // Resolution
+  outcomeStatus: text("outcome_status"), // successful_enrollment, client_declined, ineligible, no_response
+  outcomeNotes: text("outcome_notes"),
+  resolvedAt: timestamp("resolved_at"),
+  resolvedBy: varchar("resolved_by").references(() => users.id),
+  
+  // Metadata
+  identifiedAt: timestamp("identified_at").defaultNow().notNull(),
+  createdBy: varchar("created_by").references(() => users.id),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  eeClientIdIdx: index("cross_opportunities_ee_client_idx").on(table.eeClientId),
+  clientCaseIdIdx: index("cross_opportunities_client_case_idx").on(table.clientCaseId),
+  outreachStatusIdx: index("cross_opportunities_outreach_status_idx").on(table.outreachStatus),
+  priorityIdx: index("cross_opportunities_priority_idx").on(table.priority),
+  targetProgramIdx: index("cross_opportunities_target_program_idx").on(table.targetProgramId),
+}));
+
+// Cross-Enrollment Audit Events - Compliance trail for E&E operations
+export const crossEnrollmentAuditEvents = pgTable("cross_enrollment_audit_events", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  eventType: text("event_type").notNull(), // dataset_upload, dataset_activation, matching_run, eligibility_analysis, outreach_action, export
+  eventCategory: text("event_category").notNull(), // admin, navigator, system
+  
+  // Event details (PII-light)
+  datasetId: varchar("dataset_id").references(() => eeDatasets.id, { onDelete: "cascade" }),
+  opportunityId: varchar("opportunity_id").references(() => crossEnrollmentOpportunities.id, { onDelete: "cascade" }),
+  
+  // Action details
+  actionTaken: text("action_taken").notNull(),
+  actionResult: text("action_result"),
+  metadata: jsonb("metadata"), // Additional context without PII
+  
+  // Actor
+  userId: varchar("user_id").references(() => users.id).notNull(),
+  userRole: text("user_role").notNull(),
+  
+  // Compliance
+  ipAddress: text("ip_address"),
+  userAgent: text("user_agent"),
+  
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+  eventTypeIdx: index("cross_audit_event_type_idx").on(table.eventType),
+  datasetIdIdx: index("cross_audit_dataset_id_idx").on(table.datasetId),
+  userIdIdx: index("cross_audit_user_id_idx").on(table.userId),
+  createdAtIdx: index("cross_audit_created_at_idx").on(table.createdAt),
+}));
+
+// Relations
+export const eeDatasetsRelations = relations(eeDatasets, ({ one, many }) => ({
+  uploader: one(users, {
+    fields: [eeDatasets.uploadedBy],
+    references: [users.id],
+  }),
+  files: many(eeDatasetFiles),
+  clients: many(eeClients),
+  auditEvents: many(crossEnrollmentAuditEvents),
+}));
+
+export const eeDatasetFilesRelations = relations(eeDatasetFiles, ({ one }) => ({
+  dataset: one(eeDatasets, {
+    fields: [eeDatasetFiles.datasetId],
+    references: [eeDatasets.id],
+  }),
+  uploader: one(users, {
+    fields: [eeDatasetFiles.uploadedBy],
+    references: [users.id],
+  }),
+}));
+
+export const eeClientsRelations = relations(eeClients, ({ one, many }) => ({
+  dataset: one(eeDatasets, {
+    fields: [eeClients.datasetId],
+    references: [eeDatasets.id],
+  }),
+  enrolledProgram: one(benefitPrograms, {
+    fields: [eeClients.enrolledProgramId],
+    references: [benefitPrograms.id],
+  }),
+  matchedClientCase: one(clientCases, {
+    fields: [eeClients.matchedClientCaseId],
+    references: [clientCases.id],
+  }),
+  reviewer: one(users, {
+    fields: [eeClients.reviewedBy],
+    references: [users.id],
+  }),
+  opportunities: many(crossEnrollmentOpportunities),
+}));
+
+export const crossEnrollmentOpportunitiesRelations = relations(crossEnrollmentOpportunities, ({ one, many }) => ({
+  eeClient: one(eeClients, {
+    fields: [crossEnrollmentOpportunities.eeClientId],
+    references: [eeClients.id],
+  }),
+  clientCase: one(clientCases, {
+    fields: [crossEnrollmentOpportunities.clientCaseId],
+    references: [clientCases.id],
+  }),
+  currentProgram: one(benefitPrograms, {
+    fields: [crossEnrollmentOpportunities.currentProgramId],
+    references: [benefitPrograms.id],
+  }),
+  targetProgram: one(benefitPrograms, {
+    fields: [crossEnrollmentOpportunities.targetProgramId],
+    references: [benefitPrograms.id],
+  }),
+  contacter: one(users, {
+    fields: [crossEnrollmentOpportunities.contactedBy],
+    references: [users.id],
+  }),
+  resolver: one(users, {
+    fields: [crossEnrollmentOpportunities.resolvedBy],
+    references: [users.id],
+  }),
+  creator: one(users, {
+    fields: [crossEnrollmentOpportunities.createdBy],
+    references: [users.id],
+  }),
+  auditEvents: many(crossEnrollmentAuditEvents),
+}));
+
+export const crossEnrollmentAuditEventsRelations = relations(crossEnrollmentAuditEvents, ({ one }) => ({
+  dataset: one(eeDatasets, {
+    fields: [crossEnrollmentAuditEvents.datasetId],
+    references: [eeDatasets.id],
+  }),
+  opportunity: one(crossEnrollmentOpportunities, {
+    fields: [crossEnrollmentAuditEvents.opportunityId],
+    references: [crossEnrollmentOpportunities.id],
+  }),
+  user: one(users, {
+    fields: [crossEnrollmentAuditEvents.userId],
+    references: [users.id],
+  }),
+}));
+
 // Insert schemas
 export const insertEvaluationTestCaseSchema = createInsertSchema(evaluationTestCases).omit({
   id: true,
@@ -2344,3 +2615,44 @@ export type AbawdExemptionVerification = typeof abawdExemptionVerifications.$inf
 
 export type InsertProgramEnrollment = z.infer<typeof insertProgramEnrollmentSchema>;
 export type ProgramEnrollment = typeof programEnrollments.$inferSelect;
+
+// E&E Cross-Enrollment schemas
+export const insertEeDatasetSchema = createInsertSchema(eeDatasets).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertEeDatasetFileSchema = createInsertSchema(eeDatasetFiles).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertEeClientSchema = createInsertSchema(eeClients).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertCrossEnrollmentOpportunitySchema = createInsertSchema(crossEnrollmentOpportunities).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertCrossEnrollmentAuditEventSchema = createInsertSchema(crossEnrollmentAuditEvents).omit({
+  id: true,
+  createdAt: true,
+});
+
+// E&E Types
+export type InsertEeDataset = z.infer<typeof insertEeDatasetSchema>;
+export type EeDataset = typeof eeDatasets.$inferSelect;
+export type InsertEeDatasetFile = z.infer<typeof insertEeDatasetFileSchema>;
+export type EeDatasetFile = typeof eeDatasetFiles.$inferSelect;
+export type InsertEeClient = z.infer<typeof insertEeClientSchema>;
+export type EeClient = typeof eeClients.$inferSelect;
+export type InsertCrossEnrollmentOpportunity = z.infer<typeof insertCrossEnrollmentOpportunitySchema>;
+export type CrossEnrollmentOpportunity = typeof crossEnrollmentOpportunities.$inferSelect;
+export type InsertCrossEnrollmentAuditEvent = z.infer<typeof insertCrossEnrollmentAuditEventSchema>;
+export type CrossEnrollmentAuditEvent = typeof crossEnrollmentAuditEvents.$inferSelect;
