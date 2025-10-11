@@ -155,6 +155,40 @@ export const OFFICIAL_SOURCES: Omit<InsertPolicySource, 'benefitProgramId'>[] = 
       documentType: 'IM',
       years: [2024, 2023, 2022, 2021, 2020]
     }
+  },
+
+  // ===== OHEP (Office of Home Energy Programs) =====
+  {
+    name: 'OHEP Operations Manual',
+    sourceType: 'state_policy',
+    jurisdiction: 'maryland',
+    description: 'Maryland Office of Home Energy Programs Operations Manual',
+    url: 'https://dhs.maryland.gov/documents/OHEP/OHEP-Operations-Manual.pdf',
+    syncType: 'web_scraping',
+    syncSchedule: 'weekly',
+    priority: 100,
+    isActive: true,
+    syncConfig: {
+      scrapeType: 'ohep_manual_pdf',
+      isPrimaryManual: true
+    }
+  },
+
+  {
+    name: 'OHEP Forms and Documentation',
+    sourceType: 'state_policy',
+    jurisdiction: 'maryland',
+    description: 'OHEP program forms, guidance materials, and supplementary documentation',
+    url: 'https://dhs.maryland.gov/office-of-home-energy-programs/',
+    syncType: 'web_scraping',
+    syncSchedule: 'weekly',
+    priority: 95,
+    isActive: true,
+    syncConfig: {
+      scrapeType: 'ohep_forms_page',
+      extractForms: true,
+      extractGuidance: true
+    }
   }
 ];
 
@@ -353,6 +387,129 @@ export class PolicySourceScraper {
   }
   
   /**
+   * Scrape OHEP Operations Manual PDF
+   */
+  async scrapeOHEPManualPDF(sourceId: string, config: any): Promise<ScrapedDocument[]> {
+    const documents: ScrapedDocument[] = [];
+    
+    try {
+      const url = 'https://dhs.maryland.gov/documents/OHEP/OHEP-Operations-Manual.pdf';
+      
+      // Fetch PDF to get metadata
+      const response = await axios.head(url, {
+        timeout: 30000,
+        headers: {
+          'User-Agent': 'Maryland Benefits Navigator System/1.0'
+        }
+      });
+      
+      const lastModified = response.headers['last-modified'] 
+        ? new Date(response.headers['last-modified']) 
+        : new Date();
+      
+      documents.push({
+        title: 'OHEP Operations Manual',
+        url,
+        pdfUrl: url,
+        effectiveDate: lastModified,
+        sectionNumber: 'OHEP-MANUAL',
+        metadata: {
+          program: 'OHEP',
+          documentType: 'operations_manual',
+          source: 'Maryland DHS OHEP',
+          isPrimaryManual: true
+        }
+      });
+      
+      console.log('✓ Found OHEP Operations Manual PDF');
+    } catch (error) {
+      console.error('Error scraping OHEP manual PDF:', error);
+    }
+    
+    return documents;
+  }
+
+  /**
+   * Scrape OHEP Forms and Documentation page
+   */
+  async scrapeOHEPFormsPage(sourceId: string, config: any): Promise<ScrapedDocument[]> {
+    const documents: ScrapedDocument[] = [];
+    
+    try {
+      const url = 'https://dhs.maryland.gov/office-of-home-energy-programs/';
+      const response = await axios.get(url, {
+        timeout: 30000,
+        headers: {
+          'User-Agent': 'Maryland Benefits Navigator System/1.0'
+        }
+      });
+      
+      const $ = cheerio.load(response.data);
+      
+      // Extract all PDF links (forms, guidance documents, etc.)
+      $('a[href$=".pdf"], a[href*="/documents/OHEP/"]').each((_, element) => {
+        const href = $(element).attr('href');
+        const text = $(element).text().trim();
+        
+        if (href && text && !href.includes('OHEP-Operations-Manual.pdf')) {
+          const fullUrl = href.startsWith('http') ? href : `https://dhs.maryland.gov${href}`;
+          
+          // Determine document type from text/URL
+          let documentType = 'guidance';
+          if (text.toLowerCase().includes('form') || text.toLowerCase().includes('application')) {
+            documentType = 'form';
+          } else if (text.toLowerCase().includes('fact sheet') || text.toLowerCase().includes('information')) {
+            documentType = 'information';
+          }
+          
+          documents.push({
+            title: text || `OHEP Document - ${href.split('/').pop()}`,
+            url: fullUrl,
+            pdfUrl: fullUrl,
+            sectionNumber: `OHEP-${documentType.toUpperCase()}-${Date.now()}`,
+            metadata: {
+              program: 'OHEP',
+              documentType,
+              source: 'Maryland DHS OHEP Website',
+              extractedFrom: url
+            }
+          });
+        }
+      });
+      
+      // Also extract any downloadable Word/Excel documents
+      $('a[href$=".doc"], a[href$=".docx"], a[href$=".xls"], a[href$=".xlsx"]').each((_, element) => {
+        const href = $(element).attr('href');
+        const text = $(element).text().trim();
+        
+        if (href && text) {
+          const fullUrl = href.startsWith('http') ? href : `https://dhs.maryland.gov${href}`;
+          const extension = href.split('.').pop()?.toLowerCase();
+          
+          documents.push({
+            title: text,
+            url: fullUrl,
+            pdfUrl: fullUrl,
+            sectionNumber: `OHEP-DOC-${Date.now()}`,
+            metadata: {
+              program: 'OHEP',
+              documentType: 'form',
+              fileType: extension,
+              source: 'Maryland DHS OHEP Website'
+            }
+          });
+        }
+      });
+      
+      console.log(`✓ Found ${documents.length} OHEP forms and documents`);
+    } catch (error) {
+      console.error('Error scraping OHEP forms page:', error);
+    }
+    
+    return documents;
+  }
+
+  /**
    * Download and process a document from a scraped source
    */
   async downloadAndProcessDocument(
@@ -457,6 +614,10 @@ export class PolicySourceScraper {
         documents = await this.scrapeCFR(policySourceId, config);
       } else if (config?.scrapeType === 'fns_memos') {
         documents = await this.scrapeFNSMemos(policySourceId, config);
+      } else if (config?.scrapeType === 'ohep_manual_pdf') {
+        documents = await this.scrapeOHEPManualPDF(policySourceId, config);
+      } else if (config?.scrapeType === 'ohep_forms_page') {
+        documents = await this.scrapeOHEPFormsPage(policySourceId, config);
       } else {
         console.log(`⚠ Scraper not yet implemented for: ${config?.scrapeType}`);
       }
