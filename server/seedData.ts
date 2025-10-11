@@ -183,7 +183,7 @@ export async function seedMarylandBenefitPrograms() {
         sourceType: 'web_scraping',
         scrapingConfig: {
           type: 'multi_source',
-          sources: ['sdat_tax_credits', 'comptroller_tax_credits', 'onestop_forms']
+          sources: ['sdat_tax_credits_portal', 'renters_tax_credit', 'homeowners_tax_credit', 'comptroller_tax_credits', 'onestop_tax_forms']
         },
         isActive: true
       },
