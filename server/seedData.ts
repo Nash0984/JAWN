@@ -172,20 +172,18 @@ export async function seedMarylandBenefitPrograms() {
         isActive: true
       },
       {
-        name: 'Maryland Children\'s Health Program (MCHP)',
-        code: 'MD_MCHP',
-        description: 'Health insurance for uninsured Maryland children under age 19, administered by Maryland Department of Health',
-        programType: 'benefit',
+        name: 'Maryland Tax Credits and Property Tax Relief',
+        code: 'MD_TAX_CREDITS',
+        description: 'Maryland property tax credits (Renters\', Homeowners\', Homestead) and state income tax credits, administered by SDAT and Comptroller of Maryland',
+        programType: 'tax',
         hasRulesEngine: true,
         hasPolicyEngineValidation: true,
         hasConversationalAI: true,
-        primarySourceUrl: 'https://health.maryland.gov/mmcp/chp/pages/home.aspx',
+        primarySourceUrl: 'https://dat.maryland.gov/pages/tax-credit-programs.aspx',
         sourceType: 'web_scraping',
         scrapingConfig: {
-          type: 'comar_regulations',
-          comarTitle: '10.09.11',
-          regulationName: 'Maryland Children\'s Health Program',
-          supplementalUrl: 'https://www.marylandhealthconnection.gov/faq/maryland-childrens-health-program-mchp/'
+          type: 'multi_source',
+          sources: ['sdat_tax_credits', 'comptroller_tax_credits', 'onestop_forms']
         },
         isActive: true
       },
