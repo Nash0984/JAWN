@@ -156,7 +156,7 @@ The Maryland SNAP Policy Manual System is a comprehensive AI-powered platform de
 - Session management with PostgreSQL backing
 - CORS configuration for cross-origin requests
 - Automated system data seeding (benefit programs, document types)
-- Scheduled data ingestion workflows
+- Scheduled data ingestion workflows[
 
 #### server/routes.ts
 **Purpose:** RESTful API endpoint definitions
