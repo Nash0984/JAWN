@@ -1,8 +1,8 @@
 # Overview
 
-The Maryland Multi-Program Benefits Navigator System is an AI-powered platform designed to help users understand government benefit policies across seven major Maryland programs. It leverages Retrieval-Augmented Generation (RAG) and Rules as Code, primarily powered by the Google Gemini API, to process policy documents, extract information, and provide accurate answers regarding benefits, eligibility, and program requirements. The system aims to mitigate the "benefits navigation problem" by reducing information asymmetry and processing costs, thereby improving access to public benefits. Key capabilities include document upload, real-time semantic search, deterministic eligibility calculations via PolicyEngine, administrative tools, and AI model training interfaces. The project adheres to the Maryland Digital Style Guide and is intended for integration with marylandbenefits.gov.
+The Maryland Multi-Program Benefits Navigator System is an AI-powered platform designed to help users understand government benefit policies across six major Maryland programs. It leverages Retrieval-Augmented Generation (RAG) and Rules as Code, primarily powered by the Google Gemini API, to process policy documents, extract information, and provide accurate answers regarding benefits, eligibility, and program requirements. The system aims to mitigate the "benefits navigation problem" by reducing information asymmetry and processing costs, thereby improving access to public benefits. Key capabilities include document upload, real-time semantic search, deterministic eligibility calculations via PolicyEngine, administrative tools, and AI model training interfaces. The project adheres to the Maryland Digital Style Guide and is intended for integration with marylandbenefits.gov.
 
-Supported programs include Maryland SNAP, Medicaid, TCA (TANF), OHEP (Energy Assistance), WIC, Children's Health Program (MCHP), and IRS VITA Tax Assistance.
+Supported programs include Maryland SNAP, Medicaid, TCA (TANF), OHEP (Energy Assistance), Children's Health Program (MCHP), and IRS VITA Tax Assistance.
 
 # User Preferences
 

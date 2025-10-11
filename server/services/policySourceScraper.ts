@@ -225,6 +225,43 @@ export const OFFICIAL_SOURCES: Omit<InsertPolicySource, 'benefitProgramId'>[] = 
       scrapeType: 'comar_medicaid',
       regulation: '10.09.24'
     }
+  },
+
+  // ===== TCA (Temporary Cash Assistance / TANF) =====
+  {
+    name: 'TCA Main Page - Forms and Resources',
+    sourceType: 'state_policy',
+    jurisdiction: 'maryland',
+    description: 'TCA/TANF program information, forms, fact sheets, and guidance materials',
+    url: 'https://dhs.maryland.gov/weathering-tough-times/temporary-cash-assistance/',
+    syncType: 'web_scraping',
+    syncSchedule: 'weekly',
+    priority: 100,
+    isActive: true,
+    syncConfig: {
+      scrapeType: 'tca_main_page',
+      extractForms: true,
+      extractFactSheets: true,
+      extractGuidance: true,
+      extractWorkProgram: true
+    }
+  },
+
+  {
+    name: 'TCA Policy Manual',
+    sourceType: 'state_policy',
+    jurisdiction: 'maryland',
+    description: 'Temporary Cash Assistance Policy Manual - Complete sections and guidance',
+    url: 'https://dhs.maryland.gov/documents/?dir=FIA/Manuals/Temporary-Cash-Assistance-Manual',
+    syncType: 'web_scraping',
+    syncSchedule: 'weekly',
+    priority: 100,
+    isActive: true,
+    syncConfig: {
+      scrapeType: 'tca_manual_directory',
+      extractAllSections: true,
+      extractSupplements: true
+    }
   }
 ];
 
@@ -670,6 +707,172 @@ export class PolicySourceScraper {
   }
 
   /**
+   * Scrape TCA Main Page for all forms, fact sheets, and resources
+   */
+  async scrapeTCAMainPage(sourceId: string, config: any): Promise<ScrapedDocument[]> {
+    const documents: ScrapedDocument[] = [];
+    
+    try {
+      const url = 'https://dhs.maryland.gov/weathering-tough-times/temporary-cash-assistance/';
+      const response = await axios.get(url, {
+        timeout: 30000,
+        headers: {
+          'User-Agent': 'Maryland Benefits Navigator System/1.0'
+        }
+      });
+      
+      const $ = cheerio.load(response.data);
+      
+      // Extract all PDF documents
+      $('a[href$=".pdf"]').each((_, element) => {
+        const href = $(element).attr('href');
+        const text = $(element).text().trim();
+        
+        if (href && text) {
+          const fullUrl = href.startsWith('http') ? href : `https://dhs.maryland.gov${href}`;
+          
+          // Categorize document type based on text
+          let documentType = 'guidance';
+          if (text.toLowerCase().includes('application') || text.toLowerCase().includes('form')) {
+            documentType = 'form';
+          } else if (text.toLowerCase().includes('fact sheet') || text.toLowerCase().includes('information')) {
+            documentType = 'fact_sheet';
+          } else if (text.toLowerCase().includes('work') || text.toLowerCase().includes('earn')) {
+            documentType = 'work_program';
+          }
+          
+          documents.push({
+            title: text,
+            url: fullUrl,
+            pdfUrl: fullUrl,
+            sectionNumber: `TCA-${documentType.toUpperCase()}-${Date.now()}`,
+            metadata: {
+              program: 'TCA',
+              documentType,
+              source: 'Maryland DHS TCA Program',
+              extractedFrom: url
+            }
+          });
+        }
+      });
+      
+      // Extract Word/Excel documents
+      $('a[href$=".doc"], a[href$=".docx"], a[href$=".xls"], a[href$=".xlsx"]').each((_, element) => {
+        const href = $(element).attr('href');
+        const text = $(element).text().trim();
+        
+        if (href && text) {
+          const fullUrl = href.startsWith('http') ? href : `https://dhs.maryland.gov${href}`;
+          const extension = href.split('.').pop()?.toLowerCase();
+          
+          documents.push({
+            title: text,
+            url: fullUrl,
+            pdfUrl: fullUrl,
+            sectionNumber: `TCA-FORM-${Date.now()}`,
+            metadata: {
+              program: 'TCA',
+              documentType: 'form',
+              fileType: extension,
+              source: 'Maryland DHS TCA Program'
+            }
+          });
+        }
+      });
+      
+      console.log(`✓ Found ${documents.length} TCA forms and resources`);
+    } catch (error) {
+      console.error('Error scraping TCA main page:', error);
+    }
+    
+    return documents;
+  }
+
+  /**
+   * Scrape TCA Manual Directory for all policy sections
+   */
+  async scrapeTCAManualDirectory(sourceId: string, config: any): Promise<ScrapedDocument[]> {
+    const documents: ScrapedDocument[] = [];
+    
+    try {
+      const url = 'https://dhs.maryland.gov/documents/?dir=FIA/Manuals/Temporary-Cash-Assistance-Manual';
+      const response = await axios.get(url, {
+        timeout: 30000,
+        headers: {
+          'User-Agent': 'Maryland Benefits Navigator System/1.0'
+        }
+      });
+      
+      const $ = cheerio.load(response.data);
+      
+      // Extract all document links from the directory
+      $('a[href*="Temporary-Cash-Assistance-Manual"], a[href*="/FIA/Manuals/"]').each((_, element) => {
+        const href = $(element).attr('href');
+        const text = $(element).text().trim();
+        
+        if (href && text && (href.endsWith('.pdf') || href.endsWith('.doc') || href.endsWith('.docx'))) {
+          const fullUrl = href.startsWith('http') ? href : `https://dhs.maryland.gov${href}`;
+          
+          // Extract section/chapter number if available
+          const sectionMatch = text.match(/(?:Section|Chapter|Part)\s*(\d+)/i) || text.match(/^(\d+)/);
+          const sectionNumber = sectionMatch ? `TCA-${sectionMatch[1]}` : `TCA-MANUAL-${Date.now()}`;
+          
+          // Determine document type
+          let documentType = 'manual_section';
+          if (text.toLowerCase().includes('appendix')) {
+            documentType = 'appendix';
+          } else if (text.toLowerCase().includes('table of contents') || text.toLowerCase().includes('toc')) {
+            documentType = 'table_of_contents';
+          } else if (text.toLowerCase().includes('supplement') || text.toLowerCase().includes('transmittal')) {
+            documentType = 'supplement';
+          }
+          
+          documents.push({
+            title: text,
+            url: fullUrl,
+            pdfUrl: fullUrl,
+            sectionNumber,
+            metadata: {
+              program: 'TCA',
+              documentType,
+              source: 'Maryland DHS TCA Manual',
+              category: 'policy_manual'
+            }
+          });
+        }
+      });
+      
+      // Also capture any standalone PDFs in the directory
+      $('a[href$=".pdf"]').each((_, element) => {
+        const href = $(element).attr('href');
+        const text = $(element).text().trim();
+        
+        if (href && text && href.includes('FIA') && !documents.find(doc => doc.url === href)) {
+          const fullUrl = href.startsWith('http') ? href : `https://dhs.maryland.gov${href}`;
+          
+          documents.push({
+            title: text || `TCA Document - ${href.split('/').pop()}`,
+            url: fullUrl,
+            pdfUrl: fullUrl,
+            sectionNumber: `TCA-DOC-${Date.now()}`,
+            metadata: {
+              program: 'TCA',
+              documentType: 'reference',
+              source: 'Maryland DHS TCA Manual Directory'
+            }
+          });
+        }
+      });
+      
+      console.log(`✓ Found ${documents.length} TCA manual documents`);
+    } catch (error) {
+      console.error('Error scraping TCA manual directory:', error);
+    }
+    
+    return documents;
+  }
+
+  /**
    * Download and process a document from a scraped source
    */
   async downloadAndProcessDocument(
@@ -780,6 +983,10 @@ export class PolicySourceScraper {
         documents = await this.scrapeOHEPFormsPage(policySourceId, config);
       } else if (config?.scrapeType === 'md_medicaid_manual') {
         documents = await this.scrapeMedicaidManual(policySourceId, config);
+      } else if (config?.scrapeType === 'tca_main_page') {
+        documents = await this.scrapeTCAMainPage(policySourceId, config);
+      } else if (config?.scrapeType === 'tca_manual_directory') {
+        documents = await this.scrapeTCAManualDirectory(policySourceId, config);
       } else {
         console.log(`⚠ Scraper not yet implemented for: ${config?.scrapeType}`);
       }
