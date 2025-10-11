@@ -374,14 +374,16 @@ export class PolicySourceScraper {
     try {
       console.log('Seeding official policy sources...');
       
-      // Get or create SNAP program
+      // Get all necessary programs first
       const snapProgram = await storage.getBenefitProgramByCode('MD_SNAP');
       if (!snapProgram) {
         throw new Error('SNAP benefit program not found');
       }
       
-      // Get Tax Credits program for tax-related sources
       const taxCreditsProgram = await storage.getBenefitProgramByCode('MD_TAX_CREDITS');
+      const medicaidProgram = await storage.getBenefitProgramByCode('MD_MEDICAID');
+      const tcaProgram = await storage.getBenefitProgramByCode('MD_TANF');
+      const ohepProgram = await storage.getBenefitProgramByCode('MD_OHEP');
       
       for (const sourceConfig of OFFICIAL_SOURCES) {
         // Check if source already exists
@@ -392,13 +394,34 @@ export class PolicySourceScraper {
         
         // Determine which program this source belongs to
         let programId = snapProgram.id;
+        
+        // Tax Credit sources
         const isTaxCreditSource = sourceConfig.name.toLowerCase().includes('tax credit') || 
                                   sourceConfig.name.toLowerCase().includes('sdat') ||
                                   sourceConfig.name.toLowerCase().includes('comptroller') ||
                                   sourceConfig.name.toLowerCase().includes('onestop');
         
+        // OHEP sources
+        const isOHEPSource = sourceConfig.name.toLowerCase().includes('ohep') ||
+                            sourceConfig.name.toLowerCase().includes('energy');
+        
+        // Medicaid sources
+        const isMedicaidSource = sourceConfig.name.toLowerCase().includes('medicaid') ||
+                                sourceConfig.name.toLowerCase().includes('mchp');
+        
+        // TCA sources
+        const isTCASource = sourceConfig.name.toLowerCase().includes('tca') ||
+                           sourceConfig.name.toLowerCase().includes('temporary cash');
+        
+        // Assign appropriate program ID
         if (isTaxCreditSource && taxCreditsProgram) {
           programId = taxCreditsProgram.id;
+        } else if (isOHEPSource && ohepProgram) {
+          programId = ohepProgram.id;
+        } else if (isMedicaidSource && medicaidProgram) {
+          programId = medicaidProgram.id;
+        } else if (isTCASource && tcaProgram) {
+          programId = tcaProgram.id;
         }
         
         if (!existing) {
@@ -406,9 +429,13 @@ export class PolicySourceScraper {
             ...sourceConfig,
             benefitProgramId: programId
           });
-          console.log(`✓ Created policy source: ${sourceConfig.name}`);
+          console.log(`✓ Created policy source: ${sourceConfig.name} → ${isTaxCreditSource ? 'Tax Credits' : isOHEPSource ? 'OHEP' : isMedicaidSource ? 'Medicaid' : isTCASource ? 'TCA' : 'SNAP'}`);
         } else {
-          console.log(`→ Policy source already exists: ${sourceConfig.name}`);
+          // Update existing source to ensure correct program association
+          await storage.updatePolicySource(existing.id, {
+            benefitProgramId: programId
+          });
+          console.log(`✓ Updated policy source: ${sourceConfig.name} → ${isTaxCreditSource ? 'Tax Credits' : isOHEPSource ? 'OHEP' : isMedicaidSource ? 'Medicaid' : isTCASource ? 'TCA' : 'SNAP'}`);
         }
       }
       
