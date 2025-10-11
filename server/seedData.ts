@@ -172,23 +172,6 @@ export async function seedMarylandBenefitPrograms() {
         isActive: true
       },
       {
-        name: 'Maryland WIC (Women, Infants, and Children)',
-        code: 'MD_WIC',
-        description: 'Special Supplemental Nutrition Program for Women, Infants, and Children, administered by Maryland Department of Health',
-        programType: 'benefit',
-        hasRulesEngine: true,
-        hasPolicyEngineValidation: true,
-        hasConversationalAI: true,
-        primarySourceUrl: 'https://health.maryland.gov/phpa/wic/Pages/wic-policy.aspx',
-        sourceType: 'web_scraping',
-        scrapingConfig: {
-          type: 'expandable_sections',
-          baseUrl: 'https://health.maryland.gov/phpa/wic/Documents/policy/2%20Chapter%20File_Cert%20and%20Eligibility.pdf',
-          sectionPattern: 'chapter-based policy documents'
-        },
-        isActive: true
-      },
-      {
         name: 'Maryland Children\'s Health Program (MCHP)',
         code: 'MD_MCHP',
         description: 'Health insurance for uninsured Maryland children under age 19, administered by Maryland Department of Health',
