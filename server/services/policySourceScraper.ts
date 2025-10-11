@@ -189,6 +189,42 @@ export const OFFICIAL_SOURCES: Omit<InsertPolicySource, 'benefitProgramId'>[] = 
       extractForms: true,
       extractGuidance: true
     }
+  },
+
+  // ===== MEDICAID =====
+  {
+    name: 'Maryland Medicaid Manual',
+    sourceType: 'state_policy',
+    jurisdiction: 'maryland',
+    description: 'Maryland Medicaid Eligibility Manual - All Sections',
+    url: 'https://health.maryland.gov/mmcp/pages/medicaidmanual.aspx',
+    syncType: 'web_scraping',
+    syncSchedule: 'weekly',
+    priority: 100,
+    isActive: true,
+    syncConfig: {
+      scrapeType: 'md_medicaid_manual',
+      extractSections: true,
+      extractMCHP: true,
+      extractSupplements: true,
+      extractResources: true
+    }
+  },
+
+  {
+    name: 'COMAR 10.09.24 - Medicaid Eligibility Regulations',
+    sourceType: 'state_regulation',
+    jurisdiction: 'maryland',
+    description: 'Code of Maryland Regulations - Medicaid Eligibility',
+    url: 'https://bit.ly/3QYOR2L',
+    syncType: 'web_scraping',
+    syncSchedule: 'weekly',
+    priority: 95,
+    isActive: true,
+    syncConfig: {
+      scrapeType: 'comar_medicaid',
+      regulation: '10.09.24'
+    }
   }
 ];
 
@@ -510,6 +546,130 @@ export class PolicySourceScraper {
   }
 
   /**
+   * Scrape Maryland Medicaid Manual and supplements
+   */
+  async scrapeMedicaidManual(sourceId: string, config: any): Promise<ScrapedDocument[]> {
+    const documents: ScrapedDocument[] = [];
+    
+    try {
+      const url = 'https://health.maryland.gov/mmcp/pages/medicaidmanual.aspx';
+      const response = await axios.get(url, {
+        timeout: 30000,
+        headers: {
+          'User-Agent': 'Maryland Benefits Navigator System/1.0'
+        }
+      });
+      
+      const $ = cheerio.load(response.data);
+      
+      // Extract all Medicaid Manual section PDFs
+      $('a[href*="/mmcp/Medicaid%20Manual/"]').each((_, element) => {
+        const href = $(element).attr('href');
+        const text = $(element).text().trim();
+        
+        if (href && text && href.endsWith('.pdf')) {
+          const fullUrl = href.startsWith('http') ? href : `https://health.maryland.gov${href}`;
+          
+          // Extract section number from text
+          const sectionMatch = text.match(/Section (\d+)/i) || text.match(/(\d+)/);
+          const sectionNumber = sectionMatch ? `MED-${sectionMatch[1]}` : 'MED-INTRO';
+          
+          documents.push({
+            title: text,
+            url: fullUrl,
+            pdfUrl: fullUrl,
+            sectionNumber,
+            metadata: {
+              program: 'Medicaid',
+              documentType: 'manual_section',
+              source: 'Maryland Department of Health',
+              category: 'eligibility_manual'
+            }
+          });
+        }
+      });
+      
+      // Extract MCHP Manual
+      $('a[href*="MCHP%20Manual"]').each((_, element) => {
+        const href = $(element).attr('href');
+        const text = $(element).text().trim();
+        
+        if (href) {
+          const fullUrl = href.startsWith('http') ? href : `https://health.maryland.gov${href}`;
+          
+          documents.push({
+            title: text || 'Maryland Children\'s Health Program (MCHP) Manual',
+            url: fullUrl,
+            pdfUrl: fullUrl,
+            sectionNumber: 'MCHP-MANUAL',
+            metadata: {
+              program: 'MCHP',
+              documentType: 'policy_manual',
+              source: 'Maryland Department of Health',
+              category: 'childrens_health'
+            }
+          });
+        }
+      });
+      
+      // Extract Action Transmittals from supplements table
+      $('a[href*="/mmcp/ManualSupplements/AT"]').each((_, element) => {
+        const href = $(element).attr('href');
+        const text = $(element).text().trim();
+        
+        if (href) {
+          const fullUrl = href.startsWith('http') ? href : `https://health.maryland.gov${href}`;
+          
+          // Extract AT number
+          const atMatch = text.match(/AT\s*(\d{2}-\d{2})/i);
+          const atNumber = atMatch ? atMatch[1] : text;
+          
+          documents.push({
+            title: `Action Transmittal ${atNumber}`,
+            url: fullUrl,
+            pdfUrl: fullUrl,
+            sectionNumber: `MED-AT-${atNumber}`,
+            metadata: {
+              program: 'Medicaid',
+              documentType: 'action_transmittal',
+              source: 'Maryland Department of Health',
+              transmittalNumber: atNumber
+            }
+          });
+        }
+      });
+      
+      // Extract additional resource PDFs
+      $('a[href*="coverage-group"], a[href*="Coverage%20Groups"]').each((_, element) => {
+        const href = $(element).attr('href');
+        const text = $(element).text().trim();
+        
+        if (href && href.endsWith('.pdf')) {
+          const fullUrl = href.startsWith('http') ? href : `https://health.maryland.gov${href}`;
+          
+          documents.push({
+            title: text,
+            url: fullUrl,
+            pdfUrl: fullUrl,
+            sectionNumber: 'MED-RESOURCE',
+            metadata: {
+              program: 'Medicaid',
+              documentType: 'reference_guide',
+              source: 'Maryland Department of Health'
+            }
+          });
+        }
+      });
+      
+      console.log(`✓ Found ${documents.length} Medicaid manual documents`);
+    } catch (error) {
+      console.error('Error scraping Medicaid manual:', error);
+    }
+    
+    return documents;
+  }
+
+  /**
    * Download and process a document from a scraped source
    */
   async downloadAndProcessDocument(
@@ -618,6 +778,8 @@ export class PolicySourceScraper {
         documents = await this.scrapeOHEPManualPDF(policySourceId, config);
       } else if (config?.scrapeType === 'ohep_forms_page') {
         documents = await this.scrapeOHEPFormsPage(policySourceId, config);
+      } else if (config?.scrapeType === 'md_medicaid_manual') {
+        documents = await this.scrapeMedicaidManual(policySourceId, config);
       } else {
         console.log(`⚠ Scraper not yet implemented for: ${config?.scrapeType}`);
       }
