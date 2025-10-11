@@ -120,6 +120,21 @@ import {
   programEnrollments,
   type ProgramEnrollment,
   type InsertProgramEnrollment,
+  eeDatasets,
+  type EeDataset,
+  type InsertEeDataset,
+  eeDatasetFiles,
+  type EeDatasetFile,
+  type InsertEeDatasetFile,
+  eeClients,
+  type EeClient,
+  type InsertEeClient,
+  crossEnrollmentOpportunities,
+  type CrossEnrollmentOpportunity,
+  type InsertCrossEnrollmentOpportunity,
+  crossEnrollmentAuditEvents,
+  type CrossEnrollmentAuditEvent,
+  type InsertCrossEnrollmentAuditEvent,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and, ilike, sql, or, isNull, lte, gte } from "drizzle-orm";
@@ -373,6 +388,48 @@ export interface IStorage {
   getEvaluationResult(id: string): Promise<EvaluationResult | undefined>;
   getEvaluationResultsByRun(runId: string): Promise<EvaluationResult[]>;
   getEvaluationResultsByTestCase(testCaseId: string): Promise<EvaluationResult[]>;
+
+  // E&E Cross-Enrollment - Datasets
+  createEeDataset(dataset: InsertEeDataset): Promise<EeDataset>;
+  getEeDataset(id: string): Promise<EeDataset | undefined>;
+  getEeDatasets(filters?: { dataSource?: string; isActive?: boolean; processingStatus?: string }): Promise<EeDataset[]>;
+  updateEeDataset(id: string, updates: Partial<EeDataset>): Promise<EeDataset>;
+  deleteEeDataset(id: string): Promise<void>;
+
+  // E&E Cross-Enrollment - Dataset Files
+  createEeDatasetFile(file: InsertEeDatasetFile): Promise<EeDatasetFile>;
+  getEeDatasetFile(id: string): Promise<EeDatasetFile | undefined>;
+  getEeDatasetFiles(datasetId: string): Promise<EeDatasetFile[]>;
+  deleteEeDatasetFile(id: string): Promise<void>;
+
+  // E&E Cross-Enrollment - Clients
+  createEeClient(client: InsertEeClient): Promise<EeClient>;
+  getEeClient(id: string): Promise<EeClient | undefined>;
+  getEeClients(filters?: { datasetId?: string; matchStatus?: string; enrolledProgramId?: string }): Promise<EeClient[]>;
+  updateEeClient(id: string, updates: Partial<EeClient>): Promise<EeClient>;
+  deleteEeClient(id: string): Promise<void>;
+
+  // E&E Cross-Enrollment - Opportunities
+  createCrossEnrollmentOpportunity(opportunity: InsertCrossEnrollmentOpportunity): Promise<CrossEnrollmentOpportunity>;
+  getCrossEnrollmentOpportunity(id: string): Promise<CrossEnrollmentOpportunity | undefined>;
+  getCrossEnrollmentOpportunities(filters?: { 
+    eeClientId?: string; 
+    clientCaseId?: string; 
+    outreachStatus?: string;
+    priority?: string;
+    targetProgramId?: string;
+  }): Promise<CrossEnrollmentOpportunity[]>;
+  updateCrossEnrollmentOpportunity(id: string, updates: Partial<CrossEnrollmentOpportunity>): Promise<CrossEnrollmentOpportunity>;
+  deleteCrossEnrollmentOpportunity(id: string): Promise<void>;
+
+  // E&E Cross-Enrollment - Audit Events
+  createCrossEnrollmentAuditEvent(event: InsertCrossEnrollmentAuditEvent): Promise<CrossEnrollmentAuditEvent>;
+  getCrossEnrollmentAuditEvents(filters?: { 
+    datasetId?: string; 
+    opportunityId?: string; 
+    eventType?: string;
+    userId?: string;
+  }): Promise<CrossEnrollmentAuditEvent[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1885,6 +1942,211 @@ export class DatabaseStorage implements IStorage {
       enrolledPrograms,
       suggestedPrograms
     };
+  }
+
+  // E&E Cross-Enrollment - Datasets
+  async createEeDataset(dataset: InsertEeDataset): Promise<EeDataset> {
+    const [created] = await db.insert(eeDatasets).values(dataset).returning();
+    return created;
+  }
+
+  async getEeDataset(id: string): Promise<EeDataset | undefined> {
+    const [dataset] = await db.select().from(eeDatasets).where(eq(eeDatasets.id, id));
+    return dataset || undefined;
+  }
+
+  async getEeDatasets(filters?: { dataSource?: string; isActive?: boolean; processingStatus?: string }): Promise<EeDataset[]> {
+    let query = db.select().from(eeDatasets);
+    
+    const conditions = [];
+    if (filters?.dataSource) {
+      conditions.push(eq(eeDatasets.dataSource, filters.dataSource));
+    }
+    if (filters?.isActive !== undefined) {
+      conditions.push(eq(eeDatasets.isActive, filters.isActive));
+    }
+    if (filters?.processingStatus) {
+      conditions.push(eq(eeDatasets.processingStatus, filters.processingStatus));
+    }
+    
+    if (conditions.length > 0) {
+      query = query.where(and(...conditions)) as any;
+    }
+    
+    return await query.orderBy(desc(eeDatasets.createdAt));
+  }
+
+  async updateEeDataset(id: string, updates: Partial<EeDataset>): Promise<EeDataset> {
+    const [updated] = await db
+      .update(eeDatasets)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(eeDatasets.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteEeDataset(id: string): Promise<void> {
+    await db.delete(eeDatasets).where(eq(eeDatasets.id, id));
+  }
+
+  // E&E Cross-Enrollment - Dataset Files
+  async createEeDatasetFile(file: InsertEeDatasetFile): Promise<EeDatasetFile> {
+    const [created] = await db.insert(eeDatasetFiles).values(file).returning();
+    return created;
+  }
+
+  async getEeDatasetFile(id: string): Promise<EeDatasetFile | undefined> {
+    const [file] = await db.select().from(eeDatasetFiles).where(eq(eeDatasetFiles.id, id));
+    return file || undefined;
+  }
+
+  async getEeDatasetFiles(datasetId: string): Promise<EeDatasetFile[]> {
+    return await db
+      .select()
+      .from(eeDatasetFiles)
+      .where(eq(eeDatasetFiles.datasetId, datasetId))
+      .orderBy(desc(eeDatasetFiles.createdAt));
+  }
+
+  async deleteEeDatasetFile(id: string): Promise<void> {
+    await db.delete(eeDatasetFiles).where(eq(eeDatasetFiles.id, id));
+  }
+
+  // E&E Cross-Enrollment - Clients
+  async createEeClient(client: InsertEeClient): Promise<EeClient> {
+    const [created] = await db.insert(eeClients).values(client).returning();
+    return created;
+  }
+
+  async getEeClient(id: string): Promise<EeClient | undefined> {
+    const [client] = await db.select().from(eeClients).where(eq(eeClients.id, id));
+    return client || undefined;
+  }
+
+  async getEeClients(filters?: { datasetId?: string; matchStatus?: string; enrolledProgramId?: string }): Promise<EeClient[]> {
+    let query = db.select().from(eeClients);
+    
+    const conditions = [];
+    if (filters?.datasetId) {
+      conditions.push(eq(eeClients.datasetId, filters.datasetId));
+    }
+    if (filters?.matchStatus) {
+      conditions.push(eq(eeClients.matchStatus, filters.matchStatus));
+    }
+    if (filters?.enrolledProgramId) {
+      conditions.push(eq(eeClients.enrolledProgramId, filters.enrolledProgramId));
+    }
+    
+    if (conditions.length > 0) {
+      query = query.where(and(...conditions)) as any;
+    }
+    
+    return await query.orderBy(desc(eeClients.createdAt));
+  }
+
+  async updateEeClient(id: string, updates: Partial<EeClient>): Promise<EeClient> {
+    const [updated] = await db
+      .update(eeClients)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(eeClients.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteEeClient(id: string): Promise<void> {
+    await db.delete(eeClients).where(eq(eeClients.id, id));
+  }
+
+  // E&E Cross-Enrollment - Opportunities
+  async createCrossEnrollmentOpportunity(opportunity: InsertCrossEnrollmentOpportunity): Promise<CrossEnrollmentOpportunity> {
+    const [created] = await db.insert(crossEnrollmentOpportunities).values(opportunity).returning();
+    return created;
+  }
+
+  async getCrossEnrollmentOpportunity(id: string): Promise<CrossEnrollmentOpportunity | undefined> {
+    const [opportunity] = await db.select().from(crossEnrollmentOpportunities).where(eq(crossEnrollmentOpportunities.id, id));
+    return opportunity || undefined;
+  }
+
+  async getCrossEnrollmentOpportunities(filters?: {
+    eeClientId?: string;
+    clientCaseId?: string;
+    outreachStatus?: string;
+    priority?: string;
+    targetProgramId?: string;
+  }): Promise<CrossEnrollmentOpportunity[]> {
+    let query = db.select().from(crossEnrollmentOpportunities);
+    
+    const conditions = [];
+    if (filters?.eeClientId) {
+      conditions.push(eq(crossEnrollmentOpportunities.eeClientId, filters.eeClientId));
+    }
+    if (filters?.clientCaseId) {
+      conditions.push(eq(crossEnrollmentOpportunities.clientCaseId, filters.clientCaseId));
+    }
+    if (filters?.outreachStatus) {
+      conditions.push(eq(crossEnrollmentOpportunities.outreachStatus, filters.outreachStatus));
+    }
+    if (filters?.priority) {
+      conditions.push(eq(crossEnrollmentOpportunities.priority, filters.priority));
+    }
+    if (filters?.targetProgramId) {
+      conditions.push(eq(crossEnrollmentOpportunities.targetProgramId, filters.targetProgramId));
+    }
+    
+    if (conditions.length > 0) {
+      query = query.where(and(...conditions)) as any;
+    }
+    
+    return await query.orderBy(desc(crossEnrollmentOpportunities.identifiedAt));
+  }
+
+  async updateCrossEnrollmentOpportunity(id: string, updates: Partial<CrossEnrollmentOpportunity>): Promise<CrossEnrollmentOpportunity> {
+    const [updated] = await db
+      .update(crossEnrollmentOpportunities)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(crossEnrollmentOpportunities.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteCrossEnrollmentOpportunity(id: string): Promise<void> {
+    await db.delete(crossEnrollmentOpportunities).where(eq(crossEnrollmentOpportunities.id, id));
+  }
+
+  // E&E Cross-Enrollment - Audit Events
+  async createCrossEnrollmentAuditEvent(event: InsertCrossEnrollmentAuditEvent): Promise<CrossEnrollmentAuditEvent> {
+    const [created] = await db.insert(crossEnrollmentAuditEvents).values(event).returning();
+    return created;
+  }
+
+  async getCrossEnrollmentAuditEvents(filters?: {
+    datasetId?: string;
+    opportunityId?: string;
+    eventType?: string;
+    userId?: string;
+  }): Promise<CrossEnrollmentAuditEvent[]> {
+    let query = db.select().from(crossEnrollmentAuditEvents);
+    
+    const conditions = [];
+    if (filters?.datasetId) {
+      conditions.push(eq(crossEnrollmentAuditEvents.datasetId, filters.datasetId));
+    }
+    if (filters?.opportunityId) {
+      conditions.push(eq(crossEnrollmentAuditEvents.opportunityId, filters.opportunityId));
+    }
+    if (filters?.eventType) {
+      conditions.push(eq(crossEnrollmentAuditEvents.eventType, filters.eventType));
+    }
+    if (filters?.userId) {
+      conditions.push(eq(crossEnrollmentAuditEvents.userId, filters.userId));
+    }
+    
+    if (conditions.length > 0) {
+      query = query.where(and(...conditions)) as any;
+    }
+    
+    return await query.orderBy(desc(crossEnrollmentAuditEvents.createdAt));
   }
 }
 
