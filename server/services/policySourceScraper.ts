@@ -262,6 +262,96 @@ export const OFFICIAL_SOURCES: Omit<InsertPolicySource, 'benefitProgramId'>[] = 
       extractAllSections: true,
       extractSupplements: true
     }
+  },
+
+  // Maryland Tax Credits - SDAT Property Tax Programs
+  {
+    name: 'SDAT Tax Credit Programs Portal',
+    sourceType: 'state_policy',
+    jurisdiction: 'maryland',
+    description: 'Maryland Department of Assessments and Taxation - Property tax credit programs overview',
+    url: 'https://dat.maryland.gov/pages/tax-credit-programs.aspx',
+    syncType: 'web_scraping',
+    syncSchedule: 'weekly',
+    priority: 100,
+    isActive: true,
+    syncConfig: {
+      scrapeType: 'sdat_tax_credits_portal',
+      extractOverviews: true,
+      extractLinkedPdfs: true
+    }
+  },
+
+  {
+    name: 'Renters\' Tax Credit Program',
+    sourceType: 'state_policy',
+    jurisdiction: 'maryland',
+    description: 'Maryland Renters\' Tax Credit - Eligibility rules, income limits, application process',
+    url: 'https://dat.maryland.gov/realproperty/pages/renters\'-tax-credits.aspx',
+    syncType: 'web_scraping',
+    syncSchedule: 'weekly',
+    priority: 100,
+    isActive: true,
+    syncConfig: {
+      scrapeType: 'renters_tax_credit',
+      extractEligibilityRules: true,
+      extractIncomeLimits: true,
+      extractApplicationForms: true
+    }
+  },
+
+  {
+    name: 'Homeowners\' Property Tax Credit Program',
+    sourceType: 'state_policy',
+    jurisdiction: 'maryland',
+    description: 'Maryland Homeowners\' Property Tax Credit (Circuit Breaker) - Rules and calculators',
+    url: 'https://dat.maryland.gov/realproperty/pages/homeowners\'-property-tax-credit-program.aspx',
+    syncType: 'web_scraping',
+    syncSchedule: 'weekly',
+    priority: 100,
+    isActive: true,
+    syncConfig: {
+      scrapeType: 'homeowners_tax_credit',
+      extractCircuitBreakerRules: true,
+      extractCalculators: true,
+      extractApplicationForms: true
+    }
+  },
+
+  {
+    name: 'Maryland Comptroller Tax Credits',
+    sourceType: 'state_policy',
+    jurisdiction: 'maryland',
+    description: 'Maryland Comptroller - Income tax credits, deductions, and subtractions',
+    url: 'https://www.marylandtaxes.gov/tax-credits.php',
+    syncType: 'web_scraping',
+    syncSchedule: 'weekly',
+    priority: 100,
+    isActive: true,
+    syncConfig: {
+      scrapeType: 'comptroller_tax_credits',
+      extractIncomeTaxCredits: true,
+      extractDeductions: true,
+      extractGuidance: true
+    }
+  },
+
+  {
+    name: 'OneStop Tax Credit Forms Portal',
+    sourceType: 'state_policy',
+    jurisdiction: 'maryland',
+    description: 'Maryland OneStop - All SDAT tax credit application forms (RTC, HTC, HST)',
+    url: 'https://onestop.md.gov/tags/5d28c76eb7039400faf44adb',
+    syncType: 'web_scraping',
+    syncSchedule: 'weekly',
+    priority: 100,
+    isActive: true,
+    syncConfig: {
+      scrapeType: 'onestop_tax_forms',
+      extractRentersForms: true,
+      extractHomeownersForms: true,
+      extractHomesteadForms: true
+    }
   }
 ];
 
@@ -290,6 +380,9 @@ export class PolicySourceScraper {
         throw new Error('SNAP benefit program not found');
       }
       
+      // Get Tax Credits program for tax-related sources
+      const taxCreditsProgram = await storage.getBenefitProgramByCode('MD_TAX_CREDITS');
+      
       for (const sourceConfig of OFFICIAL_SOURCES) {
         // Check if source already exists
         const allSources = await storage.getPolicySources();
@@ -297,10 +390,21 @@ export class PolicySourceScraper {
           s.name === sourceConfig.name && s.jurisdiction === sourceConfig.jurisdiction
         );
         
+        // Determine which program this source belongs to
+        let programId = snapProgram.id;
+        const isTaxCreditSource = sourceConfig.name.toLowerCase().includes('tax credit') || 
+                                  sourceConfig.name.toLowerCase().includes('sdat') ||
+                                  sourceConfig.name.toLowerCase().includes('comptroller') ||
+                                  sourceConfig.name.toLowerCase().includes('onestop');
+        
+        if (isTaxCreditSource && taxCreditsProgram) {
+          programId = taxCreditsProgram.id;
+        }
+        
         if (!existing) {
           await storage.createPolicySource({
             ...sourceConfig,
-            benefitProgramId: snapProgram.id
+            benefitProgramId: programId
           });
           console.log(`✓ Created policy source: ${sourceConfig.name}`);
         } else {
@@ -873,6 +977,299 @@ export class PolicySourceScraper {
   }
 
   /**
+   * Scrape SDAT Tax Credit Programs Portal
+   */
+  async scrapeSDATTaxCreditsPortal(sourceId: string, config: any): Promise<ScrapedDocument[]> {
+    const documents: ScrapedDocument[] = [];
+    
+    try {
+      const url = 'https://dat.maryland.gov/pages/tax-credit-programs.aspx';
+      const response = await axios.get(url, {
+        timeout: 30000,
+        headers: {
+          'User-Agent': 'Maryland Benefits Navigator System/1.0'
+        }
+      });
+      
+      const $ = cheerio.load(response.data);
+      
+      // Extract all PDF links and program overview pages
+      $('a[href*=".pdf"], a[href*="tax-credit"], a[href*="property-tax"]').each((_, element) => {
+        const href = $(element).attr('href');
+        const text = $(element).text().trim();
+        
+        if (href && text) {
+          const fullUrl = href.startsWith('http') ? href : `https://dat.maryland.gov${href}`;
+          const isPdf = href.toLowerCase().endsWith('.pdf');
+          
+          documents.push({
+            title: text,
+            url: fullUrl,
+            pdfUrl: isPdf ? fullUrl : undefined,
+            metadata: {
+              program: 'Tax Credits',
+              documentType: isPdf ? 'guidance' : 'program_overview',
+              source: 'SDAT Tax Credit Programs Portal',
+              category: 'property_tax'
+            }
+          });
+        }
+      });
+      
+      console.log(`✓ Found ${documents.length} SDAT tax credit documents`);
+    } catch (error) {
+      console.error('Error scraping SDAT tax credits portal:', error);
+    }
+    
+    return documents;
+  }
+
+  /**
+   * Scrape Renters' Tax Credit Program page
+   */
+  async scrapeRentersTaxCredit(sourceId: string, config: any): Promise<ScrapedDocument[]> {
+    const documents: ScrapedDocument[] = [];
+    
+    try {
+      const url = 'https://dat.maryland.gov/realproperty/pages/renters\'-tax-credits.aspx';
+      const response = await axios.get(url, {
+        timeout: 30000,
+        headers: {
+          'User-Agent': 'Maryland Benefits Navigator System/1.0'
+        }
+      });
+      
+      const $ = cheerio.load(response.data);
+      
+      // Extract eligibility information as structured content
+      const eligibilityContent = $('.eligibility, .requirements, .how-to-apply').text().trim();
+      if (eligibilityContent) {
+        documents.push({
+          title: 'Renters\' Tax Credit - Eligibility Requirements',
+          url,
+          content: eligibilityContent,
+          metadata: {
+            program: 'Tax Credits',
+            documentType: 'eligibility_rules',
+            source: 'SDAT Renters\' Tax Credit',
+            category: 'property_tax',
+            creditType: 'renters'
+          }
+        });
+      }
+      
+      // Extract all PDF forms and guidance
+      $('a[href*=".pdf"]').each((_, element) => {
+        const href = $(element).attr('href');
+        const text = $(element).text().trim();
+        
+        if (href && text) {
+          const fullUrl = href.startsWith('http') ? href : `https://dat.maryland.gov${href}`;
+          
+          documents.push({
+            title: text,
+            url: fullUrl,
+            pdfUrl: fullUrl,
+            metadata: {
+              program: 'Tax Credits',
+              documentType: text.toLowerCase().includes('application') ? 'application_form' : 'guidance',
+              source: 'SDAT Renters\' Tax Credit',
+              category: 'property_tax',
+              creditType: 'renters'
+            }
+          });
+        }
+      });
+      
+      console.log(`✓ Found ${documents.length} Renters' Tax Credit documents`);
+    } catch (error) {
+      console.error('Error scraping Renters\' Tax Credit:', error);
+    }
+    
+    return documents;
+  }
+
+  /**
+   * Scrape Homeowners' Property Tax Credit Program page
+   */
+  async scrapeHomeownersTaxCredit(sourceId: string, config: any): Promise<ScrapedDocument[]> {
+    const documents: ScrapedDocument[] = [];
+    
+    try {
+      const url = 'https://dat.maryland.gov/realproperty/pages/homeowners\'-property-tax-credit-program.aspx';
+      const response = await axios.get(url, {
+        timeout: 30000,
+        headers: {
+          'User-Agent': 'Maryland Benefits Navigator System/1.0'
+        }
+      });
+      
+      const $ = cheerio.load(response.data);
+      
+      // Extract circuit breaker rules as structured content
+      const rulesContent = $('.circuit-breaker, .credit-calculation, .eligibility').text().trim();
+      if (rulesContent) {
+        documents.push({
+          title: 'Homeowners\' Property Tax Credit - Circuit Breaker Rules',
+          url,
+          content: rulesContent,
+          metadata: {
+            program: 'Tax Credits',
+            documentType: 'eligibility_rules',
+            source: 'SDAT Homeowners\' Tax Credit',
+            category: 'property_tax',
+            creditType: 'homeowners'
+          }
+        });
+      }
+      
+      // Extract all PDF forms, calculators, and guidance
+      $('a[href*=".pdf"], a[href*="calculator"]').each((_, element) => {
+        const href = $(element).attr('href');
+        const text = $(element).text().trim();
+        
+        if (href && text) {
+          const fullUrl = href.startsWith('http') ? href : `https://dat.maryland.gov${href}`;
+          const isPdf = href.toLowerCase().endsWith('.pdf');
+          
+          let docType = 'guidance';
+          if (text.toLowerCase().includes('application')) docType = 'application_form';
+          else if (text.toLowerCase().includes('calculator')) docType = 'calculator';
+          
+          documents.push({
+            title: text,
+            url: fullUrl,
+            pdfUrl: isPdf ? fullUrl : undefined,
+            metadata: {
+              program: 'Tax Credits',
+              documentType: docType,
+              source: 'SDAT Homeowners\' Tax Credit',
+              category: 'property_tax',
+              creditType: 'homeowners'
+            }
+          });
+        }
+      });
+      
+      console.log(`✓ Found ${documents.length} Homeowners' Tax Credit documents`);
+    } catch (error) {
+      console.error('Error scraping Homeowners\' Tax Credit:', error);
+    }
+    
+    return documents;
+  }
+
+  /**
+   * Scrape Maryland Comptroller Tax Credits page
+   */
+  async scrapeComptrollerTaxCredits(sourceId: string, config: any): Promise<ScrapedDocument[]> {
+    const documents: ScrapedDocument[] = [];
+    
+    try {
+      const url = 'https://www.marylandtaxes.gov/tax-credits.php';
+      const response = await axios.get(url, {
+        timeout: 30000,
+        headers: {
+          'User-Agent': 'Maryland Benefits Navigator System/1.0'
+        }
+      });
+      
+      const $ = cheerio.load(response.data);
+      
+      // Extract all income tax credit links and PDFs
+      $('a[href*="credit"], a[href*=".pdf"]').each((_, element) => {
+        const href = $(element).attr('href');
+        const text = $(element).text().trim();
+        
+        if (href && text && !href.includes('javascript')) {
+          const fullUrl = href.startsWith('http') ? href : `https://www.marylandtaxes.gov${href}`;
+          const isPdf = href.toLowerCase().endsWith('.pdf');
+          
+          let docType = 'guidance';
+          if (text.toLowerCase().includes('form')) docType = 'form';
+          else if (text.toLowerCase().includes('instruction')) docType = 'instructions';
+          else if (text.toLowerCase().includes('deduction')) docType = 'deduction_rules';
+          
+          documents.push({
+            title: text,
+            url: fullUrl,
+            pdfUrl: isPdf ? fullUrl : undefined,
+            metadata: {
+              program: 'Tax Credits',
+              documentType: docType,
+              source: 'Maryland Comptroller',
+              category: 'income_tax'
+            }
+          });
+        }
+      });
+      
+      console.log(`✓ Found ${documents.length} Comptroller tax credit documents`);
+    } catch (error) {
+      console.error('Error scraping Comptroller tax credits:', error);
+    }
+    
+    return documents;
+  }
+
+  /**
+   * Scrape OneStop Tax Credit Forms Portal
+   */
+  async scrapeOneStopTaxForms(sourceId: string, config: any): Promise<ScrapedDocument[]> {
+    const documents: ScrapedDocument[] = [];
+    
+    try {
+      const url = 'https://onestop.md.gov/tags/5d28c76eb7039400faf44adb';
+      const response = await axios.get(url, {
+        timeout: 30000,
+        headers: {
+          'User-Agent': 'Maryland Benefits Navigator System/1.0'
+        }
+      });
+      
+      const $ = cheerio.load(response.data);
+      
+      // Extract all form links (RTC, HTC, HST)
+      $('a[href*="form"], a[href*="application"]').each((_, element) => {
+        const href = $(element).attr('href');
+        const text = $(element).text().trim();
+        
+        if (href && text) {
+          const fullUrl = href.startsWith('http') ? href : `https://onestop.md.gov${href}`;
+          
+          // Determine form type
+          let formType = 'other';
+          if (text.toLowerCase().includes('renter') || href.includes('rtc')) {
+            formType = 'renters';
+          } else if (text.toLowerCase().includes('homeowner') || href.includes('htc')) {
+            formType = 'homeowners';
+          } else if (text.toLowerCase().includes('homestead') || href.includes('hst')) {
+            formType = 'homestead';
+          }
+          
+          documents.push({
+            title: text,
+            url: fullUrl,
+            metadata: {
+              program: 'Tax Credits',
+              documentType: 'application_form',
+              source: 'Maryland OneStop Portal',
+              category: 'property_tax',
+              formType
+            }
+          });
+        }
+      });
+      
+      console.log(`✓ Found ${documents.length} OneStop tax credit forms`);
+    } catch (error) {
+      console.error('Error scraping OneStop tax forms:', error);
+    }
+    
+    return documents;
+  }
+
+  /**
    * Download and process a document from a scraped source
    */
   async downloadAndProcessDocument(
@@ -987,6 +1384,16 @@ export class PolicySourceScraper {
         documents = await this.scrapeTCAMainPage(policySourceId, config);
       } else if (config?.scrapeType === 'tca_manual_directory') {
         documents = await this.scrapeTCAManualDirectory(policySourceId, config);
+      } else if (config?.scrapeType === 'sdat_tax_credits_portal') {
+        documents = await this.scrapeSDATTaxCreditsPortal(policySourceId, config);
+      } else if (config?.scrapeType === 'renters_tax_credit') {
+        documents = await this.scrapeRentersTaxCredit(policySourceId, config);
+      } else if (config?.scrapeType === 'homeowners_tax_credit') {
+        documents = await this.scrapeHomeownersTaxCredit(policySourceId, config);
+      } else if (config?.scrapeType === 'comptroller_tax_credits') {
+        documents = await this.scrapeComptrollerTaxCredits(policySourceId, config);
+      } else if (config?.scrapeType === 'onestop_tax_forms') {
+        documents = await this.scrapeOneStopTaxForms(policySourceId, config);
       } else {
         console.log(`⚠ Scraper not yet implemented for: ${config?.scrapeType}`);
       }

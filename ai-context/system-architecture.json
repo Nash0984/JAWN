@@ -2,8 +2,8 @@
   "$schema": "https://json-schema.org/draft-07/schema#",
   "systemName": "Maryland Multi-Program Benefits Navigator",
   "version": "1.0.0",
-  "description": "AI-powered platform assisting users in understanding government benefit policies across 7 major Maryland programs using RAG + Rules as Code technology",
-  "lastUpdated": "2025-01-11",
+  "description": "AI-powered platform assisting users in understanding government benefit policies across 6 major Maryland programs using RAG + Rules as Code technology",
+  "lastUpdated": "2025-10-11",
   
   "architectureType": "full-stack-monolith",
   "deploymentModel": "replit-cloud",
@@ -248,20 +248,20 @@
       "policyEngineEnabled": false
     },
     {
-      "id": "wic",
-      "name": "Maryland WIC",
-      "description": "Special nutrition for Women, Infants, and Children",
+      "id": "tax_credits",
+      "name": "Maryland Tax Credits and Property Tax Relief",
+      "description": "Property tax credits (Renters', Homeowners', Homestead) and state income tax credits via SDAT and Maryland Comptroller",
       "ragEnabled": true,
       "rulesAsCodeEnabled": true,
-      "policyEngineEnabled": false
-    },
-    {
-      "id": "mchp",
-      "name": "Maryland Children's Health Program (MCHP)",
-      "description": "Health insurance for children under 19",
-      "ragEnabled": true,
-      "rulesAsCodeEnabled": true,
-      "policyEngineEnabled": false
+      "policyEngineEnabled": true,
+      "sources": [
+        "SDAT Tax Credit Programs Portal",
+        "Renters' Tax Credit Program",
+        "Homeowners' Property Tax Credit Program",
+        "Maryland Comptroller Tax Credits",
+        "OneStop Tax Credit Forms Portal"
+      ],
+      "creditTypes": ["property_tax_renters", "property_tax_homeowners", "homestead", "income_tax"]
     },
     {
       "id": "vita",
