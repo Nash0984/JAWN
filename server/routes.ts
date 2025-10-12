@@ -676,7 +676,7 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
     }
   });
 
-  // Trigger policy source scraping
+  // Trigger policy source scraping (Legacy)
   app.post("/api/policy-sources/:id/scrape", requireAdmin, async (req, res) => {
     try {
       const { id } = req.params;
@@ -698,6 +698,23 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
       });
     }
   });
+
+  // Trigger eCFR Bulk Download (Official - replaces web scraping for 7 CFR Part 273)
+  app.post("/api/policy-sources/ecfr/bulk-download", requireAdmin, asyncHandler(async (req, res) => {
+    const { ecfrBulkDownloader } = await import("./services/ecfrBulkDownloader");
+    
+    console.log("Starting eCFR Bulk Download Service...");
+    
+    const result = await ecfrBulkDownloader.downloadSNAPRegulations();
+    
+    res.json({
+      success: true,
+      message: "eCFR SNAP regulations downloaded successfully",
+      documentsProcessed: result.documentIds.length,
+      sections: result.sections.length,
+      documentIds: result.documentIds
+    });
+  }));
 
   // Model Management
   app.get("/api/models", requireAdmin, async (req, res) => {
@@ -1536,7 +1553,7 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
   // VITA TAX PROGRAM - IRS Publication 4012 Ingestion
   // ============================================================================
 
-  // Trigger IRS Pub 4012 ingestion
+  // Trigger IRS Pub 4012 ingestion (Legacy - uses web scraping)
   app.post("/api/vita/ingest-pub4012", requireAdmin, asyncHandler(async (req, res) => {
     const { VitaIngestionService } = await import("./services/vitaIngestion.service");
     const vitaService = new VitaIngestionService(storage);
@@ -1557,6 +1574,22 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
       success: true,
       message: "IRS Publication 4012 ingested successfully",
       ...result
+    });
+  }));
+
+  // Trigger IRS Direct Download (Official - replaces web scraping)
+  app.post("/api/vita/download-irs-publications", requireAdmin, asyncHandler(async (req, res) => {
+    const { irsDirectDownloader } = await import("./services/irsDirectDownloader");
+    
+    console.log("Starting IRS Direct Download Service...");
+    
+    const documentIds = await irsDirectDownloader.downloadAllVITAPublications();
+    
+    res.json({
+      success: true,
+      message: "IRS VITA publications downloaded successfully",
+      documentsProcessed: documentIds.length,
+      documentIds
     });
   }));
 
