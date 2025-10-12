@@ -1417,7 +1417,8 @@ export class PolicySourceScraper {
    */
   async scrapeIRSVITAPDF(sourceId: string, config: any): Promise<ScrapedDocument[]> {
     const documents: ScrapedDocument[] = [];
-    const pdfParse = require('pdf-parse');
+    const pdfParseModule = await import('pdf-parse');
+    const pdfParse = (pdfParseModule as any).default || pdfParseModule;
     
     try {
       const sources = await storage.getPolicySources();

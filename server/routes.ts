@@ -676,6 +676,29 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
     }
   });
 
+  // Trigger policy source scraping
+  app.post("/api/policy-sources/:id/scrape", requireAdmin, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { policySourceScraper } = await import('./services/policySourceScraper.js');
+      
+      console.log(`Manual scrape triggered for policy source: ${id}`);
+      const documentCount = await policySourceScraper.scrapeSource(id);
+      
+      res.json({ 
+        success: true, 
+        message: `Successfully scraped ${documentCount} documents from policy source`,
+        documentCount 
+      });
+    } catch (error: any) {
+      console.error("Error scraping policy source:", error);
+      res.status(500).json({ 
+        error: "Failed to scrape policy source",
+        message: error.message 
+      });
+    }
+  });
+
   // Model Management
   app.get("/api/models", requireAdmin, async (req, res) => {
     try {
