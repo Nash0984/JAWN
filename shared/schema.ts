@@ -2572,6 +2572,193 @@ export const crossEnrollmentAuditEventsRelations = relations(crossEnrollmentAudi
   }),
 }));
 
+// ============================================================================
+// Tax Preparation Tables
+// ============================================================================
+
+export const federalTaxReturns = pgTable("federal_tax_returns", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  
+  // Link to household scenario (unified profile)
+  scenarioId: varchar("scenario_id").references(() => householdScenarios.id, { onDelete: "cascade" }),
+  
+  // Preparer information
+  preparerId: varchar("preparer_id").references(() => users.id).notNull(), // Navigator who prepared
+  
+  // Tax year and filing details
+  taxYear: integer("tax_year").notNull(), // e.g., 2024, 2025
+  filingStatus: text("filing_status").notNull(), // single, married_joint, married_separate, head_of_household, qualifying_widow
+  
+  // Form 1040 data (structured)
+  form1040Data: jsonb("form_1040_data").notNull(), // All Form 1040 fields
+  
+  // Schedules and additional forms
+  schedules: jsonb("schedules"), // Schedule A (itemized), C (business), EIC, etc.
+  
+  // Income documents
+  w2Forms: jsonb("w2_forms").array(), // Array of W-2 data
+  form1099s: jsonb("form_1099s").array(), // Array of 1099 data
+  
+  // Key calculations (denormalized for performance)
+  adjustedGrossIncome: real("adjusted_gross_income").default(0),
+  taxableIncome: real("taxable_income").default(0),
+  totalTax: real("total_tax").default(0),
+  totalCredits: real("total_credits").default(0),
+  eitcAmount: real("eitc_amount").default(0),
+  childTaxCredit: real("child_tax_credit").default(0),
+  additionalChildTaxCredit: real("additional_child_tax_credit").default(0),
+  refundAmount: real("refund_amount").default(0), // or amount owed (negative)
+  
+  // E-filing status
+  efileStatus: text("efile_status").default("draft"), // draft, ready, transmitted, accepted, rejected, amended
+  efileTransmissionId: text("efile_transmission_id"), // IRS acknowledgment ID
+  efileSubmittedAt: timestamp("efile_submitted_at"),
+  efileAcceptedAt: timestamp("efile_accepted_at"),
+  efileRejectionReason: text("efile_rejection_reason"),
+  
+  // Validation and quality
+  validationErrors: jsonb("validation_errors"), // IRS business rule violations
+  qualityReview: jsonb("quality_review"), // QA checklist results
+  reviewedBy: varchar("reviewed_by").references(() => users.id), // QA reviewer
+  reviewedAt: timestamp("reviewed_at"),
+  
+  // VITA program compliance
+  vitaDueDiligence: jsonb("vita_due_diligence"), // Due diligence checklist for EITC
+  vitaCertLevel: text("vita_cert_level"), // basic, advanced, military, international
+  
+  // Audit trail
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  scenarioIdIdx: index("federal_tax_returns_scenario_idx").on(table.scenarioId),
+  preparerIdIdx: index("federal_tax_returns_preparer_idx").on(table.preparerId),
+  taxYearIdx: index("federal_tax_returns_tax_year_idx").on(table.taxYear),
+  efileStatusIdx: index("federal_tax_returns_efile_status_idx").on(table.efileStatus),
+}));
+
+export const marylandTaxReturns = pgTable("maryland_tax_returns", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  
+  // Link to federal return (required for state conformity)
+  federalReturnId: varchar("federal_return_id").references(() => federalTaxReturns.id, { onDelete: "cascade" }).notNull(),
+  
+  // Maryland Form 502 data
+  form502Data: jsonb("form_502_data").notNull(), // All Form 502 fields
+  
+  // Key Maryland-specific calculations
+  marylandAGI: real("maryland_agi").default(0), // After Maryland modifications
+  marylandTaxableIncome: real("maryland_taxable_income").default(0),
+  marylandTax: real("maryland_tax").default(0),
+  
+  // Local tax (county-specific)
+  countyCode: text("county_code").notNull(), // e.g., "24", "03" for Baltimore County, Baltimore City
+  countyTax: real("county_tax").default(0),
+  localTaxRate: real("local_tax_rate"), // County-specific rate
+  
+  // Maryland credits
+  marylandEITC: real("maryland_eitc").default(0), // 50% of federal EITC
+  childTaxCreditMD: real("child_tax_credit_md").default(0),
+  
+  // Refund/payment
+  stateRefund: real("state_refund").default(0), // or amount owed (negative)
+  
+  // E-filing status (Maryland Comptroller system)
+  efileStatus: text("efile_status").default("draft"), // draft, ready, transmitted, accepted, rejected
+  efileTransmissionId: text("efile_transmission_id"), // MDTAX iFile acknowledgment
+  efileSubmittedAt: timestamp("efile_submitted_at"),
+  efileAcceptedAt: timestamp("efile_accepted_at"),
+  
+  // Audit trail
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  federalReturnIdIdx: index("maryland_tax_returns_federal_idx").on(table.federalReturnId),
+  countyCodeIdx: index("maryland_tax_returns_county_idx").on(table.countyCode),
+}));
+
+export const taxDocuments = pgTable("tax_documents", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  
+  // Link to household scenario or federal return
+  scenarioId: varchar("scenario_id").references(() => householdScenarios.id, { onDelete: "cascade" }),
+  federalReturnId: varchar("federal_return_id").references(() => federalTaxReturns.id, { onDelete: "cascade" }),
+  
+  // Document type
+  documentType: text("document_type").notNull(), // w2, 1099-misc, 1099-nec, 1099-int, 1099-div, 1095-a, schedule_c, other
+  
+  // Storage reference
+  documentId: varchar("document_id").references(() => documents.id), // Link to main documents table for file storage
+  
+  // Extracted data (from Gemini Vision)
+  extractedData: jsonb("extracted_data").notNull(), // Structured tax form fields
+  
+  // Quality and verification
+  geminiConfidence: real("gemini_confidence"), // 0-1 confidence score from extraction
+  verificationStatus: text("verification_status").default("pending"), // pending, verified, flagged, rejected
+  verifiedBy: varchar("verified_by").references(() => users.id),
+  verifiedAt: timestamp("verified_at"),
+  
+  // Flags for issues
+  qualityFlags: jsonb("quality_flags"), // Array of quality issues detected
+  requiresManualReview: boolean("requires_manual_review").default(false),
+  
+  // Metadata
+  taxYear: integer("tax_year"), // Which tax year this document applies to
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  scenarioIdIdx: index("tax_documents_scenario_idx").on(table.scenarioId),
+  federalReturnIdIdx: index("tax_documents_federal_return_idx").on(table.federalReturnId),
+  documentTypeIdx: index("tax_documents_type_idx").on(table.documentType),
+  verificationStatusIdx: index("tax_documents_verification_idx").on(table.verificationStatus),
+}));
+
+// Tax table relations
+export const federalTaxReturnsRelations = relations(federalTaxReturns, ({ one, many }) => ({
+  scenario: one(householdScenarios, {
+    fields: [federalTaxReturns.scenarioId],
+    references: [householdScenarios.id],
+  }),
+  preparer: one(users, {
+    fields: [federalTaxReturns.preparerId],
+    references: [users.id],
+  }),
+  reviewer: one(users, {
+    fields: [federalTaxReturns.reviewedBy],
+    references: [users.id],
+  }),
+  marylandReturn: one(marylandTaxReturns),
+  taxDocuments: many(taxDocuments),
+}));
+
+export const marylandTaxReturnsRelations = relations(marylandTaxReturns, ({ one }) => ({
+  federalReturn: one(federalTaxReturns, {
+    fields: [marylandTaxReturns.federalReturnId],
+    references: [federalTaxReturns.id],
+  }),
+}));
+
+export const taxDocumentsRelations = relations(taxDocuments, ({ one }) => ({
+  scenario: one(householdScenarios, {
+    fields: [taxDocuments.scenarioId],
+    references: [householdScenarios.id],
+  }),
+  federalReturn: one(federalTaxReturns, {
+    fields: [taxDocuments.federalReturnId],
+    references: [federalTaxReturns.id],
+  }),
+  document: one(documents, {
+    fields: [taxDocuments.documentId],
+    references: [documents.id],
+  }),
+  verifier: one(users, {
+    fields: [taxDocuments.verifiedBy],
+    references: [users.id],
+  }),
+}));
+
 // Insert schemas
 export const insertEvaluationTestCaseSchema = createInsertSchema(evaluationTestCases).omit({
   id: true,
@@ -2656,3 +2843,30 @@ export type InsertCrossEnrollmentOpportunity = z.infer<typeof insertCrossEnrollm
 export type CrossEnrollmentOpportunity = typeof crossEnrollmentOpportunities.$inferSelect;
 export type InsertCrossEnrollmentAuditEvent = z.infer<typeof insertCrossEnrollmentAuditEventSchema>;
 export type CrossEnrollmentAuditEvent = typeof crossEnrollmentAuditEvents.$inferSelect;
+
+// Tax preparation insert schemas
+export const insertFederalTaxReturnSchema = createInsertSchema(federalTaxReturns).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertMarylandTaxReturnSchema = createInsertSchema(marylandTaxReturns).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertTaxDocumentSchema = createInsertSchema(taxDocuments).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+// Tax preparation types
+export type InsertFederalTaxReturn = z.infer<typeof insertFederalTaxReturnSchema>;
+export type FederalTaxReturn = typeof federalTaxReturns.$inferSelect;
+export type InsertMarylandTaxReturn = z.infer<typeof insertMarylandTaxReturnSchema>;
+export type MarylandTaxReturn = typeof marylandTaxReturns.$inferSelect;
+export type InsertTaxDocument = z.infer<typeof insertTaxDocumentSchema>;
+export type TaxDocument = typeof taxDocuments.$inferSelect;
