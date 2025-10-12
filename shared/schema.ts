@@ -2870,3 +2870,290 @@ export type InsertMarylandTaxReturn = z.infer<typeof insertMarylandTaxReturnSche
 export type MarylandTaxReturn = typeof marylandTaxReturns.$inferSelect;
 export type InsertTaxDocument = z.infer<typeof insertTaxDocumentSchema>;
 export type TaxDocument = typeof taxDocuments.$inferSelect;
+
+// ============================================================================
+// LEGISLATIVE IMPACT ANALYSIS - War Gaming & State Options
+// ============================================================================
+
+// Federal Bills - Track proposed federal legislation
+export const federalBills = pgTable("federal_bills", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  billNumber: text("bill_number").notNull(), // e.g., "HR 5376", "S 2345"
+  congress: integer("congress").notNull(), // e.g., 119 for 119th Congress
+  billType: text("bill_type").notNull(), // hr, s, hjres, sjres, hconres, sconres
+  title: text("title").notNull(),
+  summary: text("summary"),
+  fullText: text("full_text"), // Complete bill text
+  introducedDate: timestamp("introduced_date"),
+  latestActionDate: timestamp("latest_action_date"),
+  latestActionText: text("latest_action_text"),
+  status: text("status").notNull().default("introduced"), // introduced, passed_house, passed_senate, enacted, vetoed
+  sponsors: jsonb("sponsors"), // Array of sponsor objects
+  cosponsors: jsonb("cosponsors"), // Array of cosponsor objects
+  committees: jsonb("committees"), // Assigned committees
+  relatedPrograms: text("related_programs").array(), // SNAP, MEDICAID, TANF, etc.
+  policyChanges: jsonb("policy_changes"), // Gemini-extracted policy changes
+  sourceUrl: text("source_url"), // Congress.gov or GovInfo URL
+  govInfoPackageId: text("govinfo_package_id"), // e.g., "BILLS-119hr1234ih"
+  billStatusXml: text("bill_status_xml"), // Full XML from GovInfo
+  lastSyncedAt: timestamp("last_synced_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  billNumberIdx: index("federal_bills_bill_number_idx").on(table.billNumber),
+  congressIdx: index("federal_bills_congress_idx").on(table.congress),
+  statusIdx: index("federal_bills_status_idx").on(table.status),
+}));
+
+// Maryland Bills - Track Maryland General Assembly legislation
+export const marylandBills = pgTable("maryland_bills", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  billNumber: text("bill_number").notNull(), // e.g., "HB0001", "SB0234"
+  session: text("session").notNull(), // e.g., "2025RS" (Regular Session)
+  billType: text("bill_type").notNull(), // HB, SB, HJ, SJ
+  title: text("title").notNull(),
+  synopsis: text("synopsis"),
+  fiscalNote: text("fiscal_note"),
+  fullTextUrl: text("full_text_url"),
+  pdfUrl: text("pdf_url"),
+  introducedDate: timestamp("introduced_date"),
+  firstReadingDate: timestamp("first_reading_date"),
+  crossFiledWith: text("cross_filed_with"), // Cross-filed bill number
+  status: text("status").notNull().default("prefiled"), // prefiled, introduced, committee, passed_first, passed_second, enacted
+  sponsors: jsonb("sponsors"),
+  committees: jsonb("committees"),
+  relatedPrograms: text("related_programs").array(),
+  policyChanges: jsonb("policy_changes"), // Gemini-extracted changes
+  sourceUrl: text("source_url"), // mgaleg.maryland.gov URL
+  lastSyncedAt: timestamp("last_synced_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  billNumberIdx: index("maryland_bills_bill_number_idx").on(table.billNumber),
+  sessionIdx: index("maryland_bills_session_idx").on(table.session),
+  statusIdx: index("maryland_bills_status_idx").on(table.status),
+}));
+
+// Public Laws - Enacted federal legislation (USLM XML from GovInfo)
+export const publicLaws = pgTable("public_laws", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  publicLawNumber: text("public_law_number").notNull(), // e.g., "119-4"
+  congress: integer("congress").notNull(),
+  lawType: text("law_type").notNull().default("public"), // public, private
+  title: text("title").notNull(),
+  enactmentDate: timestamp("enactment_date").notNull(),
+  billNumber: text("bill_number"), // Original bill that became law
+  fullText: text("full_text"), // Complete law text
+  uslmXml: text("uslm_xml"), // Full USLM XML from GovInfo
+  affectedPrograms: text("affected_programs").array(), // Programs modified by this law
+  policyChanges: jsonb("policy_changes"), // Codified policy changes
+  govInfoPackageId: text("govinfo_package_id"), // e.g., "PLAW-119publ4"
+  sourceUrl: text("source_url"), // GovInfo URL
+  usCodeCitations: jsonb("us_code_citations"), // Array of USC sections modified
+  downloadedAt: timestamp("downloaded_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  publicLawNumberIdx: index("public_laws_number_idx").on(table.publicLawNumber),
+  congressIdx: index("public_laws_congress_idx").on(table.congress),
+}));
+
+// State Options & Waivers - Master list of 28 FNS SNAP options/waivers
+export const stateOptionsWaivers = pgTable("state_options_waivers", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  optionCode: text("option_code").notNull().unique(), // e.g., "BBCE", "SIMPLIFIED_REPORTING"
+  optionName: text("option_name").notNull(),
+  category: text("category").notNull(), // eligibility, reporting, deductions, waivers
+  description: text("description").notNull(),
+  statutoryCitation: text("statutory_citation"), // Food and Nutrition Act section
+  regulatoryCitation: text("regulatory_citation"), // 7 CFR section
+  policyEngineVariable: text("policy_engine_variable"), // Corresponding PolicyEngine parameter
+  eligibilityImpact: text("eligibility_impact"), // How it affects eligibility
+  benefitImpact: text("benefit_impact"), // How it affects benefit amounts
+  administrativeImpact: text("administrative_impact"), // Administrative burden/savings
+  statesUsing: jsonb("states_using"), // Array of state codes using this option
+  fnsReportEdition: text("fns_report_edition").notNull(), // e.g., "17th Edition (Aug 2025)"
+  fnsReportSection: text("fns_report_section"), // Section in FNS report
+  sourceUrl: text("source_url"), // FNS State Options Report URL
+  isActive: boolean("is_active").default(true).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  optionCodeIdx: index("state_options_code_idx").on(table.optionCode),
+  categoryIdx: index("state_options_category_idx").on(table.category),
+}));
+
+// Maryland State Option Status - What Maryland currently participates in
+export const marylandStateOptionStatus = pgTable("maryland_state_option_status", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  stateOptionId: varchar("state_option_id").references(() => stateOptionsWaivers.id).notNull(),
+  isParticipating: boolean("is_participating").notNull(), // Maryland's current status
+  adoptionDate: timestamp("adoption_date"), // When Maryland adopted this option
+  expirationDate: timestamp("expiration_date"), // For temporary waivers
+  waiverType: text("waiver_type"), // statewide, county_specific, time_limited
+  affectedCounties: text("affected_counties").array(), // For county-specific waivers
+  policyReference: text("policy_reference"), // COMAR or DHS manual citation
+  notes: text("notes"),
+  dataSource: text("data_source").notNull(), // ai_extracted, manual_override, fns_report
+  extractedBy: varchar("extracted_by").references(() => users.id), // AI or admin user
+  lastVerifiedAt: timestamp("last_verified_at"),
+  lastVerifiedBy: varchar("last_verified_by").references(() => users.id),
+  overrideReason: text("override_reason"), // If manually overridden
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  stateOptionIdx: index("md_state_option_status_option_idx").on(table.stateOptionId),
+  isParticipatingIdx: index("md_state_option_participating_idx").on(table.isParticipating),
+}));
+
+// War Gaming Scenarios - Save scenario configurations for comparison
+export const warGamingScenarios = pgTable("war_gaming_scenarios", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull(),
+  description: text("description"),
+  scenarioType: text("scenario_type").notNull(), // proposed_bill, state_option_change, custom
+  billId: varchar("bill_id"), // References federalBills or marylandBills if applicable
+  billType: text("bill_type"), // federal, maryland
+  createdBy: varchar("created_by").references(() => users.id).notNull(),
+  isBaseline: boolean("is_baseline").default(false).notNull(), // True for current Maryland policy
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  createdByIdx: index("war_gaming_scenarios_created_by_idx").on(table.createdBy),
+  billIdIdx: index("war_gaming_scenarios_bill_id_idx").on(table.billId),
+}));
+
+// Scenario State Option Configuration - Which options are enabled in this scenario
+export const scenarioStateOptions = pgTable("scenario_state_options", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  scenarioId: varchar("scenario_id").references(() => warGamingScenarios.id, { onDelete: "cascade" }).notNull(),
+  stateOptionId: varchar("state_option_id").references(() => stateOptionsWaivers.id).notNull(),
+  isEnabled: boolean("is_enabled").notNull(), // Toggle state in this scenario
+  configurationNotes: text("configuration_notes"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+  scenarioIdIdx: index("scenario_state_options_scenario_idx").on(table.scenarioId),
+  stateOptionIdIdx: index("scenario_state_options_option_idx").on(table.stateOptionId),
+}));
+
+// State Option Status History - Audit trail for admin overrides and changes
+export const stateOptionStatusHistory = pgTable("state_option_status_history", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  stateOptionStatusId: varchar("state_option_status_id").references(() => marylandStateOptionStatus.id, { onDelete: "cascade" }).notNull(),
+  stateOptionId: varchar("state_option_id").references(() => stateOptionsWaivers.id).notNull(),
+  changeType: text("change_type").notNull(), // ai_extraction, manual_override, verification
+  previousValue: boolean("previous_value"), // Was it enabled before?
+  newValue: boolean("new_value").notNull(), // Is it enabled now?
+  dataSource: text("data_source").notNull(), // ai_extracted, manual_override, fns_report
+  changedBy: varchar("changed_by").references(() => users.id).notNull(),
+  changeReason: text("change_reason"), // Why was this overridden?
+  evidenceUrl: text("evidence_url"), // Link to supporting documentation
+  changedAt: timestamp("changed_at").defaultNow().notNull(),
+}, (table) => ({
+  stateOptionStatusIdIdx: index("state_option_history_status_idx").on(table.stateOptionStatusId),
+  changedByIdx: index("state_option_history_changed_by_idx").on(table.changedBy),
+  changedAtIdx: index("state_option_history_changed_at_idx").on(table.changedAt),
+}));
+
+// Legislative Impact Analysis - PolicyEngine calculations for scenarios
+export const legislativeImpacts = pgTable("legislative_impacts", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  scenarioId: varchar("scenario_id").references(() => warGamingScenarios.id, { onDelete: "cascade" }).notNull(),
+  baselineScenarioId: varchar("baseline_scenario_id").references(() => warGamingScenarios.id), // For comparison
+  billType: text("bill_type"), // federal, maryland (if scenario is based on bill)
+  billId: varchar("bill_id"), // References federalBills or marylandBills
+  affectedProgram: text("affected_program").notNull(), // SNAP, MEDICAID, etc.
+  impactType: text("impact_type").notNull(), // eligibility, benefit_amount, administrative
+  policyEngineInputBaseline: jsonb("policy_engine_input_baseline"), // Baseline params
+  policyEngineInputProposed: jsonb("policy_engine_input_proposed"), // Proposed params
+  policyEngineOutputBaseline: jsonb("policy_engine_output_baseline"), // Baseline results
+  policyEngineOutputProposed: jsonb("policy_engine_output_proposed"), // Proposed results
+  enrollmentImpact: jsonb("enrollment_impact"), // Newly eligible/ineligible counts
+  budgetImpact: jsonb("budget_impact"), // Monthly/annual benefit changes
+  demographicImpact: jsonb("demographic_impact"), // Who is affected
+  confidence: text("confidence").notNull().default("medium"), // low, medium, high
+  analysisMethod: text("analysis_method").notNull(), // policy_engine, gemini_estimate, manual
+  calculatedBy: varchar("calculated_by").references(() => users.id),
+  calculatedAt: timestamp("calculated_at").notNull(),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  scenarioIdIdx: index("legislative_impacts_scenario_idx").on(table.scenarioId),
+  billIdIdx: index("legislative_impacts_bill_id_idx").on(table.billId),
+  affectedProgramIdx: index("legislative_impacts_program_idx").on(table.affectedProgram),
+}));
+
+// Legislative tracking insert schemas
+export const insertFederalBillSchema = createInsertSchema(federalBills).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertMarylandBillSchema = createInsertSchema(marylandBills).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertPublicLawSchema = createInsertSchema(publicLaws).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertStateOptionWaiverSchema = createInsertSchema(stateOptionsWaivers).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertMarylandStateOptionStatusSchema = createInsertSchema(marylandStateOptionStatus).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertLegislativeImpactSchema = createInsertSchema(legislativeImpacts).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertWarGamingScenarioSchema = createInsertSchema(warGamingScenarios).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertScenarioStateOptionSchema = createInsertSchema(scenarioStateOptions).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertStateOptionStatusHistorySchema = createInsertSchema(stateOptionStatusHistory).omit({
+  id: true,
+  changedAt: true,
+});
+
+// Legislative tracking types
+export type InsertFederalBill = z.infer<typeof insertFederalBillSchema>;
+export type FederalBill = typeof federalBills.$inferSelect;
+export type InsertMarylandBill = z.infer<typeof insertMarylandBillSchema>;
+export type MarylandBill = typeof marylandBills.$inferSelect;
+export type InsertPublicLaw = z.infer<typeof insertPublicLawSchema>;
+export type PublicLaw = typeof publicLaws.$inferSelect;
+export type InsertStateOptionWaiver = z.infer<typeof insertStateOptionWaiverSchema>;
+export type StateOptionWaiver = typeof stateOptionsWaivers.$inferSelect;
+export type InsertMarylandStateOptionStatus = z.infer<typeof insertMarylandStateOptionStatusSchema>;
+export type MarylandStateOptionStatus = typeof marylandStateOptionStatus.$inferSelect;
+export type InsertLegislativeImpact = z.infer<typeof insertLegislativeImpactSchema>;
+export type LegislativeImpact = typeof legislativeImpacts.$inferSelect;
+export type InsertWarGamingScenario = z.infer<typeof insertWarGamingScenarioSchema>;
+export type WarGamingScenario = typeof warGamingScenarios.$inferSelect;
+export type InsertScenarioStateOption = z.infer<typeof insertScenarioStateOptionSchema>;
+export type ScenarioStateOption = typeof scenarioStateOptions.$inferSelect;
+export type InsertStateOptionStatusHistory = z.infer<typeof insertStateOptionStatusHistorySchema>;
+export type StateOptionStatusHistory = typeof stateOptionStatusHistory.$inferSelect;
