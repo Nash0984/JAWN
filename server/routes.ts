@@ -716,6 +716,22 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
     });
   }));
 
+  // Trigger FNS State Options Report parsing (28 SNAP options/waivers)
+  app.post("/api/policy-sources/fns-state-options", requireAdmin, asyncHandler(async (req, res) => {
+    const { fnsStateOptionsParser } = await import("./services/fnsStateOptionsParser");
+    
+    console.log("Starting FNS State Options Report parsing...");
+    
+    const result = await fnsStateOptionsParser.downloadAndParse();
+    
+    res.json({
+      success: true,
+      message: "FNS State Options Report parsed successfully",
+      optionsCreated: result.optionsCreated,
+      marylandStatusCreated: result.marylandStatusCreated
+    });
+  }));
+
   // Model Management
   app.get("/api/models", requireAdmin, async (req, res) => {
     try {
