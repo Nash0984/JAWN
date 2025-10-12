@@ -91,7 +91,7 @@ export const OFFICIAL_SOURCES: Omit<InsertPolicySource, 'benefitProgramId'>[] = 
   
   // Maryland State Regulations
   {
-    name: 'COMAR Title 10 - Maryland SNAP Regulations',
+    name: 'COMAR 07.03.17 - Maryland SNAP Regulations',
     sourceType: 'state_regulation',
     jurisdiction: 'maryland',
     description: 'Code of Maryland Regulations - Food Supplement Program',
@@ -102,8 +102,8 @@ export const OFFICIAL_SOURCES: Omit<InsertPolicySource, 'benefitProgramId'>[] = 
     isActive: true,
     syncConfig: {
       scrapeType: 'comar',
-      title: '10',
-      subtitles: ['10.01', '10.02']
+      title: '07',
+      subtitles: ['07.03.17']
     }
   },
   
