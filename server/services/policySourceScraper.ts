@@ -1418,7 +1418,7 @@ export class PolicySourceScraper {
   async scrapeIRSVITAPDF(sourceId: string, config: any): Promise<ScrapedDocument[]> {
     const documents: ScrapedDocument[] = [];
     const pdfParseModule = await import('pdf-parse');
-    const pdfParse = (pdfParseModule as any).default || pdfParseModule;
+    const pdfParse = (pdfParseModule as any).pdf || (pdfParseModule as any).PDFParse;
     
     try {
       const sources = await storage.getPolicySources();
@@ -1428,7 +1428,7 @@ export class PolicySourceScraper {
       }
 
       const url = source.url;
-      const { publicationNumber, formNumber, minRevisionYear, taxYear } = config;
+      const { publicationNumber, formNumber } = config;
       
       // Download PDF
       console.log(`Downloading IRS VITA PDF from: ${url}`);
@@ -1485,54 +1485,82 @@ export class PolicySourceScraper {
         }
       }
       
-      // Apply filters
-      let passesFilter = true;
-      let filterReason = '';
+      // Accept all current IRS publications - removed year filtering per user request
+      const docTitle = publicationNumber ? 
+        `IRS Publication ${publicationNumber}${extractedRevision ? ` (${extractedRevision})` : ''}` :
+        `IRS Form ${formNumber}${extractedRevision ? ` (${extractedRevision})` : ''}`;
       
-      if (minRevisionYear && extractedYear) {
-        passesFilter = extractedYear >= minRevisionYear;
-        filterReason = passesFilter ? 
-          `Revision year ${extractedYear} meets minRevisionYear ${minRevisionYear}` :
-          `Revision year ${extractedYear} does not meet minRevisionYear ${minRevisionYear} - skipping`;
-      } else if (taxYear && extractedYear) {
-        passesFilter = extractedYear >= taxYear;
-        filterReason = passesFilter ?
-          `Tax year ${extractedYear} meets required taxYear ${taxYear}` :
-          `Tax year ${extractedYear} does not meet required taxYear ${taxYear} - skipping`;
-      } else if (minRevisionYear || taxYear) {
-        // Filter specified but couldn't extract year - skip to be safe
-        passesFilter = false;
-        filterReason = `Could not extract year from PDF (required: ${minRevisionYear || taxYear})  - skipping for safety`;
+      console.log(`✓ ${docTitle}${extractedRevision ? ` - ${extractedRevision}` : ''} (${pdfData.numpages} pages)`);
+      
+      // Store the document immediately (we already have the PDF buffer)
+      const scrapedDoc: ScrapedDocument = {
+        title: docTitle,
+        url,
+        pdfUrl: url,
+        effectiveDate: new Date(),
+        sectionNumber: publicationNumber || formNumber,
+        metadata: {
+          program: 'VITA',
+          documentType: publicationNumber ? 'publication' : 'form',
+          source: 'IRS',
+          publicationNumber,
+          formNumber,
+          revisionInfo: extractedRevision,
+          extractedYear,
+          taxYear: extractedYear,
+          pdfPageCount: pdfData.numpages,
+          isCurrentVersion: true
+        }
+      };
+      
+      // Get VITA program ID for document storage
+      const programs = await storage.getBenefitPrograms();
+      const vitaProgram = programs.find(p => 
+        p.code === 'VITA' || 
+        p.name?.toLowerCase().includes('vita') ||
+        p.name?.toLowerCase().includes('tax assistance')
+      );
+      
+      if (!vitaProgram) {
+        throw new Error('VITA benefit program not found');
       }
       
-      if (passesFilter) {
-        const docTitle = publicationNumber ? 
-          `IRS Publication ${publicationNumber}${extractedRevision ? ` (${extractedRevision})` : ''}` :
-          `IRS Form ${formNumber}${extractedRevision ? ` (${extractedRevision})` : ''}`;
-        
-        documents.push({
-          title: docTitle,
+      // Store document with PDF buffer we already have
+      const filename = url.split('/').pop() || `${publicationNumber || formNumber}.pdf`;
+      const documentHash = crypto.createHash('sha256').update(pdfBuffer).digest('hex');
+      
+      // Use demo.admin for automated uploads (created during seed)
+      const ADMIN_USER_ID = 'b259547b-0479-4549-9576-a55e013345a5'; // demo.admin from seedData.ts
+      
+      const document = {
+        filename,
+        originalName: docTitle,
+        documentTypeId: null,
+        benefitProgramId: vitaProgram.id,
+        fileSize: pdfBuffer.length,
+        mimeType: 'application/pdf',
+        uploadedBy: ADMIN_USER_ID,
+        status: 'uploaded' as const,
+        sourceUrl: url,
+        downloadedAt: new Date(),
+        documentHash,
+        isGoldenSource: true,
+        sectionNumber: publicationNumber || formNumber,
+        lastModifiedAt: new Date(),
+        metadata: scrapedDoc.metadata,
+        auditTrail: {
+          source: 'policy_source_scraper',
+          policySourceId: sourceId,
+          scrapedAt: new Date(),
           url,
-          pdfUrl: url,
-          effectiveDate: new Date(),
-          sectionNumber: publicationNumber || formNumber,
-          metadata: {
-            program: 'VITA',
-            documentType: publicationNumber ? 'publication' : 'form',
-            source: 'IRS',
-            publicationNumber,
-            formNumber,
-            revisionInfo: extractedRevision,
-            extractedYear,
-            taxYear: extractedYear,
-            pdfPageCount: pdfData.numpages
-          }
-        });
-        
-        console.log(`✓ ${docTitle} - ${filterReason}`);
-      } else {
-        console.log(`⊗ Skipping ${publicationNumber || formNumber} - ${filterReason}`);
-      }
+          revisionInfo: extractedRevision
+        }
+      };
+      
+      const createdDocument = await storage.createDocument(document);
+      console.log(`  → Stored in database: ${createdDocument.id}`);
+      
+      documents.push(scrapedDoc);
       
     } catch (error: any) {
       console.error(`Error scraping IRS VITA PDF:`, error.message);
