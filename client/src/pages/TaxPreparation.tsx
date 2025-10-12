@@ -68,9 +68,15 @@ export default function TaxPreparation() {
     taxpayerFirstName: "",
     taxpayerLastName: "",
     taxpayerSSN: "",
+    taxpayerAge: 35,
+    taxpayerBlind: false,
+    taxpayerDisabled: false,
     spouseFirstName: "",
     spouseLastName: "",
     spouseSSN: "",
+    spouseAge: 35,
+    spouseBlind: false,
+    spouseDisabled: false,
     streetAddress: "",
     aptNumber: "",
     city: "",
@@ -127,28 +133,72 @@ export default function TaxPreparation() {
   });
 
   // Tax calculation mutation
-  const calculateMutation = useMutation({
+  const calculateMutation = useMutation<TaxCalculation, Error, void>({
     mutationFn: async () => {
       // Build household tax input from forms and extracted documents
+      
+      // Process W-2 documents (wage income)
       const w2Docs = documents.filter(d => d.documentType === 'w2');
       const totalWages = w2Docs.reduce((sum, doc) => {
         return sum + (doc.extractedData?.box1_wages || 0);
       }, 0);
+      const w2FederalWithholding = w2Docs.reduce((sum, doc) => {
+        return sum + (doc.extractedData?.box2_federalTaxWithheld || 0);
+      }, 0);
+
+      // Process 1099-MISC documents - separate passive income from self-employment
+      const misc1099Docs = documents.filter(d => d.documentType === '1099-misc');
+      
+      // Passive income (NOT self-employment)
+      const passiveRentalIncome = misc1099Docs.reduce((sum, doc) => {
+        return sum + (doc.extractedData?.box1_rents || 0);
+      }, 0);
+      const passiveRoyaltyIncome = misc1099Docs.reduce((sum, doc) => {
+        return sum + (doc.extractedData?.box2_royalties || 0);
+      }, 0);
+      const passiveOtherIncome = misc1099Docs.reduce((sum, doc) => {
+        return sum + (doc.extractedData?.box3_otherIncome || 0);
+      }, 0);
+      
+      // Self-employment income from box 7 (pre-2020 only)
+      const misc1099SelfEmployment = misc1099Docs.reduce((sum, doc) => {
+        return sum + (doc.extractedData?.box7_nonemployeeCompensation || 0);
+      }, 0);
+      
+      const misc1099Withholding = misc1099Docs.reduce((sum, doc) => {
+        return sum + (doc.extractedData?.box4_federalTaxWithheld || 0);
+      }, 0);
+
+      // Process 1099-NEC documents (self-employment income, post-2020)
+      const nec1099Docs = documents.filter(d => d.documentType === '1099-nec');
+      const necSelfEmployment = nec1099Docs.reduce((sum, doc) => {
+        return sum + (doc.extractedData?.box1_nonemployeeCompensation || 0);
+      }, 0);
+      const nec1099Withholding = nec1099Docs.reduce((sum, doc) => {
+        return sum + (doc.extractedData?.box4_federalTaxWithheld || 0);
+      }, 0);
+
+      // Total self-employment income (1099-NEC + 1099-MISC box 7 only)
+      const totalSelfEmployment = necSelfEmployment + misc1099SelfEmployment;
+
+      // Process 1095-A documents (health insurance)
+      const aca1095Docs = documents.filter(d => d.documentType === '1095-a');
+      const acaData = aca1095Docs.length > 0 ? aca1095Docs[0].extractedData : null;
 
       const taxInput = {
         taxYear,
         filingStatus: personalInfo.filingStatus as any,
         stateCode: "MD",
         taxpayer: {
-          age: 35, // TODO: collect from form
-          isBlind: false,
-          isDisabled: false
+          age: personalInfo.taxpayerAge,
+          isBlind: personalInfo.taxpayerBlind,
+          isDisabled: personalInfo.taxpayerDisabled
         },
         ...(personalInfo.filingStatus === 'married_joint' && {
           spouse: {
-            age: 35,
-            isBlind: false,
-            isDisabled: false
+            age: personalInfo.spouseAge,
+            isBlind: personalInfo.spouseBlind,
+            isDisabled: personalInfo.spouseDisabled
           }
         }),
         dependents: dependents.map(d => ({
@@ -158,13 +208,36 @@ export default function TaxPreparation() {
         })),
         w2Income: {
           taxpayerWages: totalWages,
-          federalWithholding: w2Docs.reduce((sum, doc) => sum + (doc.extractedData?.box2_federalTaxWithheld || 0), 0),
-          socialSecurityWithholding: 0,
-          medicareWithholding: 0
-        }
+          federalWithholding: w2FederalWithholding + misc1099Withholding + nec1099Withholding,
+          socialSecurityWithholding: w2Docs.reduce((sum, doc) => sum + (doc.extractedData?.box4_socialSecurityTaxWithheld || 0), 0),
+          medicareWithholding: w2Docs.reduce((sum, doc) => sum + (doc.extractedData?.box6_medicareTaxWithheld || 0), 0)
+        },
+        ...(totalSelfEmployment > 0 && {
+          selfEmploymentIncome: {
+            businessIncome: totalSelfEmployment,
+            businessExpenses: 0 // TODO: add expense tracking in future
+          }
+        }),
+        ...(passiveRentalIncome > 0 && {
+          rentalIncome: passiveRentalIncome
+        }),
+        ...(passiveRoyaltyIncome > 0 && {
+          royaltyIncome: passiveRoyaltyIncome
+        }),
+        ...(passiveOtherIncome > 0 && {
+          otherIncome: passiveOtherIncome
+        }),
+        ...(acaData && {
+          healthInsurance: {
+            marketplaceCoverage: true,
+            slcspPremium: acaData.annualTotals?.slcspTotal || 0,
+            actualPremium: acaData.annualTotals?.enrolledTotal || 0,
+            advancePremiumTaxCredit: acaData.annualTotals?.aptcTotal || 0
+          }
+        })
       };
 
-      return await apiRequest("/api/tax/calculate", "POST", taxInput);
+      return await apiRequest("/api/tax/calculate", "POST", taxInput) as unknown as TaxCalculation;
     },
     onSuccess: (data: TaxCalculation) => {
       setCalculationResult(data);
@@ -447,16 +520,55 @@ export default function TaxPreparation() {
                   </div>
                 </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="ssn">Social Security Number</Label>
-                  <Input
-                    id="ssn"
-                    type="password"
-                    placeholder="XXX-XX-XXXX"
-                    value={personalInfo.taxpayerSSN}
-                    onChange={(e) => setPersonalInfo({...personalInfo, taxpayerSSN: e.target.value})}
-                    data-testid="input-ssn"
-                  />
+                <div className="grid grid-cols-3 gap-4">
+                  <div className="space-y-2 col-span-2">
+                    <Label htmlFor="ssn">Social Security Number</Label>
+                    <Input
+                      id="ssn"
+                      type="password"
+                      placeholder="XXX-XX-XXXX"
+                      value={personalInfo.taxpayerSSN}
+                      onChange={(e) => setPersonalInfo({...personalInfo, taxpayerSSN: e.target.value})}
+                      data-testid="input-ssn"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="taxpayer-age">Age</Label>
+                    <Input
+                      id="taxpayer-age"
+                      type="number"
+                      min="0"
+                      max="120"
+                      value={personalInfo.taxpayerAge}
+                      onChange={(e) => setPersonalInfo({...personalInfo, taxpayerAge: parseInt(e.target.value) || 0})}
+                      data-testid="input-taxpayer-age"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex gap-4">
+                  <div className="flex items-center space-x-2">
+                    <input
+                      type="checkbox"
+                      id="taxpayer-blind"
+                      checked={personalInfo.taxpayerBlind}
+                      onChange={(e) => setPersonalInfo({...personalInfo, taxpayerBlind: e.target.checked})}
+                      data-testid="checkbox-taxpayer-blind"
+                      className="rounded border-gray-300"
+                    />
+                    <Label htmlFor="taxpayer-blind" className="cursor-pointer">Blind</Label>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <input
+                      type="checkbox"
+                      id="taxpayer-disabled"
+                      checked={personalInfo.taxpayerDisabled}
+                      onChange={(e) => setPersonalInfo({...personalInfo, taxpayerDisabled: e.target.checked})}
+                      data-testid="checkbox-taxpayer-disabled"
+                      className="rounded border-gray-300"
+                    />
+                    <Label htmlFor="taxpayer-disabled" className="cursor-pointer">Disabled</Label>
+                  </div>
                 </div>
 
                 <div className="space-y-2">
@@ -474,6 +586,82 @@ export default function TaxPreparation() {
                     </SelectContent>
                   </Select>
                 </div>
+
+                {(personalInfo.filingStatus === 'married_joint' || personalInfo.filingStatus === 'married_separate') && (
+                  <>
+                    <Separator />
+                    <h3 className="font-medium">Spouse Information</h3>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="spouse-first-name">Spouse First Name</Label>
+                        <Input
+                          id="spouse-first-name"
+                          value={personalInfo.spouseFirstName}
+                          onChange={(e) => setPersonalInfo({...personalInfo, spouseFirstName: e.target.value})}
+                          data-testid="input-spouse-first-name"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="spouse-last-name">Spouse Last Name</Label>
+                        <Input
+                          id="spouse-last-name"
+                          value={personalInfo.spouseLastName}
+                          onChange={(e) => setPersonalInfo({...personalInfo, spouseLastName: e.target.value})}
+                          data-testid="input-spouse-last-name"
+                        />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-3 gap-4">
+                      <div className="space-y-2 col-span-2">
+                        <Label htmlFor="spouse-ssn">Spouse SSN</Label>
+                        <Input
+                          id="spouse-ssn"
+                          type="password"
+                          placeholder="XXX-XX-XXXX"
+                          value={personalInfo.spouseSSN}
+                          onChange={(e) => setPersonalInfo({...personalInfo, spouseSSN: e.target.value})}
+                          data-testid="input-spouse-ssn"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="spouse-age">Age</Label>
+                        <Input
+                          id="spouse-age"
+                          type="number"
+                          min="0"
+                          max="120"
+                          value={personalInfo.spouseAge}
+                          onChange={(e) => setPersonalInfo({...personalInfo, spouseAge: parseInt(e.target.value) || 0})}
+                          data-testid="input-spouse-age"
+                        />
+                      </div>
+                    </div>
+                    <div className="flex gap-4">
+                      <div className="flex items-center space-x-2">
+                        <input
+                          type="checkbox"
+                          id="spouse-blind"
+                          checked={personalInfo.spouseBlind}
+                          onChange={(e) => setPersonalInfo({...personalInfo, spouseBlind: e.target.checked})}
+                          data-testid="checkbox-spouse-blind"
+                          className="rounded border-gray-300"
+                        />
+                        <Label htmlFor="spouse-blind" className="cursor-pointer">Spouse Blind</Label>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <input
+                          type="checkbox"
+                          id="spouse-disabled"
+                          checked={personalInfo.spouseDisabled}
+                          onChange={(e) => setPersonalInfo({...personalInfo, spouseDisabled: e.target.checked})}
+                          data-testid="checkbox-spouse-disabled"
+                          className="rounded border-gray-300"
+                        />
+                        <Label htmlFor="spouse-disabled" className="cursor-pointer">Spouse Disabled</Label>
+                      </div>
+                    </div>
+                  </>
+                )}
 
                 <Separator />
 
@@ -620,10 +808,17 @@ export default function TaxPreparation() {
                   <AlertTitle>What's Included</AlertTitle>
                   <AlertDescription>
                     <ul className="list-disc list-inside space-y-1 mt-2">
-                      <li>{documents.length} tax document(s) uploaded</li>
+                      <li>{documents.filter(d => d.documentType === 'w2').length} W-2 form(s) - Wage Income</li>
+                      <li>{documents.filter(d => d.documentType === '1099-misc').length} 1099-MISC form(s) - Miscellaneous Income</li>
+                      <li>{documents.filter(d => d.documentType === '1099-nec').length} 1099-NEC form(s) - Self-Employment Income</li>
+                      <li>{documents.filter(d => d.documentType === '1095-a').length} 1095-A form(s) - Health Insurance</li>
                       <li>Filing Status: {personalInfo.filingStatus.replace('_', ' ')}</li>
+                      <li>Taxpayer Age: {personalInfo.taxpayerAge} {personalInfo.taxpayerBlind && '(Blind)'} {personalInfo.taxpayerDisabled && '(Disabled)'}</li>
+                      {(personalInfo.filingStatus === 'married_joint' || personalInfo.filingStatus === 'married_separate') && (
+                        <li>Spouse Age: {personalInfo.spouseAge} {personalInfo.spouseBlind && '(Blind)'} {personalInfo.spouseDisabled && '(Disabled)'}</li>
+                      )}
                       <li>{dependents.length} dependent(s)</li>
-                      <li>Estimated EITC, Child Tax Credit, and refund amount</li>
+                      <li>Calculations: AGI, Taxable Income, EITC, Child Tax Credit, Refund</li>
                     </ul>
                   </AlertDescription>
                 </Alert>

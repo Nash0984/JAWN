@@ -3,6 +3,7 @@ import * as cheerio from 'cheerio';
 import crypto from 'crypto';
 import { storage } from '../storage';
 import type { InsertPolicySource, InsertDocument } from '../../shared/schema';
+import { documentProcessor } from './documentProcessor';
 
 // Official Policy Sources Configuration
 export const OFFICIAL_SOURCES: Omit<InsertPolicySource, 'benefitProgramId'>[] = [
@@ -1645,7 +1646,15 @@ export class PolicySourceScraper {
       const createdDocument = await storage.createDocument(document);
       console.log(`✓ Downloaded and stored: ${scrapedDoc.title} (ID: ${createdDocument.id})`);
       
-      // TODO: Queue document for processing (OCR, chunking, embedding generation)
+      // Queue document for processing (OCR, chunking, embedding generation)
+      try {
+        console.log(`  → Starting document processing pipeline for: ${createdDocument.id}`);
+        await documentProcessor.processDocument(createdDocument.id);
+        console.log(`  ✓ Document processed successfully (chunked, embedded, indexed)`);
+      } catch (processingError: any) {
+        console.error(`  ⚠ Document processing failed, but document is stored: ${processingError.message}`);
+        // Don't fail the entire operation if processing fails - document is already saved
+      }
       
       return { documentId: createdDocument.id, document: createdDocument };
     } catch (error: any) {
