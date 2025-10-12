@@ -123,6 +123,15 @@ import {
   eeDatasets,
   type EeDataset,
   type InsertEeDataset,
+  federalTaxReturns,
+  type FederalTaxReturn,
+  type InsertFederalTaxReturn,
+  marylandTaxReturns,
+  type MarylandTaxReturn,
+  type InsertMarylandTaxReturn,
+  taxDocuments,
+  type TaxDocument,
+  type InsertTaxDocument,
   eeDatasetFiles,
   type EeDatasetFile,
   type InsertEeDatasetFile,
@@ -388,6 +397,31 @@ export interface IStorage {
   getEvaluationResult(id: string): Promise<EvaluationResult | undefined>;
   getEvaluationResultsByRun(runId: string): Promise<EvaluationResult[]>;
   getEvaluationResultsByTestCase(testCaseId: string): Promise<EvaluationResult[]>;
+
+  // Tax Preparation - Federal Returns
+  createFederalTaxReturn(taxReturn: InsertFederalTaxReturn): Promise<FederalTaxReturn>;
+  getFederalTaxReturn(id: string): Promise<FederalTaxReturn | undefined>;
+  getFederalTaxReturns(filters?: { scenarioId?: string; preparerId?: string; taxYear?: number; efileStatus?: string }): Promise<FederalTaxReturn[]>;
+  getFederalTaxReturnsByScenario(scenarioId: string): Promise<FederalTaxReturn[]>;
+  getFederalTaxReturnsByPreparer(preparerId: string, taxYear?: number): Promise<FederalTaxReturn[]>;
+  updateFederalTaxReturn(id: string, updates: Partial<FederalTaxReturn>): Promise<FederalTaxReturn>;
+  deleteFederalTaxReturn(id: string): Promise<void>;
+
+  // Tax Preparation - Maryland Returns
+  createMarylandTaxReturn(taxReturn: InsertMarylandTaxReturn): Promise<MarylandTaxReturn>;
+  getMarylandTaxReturn(id: string): Promise<MarylandTaxReturn | undefined>;
+  getMarylandTaxReturnByFederalId(federalReturnId: string): Promise<MarylandTaxReturn | undefined>;
+  updateMarylandTaxReturn(id: string, updates: Partial<MarylandTaxReturn>): Promise<MarylandTaxReturn>;
+  deleteMarylandTaxReturn(id: string): Promise<void>;
+
+  // Tax Preparation - Tax Documents
+  createTaxDocument(taxDoc: InsertTaxDocument): Promise<TaxDocument>;
+  getTaxDocument(id: string): Promise<TaxDocument | undefined>;
+  getTaxDocuments(filters?: { scenarioId?: string; federalReturnId?: string; documentType?: string; verificationStatus?: string }): Promise<TaxDocument[]>;
+  getTaxDocumentsByScenario(scenarioId: string): Promise<TaxDocument[]>;
+  getTaxDocumentsByFederalReturn(federalReturnId: string): Promise<TaxDocument[]>;
+  updateTaxDocument(id: string, updates: Partial<TaxDocument>): Promise<TaxDocument>;
+  deleteTaxDocument(id: string): Promise<void>;
 
   // E&E Cross-Enrollment - Datasets
   createEeDataset(dataset: InsertEeDataset): Promise<EeDataset>;
@@ -2147,6 +2181,182 @@ export class DatabaseStorage implements IStorage {
     }
     
     return await query.orderBy(desc(crossEnrollmentAuditEvents.createdAt));
+  }
+
+  // ============================================================================
+  // Tax Preparation Methods
+  // ============================================================================
+
+  // Federal Tax Returns
+  async createFederalTaxReturn(taxReturn: InsertFederalTaxReturn): Promise<FederalTaxReturn> {
+    const [created] = await db.insert(federalTaxReturns).values(taxReturn).returning();
+    return created;
+  }
+
+  async getFederalTaxReturn(id: string): Promise<FederalTaxReturn | undefined> {
+    return await db.query.federalTaxReturns.findFirst({
+      where: eq(federalTaxReturns.id, id),
+    });
+  }
+
+  async getFederalTaxReturns(filters?: { 
+    scenarioId?: string; 
+    preparerId?: string; 
+    taxYear?: number; 
+    efileStatus?: string 
+  }): Promise<FederalTaxReturn[]> {
+    let query = db.select().from(federalTaxReturns);
+    
+    const conditions = [];
+    if (filters?.scenarioId) {
+      conditions.push(eq(federalTaxReturns.scenarioId, filters.scenarioId));
+    }
+    if (filters?.preparerId) {
+      conditions.push(eq(federalTaxReturns.preparerId, filters.preparerId));
+    }
+    if (filters?.taxYear) {
+      conditions.push(eq(federalTaxReturns.taxYear, filters.taxYear));
+    }
+    if (filters?.efileStatus) {
+      conditions.push(eq(federalTaxReturns.efileStatus, filters.efileStatus));
+    }
+    
+    if (conditions.length > 0) {
+      query = query.where(and(...conditions)) as any;
+    }
+    
+    return await query.orderBy(desc(federalTaxReturns.createdAt));
+  }
+
+  async getFederalTaxReturnsByScenario(scenarioId: string): Promise<FederalTaxReturn[]> {
+    return await db.query.federalTaxReturns.findMany({
+      where: eq(federalTaxReturns.scenarioId, scenarioId),
+      orderBy: [desc(federalTaxReturns.taxYear)],
+    });
+  }
+
+  async getFederalTaxReturnsByPreparer(preparerId: string, taxYear?: number): Promise<FederalTaxReturn[]> {
+    const conditions = [eq(federalTaxReturns.preparerId, preparerId)];
+    if (taxYear) {
+      conditions.push(eq(federalTaxReturns.taxYear, taxYear));
+    }
+    
+    return await db.query.federalTaxReturns.findMany({
+      where: and(...conditions),
+      orderBy: [desc(federalTaxReturns.createdAt)],
+    });
+  }
+
+  async updateFederalTaxReturn(id: string, updates: Partial<FederalTaxReturn>): Promise<FederalTaxReturn> {
+    const [updated] = await db
+      .update(federalTaxReturns)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(federalTaxReturns.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteFederalTaxReturn(id: string): Promise<void> {
+    await db.delete(federalTaxReturns).where(eq(federalTaxReturns.id, id));
+  }
+
+  // Maryland Tax Returns
+  async createMarylandTaxReturn(taxReturn: InsertMarylandTaxReturn): Promise<MarylandTaxReturn> {
+    const [created] = await db.insert(marylandTaxReturns).values(taxReturn).returning();
+    return created;
+  }
+
+  async getMarylandTaxReturn(id: string): Promise<MarylandTaxReturn | undefined> {
+    return await db.query.marylandTaxReturns.findFirst({
+      where: eq(marylandTaxReturns.id, id),
+    });
+  }
+
+  async getMarylandTaxReturnByFederalId(federalReturnId: string): Promise<MarylandTaxReturn | undefined> {
+    return await db.query.marylandTaxReturns.findFirst({
+      where: eq(marylandTaxReturns.federalReturnId, federalReturnId),
+    });
+  }
+
+  async updateMarylandTaxReturn(id: string, updates: Partial<MarylandTaxReturn>): Promise<MarylandTaxReturn> {
+    const [updated] = await db
+      .update(marylandTaxReturns)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(marylandTaxReturns.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteMarylandTaxReturn(id: string): Promise<void> {
+    await db.delete(marylandTaxReturns).where(eq(marylandTaxReturns.id, id));
+  }
+
+  // Tax Documents
+  async createTaxDocument(taxDoc: InsertTaxDocument): Promise<TaxDocument> {
+    const [created] = await db.insert(taxDocuments).values(taxDoc).returning();
+    return created;
+  }
+
+  async getTaxDocument(id: string): Promise<TaxDocument | undefined> {
+    return await db.query.taxDocuments.findFirst({
+      where: eq(taxDocuments.id, id),
+    });
+  }
+
+  async getTaxDocuments(filters?: { 
+    scenarioId?: string; 
+    federalReturnId?: string; 
+    documentType?: string; 
+    verificationStatus?: string 
+  }): Promise<TaxDocument[]> {
+    let query = db.select().from(taxDocuments);
+    
+    const conditions = [];
+    if (filters?.scenarioId) {
+      conditions.push(eq(taxDocuments.scenarioId, filters.scenarioId));
+    }
+    if (filters?.federalReturnId) {
+      conditions.push(eq(taxDocuments.federalReturnId, filters.federalReturnId));
+    }
+    if (filters?.documentType) {
+      conditions.push(eq(taxDocuments.documentType, filters.documentType));
+    }
+    if (filters?.verificationStatus) {
+      conditions.push(eq(taxDocuments.verificationStatus, filters.verificationStatus));
+    }
+    
+    if (conditions.length > 0) {
+      query = query.where(and(...conditions)) as any;
+    }
+    
+    return await query.orderBy(desc(taxDocuments.createdAt));
+  }
+
+  async getTaxDocumentsByScenario(scenarioId: string): Promise<TaxDocument[]> {
+    return await db.query.taxDocuments.findMany({
+      where: eq(taxDocuments.scenarioId, scenarioId),
+      orderBy: [desc(taxDocuments.createdAt)],
+    });
+  }
+
+  async getTaxDocumentsByFederalReturn(federalReturnId: string): Promise<TaxDocument[]> {
+    return await db.query.taxDocuments.findMany({
+      where: eq(taxDocuments.federalReturnId, federalReturnId),
+      orderBy: [desc(taxDocuments.createdAt)],
+    });
+  }
+
+  async updateTaxDocument(id: string, updates: Partial<TaxDocument>): Promise<TaxDocument> {
+    const [updated] = await db
+      .update(taxDocuments)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(taxDocuments.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteTaxDocument(id: string): Promise<void> {
+    await db.delete(taxDocuments).where(eq(taxDocuments.id, id));
   }
 }
 
