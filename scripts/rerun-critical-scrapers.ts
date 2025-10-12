@@ -17,7 +17,7 @@ async function main() {
     // Find the three critical sources
     const criticalSourceNames = [
       'Maryland SNAP Policy Manual',
-      'COMAR Title 10 - Maryland SNAP Regulations',
+      'COMAR 07.03.17 - Food Supplement Program',
       'COMAR 10.09.24 - Medicaid Eligibility Regulations'
     ];
     
