@@ -1412,6 +1412,135 @@ export class PolicySourceScraper {
   }
 
   /**
+   * Scrape IRS VITA PDF Publications with 2025+ filtering
+   * Downloads PDF, extracts revision info, and filters by year
+   */
+  async scrapeIRSVITAPDF(sourceId: string, config: any): Promise<ScrapedDocument[]> {
+    const documents: ScrapedDocument[] = [];
+    const pdfParse = require('pdf-parse');
+    
+    try {
+      const sources = await storage.getPolicySources();
+      const source = sources.find(s => s.id === sourceId);
+      if (!source?.url) {
+        throw new Error('Source URL not found');
+      }
+
+      const url = source.url;
+      const { publicationNumber, formNumber, minRevisionYear, taxYear } = config;
+      
+      // Download PDF
+      console.log(`Downloading IRS VITA PDF from: ${url}`);
+      const response = await axios.get(url, {
+        responseType: 'arraybuffer',
+        timeout: 60000,
+        headers: {
+          'User-Agent': 'Maryland Benefits Navigator System/1.0'
+        }
+      });
+      
+      const pdfBuffer = Buffer.from(response.data);
+      
+      // Parse PDF to extract text
+      const pdfData = await pdfParse(pdfBuffer);
+      const pdfText = pdfData.text;
+      
+      // Extract revision information from PDF text
+      // Look for patterns like "Rev. 1-2025", "Revision 5-2025", "(2025 tax returns)", etc.
+      const revisionPatterns = [
+        /Rev(?:ision)?\.?\s+(\d+)-(\d{4})/i,  // Rev. 1-2025
+        /Rev(?:ision)?\.?\s+(\d{4})/i,        // Rev. 2025
+        /\((\d{4})\s+tax\s+returns?\)/i,      // (2025 tax returns)
+        /Tax\s+Year\s+(\d{4})/i,              // Tax Year 2025
+        /For\s+(\d{4})/i                      // For 2025
+      ];
+      
+      let extractedYear: number | null = null;
+      let extractedRevision: string | null = null;
+      
+      // Try each pattern
+      for (const pattern of revisionPatterns) {
+        const match = pdfText.match(pattern);
+        if (match) {
+          // Extract year from match groups
+          const yearMatch = match[0].match(/\d{4}/);
+          if (yearMatch) {
+            extractedYear = parseInt(yearMatch[0]);
+            extractedRevision = match[0].trim();
+            break;
+          }
+        }
+      }
+      
+      // Also check PDF metadata for creation/modification date as fallback
+      if (!extractedYear && pdfData.metadata) {
+        const modDate = pdfData.metadata.ModDate || pdfData.metadata.CreationDate;
+        if (modDate) {
+          // PDF dates are in format: D:20250115...
+          const dateMatch = modDate.match(/D:(\d{4})/);
+          if (dateMatch) {
+            extractedYear = parseInt(dateMatch[1]);
+          }
+        }
+      }
+      
+      // Apply filters
+      let passesFilter = true;
+      let filterReason = '';
+      
+      if (minRevisionYear && extractedYear) {
+        passesFilter = extractedYear >= minRevisionYear;
+        filterReason = passesFilter ? 
+          `Revision year ${extractedYear} meets minRevisionYear ${minRevisionYear}` :
+          `Revision year ${extractedYear} does not meet minRevisionYear ${minRevisionYear} - skipping`;
+      } else if (taxYear && extractedYear) {
+        passesFilter = extractedYear >= taxYear;
+        filterReason = passesFilter ?
+          `Tax year ${extractedYear} meets required taxYear ${taxYear}` :
+          `Tax year ${extractedYear} does not meet required taxYear ${taxYear} - skipping`;
+      } else if (minRevisionYear || taxYear) {
+        // Filter specified but couldn't extract year - skip to be safe
+        passesFilter = false;
+        filterReason = `Could not extract year from PDF (required: ${minRevisionYear || taxYear})  - skipping for safety`;
+      }
+      
+      if (passesFilter) {
+        const docTitle = publicationNumber ? 
+          `IRS Publication ${publicationNumber}${extractedRevision ? ` (${extractedRevision})` : ''}` :
+          `IRS Form ${formNumber}${extractedRevision ? ` (${extractedRevision})` : ''}`;
+        
+        documents.push({
+          title: docTitle,
+          url,
+          pdfUrl: url,
+          effectiveDate: new Date(),
+          sectionNumber: publicationNumber || formNumber,
+          metadata: {
+            program: 'VITA',
+            documentType: publicationNumber ? 'publication' : 'form',
+            source: 'IRS',
+            publicationNumber,
+            formNumber,
+            revisionInfo: extractedRevision,
+            extractedYear,
+            taxYear: extractedYear,
+            pdfPageCount: pdfData.numpages
+          }
+        });
+        
+        console.log(`✓ ${docTitle} - ${filterReason}`);
+      } else {
+        console.log(`⊗ Skipping ${publicationNumber || formNumber} - ${filterReason}`);
+      }
+      
+    } catch (error: any) {
+      console.error(`Error scraping IRS VITA PDF:`, error.message);
+    }
+    
+    return documents;
+  }
+
+  /**
    * Download and process a document from a scraped source
    */
   async downloadAndProcessDocument(
@@ -1536,6 +1665,8 @@ export class PolicySourceScraper {
         documents = await this.scrapeComptrollerTaxCredits(policySourceId, config);
       } else if (config?.scrapeType === 'onestop_tax_forms') {
         documents = await this.scrapeOneStopTaxForms(policySourceId, config);
+      } else if (config?.scrapeType === 'irs_vita_pdf') {
+        documents = await this.scrapeIRSVITAPDF(policySourceId, config);
       } else {
         console.log(`⚠ Scraper not yet implemented for: ${config?.scrapeType}`);
       }
