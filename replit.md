@@ -1,8 +1,12 @@
 # Overview
 
-The Maryland Multi-Program Benefits Navigator System is an AI-powered platform designed to help users understand government benefit policies across six major Maryland programs. It leverages Retrieval-Augmented Generation (RAG) and Rules as Code, primarily powered by the Google Gemini API, to process policy documents, extract information, and provide accurate answers regarding benefits, eligibility, and program requirements. The system aims to mitigate the "benefits navigation problem" by reducing information asymmetry and processing costs, thereby improving access to public benefits. Key capabilities include document upload, real-time semantic search, deterministic eligibility calculations via PolicyEngine, administrative tools, and AI model training interfaces. The project adheres to the Maryland Digital Style Guide and is intended for integration with marylandbenefits.gov.
+The Maryland Universal Financial Navigator is an AI-powered platform that integrates public benefits eligibility with federal and state tax preparation - the first system to combine these traditionally separate services. Leveraging Retrieval-Augmented Generation (RAG), Rules as Code, and the Google Gemini API, it provides comprehensive financial optimization through a single conversational interface. The system supports six Maryland benefit programs (SNAP, Medicaid, TCA/TANF, OHEP, Tax Credits) plus IRS VITA tax assistance, with planned expansion to full federal/state e-filing capabilities.
 
-Supported programs include Maryland SNAP, Medicaid, TCA (TANF), OHEP (Energy Assistance), Tax Credits (Property Tax and Income Tax), and IRS VITA Tax Assistance.
+**Strategic Vision:** Transform from benefits navigator to universal financial command center, where one household interview drives both benefit applications AND tax return preparation, identifying cross-program opportunities and optimizing total household resources.
+
+**Government Partnership Advantage:** Built by Maryland DHS in partnership with the Comptroller's office, with IRS ETAAC committee access enabling direct API integration for authoritative tax data and expedited e-filing certification.
+
+**Core Innovation:** Single household profile powers both benefits calculations (PolicyEngine) and tax preparation (Form 1040 generation), with AI-driven cross-enrollment intelligence that mines tax return data to identify unclaimed benefits (e.g., EITC filers missing SNAP eligibility).
 
 # User Preferences
 
@@ -66,11 +70,20 @@ All documentation aligns with actual codebase implementation (schema.ts, server 
 
 # External Dependencies
 
+## Current Production
 -   **AI Services**: Google Gemini API (`@google/genai`) for language models, document analysis, embeddings, and RAG. Models used: `gemini-2.5-flash`, `text-embedding-004`.
 -   **Benefit Calculations**: PolicyEngine (`policyengine-us`) Python package for multi-benefit eligibility and amount calculations.
 -   **Database**: PostgreSQL via Drizzle ORM (`drizzle-orm`) with Neon Database.
 -   **Object Storage**: Google Cloud Storage.
--   **Document Processing**: Tesseract OCR engine and Google Gemini Vision API.
+-   **Document Processing**: Tesseract OCR engine, Google Gemini Vision API, pdf-parse for IRS publications.
 -   **UI Components**: Radix UI primitives via shadcn/ui.
 -   **Data Visualization**: Recharts for benefit comparison charts and analytics dashboards.
 -   **PDF Generation**: jsPDF and jspdf-autotable for client counseling reports and scenario exports.
+
+## Planned Tax Integration (Roadmap)
+-   **IRS Integration**: Bulk Data API (via ETAAC access), MeF FIRE API for e-filing, IRS Publication feeds
+-   **Maryland E-Filing**: MDTAX iFile system API (via DHS-Comptroller partnership)
+-   **Tax Calculations**: PolicyEngine US expansion for federal tax (EITC, CTC, ACTC, Premium Tax Credit)
+-   **Form Generation**: IRS XML schema libraries for Form 1040, schedules (A, C, EIC), Maryland Form 502
+-   **Validation**: Custom business rules engine (5,000+ IRS rules), Circular 230 compliance checks
+-   **Document Extraction**: Enhanced Gemini Vision for W-2, 1099, 1095-A, Schedule C extraction
