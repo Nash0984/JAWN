@@ -205,7 +205,19 @@ export class Form1040Generator {
     this.doc.text(`Address: ${info.streetAddress}${info.aptNumber ? ` Apt ${info.aptNumber}` : ''}`, this.margin + 20, this.currentY);
     this.currentY += this.lineHeight;
     this.doc.text(`${info.city}, ${info.state} ${info.zipCode}`, this.margin + 20, this.currentY);
-    this.currentY += this.lineHeight + 10;
+    this.currentY += this.lineHeight + 5;
+    
+    // Virtual currency question (required IRS disclosure)
+    this.doc.setFontSize(9);
+    const vcYesBox = info.virtualCurrency ? '☑' : '☐';
+    const vcNoBox = info.virtualCurrency ? '☐' : '☑';
+    this.doc.text(`At any time during 2024, did you: (a) receive (as a reward, award, or payment for property or services); or`, this.margin + 20, this.currentY);
+    this.currentY += 10;
+    this.doc.text(`(b) sell, exchange, or otherwise dispose of a digital asset (or a financial interest in a digital asset)?`, this.margin + 20, this.currentY);
+    this.currentY += 10;
+    this.doc.text(`${vcYesBox} Yes   ${vcNoBox} No`, this.margin + 20, this.currentY);
+    this.doc.setFontSize(10);
+    this.currentY += this.lineHeight + 5;
     
     // Dependents
     if (info.dependents && info.dependents.length > 0) {
@@ -251,17 +263,30 @@ export class Form1040Generator {
     // Line 2b: Taxable interest
     this.drawLine('2b', 'Taxable interest', taxInput.interestIncome || 0);
     
-    // Line 3: Qualified dividends
+    // Line 3a: Qualified dividends
     this.drawLine('3a', 'Qualified dividends', taxInput.dividendIncome || 0);
     
-    // Line 4: IRA distributions
-    this.drawLine('4b', 'IRA distributions (taxable)', 0);
+    // Line 3b: Ordinary dividends (includes qualified)
+    this.drawLine('3b', 'Ordinary dividends', taxInput.dividendIncome || 0);
     
-    // Line 5: Pensions and annuities
-    this.drawLine('5b', 'Pensions and annuities (taxable)', 0);
+    // Line 4a/4b: IRA distributions
+    const iraTotal = taxInput.iraDistributions?.total || 0;
+    const iraTaxable = taxInput.iraDistributions?.taxable || 0;
+    this.drawLine('4a', 'IRA distributions', iraTotal);
+    this.drawLine('4b', 'IRA distributions (taxable amount)', iraTaxable);
     
-    // Line 6: Social Security benefits
-    this.drawLine('6b', 'Social Security benefits (taxable)', taxInput.socialSecurityBenefits || 0);
+    // Line 5a/5b: Pensions and annuities
+    const pensionTotal = taxInput.pensionDistributions?.total || 0;
+    const pensionTaxable = taxInput.pensionDistributions?.taxable || 0;
+    this.drawLine('5a', 'Pensions and annuities', pensionTotal);
+    this.drawLine('5b', 'Pensions and annuities (taxable amount)', pensionTaxable);
+    
+    // Line 6a/6b: Social Security benefits
+    // PolicyEngine calculates taxable portion (0-85% based on provisional income)
+    const ssTotal = taxInput.socialSecurityBenefits || 0;
+    const ssTaxable = taxResult.taxableSocialSecurity || 0;
+    this.drawLine('6a', 'Social Security benefits', ssTotal);
+    this.drawLine('6b', 'Social Security benefits (taxable amount)', ssTaxable);
     
     // Line 7: Capital gain/loss
     this.drawLine('7', 'Capital gain or (loss)', taxInput.capitalGains || 0);
