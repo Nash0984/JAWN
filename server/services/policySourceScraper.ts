@@ -352,6 +352,105 @@ export const OFFICIAL_SOURCES: Omit<InsertPolicySource, 'benefitProgramId'>[] = 
       extractHomeownersForms: true,
       extractHomesteadForms: true
     }
+  },
+
+  // ===== VITA (Volunteer Income Tax Assistance) - 2025 Materials Only =====
+  {
+    name: 'IRS Pub 4012 - VITA/TCE Volunteer Resource Guide',
+    sourceType: 'federal_guidance',
+    jurisdiction: 'federal',
+    description: 'Primary VITA reference guide for volunteer tax preparation (2025 tax year)',
+    url: 'https://www.irs.gov/pub/irs-pdf/p4012.pdf',
+    syncType: 'web_scraping',
+    syncSchedule: 'weekly',
+    priority: 100,
+    isActive: true,
+    syncConfig: {
+      scrapeType: 'irs_vita_pdf',
+      publicationNumber: '4012',
+      minRevisionYear: 2025,
+      extractTaxLaw: true,
+      extractEligibilityRules: true
+    }
+  },
+
+  {
+    name: 'IRS Pub 4491 - VITA/TCE Training Guide',
+    sourceType: 'federal_guidance',
+    jurisdiction: 'federal',
+    description: 'Core VITA training guide with lessons for all certification levels (2025 tax year)',
+    url: 'https://www.irs.gov/pub/irs-pdf/p4491.pdf',
+    syncType: 'web_scraping',
+    syncSchedule: 'weekly',
+    priority: 95,
+    isActive: true,
+    syncConfig: {
+      scrapeType: 'irs_vita_pdf',
+      publicationNumber: '4491',
+      minRevisionYear: 2025,
+      extractTrainingContent: true,
+      extractScenarios: true
+    }
+  },
+
+  {
+    name: 'IRS Pub 4491-X - VITA/TCE Training Supplement',
+    sourceType: 'federal_guidance',
+    jurisdiction: 'federal',
+    description: 'Updates to VITA training materials after initial printing (Rev. 1-2025)',
+    url: 'https://www.irs.gov/pub/irs-pdf/p4491x.pdf',
+    syncType: 'web_scraping',
+    syncSchedule: 'weekly',
+    priority: 98,
+    isActive: true,
+    syncConfig: {
+      scrapeType: 'irs_vita_pdf',
+      publicationNumber: '4491-X',
+      minRevisionYear: 2025,
+      revisionMonth: 1,
+      extractUpdates: true,
+      extractCorrections: true
+    }
+  },
+
+  {
+    name: 'IRS Pub 4961 - VITA/TCE Volunteer Standards of Conduct',
+    sourceType: 'federal_guidance',
+    jurisdiction: 'federal',
+    description: 'Required ethics training for all VITA volunteers (Rev. 5-2025)',
+    url: 'https://www.irs.gov/pub/irs-pdf/p4961.pdf',
+    syncType: 'web_scraping',
+    syncSchedule: 'weekly',
+    priority: 100,
+    isActive: true,
+    syncConfig: {
+      scrapeType: 'irs_vita_pdf',
+      publicationNumber: '4961',
+      minRevisionYear: 2025,
+      revisionMonth: 5,
+      extractEthicsRules: true,
+      extractConduct: true
+    }
+  },
+
+  {
+    name: 'IRS Form 6744 - VITA/TCE Volunteer Assistor Test/Retest',
+    sourceType: 'federal_guidance',
+    jurisdiction: 'federal',
+    description: 'Practice scenarios and certification test questions (2025 tax returns)',
+    url: 'https://www.irs.gov/pub/irs-pdf/f6744.pdf',
+    syncType: 'web_scraping',
+    syncSchedule: 'weekly',
+    priority: 90,
+    isActive: true,
+    syncConfig: {
+      scrapeType: 'irs_vita_pdf',
+      formNumber: '6744',
+      taxYear: 2025,
+      extractTestQuestions: true,
+      extractScenarios: true,
+      extractAnswerKey: true
+    }
   }
 ];
 
@@ -384,6 +483,7 @@ export class PolicySourceScraper {
       const medicaidProgram = await storage.getBenefitProgramByCode('MD_MEDICAID');
       const tcaProgram = await storage.getBenefitProgramByCode('MD_TANF');
       const ohepProgram = await storage.getBenefitProgramByCode('MD_OHEP');
+      const vitaProgram = await storage.getBenefitProgramByCode('VITA');
       
       for (const sourceConfig of OFFICIAL_SOURCES) {
         // Check if source already exists
@@ -394,6 +494,13 @@ export class PolicySourceScraper {
         
         // Determine which program this source belongs to
         let programId = snapProgram.id;
+        
+        // VITA sources
+        const isVITASource = sourceConfig.name.toLowerCase().includes('vita') ||
+                            sourceConfig.name.toLowerCase().includes('pub 4012') ||
+                            sourceConfig.name.toLowerCase().includes('pub 4491') ||
+                            sourceConfig.name.toLowerCase().includes('pub 4961') ||
+                            sourceConfig.name.toLowerCase().includes('form 6744');
         
         // Tax Credit sources
         const isTaxCreditSource = sourceConfig.name.toLowerCase().includes('tax credit') || 
@@ -414,7 +521,9 @@ export class PolicySourceScraper {
                            sourceConfig.name.toLowerCase().includes('temporary cash');
         
         // Assign appropriate program ID
-        if (isTaxCreditSource && taxCreditsProgram) {
+        if (isVITASource && vitaProgram) {
+          programId = vitaProgram.id;
+        } else if (isTaxCreditSource && taxCreditsProgram) {
           programId = taxCreditsProgram.id;
         } else if (isOHEPSource && ohepProgram) {
           programId = ohepProgram.id;
@@ -424,18 +533,24 @@ export class PolicySourceScraper {
           programId = tcaProgram.id;
         }
         
+        const programName = isVITASource ? 'VITA' : 
+                           isTaxCreditSource ? 'Tax Credits' : 
+                           isOHEPSource ? 'OHEP' : 
+                           isMedicaidSource ? 'Medicaid' : 
+                           isTCASource ? 'TCA' : 'SNAP';
+        
         if (!existing) {
           await storage.createPolicySource({
             ...sourceConfig,
             benefitProgramId: programId
           });
-          console.log(`✓ Created policy source: ${sourceConfig.name} → ${isTaxCreditSource ? 'Tax Credits' : isOHEPSource ? 'OHEP' : isMedicaidSource ? 'Medicaid' : isTCASource ? 'TCA' : 'SNAP'}`);
+          console.log(`✓ Created policy source: ${sourceConfig.name} → ${programName}`);
         } else {
           // Update existing source to ensure correct program association
           await storage.updatePolicySource(existing.id, {
             benefitProgramId: programId
           });
-          console.log(`✓ Updated policy source: ${sourceConfig.name} → ${isTaxCreditSource ? 'Tax Credits' : isOHEPSource ? 'OHEP' : isMedicaidSource ? 'Medicaid' : isTCASource ? 'TCA' : 'SNAP'}`);
+          console.log(`✓ Updated policy source: ${sourceConfig.name} → ${programName}`);
         }
       }
       
