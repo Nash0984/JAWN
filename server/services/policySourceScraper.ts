@@ -1715,14 +1715,16 @@ export class PolicySourceScraper {
   
   /**
    * Scrape COMAR 07.03.17 SNAP regulations (Maryland Food Supplement Program)
+   * Uses official dsd.maryland.gov website (mdrules.elaws.us is inaccessible)
    */
   async scrapeCOMAR(sourceId: string, config: any): Promise<ScrapedDocument[]> {
     const documents: ScrapedDocument[] = [];
-    // Maryland SNAP regs are in COMAR 07.03.17 (Title 7 = DHS), not Title 10
-    const baseUrl = 'http://mdrules.elaws.us/comar/07.03.17';
+    // Use official Maryland DSD website
+    const baseChapterUrl = 'https://dsd.maryland.gov/regulations/Pages/07.03.17.00.aspx';
     
     try {
-      const response = await axios.get(baseUrl, {
+      // Fetch the chapter index page
+      const response = await axios.get(baseChapterUrl, {
         timeout: 30000,
         headers: {
           'User-Agent': 'Maryland SNAP Policy Manual System/1.0'
@@ -1730,23 +1732,24 @@ export class PolicySourceScraper {
       });
       
       const $ = cheerio.load(response.data);
-      const content = $('body').text().trim();
       
-      // Extract sections from the COMAR page
-      $('a').each((_, element) => {
+      // Find all regulation section links (e.g., 07.03.17.01, 07.03.17.02, etc.)
+      $('a[href*="07.03.17"]').each((_, element) => {
         const $link = $(element);
         const href = $link.attr('href');
         const text = $link.text().trim();
         
-        // Look for section links (e.g., 07.03.17.01, 07.03.17.02, etc.)
-        if (href && text.match(/07\.03\.17\.\d+/)) {
-          const fullUrl = href.startsWith('http') ? href : `http://mdrules.elaws.us${href}`;
+        // Match regulation numbers like 07.03.17.01, 07.03.17.02, etc.
+        const regMatch = href?.match(/07\.03\.17\.\d+\.aspx/);
+        if (regMatch) {
+          const fullUrl = href.startsWith('http') ? href : `https://dsd.maryland.gov${href}`;
+          const sectionNumber = regMatch[0].replace('.aspx', '');
           
           documents.push({
-            title: text,
+            title: text || `COMAR ${sectionNumber}`,
             url: fullUrl,
-            content: '', // Will fetch content from link
-            sectionNumber: text.match(/07\.03\.17\.\d+/)?.[0] || '',
+            content: '', // Will fetch content when downloading
+            sectionNumber,
             metadata: {
               regulation: 'COMAR 07.03.17 - Food Supplement Program',
               source: 'Maryland Division of State Documents'
@@ -1755,21 +1758,24 @@ export class PolicySourceScraper {
         }
       });
       
-      // If no section links found, save the main page content
-      if (documents.length === 0 && content.length > 100) {
-        documents.push({
-          title: 'COMAR 07.03.17 - Food Supplement Program',
-          url: baseUrl,
-          content,
-          sectionNumber: '07.03.17',
-          metadata: {
-            regulation: 'COMAR 07.03.17',
-            source: 'Maryland Division of State Documents'
-          }
-        });
+      // If no sections found, try to get the chapter overview content
+      if (documents.length === 0) {
+        const content = $('body').text().trim();
+        if (content.length > 100) {
+          documents.push({
+            title: 'COMAR 07.03.17 - Food Supplement Program (Chapter Overview)',
+            url: baseChapterUrl,
+            content,
+            sectionNumber: '07.03.17',
+            metadata: {
+              regulation: 'COMAR 07.03.17',
+              source: 'Maryland Division of State Documents'
+            }
+          });
+        }
       }
       
-      console.log(`✓ Found ${documents.length} COMAR 07.03.17 SNAP regulations`);
+      console.log(`✓ Found ${documents.length} COMAR 07.03.17 SNAP regulation sections`);
     } catch (error) {
       console.error('Error scraping COMAR SNAP regulations:', error);
     }
@@ -1779,14 +1785,14 @@ export class PolicySourceScraper {
   
   /**
    * Scrape COMAR 10.09.24 Medicaid Eligibility Regulations
+   * Uses official dsd.maryland.gov website (mdrules.elaws.us is inaccessible)
    */
   async scrapeCOMARMedicaid(sourceId: string, config: any): Promise<ScrapedDocument[]> {
     const documents: ScrapedDocument[] = [];
-    // Use the correct mdrules.elaws.us URL
-    const baseUrl = 'http://mdrules.elaws.us/comar/10.09.24';
+    const baseChapterUrl = 'https://dsd.maryland.gov/regulations/Pages/10.09.24.00.aspx';
     
     try {
-      const response = await axios.get(baseUrl, {
+      const response = await axios.get(baseChapterUrl, {
         timeout: 30000,
         headers: {
           'User-Agent': 'Maryland SNAP Policy Manual System/1.0'
@@ -1794,23 +1800,22 @@ export class PolicySourceScraper {
       });
       
       const $ = cheerio.load(response.data);
-      const content = $('body').text().trim();
       
-      // Extract sections from the COMAR page
-      $('a').each((_, element) => {
+      $('a[href*="10.09.24"]').each((_, element) => {
         const $link = $(element);
         const href = $link.attr('href');
         const text = $link.text().trim();
         
-        // Look for section links (e.g., 10.09.24.02, 10.09.24.03, etc.)
-        if (href && text.match(/10\.09\.24\.\d+/)) {
-          const fullUrl = href.startsWith('http') ? href : `http://mdrules.elaws.us${href}`;
+        const regMatch = href?.match(/10\.09\.24\.\d+\.aspx/);
+        if (regMatch) {
+          const fullUrl = href.startsWith('http') ? href : `https://dsd.maryland.gov${href}`;
+          const sectionNumber = regMatch[0].replace('.aspx', '');
           
           documents.push({
-            title: text,
+            title: text || `COMAR ${sectionNumber}`,
             url: fullUrl,
-            content: '', // Will fetch content from link
-            sectionNumber: text.match(/10\.09\.24\.\d+/)?.[0] || '',
+            content: '',
+            sectionNumber,
             metadata: {
               regulation: 'COMAR 10.09.24 - Medicaid Eligibility',
               source: 'Maryland Division of State Documents',
@@ -1820,22 +1825,24 @@ export class PolicySourceScraper {
         }
       });
       
-      // If no section links found, save the main page content
-      if (documents.length === 0 && content.length > 100) {
-        documents.push({
-          title: 'COMAR 10.09.24 - Medical Assistance Eligibility',
-          url: baseUrl,
-          content,
-          sectionNumber: '10.09.24',
-          metadata: {
-            regulation: 'COMAR 10.09.24',
-            source: 'Maryland Division of State Documents',
-            program: 'Medicaid'
-          }
-        });
+      if (documents.length === 0) {
+        const content = $('body').text().trim();
+        if (content.length > 100) {
+          documents.push({
+            title: 'COMAR 10.09.24 - Medical Assistance Eligibility (Chapter Overview)',
+            url: baseChapterUrl,
+            content,
+            sectionNumber: '10.09.24',
+            metadata: {
+              regulation: 'COMAR 10.09.24',
+              source: 'Maryland Division of State Documents',
+              program: 'Medicaid'
+            }
+          });
+        }
       }
       
-      console.log(`✓ Found ${documents.length} COMAR 10.09.24 Medicaid regulations`);
+      console.log(`✓ Found ${documents.length} COMAR 10.09.24 Medicaid regulation sections`);
     } catch (error) {
       console.error('Error scraping COMAR Medicaid:', error);
     }
