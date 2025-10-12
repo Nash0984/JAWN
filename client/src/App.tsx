@@ -41,6 +41,7 @@ import ScenarioWorkspace from "@/pages/ScenarioWorkspace";
 import AbawdVerificationAdmin from "@/pages/AbawdVerificationAdmin";
 import CrossEnrollmentAdmin from "@/pages/CrossEnrollmentAdmin";
 import DocumentReviewQueue from "@/pages/DocumentReviewQueue";
+import TaxPreparation from "@/pages/TaxPreparation";
 import MobileBottomNav from "@/components/MobileBottomNav";
 
 function Router() {
@@ -143,6 +144,13 @@ function Router() {
             {() => (
               <ProtectedRoute>
                 <ScenarioWorkspace />
+              </ProtectedRoute>
+            )}
+          </Route>
+          <Route path="/tax">
+            {() => (
+              <ProtectedRoute>
+                <TaxPreparation />
               </ProtectedRoute>
             )}
           </Route>
