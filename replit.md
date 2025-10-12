@@ -1,12 +1,6 @@
 # Overview
 
-The Maryland Universal Financial Navigator is an AI-powered platform that integrates public benefits eligibility with federal and state tax preparation - the first system to combine these traditionally separate services. Leveraging Retrieval-Augmented Generation (RAG), Rules as Code, and the Google Gemini API, it provides comprehensive financial optimization through a single conversational interface. The system supports six Maryland benefit programs (SNAP, Medicaid, TCA/TANF, OHEP, Tax Credits) plus IRS VITA tax assistance, with planned expansion to full federal/state e-filing capabilities.
-
-**Strategic Vision:** Transform from benefits navigator to universal financial command center, where one household interview drives both benefit applications AND tax return preparation, identifying cross-program opportunities and optimizing total household resources.
-
-**Government Partnership Advantage:** Built by Maryland DHS in partnership with the Comptroller's office, with IRS ETAAC committee access enabling direct API integration for authoritative tax data and expedited e-filing certification.
-
-**Core Innovation:** Single household profile powers both benefits calculations (PolicyEngine) and tax preparation (Form 1040 generation), with AI-driven cross-enrollment intelligence that mines tax return data to identify unclaimed benefits (e.g., EITC filers missing SNAP eligibility).
+The Maryland Universal Financial Navigator is an AI-powered platform that integrates public benefits eligibility with federal and state tax preparation, aiming to be a universal financial command center. It leverages Retrieval-Augmented Generation (RAG), Rules as Code, and the Google Gemini API to provide comprehensive financial optimization through a single conversational interface. The system supports six Maryland benefit programs (SNAP, Medicaid, TCA/TANF, OHEP, Tax Credits) and IRS VITA tax assistance, with planned expansion to full federal/state e-filing capabilities. Its core innovation lies in using a single household profile to power both benefit calculations (via PolicyEngine) and tax preparation (Form 1040 generation), with AI-driven cross-enrollment intelligence to identify unclaimed benefits.
 
 # User Preferences
 
@@ -14,76 +8,51 @@ Preferred communication style: Simple, everyday language.
 
 # System Architecture
 
-## Frontend
-The frontend is built with React 18, TypeScript, Vite, shadcn/ui (Radix UI), and Tailwind CSS. It uses Wouter for routing and TanStack Query for server state management. The design emphasizes modularity, accessibility (WCAG, semantic HTML, ARIA), and mobile-first responsiveness. Key features include a `PolicyChatWidget`, a Command Palette, Framer Motion animations, resizable split views, and skeleton loading states. A public applicant portal offers document checklist generation, notice letter explanation, and simplified policy search, supporting both AI-powered ("smart") and manual ("simple") modes.
+## UI/UX
+The frontend is built with React 18, TypeScript, Vite, shadcn/ui (Radix UI), and Tailwind CSS, focusing on modularity, accessibility (WCAG, semantic HTML, ARIA), and mobile-first responsiveness. It includes a `PolicyChatWidget`, Command Palette, Framer Motion animations, resizable split views, and skeleton loading states. A public applicant portal supports document checklist generation, notice letter explanation, and simplified policy search in both AI-powered and manual modes.
 
-## Backend
-The backend utilizes Express.js with TypeScript, providing RESTful API endpoints. Data is stored in PostgreSQL via Drizzle ORM on Neon Database. A multi-stage document processing pipeline handles OCR, classification, quality assessment, semantic chunking, and embedding generation. The Google Gemini API (`gemini-2.5-flash` for text, `text-embedding-004` for embeddings) is central for analysis, query processing, and RAG. The system also features a "Living Policy Manual" for generating human-readable policy text and a "Rules Extraction Pipeline" to derive structured "Rules as Code" from policy documents using Gemini.
+## Technical Implementations
+The backend uses Express.js with TypeScript and PostgreSQL via Drizzle ORM on Neon Database. A multi-stage document processing pipeline handles OCR, classification, semantic chunking, and embedding generation. The Google Gemini API is central for analysis, query processing, and RAG. Key features include a "Living Policy Manual" for generating human-readable policy text and a "Rules Extraction Pipeline" to derive structured "Rules as Code" from policy documents. Google Cloud Storage is used for document file storage with custom ACLs.
 
-## Data Management
-PostgreSQL stores core data such as users, documents, chunks, "Rules as Code," citation tracking, navigator workspace data, audit logs, and document integrity information. Google Cloud Storage is used for document file storage with custom ACLs. Vector embeddings are stored within document chunks. An automated scraping infrastructure ensures integrity and version management of documents from official sources.
+## Feature Specifications
+### Core Platform Features
+-   **Navigator Workspace**: Manages client interaction sessions and E&E export.
+-   **Feedback Collection System**: User feedback on AI responses with admin management.
+-   **Admin Enhancement Tools**: Audit Log Viewer, API Documentation, Feedback Management.
+-   **Notification System**: In-app notifications for policy updates, feedback, and system alerts.
+-   **Policy Change Diff Monitor**: Tracks policy document versions and performs impact analysis.
+-   **Compliance Assurance Suite**: Gemini-powered validation of policy documents against regulatory requirements.
+-   **Adaptive Intake Copilot**: Gemini-powered conversational assistant for application guidance and structured data extraction.
+-   **PolicyEngine Integration**: Provides accurate multi-benefit calculations (SNAP, Medicaid, EITC, CTC, SSI, TANF).
+-   **Anonymous Benefit Screener**: Public-facing tool for anonymous eligibility checks.
+-   **Household Scenario Workspace**: Modeling tool for navigators using PolicyEngine.
+-   **VITA Tax Assistant**: Knowledge base for federal tax assistance using IRS Publication 4012.
+-   **Maryland Evaluation Framework**: Accuracy testing system for policy rules and calculations.
 
-## Authentication and Authorization
-A basic user authentication system supports roles (user, admin, super_admin). Object-level security is enforced using custom ACLs for Google Cloud Storage. Session management uses `connect-pg-simple` with PostgreSQL.
+### Tax Preparation System
+This system integrates federal/state tax preparation with public benefits eligibility.
+-   **Tax Document Extraction Service**: Gemini Vision-powered extraction from W-2, 1099, 1095-A with confidence scoring.
+-   **PolicyEngine Tax Calculation Service**: Federal tax calculations (EITC, CTC, taxable income) using PolicyEngine US, bridging tax data to benefit screening.
+-   **Form 1040 PDF Generator**: IRS-compliant Form 1040 PDF generation, including virtual currency disclosure and accurate calculations.
+-   **Cross-Enrollment Intelligence Engine**: AI-powered analysis identifying missed benefits from tax data (e.g., high EITC leading to SNAP screening) and vice-versa.
 
-## Core Features
--   **Navigator Workspace**: Tracks client interaction sessions and supports E&E (Eligibility & Enrollment) export.
--   **Feedback Collection System**: Allows users to report issues with AI responses, with an admin interface for management.
--   **Admin Enhancement Tools**: Includes an Audit Log Viewer, API Documentation, and Feedback Management.
--   **Notification System**: Provides in-app notifications for policy updates, feedback, system alerts, and workflow events.
--   **Policy Change Diff Monitor**: Tracks policy document versions, detects changes, performs impact analysis, and sends role-based notifications.
--   **Compliance Assurance Suite**: A Gemini-powered system to validate policy documents against regulatory requirements (WCAG, LEP, federal regulations), managed via an admin UI.
--   **Adaptive Intake Copilot**: A Gemini-powered conversational assistant guiding applicants through processes like SNAP applications, extracting structured data, and generating forms. Integrates with PolicyEngine for real-time benefit calculations.
--   **PolicyEngine Integration**: Provides accurate multi-benefit calculations (SNAP, Medicaid, EITC, CTC, SSI, TANF) based on household data, integrated throughout the platform.
--   **Anonymous Benefit Screener**: A public-facing tool for anonymous eligibility checks using PolicyEngine, with session management and data migration features.
--   **Household Scenario Workspace**: A modeling tool for navigators to create and compare household scenarios with PolicyEngine-powered benefit calculations and visualizations.
--   **VITA Tax Assistant**: A federal tax assistance knowledge base using IRS Publication 4012, featuring RAG semantic search, extracted tax rules, and citations.
--   **Maryland Evaluation Framework**: An accuracy testing system for policy rules and calculations, adapted from Propel's snap-eval, tracking test cases, evaluation runs, and results with variance tolerance.
-
-## Security & Performance
-CSRF protection, multi-tier rate limiting, and security headers (Helmet, CSP, HSTS) are implemented for security. Server-side caching (NodeCache) and strategic database indexing are used for performance optimization.
-
-## Testing
-Vitest, @testing-library/react, and supertest are used for unit, component, and API integration tests respectively.
-
-## Developer Documentation
-
-The `ai-context/` directory contains comprehensive technical documentation for developers and AI agents working on the system:
-
--   **system-architecture.json**: JSON schema defining the complete system architecture including technology stack (Node.js, React, TypeScript), database structure (PostgreSQL/Drizzle ORM), AI services (Google Gemini models), external dependencies, security configuration, deployment model, and all 7 benefit programs. Serves as single source of truth for architectural decisions and system capabilities.
-
--   **code-patterns.md**: Reusable code examples and best practices from the codebase covering React component patterns, API routes, data fetching with TanStack Query, form validation with react-hook-form and Zod, authentication with Passport.js, database patterns with Drizzle ORM, AI integration with Gemini API, error handling, TypeScript patterns, and testing patterns.
-
--   **api-contracts.ts**: TypeScript interface definitions for 160+ API endpoints organized by domain (authentication, documents, RAG, PolicyEngine, admin, etc.). Provides type safety and API reference. Note: Reference template only - production should use tRPC or automated contract tests.
-
--   **task-templates.md**: Reusable workflow templates for common development tasks including document upload/processing, RAG search implementation, rules extraction, PolicyEngine integration, navigator workspace operations, compliance validation, admin dashboard features, testing workflows, document version management, and security audits.
-
--   **performance-optimization.md**: Performance tuning strategies covering database query optimization (indexing, Drizzle best practices), caching strategies (NodeCache with TTLs), frontend optimization (code splitting, lazy loading), API performance (pagination, rate limiting), and RAG search optimization.
-
--   **testing-guide.md**: Comprehensive testing patterns including unit testing (storage, utilities), integration testing (API routes, RAG service), component testing (React, forms), E2E testing (Playwright), AI/Gemini testing (mocking, embeddings), test setup (vitest.config.ts), and CI/CD integration.
-
--   **deployment-checklist.md**: Production deployment guide including pre-deployment validation, environment configuration (all required env vars), database migration (Drizzle commands), security hardening (CSP, rate limiting), performance optimization (accurate schema indexes, caching), monitoring/logging (winston, health checks, Sentry), post-deployment verification (all 7 Maryland programs), and rollback procedures.
-
--   **troubleshooting-guide.md**: Common issues and debugging solutions for application startup, database problems, authentication (session persistence with connect-pg-simple, CSRF), AI/Gemini integration, PolicyEngine issues, document upload/processing (GCS, OCR), RAG search debugging, performance optimization, frontend issues, and API errors.
-
-All documentation aligns with actual codebase implementation (schema.ts, server modules, service files) and provides executable examples where applicable.
+## System Design Choices
+-   **Data Management**: PostgreSQL stores core data (users, documents, "Rules as Code", audit logs). Google Cloud Storage for file storage.
+-   **Authentication & Authorization**: Basic user authentication with roles, object-level security via Google Cloud Storage ACLs, and session management using `connect-pg-simple`.
+-   **Unified Household Profiler**: A single profile drives both benefits and tax workflows, enabling pre-population and cross-screening.
+-   **E-Filing Roadmap**: Phased approach including federal/Maryland e-filing via IRS MeF FIRE API and MDTAX iFile API integration.
+-   **Security & Performance**: CSRF protection, multi-tier rate limiting, security headers (Helmet, CSP, HSTS), server-side caching (NodeCache), and strategic database indexing.
+-   **Testing**: Vitest, @testing-library/react, and supertest for unit, component, and API integration tests.
 
 # External Dependencies
 
-## Current Production
 -   **AI Services**: Google Gemini API (`@google/genai`) for language models, document analysis, embeddings, and RAG. Models used: `gemini-2.5-flash`, `text-embedding-004`.
--   **Benefit Calculations**: PolicyEngine (`policyengine-us`) Python package for multi-benefit eligibility and amount calculations.
+-   **Benefit Calculations**: PolicyEngine (`policyengine-us`) Python package.
 -   **Database**: PostgreSQL via Drizzle ORM (`drizzle-orm`) with Neon Database.
 -   **Object Storage**: Google Cloud Storage.
--   **Document Processing**: Tesseract OCR engine, Google Gemini Vision API, pdf-parse for IRS publications.
+-   **Document Processing**: Tesseract OCR engine, Google Gemini Vision API, pdf-parse.
 -   **UI Components**: Radix UI primitives via shadcn/ui.
--   **Data Visualization**: Recharts for benefit comparison charts and analytics dashboards.
--   **PDF Generation**: jsPDF and jspdf-autotable for client counseling reports and scenario exports.
-
-## Planned Tax Integration (Roadmap)
--   **IRS Integration**: Bulk Data API (via ETAAC access), MeF FIRE API for e-filing, IRS Publication feeds
--   **Maryland E-Filing**: MDTAX iFile system API (via DHS-Comptroller partnership)
--   **Tax Calculations**: PolicyEngine US expansion for federal tax (EITC, CTC, ACTC, Premium Tax Credit)
--   **Form Generation**: IRS XML schema libraries for Form 1040, schedules (A, C, EIC), Maryland Form 502
--   **Validation**: Custom business rules engine (5,000+ IRS rules), Circular 230 compliance checks
--   **Document Extraction**: Enhanced Gemini Vision for W-2, 1099, 1095-A, Schedule C extraction
+-   **Data Visualization**: Recharts.
+-   **PDF Generation**: jsPDF and jspdf-autotable.
+-   **IRS Integration (Planned)**: IRS Bulk Data API, MeF FIRE API.
+-   **Maryland E-Filing (Planned)**: MDTAX iFile system API.
