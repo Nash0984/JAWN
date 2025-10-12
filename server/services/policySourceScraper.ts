@@ -1647,6 +1647,158 @@ export class PolicySourceScraper {
   }
   
   /**
+   * Scrape Maryland SNAP Policy Manual
+   */
+  async scrapeMarylandSNAPManual(sourceId: string, config: any): Promise<ScrapedDocument[]> {
+    const documents: ScrapedDocument[] = [];
+    const baseUrl = 'https://dhs.maryland.gov/supplemental-nutrition-assistance-program/food-supplement-program-manual/';
+    
+    try {
+      const response = await axios.get(baseUrl, {
+        timeout: 30000,
+        headers: {
+          'User-Agent': 'Maryland SNAP Policy Manual System/1.0'
+        }
+      });
+      
+      const $ = cheerio.load(response.data);
+      
+      // Look for section links (PDF/DOCX documents)
+      $('a[href*=".pdf"], a[href*=".docx"], a[href*=".doc"]').each((_, element) => {
+        const $link = $(element);
+        const href = $link.attr('href');
+        const text = $link.text().trim();
+        
+        if (href) {
+          const fullUrl = href.startsWith('http') ? href : `https://dhs.maryland.gov${href}`;
+          
+          // Extract section number (e.g., "100", "200", "300")
+          const sectionMatch = text.match(/^(\d{3})/);
+          const sectionNumber = sectionMatch ? sectionMatch[1] : '';
+          
+          // Extract title
+          const titleMatch = text.match(/^\d{3}\s+(.+?)(?:\s*-\s*(.+))?$/);
+          const title = titleMatch ? titleMatch[1].trim() : text;
+          
+          documents.push({
+            title: text,
+            url: fullUrl,
+            pdfUrl: fullUrl,
+            sectionNumber,
+            metadata: {
+              manualType: 'Maryland SNAP Policy Manual',
+              source: 'Maryland DHS'
+            }
+          });
+        }
+      });
+      
+      console.log(`✓ Found ${documents.length} Maryland SNAP Manual sections`);
+    } catch (error) {
+      console.error('Error scraping Maryland SNAP Manual:', error);
+    }
+    
+    return documents;
+  }
+  
+  /**
+   * Scrape COMAR Title 10 regulations
+   */
+  async scrapeCOMAR(sourceId: string, config: any): Promise<ScrapedDocument[]> {
+    const documents: ScrapedDocument[] = [];
+    const baseUrl = 'https://dsd.maryland.gov/Pages/CODListByTitle.aspx?Title=10';
+    
+    try {
+      const response = await axios.get(baseUrl, {
+        timeout: 30000,
+        headers: {
+          'User-Agent': 'Maryland SNAP Policy Manual System/1.0'
+        }
+      });
+      
+      const $ = cheerio.load(response.data);
+      
+      // Look for regulation links
+      $('a[href*="Subtitle"]').each((_, element) => {
+        const $link = $(element);
+        const href = $link.attr('href');
+        const text = $link.text().trim();
+        
+        // Filter for SNAP-related subtitles (10.01 Food Supplement Program, 10.02, etc.)
+        if (href && (text.includes('10.01') || text.includes('10.02'))) {
+          const fullUrl = href.startsWith('http') ? href : `https://dsd.maryland.gov${href}`;
+          
+          documents.push({
+            title: text,
+            url: fullUrl,
+            content: '', // Will be filled when fetching the regulation page
+            sectionNumber: text.match(/10\.\d+/)?.[0] || '',
+            metadata: {
+              regulation: 'COMAR Title 10',
+              source: 'Maryland Division of State Documents'
+            }
+          });
+        }
+      });
+      
+      console.log(`✓ Found ${documents.length} COMAR Title 10 regulations`);
+    } catch (error) {
+      console.error('Error scraping COMAR:', error);
+    }
+    
+    return documents;
+  }
+  
+  /**
+   * Scrape COMAR 10.09.24 Medicaid Eligibility Regulations
+   */
+  async scrapeCOMARMedicaid(sourceId: string, config: any): Promise<ScrapedDocument[]> {
+    const documents: ScrapedDocument[] = [];
+    // The URL is a bit.ly redirect - use the actual COMAR URL
+    const baseUrl = 'https://dsd.maryland.gov/Pages/CODListByChapter.aspx?Chapter=10.09.24';
+    
+    try {
+      const response = await axios.get(baseUrl, {
+        timeout: 30000,
+        headers: {
+          'User-Agent': 'Maryland SNAP Policy Manual System/1.0'
+        }
+      });
+      
+      const $ = cheerio.load(response.data);
+      
+      // Look for regulation sections
+      $('a[href*=".aspx"]').each((_, element) => {
+        const $link = $(element);
+        const href = $link.attr('href');
+        const text = $link.text().trim();
+        
+        if (href && text.includes('10.09.24')) {
+          const fullUrl = href.startsWith('http') ? href : `https://dsd.maryland.gov/Pages/${href}`;
+          
+          documents.push({
+            title: text,
+            url: fullUrl,
+            content: '', // Will be filled when fetching the regulation page
+            sectionNumber: text.match(/10\.09\.24\.\d+/)?.[0] || '',
+            metadata: {
+              regulation: 'COMAR 10.09.24',
+              source: 'Maryland Division of State Documents',
+              program: 'Medicaid'
+            }
+          });
+        }
+      });
+      
+      console.log(`✓ Found ${documents.length} COMAR 10.09.24 Medicaid regulations`);
+    } catch (error) {
+      console.error('Error scraping COMAR Medicaid:', error);
+    }
+    
+    return documents;
+  }
+  
+  /**
    * Execute scraping for a specific policy source
    */
   async scrapeSource(policySourceId: string): Promise<number> {
@@ -1670,6 +1822,12 @@ export class PolicySourceScraper {
       // Route to appropriate scraper based on scrapeType
       if (config?.scrapeType === 'md_transmittals') {
         documents = await this.scrapeMarylandTransmittals(policySourceId, config);
+      } else if (config?.scrapeType === 'md_snap_manual') {
+        documents = await this.scrapeMarylandSNAPManual(policySourceId, config);
+      } else if (config?.scrapeType === 'comar') {
+        documents = await this.scrapeCOMAR(policySourceId, config);
+      } else if (config?.scrapeType === 'comar_medicaid') {
+        documents = await this.scrapeCOMARMedicaid(policySourceId, config);
       } else if (config?.scrapeType === 'ecfr') {
         documents = await this.scrapeCFR(policySourceId, config);
       } else if (config?.scrapeType === 'fns_memos') {
@@ -1702,15 +1860,38 @@ export class PolicySourceScraper {
       
       console.log(`✓ Scraped ${documents.length} documents from ${source.name}`);
       
+      // Download and process each document
+      const ADMIN_USER_ID = 'b259547b-0479-4549-9576-a55e013345a5'; // demo.admin from seedData.ts
+      let processedCount = 0;
+      
+      for (const doc of documents) {
+        try {
+          const result = await this.downloadAndProcessDocument(
+            doc,
+            policySourceId,
+            source.benefitProgramId || '',
+            ADMIN_USER_ID
+          );
+          if (result) {
+            processedCount++;
+          }
+        } catch (error) {
+          console.error(`Failed to process document ${doc.title}:`, error);
+          // Continue with other documents
+        }
+      }
+      
+      console.log(`✓ Downloaded and stored ${processedCount}/${documents.length} documents`);
+      
       // Update sync status
       await storage.updatePolicySource(policySourceId, {
         syncStatus: 'success',
         lastSuccessfulSyncAt: new Date(),
-        documentCount: documents.length,
+        documentCount: processedCount,
         syncError: null
       });
       
-      return documents.length;
+      return processedCount;
     } catch (error: any) {
       console.error(`Error scraping source ${policySourceId}:`, error);
       
