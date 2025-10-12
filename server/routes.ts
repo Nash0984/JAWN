@@ -3670,6 +3670,353 @@ If the question cannot be answered with the available information, say so clearl
   }));
 
   // ============================================================================
+  // Tax Preparation Routes
+  // ============================================================================
+
+  // Upload and extract tax document (W-2, 1099, 1095-A)
+  app.post("/api/tax/documents/extract", requireAuth, upload.single('taxDocument'), asyncHandler(async (req, res) => {
+    const { taxDocumentExtractionService } = await import("./services/taxDocumentExtraction");
+    
+    if (!req.file) {
+      return res.status(400).json({ error: "No file uploaded" });
+    }
+
+    const schema = z.object({
+      documentType: z.enum(['w2', '1099-misc', '1099-nec', '1095-a']),
+      taxYear: z.string().transform(Number),
+      scenarioId: z.string().optional()
+    });
+
+    const validated = schema.parse(req.body);
+
+    // Convert file buffer to base64
+    const base64Image = req.file.buffer.toString('base64');
+
+    // Extract data using Gemini Vision
+    const extractedData = await taxDocumentExtractionService.extractTaxDocument(
+      base64Image,
+      validated.documentType,
+      validated.taxYear
+    );
+
+    // Save to documents table
+    const document = await storage.createDocument({
+      filename: req.file.originalname,
+      originalName: req.file.originalname,
+      fileSize: req.file.size,
+      mimeType: req.file.mimetype,
+      uploadedBy: req.user!.id,
+      status: 'processed',
+      metadata: { taxYear: validated.taxYear, documentType: validated.documentType }
+    });
+
+    // Save tax document record
+    const taxDocument = await storage.createTaxDocument({
+      scenarioId: validated.scenarioId || null,
+      federalReturnId: null,
+      documentType: validated.documentType,
+      documentId: document.id,
+      extractedData,
+      geminiConfidence: extractedData.metadata?.confidence || 0.85,
+      verificationStatus: 'pending',
+      taxYear: validated.taxYear,
+      qualityFlags: extractedData.metadata?.qualityFlags || [],
+      requiresManualReview: (extractedData.metadata?.confidence || 0.85) < 0.7
+    });
+
+    res.json({
+      success: true,
+      taxDocumentId: taxDocument.id,
+      documentId: document.id,
+      extractedData,
+      requiresManualReview: taxDocument.requiresManualReview
+    });
+  }));
+
+  // Run tax calculations using PolicyEngine
+  app.post("/api/tax/calculate", requireAuth, asyncHandler(async (req, res) => {
+    const { policyEngineTaxCalculationService } = await import("./services/policyEngineTaxCalculation");
+    
+    const schema = z.object({
+      taxYear: z.number(),
+      filingStatus: z.enum(['single', 'married_joint', 'married_separate', 'head_of_household', 'qualifying_widow']),
+      stateCode: z.string().default('MD'),
+      taxpayer: z.object({
+        age: z.number(),
+        isBlind: z.boolean().default(false),
+        isDisabled: z.boolean().default(false)
+      }),
+      spouse: z.object({
+        age: z.number(),
+        isBlind: z.boolean().default(false),
+        isDisabled: z.boolean().default(false)
+      }).optional(),
+      dependents: z.array(z.object({
+        age: z.number(),
+        relationship: z.string(),
+        isStudent: z.boolean().default(false),
+        disabilityStatus: z.boolean().default(false)
+      })).optional(),
+      w2Income: z.object({
+        taxpayerWages: z.number().default(0),
+        taxpayerWithholding: z.number().default(0),
+        spouseWages: z.number().default(0),
+        spouseWithholding: z.number().default(0)
+      }).optional(),
+      form1099Income: z.object({
+        miscIncome: z.number().default(0),
+        necIncome: z.number().default(0),
+        interestIncome: z.number().default(0),
+        dividendIncome: z.number().default(0)
+      }).optional(),
+      healthInsurance: z.object({
+        monthsOfCoverage: z.number(),
+        slcspPremium: z.number(),
+        aptcReceived: z.number()
+      }).optional(),
+      adjustments: z.object({
+        studentLoanInterest: z.number().default(0),
+        hsaContributions: z.number().default(0),
+        iraContributions: z.number().default(0)
+      }).optional(),
+      itemizedDeductions: z.object({
+        medicalExpenses: z.number().default(0),
+        stateTaxesPaid: z.number().default(0),
+        mortgageInterest: z.number().default(0),
+        charitableContributions: z.number().default(0)
+      }).optional(),
+      childcareCosts: z.number().optional(),
+      medicalExpenses: z.number().optional()
+    });
+
+    const validated = schema.parse(req.body);
+
+    const result = await policyEngineTaxCalculationService.calculateTaxes(validated);
+
+    res.json(result);
+  }));
+
+  // Generate Form 1040 PDF
+  app.post("/api/tax/form1040/generate", requireAuth, asyncHandler(async (req, res) => {
+    const { form1040GeneratorService } = await import("./services/form1040Generator");
+    
+    const schema = z.object({
+      taxReturnId: z.string()
+    });
+
+    const validated = schema.parse(req.body);
+
+    // Get tax return data
+    const taxReturn = await storage.getFederalTaxReturn(validated.taxReturnId);
+    if (!taxReturn) {
+      return res.status(404).json({ error: "Tax return not found" });
+    }
+
+    // Generate PDF
+    const pdfBuffer = await form1040GeneratorService.generateForm1040PDF(
+      taxReturn.form1040Data,
+      taxReturn.taxYear
+    );
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="Form-1040-${taxReturn.taxYear}.pdf"`);
+    res.send(pdfBuffer);
+  }));
+
+  // Get cross-enrollment opportunities from tax data
+  app.post("/api/tax/cross-enrollment/analyze", requireAuth, asyncHandler(async (req, res) => {
+    const { crossEnrollmentIntelligenceService } = await import("./services/crossEnrollmentIntelligence");
+    const { policyEngineTaxCalculationService } = await import("./services/policyEngineTaxCalculation");
+    
+    const schema = z.object({
+      taxInput: z.object({
+        taxYear: z.number(),
+        filingStatus: z.enum(['single', 'married_joint', 'married_separate', 'head_of_household', 'qualifying_widow']),
+        stateCode: z.string().default('MD'),
+        taxpayer: z.object({
+          age: z.number(),
+          isBlind: z.boolean().default(false),
+          isDisabled: z.boolean().default(false)
+        }),
+        spouse: z.object({
+          age: z.number(),
+          isBlind: z.boolean().default(false),
+          isDisabled: z.boolean().default(false)
+        }).optional(),
+        dependents: z.array(z.object({
+          age: z.number(),
+          relationship: z.string(),
+          isStudent: z.boolean().default(false),
+          disabilityStatus: z.boolean().default(false)
+        })).optional(),
+        w2Income: z.object({
+          taxpayerWages: z.number().default(0),
+          taxpayerWithholding: z.number().default(0),
+          spouseWages: z.number().default(0),
+          spouseWithholding: z.number().default(0)
+        }).optional(),
+        form1099Income: z.object({
+          miscIncome: z.number().default(0),
+          necIncome: z.number().default(0),
+          interestIncome: z.number().default(0),
+          dividendIncome: z.number().default(0)
+        }).optional(),
+        healthInsurance: z.object({
+          monthsOfCoverage: z.number(),
+          slcspPremium: z.number(),
+          aptcReceived: z.number()
+        }).optional(),
+        medicalExpenses: z.number().optional(),
+        childcareCosts: z.number().optional()
+      }),
+      benefitData: z.object({
+        childcareExpenses: z.number().optional(),
+        educationExpenses: z.number().optional(),
+        medicalExpenses: z.number().optional(),
+        dependents: z.number().optional(),
+        agi: z.number().optional()
+      }).optional()
+    });
+
+    const validated = schema.parse(req.body);
+
+    // Calculate tax first
+    const taxResult = await policyEngineTaxCalculationService.calculateTaxes(validated.taxInput);
+
+    // Analyze for cross-enrollment opportunities
+    const analysis = await crossEnrollmentIntelligenceService.generateFullAnalysis(
+      validated.taxInput,
+      taxResult,
+      validated.benefitData
+    );
+
+    res.json(analysis);
+  }));
+
+  // Create federal tax return
+  app.post("/api/tax/federal", requireAuth, asyncHandler(async (req, res) => {
+    const schema = insertFederalTaxReturnSchema.extend({
+      preparerId: z.string().optional()
+    });
+
+    const validated = schema.parse(req.body);
+
+    const taxReturn = await storage.createFederalTaxReturn({
+      ...validated,
+      preparerId: validated.preparerId || req.user!.id
+    });
+
+    res.json(taxReturn);
+  }));
+
+  // Get federal tax return
+  app.get("/api/tax/federal/:id", requireAuth, asyncHandler(async (req, res) => {
+    const taxReturn = await storage.getFederalTaxReturn(req.params.id);
+    
+    if (!taxReturn) {
+      return res.status(404).json({ error: "Tax return not found" });
+    }
+
+    res.json(taxReturn);
+  }));
+
+  // Get federal tax returns with filters
+  app.get("/api/tax/federal", requireAuth, asyncHandler(async (req, res) => {
+    const filters = {
+      scenarioId: req.query.scenarioId as string | undefined,
+      preparerId: req.query.preparerId as string | undefined,
+      taxYear: req.query.taxYear ? Number(req.query.taxYear) : undefined,
+      efileStatus: req.query.efileStatus as string | undefined
+    };
+
+    const taxReturns = await storage.getFederalTaxReturns(filters);
+    res.json(taxReturns);
+  }));
+
+  // Update federal tax return
+  app.patch("/api/tax/federal/:id", requireAuth, asyncHandler(async (req, res) => {
+    const updates = req.body;
+    const taxReturn = await storage.updateFederalTaxReturn(req.params.id, updates);
+    res.json(taxReturn);
+  }));
+
+  // Delete federal tax return
+  app.delete("/api/tax/federal/:id", requireAuth, asyncHandler(async (req, res) => {
+    await storage.deleteFederalTaxReturn(req.params.id);
+    res.json({ success: true });
+  }));
+
+  // Create Maryland tax return
+  app.post("/api/tax/maryland", requireAuth, asyncHandler(async (req, res) => {
+    const schema = insertMarylandTaxReturnSchema;
+    const validated = schema.parse(req.body);
+
+    const taxReturn = await storage.createMarylandTaxReturn(validated);
+    res.json(taxReturn);
+  }));
+
+  // Get Maryland tax return
+  app.get("/api/tax/maryland/:id", requireAuth, asyncHandler(async (req, res) => {
+    const taxReturn = await storage.getMarylandTaxReturn(req.params.id);
+    
+    if (!taxReturn) {
+      return res.status(404).json({ error: "Maryland tax return not found" });
+    }
+
+    res.json(taxReturn);
+  }));
+
+  // Get Maryland tax return by federal ID
+  app.get("/api/tax/maryland/federal/:federalId", requireAuth, asyncHandler(async (req, res) => {
+    const taxReturn = await storage.getMarylandTaxReturnByFederalId(req.params.federalId);
+    
+    if (!taxReturn) {
+      return res.status(404).json({ error: "Maryland tax return not found" });
+    }
+
+    res.json(taxReturn);
+  }));
+
+  // Update Maryland tax return
+  app.patch("/api/tax/maryland/:id", requireAuth, asyncHandler(async (req, res) => {
+    const updates = req.body;
+    const taxReturn = await storage.updateMarylandTaxReturn(req.params.id, updates);
+    res.json(taxReturn);
+  }));
+
+  // Get tax documents
+  app.get("/api/tax/documents", requireAuth, asyncHandler(async (req, res) => {
+    const filters = {
+      scenarioId: req.query.scenarioId as string | undefined,
+      federalReturnId: req.query.federalReturnId as string | undefined,
+      documentType: req.query.documentType as string | undefined,
+      verificationStatus: req.query.verificationStatus as string | undefined
+    };
+
+    const documents = await storage.getTaxDocuments(filters);
+    res.json(documents);
+  }));
+
+  // Verify tax document
+  app.patch("/api/tax/documents/:id/verify", requireAuth, asyncHandler(async (req, res) => {
+    const schema = z.object({
+      verificationStatus: z.enum(['verified', 'flagged', 'rejected']),
+      notes: z.string().optional()
+    });
+
+    const validated = schema.parse(req.body);
+
+    const taxDocument = await storage.updateTaxDocument(req.params.id, {
+      verificationStatus: validated.verificationStatus,
+      verifiedBy: req.user!.id,
+      verifiedAt: new Date(),
+      notes: validated.notes
+    });
+
+    res.json(taxDocument);
+  }));
+
+  // ============================================================================
   // Anonymous Screening Session Routes
   // ============================================================================
 
