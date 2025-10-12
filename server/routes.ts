@@ -732,6 +732,46 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
     });
   }));
 
+  // Trigger GovInfo Bill Status Download (Federal legislation tracking)
+  app.post("/api/legislative/govinfo-bill-status", requireAdmin, asyncHandler(async (req, res) => {
+    const { govInfoBillStatusDownloader } = await import("./services/govInfoBillStatusDownloader");
+    
+    const congress = req.body.congress || 119; // Default to 119th Congress
+    console.log(`Starting GovInfo Bill Status Download for Congress ${congress}...`);
+    
+    const result = await govInfoBillStatusDownloader.downloadBillStatus(congress);
+    
+    res.json({
+      success: result.success,
+      message: `Bill Status download ${result.success ? 'completed' : 'completed with errors'}`,
+      billsProcessed: result.billsProcessed,
+      billsUpdated: result.billsUpdated,
+      billsSkipped: result.billsSkipped,
+      documentsCreated: result.documentsCreated,
+      errors: result.errors
+    });
+  }));
+
+  // Trigger GovInfo Public Laws Download (Enacted federal legislation)
+  app.post("/api/legislative/govinfo-public-laws", requireAdmin, asyncHandler(async (req, res) => {
+    const { govInfoPublicLawsDownloader } = await import("./services/govInfoPublicLawsDownloader");
+    
+    const congress = req.body.congress || 119; // Default to 119th Congress
+    console.log(`Starting GovInfo Public Laws Download for Congress ${congress}...`);
+    
+    const result = await govInfoPublicLawsDownloader.downloadPublicLaws(congress);
+    
+    res.json({
+      success: result.success,
+      message: `Public Laws download ${result.success ? 'completed' : 'completed with errors'}`,
+      lawsProcessed: result.lawsProcessed,
+      lawsUpdated: result.lawsUpdated,
+      lawsSkipped: result.lawsSkipped,
+      documentsCreated: result.documentsCreated,
+      errors: result.errors
+    });
+  }));
+
   // Model Management
   app.get("/api/models", requireAdmin, async (req, res) => {
     try {
