@@ -2,43 +2,52 @@
 
 These prompts can be used with AI coding assistants to recreate the entire Maryland Multi-Program Benefits Navigator System functionality from scratch.
 
-**Last Updated:** October 2025  
-**System Version:** 2.0 - Multi-Program RAG + Rules as Code
+**Last Updated:** October 12, 2025  
+**System Version:** 3.0 - Universal Benefits-Tax Service Delivery Platform
 
 ---
 
 ## 🎯 Master System Prompt
 
 ```
-Create a comprehensive Maryland Multi-Program Benefits Navigator System - an AI-powered platform combining Retrieval-Augmented Generation (RAG) with Rules as Code to help Maryland residents understand eligibility, navigate applications, and verify documents across 7 major benefit programs.
+Create a comprehensive Maryland Universal Benefits-Tax Service Delivery Platform - the first government system to integrate public benefits eligibility with federal/state tax preparation through a unified household profile. Combines Retrieval-Augmented Generation (RAG) with Rules as Code for 6 Maryland benefit programs plus IRS VITA tax assistance and full tax preparation capabilities.
 
 SUPPORTED PROGRAMS:
 1. Maryland SNAP (Food Supplement Program)
 2. Maryland Medicaid (Medical Assistance)
 3. Maryland TCA (TANF - Temporary Cash Assistance)
 4. Maryland OHEP (Energy Assistance - MEAP/EUSP)
-5. Maryland WIC (Women, Infants, Children)
-6. Maryland Children's Health Program (MCHP)
-7. IRS VITA Tax Assistance
+5. Maryland Tax Credits and Property Tax Relief
+6. IRS VITA Tax Assistance
+
+TAX PREPARATION SYSTEM:
+- Federal Form 1040 generation with IRS compliance
+- Maryland Form 502 (state tax return)
+- Tax document extraction (W-2, 1099, 1095-A) via Gemini Vision
+- PolicyEngine federal tax calculations (EITC, CTC, ACTC)
+- Cross-Enrollment Intelligence: Tax data → Benefits screening
+- E-filing roadmap: IRS MeF FIRE API + MDTAX iFile integration
 
 KEY REQUIREMENTS:
 - RAG-powered conversational search with semantic understanding
 - Rules as Code for deterministic eligibility calculations (PolicyEngine)
 - Document verification using Gemini Vision API
+- Single household profile driving BOTH benefits AND tax workflows
 - Multi-role access: Applicant, Navigator, Caseworker, Admin
-- Navigator Workspace with client case management
+- Navigator Workspace with client case management + tax preparation
 - Maryland Digital Style Guide branding (DHS Blue #0D4F8B)
 - Mobile-first responsive design with WCAG 2.1 AA compliance
 - Real-time notifications via WebSocket with email backup
-- Export capabilities (PDF/CSV reports)
+- Export capabilities (PDF/CSV reports, Form 1040 PDFs)
 - Bulk document processing and review workflows
 
 ARCHITECTURE:
 - Frontend: React 18 + TypeScript + Vite + shadcn/ui + Tailwind CSS
 - Backend: Express.js + TypeScript + PostgreSQL (Neon) + Google Gemini API
-- AI: Google Gemini 2.5 Flash for text, text-embedding-004 for RAG
+- AI: Google Gemini 2.5 Flash for text/vision, text-embedding-004 for RAG
 - Storage: Google Cloud Storage for documents
-- Integrations: PolicyEngine API for benefit calculations
+- Integrations: PolicyEngine API for benefit + tax calculations
+- Government Partnership: Maryland DHS + Comptroller + IRS ETAAC access
 ```
 
 ---
@@ -313,6 +322,12 @@ EVALUATION:
 - evaluation_test_cases: id, program, test_type, input_data, expected_output, tags
 - evaluation_runs: id, test_suite, pass_at_1_score, variance_tolerance, results_summary
 
+TAX PREPARATION:
+- federalTaxReturns: id (varchar), taxYear, filingStatus, preparerId, scenarioId, wages, agi, taxableIncome, totalTax, eitc, ctc, actc, refundAmount, form1040Pdf (base64), virtualCurrencyDisclosure
+- marylandTaxReturns: id (varchar), federalReturnId (FK), marylandAgi, marylandTaxableIncome, marylandTax, marylandCredits (EITC supplement, property/renter), marylandRefund, form502Pdf
+- taxDocuments: id (varchar), scenarioId, federalReturnId, documentType (W-2/1099/1095-A), extractedData (JSONB with confidence scores), verificationStatus, storagePath
+- crossEnrollmentAlerts: id (serial), scenarioId, federalReturnId, program, estimatedMonthlyBenefit, confidence, reasoning, actionSteps (text array), status
+
 Include proper foreign keys, indexes for performance, vector extension for embeddings, and migration support.
 ```
 
@@ -529,60 +544,602 @@ Include scalability planning, disaster recovery, data backup, and compliance doc
 
 ---
 
+## 💰 Tax Preparation System
+
+### Tax Document Extraction with Gemini Vision
+```
+Build a tax document extraction service using Gemini Vision API:
+
+SERVICE: server/services/taxDocumentExtraction.ts
+
+1. SUPPORTED DOCUMENTS:
+   - W-2: Wages and Tax Statement
+   - 1099: Income forms (INT, DIV, MISC, NEC)
+   - 1095-A: Health Insurance Marketplace Statement
+
+2. GEMINI VISION INTEGRATION:
+   - Model: gemini-2.5-flash with vision capabilities
+   - Input: PDF/image file buffer
+   - Prompt: Document-specific field extraction instructions
+   - Output: Structured JSON with extracted data
+
+3. FIELD EXTRACTION (W-2 Example):
+   - Box a: Employee SSN
+   - Box b: Employer EIN
+   - Box 1: Wages, tips, other compensation
+   - Box 2: Federal income tax withheld
+   - Box 16-18: State wages, state tax, locality
+   - Employer information (name, address)
+
+4. VALIDATION & CONFIDENCE:
+   - Per-field confidence scores (0.0-1.0)
+   - SSN/EIN normalization (digits only)
+   - Amount parsing ($XX,XXX.XX → numeric)
+   - Date format standardization
+   - Error handling with graceful fallbacks
+
+5. API ENDPOINT:
+   POST /api/tax/documents/extract
+   - Multer middleware for file upload
+   - Document type detection
+   - Gemini Vision analysis
+   - Return structured JSON with confidence scores
+
+RESPONSE STRUCTURE:
+{
+  "success": true,
+  "documentType": "W-2",
+  "extractedData": {
+    "employeeSsn": { "value": "123456789", "confidence": 0.95 },
+    "wages": { "value": "45000.00", "confidence": 0.98 },
+    "federalWithheld": { "value": "5400.00", "confidence": 0.92 }
+  }
+}
+```
+
+### PolicyEngine Federal Tax Calculation
+```
+Build federal tax calculation service using PolicyEngine US:
+
+SERVICE: server/services/policyEngineTaxCalculation.ts
+
+1. HOUSEHOLD MODELING:
+   - Convert Navigator household profile to PolicyEngine format
+   - Map household members (adults, children, dependents)
+   - Income sources (wages, self-employment, investments)
+   - Deductions (standard/itemized, above-the-line)
+   - Filing status (single, married, head of household)
+
+2. TAX CALCULATIONS:
+   - Federal adjusted gross income (AGI)
+   - Taxable income after deductions
+   - Total tax liability (from tax tables)
+   - Earned Income Tax Credit (EITC)
+   - Child Tax Credit (CTC) and Additional CTC (ACTC)
+   - Premium Tax Credit (marketplace health insurance)
+   - Taxable Social Security (up to 85%)
+   - Refund or amount owed
+
+3. FPL THRESHOLDS (Critical for Cross-Enrollment):
+   - 100% FPL baseline: $1,255/month (single adult, 2024)
+   - SNAP eligibility: 200% FPL ($2,510/month single)
+   - Medicaid eligibility: 138% FPL ($1,732/month single)
+   - SSI: 100% FPL, TANF: varies by household size
+
+4. API ENDPOINT:
+   POST /api/tax/calculate
+   - Accept household data + tax year
+   - Call PolicyEngine US Python API
+   - Return comprehensive tax calculation
+
+5. INTEGRATION WITH BENEFITS:
+   - Use tax income for SNAP screening
+   - Medical expenses → Medicaid eligibility
+   - Dependent care → CDCC optimization
+   - Education expenses → education credits
+
+RESPONSE STRUCTURE:
+{
+  "taxYear": 2024,
+  "filingStatus": "single",
+  "adjustedGrossIncome": 28000,
+  "taxableIncome": 14050,
+  "totalTax": 1405,
+  "eitc": 1502,
+  "ctc": 0,
+  "refundAmount": 3497,
+  "calculations": { ... }
+}
+```
+
+### Form 1040 PDF Generator
+```
+Build IRS-compliant Form 1040 PDF generator:
+
+SERVICE: server/services/form1040Generator.ts
+
+1. IRS FORM 1040 STRUCTURE:
+   - Personal Information: Name, SSN, address, filing status
+   - Virtual Currency Disclosure: Required checkbox (IRS 2024+)
+   - Income Section (Lines 1-9):
+     * Line 1: Wages, salaries, tips
+     * Line 2a/2b: Tax-exempt interest / taxable interest
+     * Line 3a/3b: Qualified dividends / ordinary dividends
+     * Line 4a/4b: IRA distributions (total/taxable)
+     * Line 5a/5b: Pensions and annuities (total/taxable)
+     * Line 6a/6b: Social Security benefits (total/taxable)
+     * Line 7: Capital gain or loss
+     * Line 8: Other income
+     * Line 9: Total income
+
+   - Adjustments (Lines 10-11): AGI calculation
+   - Deductions (Lines 12-15): Standard or itemized
+   - Tax and Credits (Lines 16-31):
+     * Line 16: Taxable income
+     * Line 24: Total tax
+     * Line 27: Earned Income Credit (EITC)
+     * Line 28: Child Tax Credit/ACTC
+     * Line 29: Premium Tax Credit (Form 8962)
+
+   - Payments (Lines 32-33): Withholding, estimated tax
+   - Refund/Payment (Lines 34-37): Final calculation
+
+2. PDF GENERATION (jsPDF):
+   - Font: Courier 10pt (OCR compatibility)
+   - Layout: Official IRS Form 1040 structure
+   - Checkboxes: Filing status, virtual currency, dependents
+   - Amounts: Right-aligned, comma separators
+   - Signature block: Placeholder for in-person signing
+
+3. COMPANION LINES:
+   - Always show both "a" and "b" lines (4a/4b, 5a/5b, 6a/6b)
+   - Line 4a: Total IRA distributions
+   - Line 4b: Taxable IRA distributions
+   - Line 5a: Total pensions
+   - Line 5b: Taxable pensions
+   - Line 6a: Total Social Security
+   - Line 6b: Taxable Social Security (up to 85%)
+
+4. CALCULATIONS:
+   - All amounts from PolicyEngine tax calculation
+   - Refundable credits excluded from totalTax
+   - EITC, ACTC added to refund calculation
+   - Accurate line-by-line placement
+
+5. API ENDPOINT:
+   POST /api/tax/form1040/generate
+   - Accept tax calculation data
+   - Generate PDF buffer
+   - Return base64-encoded PDF
+
+CRITICAL REQUIREMENTS:
+- Virtual currency checkbox (required by IRS 2024+)
+- Companion lines 4a/4b, 5a/5b, 6a/6b with correct amounts
+- Taxable Social Security from PolicyEngine
+- EITC/CTC/ACTC properly placed
+- Refundable credits NOT in total tax
+```
+
+### Cross-Enrollment Intelligence Engine
+```
+Build AI-powered cross-enrollment analysis service:
+
+SERVICE: server/services/crossEnrollmentIntelligence.ts
+
+1. TAX-TO-BENEFITS ANALYSIS:
+   
+   HIGH EITC → SNAP SCREENING:
+   - EITC > $5,000 indicates low income
+   - Calculate monthly income from tax data
+   - Compare to SNAP limit (200% FPL)
+   - Estimate SNAP benefit amount
+   - Confidence: High if W-2 matches household size
+
+   MEDICAL EXPENSES → MEDICAID:
+   - Schedule A medical deductions > $5,000
+   - Indicates high medical costs
+   - Medicaid 138% FPL threshold check
+   - Asset test waiver for medical spend-down
+   - Confidence: Medium (need current income verification)
+
+   1095-A FORM → PREMIUM TAX CREDIT:
+   - Marketplace health insurance present
+   - Optimize Premium Tax Credit calculation
+   - Check if APTC reconciliation maximized
+   - Suggest plan changes for next year
+   - Confidence: High (have 1095-A data)
+
+   DEPENDENT CARE → CDCC:
+   - Child care expenses on tax return
+   - Calculate Child and Dependent Care Credit
+   - Check if child care subsidy available
+   - Maximize federal + state credits
+   - Confidence: High (documented expenses)
+
+2. BENEFITS-TO-TAX ANALYSIS:
+   
+   SNAP DATA → TAX PREPARATION:
+   - Known household income from SNAP verification
+   - Pre-populate W-2 wage amounts
+   - Household size → dependents on Form 1040
+   - Income → EITC eligibility projection
+   - Confidence: High (verified SNAP data)
+
+   MEDICAID ASSETS → TAX PLANNING:
+   - Asset verification from Medicaid application
+   - Capital gains planning opportunities
+   - Investment income optimization
+   - Estimated tax payment suggestions
+   - Confidence: Medium (asset values may change)
+
+   CHILD CARE SUBSIDY → CDCC:
+   - Documented child care expenses
+   - Maximum CDCC amount calculation
+   - Form 2441 completion assistance
+   - Provider EIN from subsidy records
+   - Confidence: High (verified expenses)
+
+3. GEMINI AI ANALYSIS:
+   - Model: gemini-2.5-flash
+   - Input: Tax return data + household profile
+   - Prompt: Identify missed benefit opportunities
+   - Output: Prioritized opportunities with reasoning
+
+4. PRIORITY SCORING:
+   - Rank by estimated monthly benefit amount
+   - SNAP $450/month > SSI $300/month > Tax Credit $75/month
+   - Consider confidence level in ranking
+   - Factor in application complexity
+
+5. API ENDPOINT:
+   POST /api/tax/cross-enrollment/analyze
+   - Accept federal tax return data
+   - Run AI analysis for benefits opportunities
+   - Return prioritized recommendations
+
+RESPONSE STRUCTURE:
+{
+  "opportunities": [
+    {
+      "program": "Maryland SNAP",
+      "estimatedMonthlyBenefit": 450,
+      "confidence": "high",
+      "reasoning": "Household income $28,000 (EITC $6,000) is 180% FPL, below SNAP limit (200% FPL = $2,510/month for family of 3)",
+      "actionSteps": [
+        "Request recent paystubs for SNAP income verification",
+        "Complete SNAP application via Navigator Workspace",
+        "Schedule SNAP interview within 30 days"
+      ],
+      "dataSource": "Form 1040 Line 1 (wages) + household size",
+      "fplCalculation": {
+        "householdSize": 3,
+        "monthlyIncome": 2333,
+        "fplPercentage": 180,
+        "snapLimit": 2510
+      }
+    }
+  ]
+}
+```
+
+### Tax Preparation API Routes
+```
+Create comprehensive tax preparation API endpoints:
+
+LOCATION: server/routes.ts (Lines 3675-3950)
+
+1. DOCUMENT EXTRACTION:
+   POST /api/tax/documents/extract
+   - Multer middleware: upload.single('taxDocument')
+   - Gemini Vision extraction
+   - Return structured data with confidence scores
+
+2. TAX CALCULATION:
+   POST /api/tax/calculate
+   - Accept household data + tax year
+   - PolicyEngine federal tax calculation
+   - Return comprehensive tax results
+
+3. FORM 1040 GENERATION:
+   POST /api/tax/form1040/generate
+   - Accept tax calculation data
+   - Generate IRS-compliant PDF
+   - Return base64-encoded PDF
+
+4. CROSS-ENROLLMENT INTELLIGENCE:
+   POST /api/tax/cross-enrollment/analyze
+   - Accept federal tax return data
+   - AI analysis for benefit opportunities
+   - Return prioritized recommendations
+
+5. FEDERAL TAX RETURN CRUD:
+   POST /api/tax/federal - Create federal tax return
+   GET /api/tax/federal/:id - Get by ID
+   GET /api/tax/federal - List returns (filter by scenario/preparer/taxYear)
+   PATCH /api/tax/federal/:id - Update return
+   DELETE /api/tax/federal/:id - Delete return (cascades to Maryland)
+
+6. MARYLAND TAX RETURN CRUD:
+   POST /api/tax/maryland - Create Maryland return (Form 502)
+   GET /api/tax/maryland/:id - Get by ID
+   GET /api/tax/maryland/federal/:federalReturnId - Get by federal return
+   PATCH /api/tax/maryland/:id - Update return
+
+7. TAX DOCUMENT MANAGEMENT:
+   GET /api/tax/documents - List tax documents (filter by scenario/type)
+   PATCH /api/tax/documents/:id/verify - Mark as verified/rejected
+
+TOTAL: 15 Tax Preparation Endpoints
+
+AUTHENTICATION:
+- All routes use requireAuth middleware
+- preparerId = req.user.id
+- scenarioId links to Navigator Workspace cases
+
+VALIDATION:
+- Zod schemas for all request bodies
+- Type-safe responses using shared types
+- Error handling with asyncHandler
+```
+
+### Tax Database Schema
+```
+Add tax preparation tables to PostgreSQL schema:
+
+LOCATION: shared/schema.ts (Lines 2579-2872)
+
+1. FEDERAL TAX RETURNS:
+   federalTaxReturns table (varchar ID, cascading deletes)
+   - taxYear, filingStatus, preparerId, scenarioId
+   - wages, interest, dividends, capitalGains, businessIncome, otherIncome
+   - adjustedGrossIncome, deductions (standard/itemized), taxableIncome
+   - totalTax, withheld, estimatedPayments, refundableCredits
+   - eitc, ctc, actc, premiumTaxCredit, otherCredits
+   - refundAmount, amountOwed, efileStatus, efileSubmittedAt
+   - form1040Pdf (base64), virtualCurrencyDisclosure
+   - createdAt, updatedAt
+
+2. MARYLAND TAX RETURNS:
+   marylandTaxReturns table (varchar ID, foreign key to federalTaxReturns)
+   - federalReturnId (links to federal return)
+   - marylandAdjustedGrossIncome, marylandDeductions
+   - marylandTaxableIncome, marylandTax, marylandWithheld
+   - marylandCredits (EITC supplement, property tax, renter credit)
+   - marylandRefund, marylandAmountOwed
+   - form502Pdf (base64), efileStatus, efileSubmittedAt
+   - createdAt, updatedAt
+
+3. TAX DOCUMENTS:
+   taxDocuments table (varchar ID, foreign keys to scenario/federalReturn)
+   - scenarioId, federalReturnId
+   - documentType (W-2, 1099, 1095-A)
+   - extractedData (JSONB with confidence scores)
+   - verificationStatus (pending, verified, rejected)
+   - verifiedBy, verifiedAt
+   - storagePath, uploadedAt, uploadedBy
+
+4. CROSS-ENROLLMENT ALERTS:
+   crossEnrollmentAlerts table (serial ID)
+   - scenarioId, federalReturnId
+   - program (SNAP, Medicaid, SSI, etc)
+   - estimatedMonthlyBenefit, confidence (high/medium/low)
+   - reasoning (text), actionSteps (text array)
+   - status (pending/contacted/enrolled/dismissed)
+   - createdAt
+
+5. ZOD SCHEMAS:
+   - insertFederalTaxReturnSchema (from createInsertSchema)
+   - insertMarylandTaxReturnSchema
+   - insertTaxDocumentSchema
+   - Export types: FederalTaxReturn, MarylandTaxReturn, TaxDocument
+
+6. STORAGE METHODS (server/storage.ts Lines 2190-2360):
+   - createFederalTaxReturn(), getFederalTaxReturn(id)
+   - getFederalTaxReturns(filters), updateFederalTaxReturn(id, updates)
+   - deleteFederalTaxReturn(id)
+   - createMarylandTaxReturn(), getMarylandTaxReturn(id)
+   - getMarylandTaxReturnByFederalId(federalReturnId)
+   - updateMarylandTaxReturn(id, updates)
+   - createTaxDocument(), getTaxDocument(id)
+   - getTaxDocuments(filters), updateTaxDocument(id, updates)
+```
+
+### Unified Household Profiler
+```
+Implement single household profile driving both benefits and tax:
+
+CONCEPT: One household interview → Benefits calculations + Tax preparation
+
+1. BENEFITS → TAX PRE-POPULATION:
+   - SNAP income verification → W-2 wages on Form 1040
+   - Medicaid household size → Dependents on Form 1040
+   - Child care subsidy expenses → CDCC amounts
+   - Energy assistance (OHEP) → Residential energy credits
+   - Rent/property tax → Maryland credits
+
+2. TAX → BENEFITS SCREENING:
+   - Form 1040 Line 1 (wages) → SNAP income eligibility
+   - Schedule A medical expenses → Medicaid asset waiver
+   - 1095-A marketplace coverage → Premium Tax Credit optimization
+   - EITC amount → SSI/TANF income limits
+   - Child Tax Credit → SNAP categorical eligibility
+
+3. NAVIGATOR WORKFLOW:
+   - Single intake interview captures all data
+   - Real-time PolicyEngine: Benefits + Tax calculations
+   - Cross-enrollment alerts surface missed opportunities
+   - Combined counseling report (benefits + tax summary)
+   - E&E export includes tax refund projection
+
+4. DATA FLOW:
+   Household Profile (scenarioId)
+     ↓
+   PolicyEngine API
+     ↓
+   ├─→ Benefits: SNAP, Medicaid, TANF, OHEP
+   └─→ Tax: EITC, CTC, ACTC, Form 1040
+     ↓
+   Cross-Enrollment Intelligence
+     ↓
+   Combined Report: Total household resources
+
+5. EXAMPLE SCENARIO:
+   Family of 3, $28,000 income
+   - SNAP: $450/month ($5,400/year)
+   - Medicaid: Full coverage
+   - EITC: $6,000
+   - Tax refund: $3,450
+   TOTAL BENEFIT: $14,850/year
+```
+
+### E-Filing Roadmap
+```
+Plan for federal and Maryland e-filing integration:
+
+PHASE 1: FOUNDATION (COMPLETED)
+✅ Form 1040 PDF generation with IRS compliance
+✅ PolicyEngine federal tax calculations
+✅ Tax document extraction via Gemini Vision
+✅ Cross-Enrollment Intelligence Engine
+✅ Database schema and API routes
+
+PHASE 2: MARYLAND E-FILING (Q1 2026)
+- MDTAX iFile API Integration (DHS-Comptroller partnership)
+  * Form 502 XML generation (Maryland resident return)
+  * Form 502B XML (non-resident)
+  * Direct transmission to Comptroller's iFile system
+  * Real-time validation and acknowledgment
+
+- Maryland Tax Credits:
+  * Renters' Tax Credit (auto-eligible from SNAP/TCA)
+  * Homeowners' Property Tax Credit (SDAT integration)
+  * EITC supplement (25% of federal EITC)
+
+PHASE 3: FEDERAL E-FILING (Q2 2026)
+- IRS MeF FIRE API Integration (ETAAC access)
+  * Form 1040 XML (IRS schema 2024+)
+  * Schedule EIC XML (EITC qualifying children)
+  * Schedule 8812 XML (Additional Child Tax Credit)
+  * Form 8962 XML (Premium Tax Credit reconciliation)
+  * Direct e-file with acknowledgment tracking
+
+- IRS Bulk Data API (ETAAC-enabled):
+  * Publication feed (4012, 4491, 596)
+  * Tax table updates
+  * E-file provider directory
+
+PHASE 4: BUSINESS RULES ENGINE (Q3 2026)
+- IRS Validation (5,000+ rules):
+  * Dependency tests
+  * Filing status eligibility
+  * Credit limitations (EITC AGI phase-outs)
+  * Circular 230 compliance
+
+- Maryland Validation:
+  * Local tax jurisdiction (24 counties + Baltimore City)
+  * Two-income household adjustments
+  * Tax credit verification (SDAT, DHS records)
+
+PHASE 5: UNIVERSAL FINANCIAL COMMAND CENTER (Q4 2026)
+- Single household interview drives benefits AND tax
+- Government-to-government data sharing
+- EITC filers auto-screened for SNAP/Medicaid
+- Tax refund → SNAP EBT direct deposit
+- Total household resources dashboard
+```
+
+---
+
 ## 🎯 Complete System Recreation Prompt
 
 **Use this single comprehensive prompt to recreate the entire system:**
 
 ```
-Create a complete Maryland Multi-Program Benefits Navigator System - an AI-powered platform combining Retrieval-Augmented Generation (RAG) with Rules as Code for 7 Maryland benefit programs: SNAP, Medicaid, TCA, OHEP, WIC, MCHP, and VITA.
+Create a complete Maryland Universal Benefits-Tax Service Delivery Platform - the FIRST government system integrating public benefits eligibility with federal/state tax preparation through a unified household profile. Combines Retrieval-Augmented Generation (RAG) with Rules as Code for 6 Maryland benefit programs plus IRS VITA tax assistance and complete tax preparation capabilities.
 
 SYSTEM ARCHITECTURE:
 - Frontend: React 18 + TypeScript + Vite + shadcn/ui + Tailwind CSS + Wouter
 - Backend: Express.js + TypeScript + PostgreSQL (Neon) + Drizzle ORM
 - AI: Google Gemini 2.5 Flash, text-embedding-004, Gemini Vision
 - Storage: Google Cloud Storage with ACL management
-- Integrations: PolicyEngine for benefit calculations
+- Integrations: PolicyEngine for benefit + tax calculations
+- Government Partnership: Maryland DHS + Comptroller + IRS ETAAC access
+
+BENEFIT PROGRAMS:
+1. Maryland SNAP (Food Supplement Program)
+2. Maryland Medicaid (Medical Assistance)
+3. Maryland TCA (TANF - Temporary Cash Assistance)
+4. Maryland OHEP (Energy Assistance)
+5. Maryland Tax Credits (Property Tax, Renter's Credit, EITC supplement)
+6. IRS VITA Tax Assistance
+
+TAX PREPARATION SYSTEM (NEW):
+1. Tax Document Extraction: Gemini Vision extracts W-2, 1099, 1095-A with confidence scoring
+2. PolicyEngine Tax Calculation: Federal EITC, CTC, ACTC, taxable income, total tax, refund
+3. Form 1040 PDF Generator: IRS-compliant with virtual currency disclosure, companion lines
+4. Maryland Form 502: State tax return with local jurisdiction assignment
+5. Cross-Enrollment Intelligence: AI identifies missed benefits from tax data (EITC → SNAP screening)
+6. Unified Household Profiler: Single interview drives BOTH benefits AND tax workflows
+7. E-Filing Roadmap: IRS MeF FIRE API + MDTAX iFile integration (Phases 2-5)
 
 CORE FEATURES:
-1. Multi-Program RAG Search: Conversational AI across 7 programs with citations
+1. Multi-Program RAG Search: Conversational AI across 6 programs with citations
 2. Document Verification: Gemini Vision analysis with verification stamps
-3. Navigator Workspace: Client case management, E&E export, scenario modeling
-4. PolicyEngine Integration: Deterministic eligibility and benefit calculations
+3. Navigator Workspace: Client case management, E&E export, scenario modeling, TAX PREPARATION
+4. PolicyEngine Integration: Benefits + federal tax calculations with accurate FPL thresholds
 5. Real-Time Notifications: WebSocket with email backup for offline users
 6. Bulk Document Actions: Checkbox selection, select all, bulk approve/reject
-7. Export Reports: PDF/CSV with Maryland DHS branding
-8. Intake Copilot: Gemini-powered conversational SNAP application assistant
+7. Export Reports: PDF/CSV with Maryland DHS branding, Form 1040 PDFs
+8. Intake Copilot: Gemini-powered conversational assistant (SNAP + tax interviews)
 9. Compliance Suite: AI validation against WCAG, LEP, federal regulations
 10. Policy Change Monitoring: Automated diff detection with staff alerts
+11. Tax-to-Benefits Intelligence: High EITC → SNAP screening, medical expenses → Medicaid
+12. Benefits-to-Tax Pre-population: SNAP income → W-2 wages, household size → dependents
 
 MARYLAND DHS DESIGN SYSTEM:
 - Colors: DHS Blue #0D4F8B, DHS Red #C5203A, Gold #FFB81C
 - Branding: Maryland flag, state seal, official header with gold stripe
-- Components: MDAlert (5 variants), verification stamps, status badges
+- Components: MDAlert (5 variants), verification stamps, status badges, tax form previews
 - Mobile: Bottom navigation (4-column grid), responsive breakpoints
 - Accessibility: WCAG 2.1 AA mandatory, plain language (Grade 6-8)
 
 MULTI-ROLE ARCHITECTURE:
 - Applicant: Document upload, benefit screening, intake copilot
-- Navigator: Workspace, client cases, scenario modeling, E&E export
-- Caseworker: Document review queue, bulk actions, compliance tools
-- Admin: Policy management, compliance suite, audit logs, API docs
+- Navigator: Workspace, client cases, scenario modeling, E&E export, TAX PREPARATION
+- Caseworker: Document review queue, bulk actions, compliance tools, tax document verification
+- Admin: Policy management, compliance suite, audit logs, API docs, tax system configuration
 
 DATABASE SCHEMA:
-users, benefit_programs, documents, document_chunks (vectors), client_cases, client_interaction_sessions, client_verification_documents, extracted_rules, policy_calculations, notifications, notification_preferences, policy_changes, compliance_rules, evaluation_test_cases
+CORE: users, benefit_programs, documents, document_chunks (vectors)
+NAVIGATOR: client_cases, client_interaction_sessions, client_verification_documents
+RULES: extracted_rules, policy_calculations
+TAX: federalTaxReturns, marylandTaxReturns, taxDocuments, crossEnrollmentAlerts
+POLICY: policy_changes, compliance_rules, evaluation_test_cases
+NOTIFICATIONS: notifications, notification_preferences
 
 KEY SERVICES:
 - RAG: Semantic search with Gemini embeddings and cosine similarity
 - Document Processing: OCR → Classification → Gemini Vision → Verification
-- PolicyEngine: Multi-benefit calculations with Maryland overrides
+- PolicyEngine: Multi-benefit + federal tax calculations with Maryland overrides
+- Tax Document Extraction: Gemini Vision W-2/1099/1095-A extraction with validation
+- Form 1040 Generator: IRS-compliant PDF with virtual currency, companion lines, taxable SS
+- Cross-Enrollment Intelligence: AI analyzes tax returns for missed benefit opportunities
 - Notification: WebSocket real-time + email backup for offline
 - Email: SMTP-ready with HTML templates and Maryland branding
 - Compliance: Gemini validation engine for regulatory checks
 - Intake Copilot: Multi-turn conversational assistant with data extraction
 
+API ENDPOINTS (160+ total):
+- Benefits: RAG search, PolicyEngine calculations, scenario modeling
+- Tax Preparation (15 new): Document extraction, tax calculation, Form 1040 PDF, cross-enrollment, federal/Maryland CRUD, document verification
+- Navigator: Client cases, sessions, E&E export, tax preparation workspace
+- Admin: Compliance, policy changes, audit logs, API documentation
+- Documents: Upload, verify, bulk review, tax document extraction
+- Notifications: WebSocket real-time, preferences, email backup
+
 DEPLOYMENT:
 - Replit-compatible with workflows and environment secrets
-- PostgreSQL migrations via Drizzle (`npm run db:push`)
+- PostgreSQL migrations via Drizzle (`npm run db:push --force` for schema changes)
 - Google Cloud Storage integration with service account
 - WebSocket server on /ws/notifications
 - Health checks and graceful shutdown
@@ -591,16 +1148,28 @@ SECURITY & COMPLIANCE:
 - CSRF protection, rate limiting, security headers
 - Role-based access control (5 levels)
 - Audit logging for all mutations
+- SSN/EIN encryption at rest
+- Tax return access controls (navigator-to-scenario assignment)
 - WCAG 2.1 AA compliance throughout
+- IRS Form 1040 compliance (virtual currency disclosure, companion lines)
 - Maryland replaceability principle (swappable components)
 
 TESTING:
 - Frontend: React Testing Library, axe-core, data-testid attributes
 - Backend: supertest, mock Gemini, integration tests
-- AI: RAG accuracy, PolicyEngine validation, citation tracking
+- AI: RAG accuracy, PolicyEngine validation, citation tracking, tax extraction accuracy
+- Tax System: IRS test scenarios (Form 1040, EITC edge cases), benefits-tax interaction tests
 - Maryland Evaluation Framework: 25-case suite with 2% tolerance
 
-Include comprehensive error handling, logging, caching, performance optimization, and extensive documentation for DHS integration readiness.
+STRATEGIC INNOVATION:
+- Single household profile drives benefits AND tax preparation
+- Cross-enrollment intelligence: Tax data → benefits screening (EITC $6,000 → SNAP $450/month)
+- Benefits data → tax pre-population (SNAP income → W-2 wages)
+- Total household resources optimization (benefits + tax refunds + credits)
+- Government-to-government integration (DHS ↔ Comptroller ↔ IRS via ETAAC)
+- E-filing roadmap: Federal (IRS MeF FIRE) + Maryland (MDTAX iFile)
+
+Include comprehensive error handling, logging, caching, performance optimization, extensive documentation for DHS integration readiness, and complete tax preparation workflows.
 ```
 
 ---
@@ -609,20 +1178,58 @@ Include comprehensive error handling, logging, caching, performance optimization
 
 Use this checklist when integrating with existing Maryland DHS systems:
 
+### Benefits System Integration
 - [ ] **Maryland Replaceability**: All components swappable with DHS systems
 - [ ] **E&E Export**: Navigator workspace data export for enrollment systems
 - [ ] **PolicyEngine**: Benefit calculations match DHS business rules
 - [ ] **Document Standards**: Compatible with existing document management
 - [ ] **Audit Compliance**: Full audit trail for regulatory review
+
+### Tax Preparation Integration (NEW)
+- [ ] **IRS Form 1040 Compliance**: Virtual currency disclosure, companion lines (4a/4b, 5a/5b, 6a/6b)
+- [ ] **PolicyEngine Tax Calculations**: Accurate EITC, CTC, ACTC, taxable Social Security
+- [ ] **FPL Threshold Accuracy**: 100% FPL baseline × multipliers (200% SNAP, 138% Medicaid)
+- [ ] **Cross-Enrollment Intelligence**: Tax-to-benefits analysis functioning correctly
+- [ ] **Maryland Form 502**: State tax return schema ready for Comptroller iFile integration
+- [ ] **Tax Document Extraction**: Gemini Vision W-2/1099/1095-A extraction validated
+- [ ] **E-Filing Readiness**: IRS MeF FIRE API + MDTAX iFile integration planned
+
+### Security & Compliance
 - [ ] **Security**: Meets DHS cybersecurity requirements
-- [ ] **Accessibility**: WCAG 2.1 AA verified across all features
+- [ ] **SSN/EIN Encryption**: Tax data encrypted at rest
+- [ ] **Tax Return Access Controls**: Navigator-to-scenario assignment enforced
+- [ ] **Accessibility**: WCAG 2.1 AA verified across all features (including tax forms)
 - [ ] **Plain Language**: Grade 6-8 reading level compliance
 - [ ] **Data Privacy**: HIPAA/PII protection in place
 - [ ] **Email Notifications**: SMTP configured with approved provider
 
+### Government Partnerships
+- [ ] **DHS-Comptroller Partnership**: Maryland tax integration agreement in place
+- [ ] **IRS ETAAC Access**: Federal e-filing API credentials obtained
+- [ ] **Unified Household Profiler**: Single interview drives benefits + tax workflows
+- [ ] **Total Household Resources**: Combined benefits + tax refund reporting
+
 ---
 
 ## 🔄 Recent Major Updates (October 2025)
+
+### TAX PREPARATION SYSTEM (October 12, 2025) - NEW ✨
+- ✅ **Tax Document Extraction**: Gemini Vision extracts W-2, 1099, 1095-A with confidence scoring
+- ✅ **PolicyEngine Tax Calculation**: Federal EITC, CTC, ACTC, taxable income, total tax, refund calculations
+- ✅ **Form 1040 PDF Generator**: IRS-compliant with virtual currency disclosure, companion lines (4a/4b, 5a/5b, 6a/6b)
+- ✅ **Maryland Form 502**: State tax return schema with local jurisdiction support
+- ✅ **Cross-Enrollment Intelligence Engine**: AI identifies missed benefits from tax data (EITC → SNAP screening)
+- ✅ **Unified Household Profiler**: Single interview drives BOTH benefits AND tax workflows
+- ✅ **Tax Preparation API Routes**: 15 endpoints (document extraction, calculation, Form 1040 PDF, federal/Maryland CRUD)
+- ✅ **Tax Database Schema**: federalTaxReturns, marylandTaxReturns, taxDocuments, crossEnrollmentAlerts tables
+- ✅ **FPL Threshold Accuracy**: 100% FPL baseline ($1,255/month) × multipliers (200% SNAP, 138% Medicaid)
+- ✅ **E-Filing Roadmap**: Phases 1-5 (Foundation complete, IRS MeF FIRE + MDTAX iFile planned)
+
+**Strategic Innovation:**
+- First government system integrating benefits + tax preparation
+- Tax-to-benefits analysis: High EITC → SNAP opportunity ($450/month)
+- Benefits-to-tax pre-population: SNAP income → W-2 wages
+- Government-to-government integration: DHS ↔ Comptroller ↔ IRS (ETAAC access)
 
 ### Design System Enhancements
 - ✅ Maryland DHS color palette (#0D4F8B, #C5203A, #FFB81C)
@@ -637,7 +1244,7 @@ Use this checklist when integrating with existing Maryland DHS systems:
 - ✅ Document thumbnail previews in review queue
 - ✅ Email notification backup for offline users
 - ✅ Export reports (PDF/CSV) with Maryland branding
-- ✅ PolicyEngine integration for benefit calculations
+- ✅ PolicyEngine integration for benefit + tax calculations
 - ✅ Intake copilot with conversational assistant
 - ✅ Anonymous benefit screener (no login)
 - ✅ Household scenario workspace with what-if analysis
@@ -651,6 +1258,9 @@ Use this checklist when integrating with existing Maryland DHS systems:
 - ✅ Server-side caching with NodeCache
 - ✅ Database query optimization
 - ✅ Security headers and CSRF protection
+- ✅ Tax document extraction with Gemini Vision validation
+- ✅ IRS Form 1040 compliance (virtual currency, companion lines)
+- ✅ Cross-enrollment intelligence with AI reasoning
 - ✅ Multi-tier rate limiting
 - ✅ Dynamic imports for code splitting
 - ✅ Comprehensive data-testid coverage
