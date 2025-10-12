@@ -4,6 +4,7 @@ import { seedMarylandTestCases } from "./seedMarylandTestCases";
 import { db } from "./db";
 import { eq } from "drizzle-orm";
 import { benefitPrograms } from "@shared/schema";
+import { policySourceScraper } from "./services/policySourceScraper";
 
 export async function seedDemoUsers() {
   try {
@@ -532,6 +533,7 @@ export async function initializeSystemData() {
     await seedDemoUsers();
     await seedMarylandBenefitPrograms();
     await seedDocumentTypes();
+    await policySourceScraper.seedPolicySources();
     await seedMarylandDemoScenarios();
     await seedMarylandTestCases();
     
