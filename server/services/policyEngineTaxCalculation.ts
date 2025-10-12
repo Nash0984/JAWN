@@ -63,6 +63,16 @@ export interface TaxHouseholdInput {
   unemploymentCompensation?: number;
   socialSecurityBenefits?: number;
   
+  // Retirement income
+  iraDistributions?: {
+    total: number;
+    taxable: number;
+  };
+  pensionDistributions?: {
+    total: number;
+    taxable: number;
+  };
+  
   // Deductions and expenses
   medicalExpenses?: number;
   mortgageInterest?: number;
@@ -87,6 +97,9 @@ export interface TaxCalculationResult {
   adjustedGrossIncome: number; // Line 11 (AGI)
   deduction: number; // Line 12 (standard or itemized)
   taxableIncome: number; // Line 15
+  
+  // Taxable portions (for Form 1040 companion lines)
+  taxableSocialSecurity: number; // Line 6b
   
   // Tax calculation
   incomeTax: number; // Line 16 (before credits)
@@ -321,11 +334,16 @@ export class PolicyEngineTaxCalculationService {
       const marginalTaxRate = this.extractValue(data, 'marginal_tax_rate', year) || 0;
       const effectiveTaxRate = agi > 0 ? (totalTax / agi) * 100 : 0;
       
+      // Extract taxable Social Security (Line 6b)
+      const taxableSocialSecurity = this.extractValue(data, 'taxable_social_security', year) || 
+                                    this.extractValue(data, 'social_security_taxable', year) || 0;
+      
       return {
         totalIncome,
         adjustedGrossIncome: agi,
         deduction,
         taxableIncome,
+        taxableSocialSecurity,
         incomeTax,
         totalCredits,
         totalTax,
