@@ -52,17 +52,32 @@ import {
   notifications
 } from "@shared/schema";
 import { z } from "zod";
-import multer from "multer";
 import bcrypt from "bcryptjs";
 import passport from "./auth";
+import { 
+  createSecureUploader, 
+  verifyFileMiddleware,
+  getFileHash
+} from "./middleware/fileUploadSecurity";
 
-// Configure multer for memory storage
-const upload = multer({ 
-  storage: multer.memoryStorage(),
-  limits: {
-    fileSize: 50 * 1024 * 1024, // 50MB limit
-  },
+// Configure secure file uploaders for different use cases
+const documentUpload = createSecureUploader('documents', {
+  enableSignatureVerification: true,
+  enableVirusScanning: process.env.ENABLE_VIRUS_SCANNING === 'true',
 });
+
+const taxDocumentUpload = createSecureUploader('taxDocuments', {
+  enableSignatureVerification: true,
+  enableVirusScanning: process.env.ENABLE_VIRUS_SCANNING === 'true',
+});
+
+const imageUpload = createSecureUploader('images', {
+  enableSignatureVerification: true,
+  enableVirusScanning: false, // Images don't typically need virus scanning
+});
+
+// For backward compatibility with existing code
+const upload = documentUpload;
 
 // Simple Gemini helper for public portal
 function getGeminiClient() {
