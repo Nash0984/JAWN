@@ -3029,9 +3029,10 @@ export const marylandTaxReturns = pgTable("maryland_tax_returns", {
 export const taxDocuments = pgTable("tax_documents", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   
-  // Link to household scenario or federal return
+  // Link to household scenario, federal return, or VITA session
   scenarioId: varchar("scenario_id").references(() => householdScenarios.id, { onDelete: "cascade" }),
   federalReturnId: varchar("federal_return_id").references(() => federalTaxReturns.id, { onDelete: "cascade" }),
+  vitaSessionId: varchar("vita_session_id").references(() => vitaIntakeSessions.id, { onDelete: "cascade" }),
   
   // Document type
   documentType: text("document_type").notNull(), // w2, 1099-misc, 1099-nec, 1099-int, 1099-div, 1095-a, schedule_c, other
@@ -3060,6 +3061,7 @@ export const taxDocuments = pgTable("tax_documents", {
 }, (table) => ({
   scenarioIdIdx: index("tax_documents_scenario_idx").on(table.scenarioId),
   federalReturnIdIdx: index("tax_documents_federal_return_idx").on(table.federalReturnId),
+  vitaSessionIdIdx: index("tax_documents_vita_session_idx").on(table.vitaSessionId),
   documentTypeIdx: index("tax_documents_type_idx").on(table.documentType),
   verificationStatusIdx: index("tax_documents_verification_idx").on(table.verificationStatus),
 }));
@@ -3097,6 +3099,10 @@ export const taxDocumentsRelations = relations(taxDocuments, ({ one }) => ({
   federalReturn: one(federalTaxReturns, {
     fields: [taxDocuments.federalReturnId],
     references: [federalTaxReturns.id],
+  }),
+  vitaSession: one(vitaIntakeSessions, {
+    fields: [taxDocuments.vitaSessionId],
+    references: [vitaIntakeSessions.id],
   }),
   document: one(documents, {
     fields: [taxDocuments.documentId],

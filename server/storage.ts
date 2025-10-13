@@ -449,7 +449,7 @@ export interface IStorage {
   // Tax Preparation - Tax Documents
   createTaxDocument(taxDoc: InsertTaxDocument): Promise<TaxDocument>;
   getTaxDocument(id: string): Promise<TaxDocument | undefined>;
-  getTaxDocuments(filters?: { scenarioId?: string; federalReturnId?: string; documentType?: string; verificationStatus?: string }): Promise<TaxDocument[]>;
+  getTaxDocuments(filters?: { scenarioId?: string; federalReturnId?: string; vitaSessionId?: string; documentType?: string; verificationStatus?: string }): Promise<TaxDocument[]>;
   getTaxDocumentsByScenario(scenarioId: string): Promise<TaxDocument[]>;
   getTaxDocumentsByFederalReturn(federalReturnId: string): Promise<TaxDocument[]>;
   updateTaxDocument(id: string, updates: Partial<TaxDocument>): Promise<TaxDocument>;
@@ -2429,6 +2429,7 @@ export class DatabaseStorage implements IStorage {
   async getTaxDocuments(filters?: { 
     scenarioId?: string; 
     federalReturnId?: string; 
+    vitaSessionId?: string;
     documentType?: string; 
     verificationStatus?: string 
   }): Promise<TaxDocument[]> {
@@ -2440,6 +2441,9 @@ export class DatabaseStorage implements IStorage {
     }
     if (filters?.federalReturnId) {
       conditions.push(eq(taxDocuments.federalReturnId, filters.federalReturnId));
+    }
+    if (filters?.vitaSessionId) {
+      conditions.push(eq(taxDocuments.vitaSessionId, filters.vitaSessionId));
     }
     if (filters?.documentType) {
       conditions.push(eq(taxDocuments.documentType, filters.documentType));
