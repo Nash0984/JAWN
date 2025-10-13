@@ -76,9 +76,14 @@ export class GovInfoPublicLawsDownloader {
     };
 
     try {
-      // Fetch all packages from PLAW collection
+      // Fetch all packages from PLAW collection for the entire Congress
       console.log(`📥 Fetching public laws from GovInfo API...`);
-      const packages = await govInfoClient.getAllPackages('PLAW', congress.toString());
+      const packages = await govInfoClient.getAllPackages(
+        'PLAW',
+        undefined,
+        undefined,
+        { congress: congress.toString() }
+      );
       console.log(`✅ Found ${packages.length} public laws in Congress ${congress}\n`);
 
       // Filter laws by policy keywords
