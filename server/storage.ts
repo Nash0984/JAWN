@@ -254,6 +254,7 @@ export interface IStorage {
 
   // Rules as Code - Eligibility Calculations
   createEligibilityCalculation(calculation: InsertEligibilityCalculation): Promise<EligibilityCalculation>;
+  getEligibilityCalculation(id: string): Promise<EligibilityCalculation | undefined>;
   getEligibilityCalculations(userId?: string, limit?: number): Promise<EligibilityCalculation[]>;
 
   // Rules as Code - Client Cases
@@ -275,6 +276,7 @@ export interface IStorage {
   // Navigator Workspace - Client Interaction Sessions
   createClientInteractionSession(session: InsertClientInteractionSession): Promise<ClientInteractionSession>;
   getClientInteractionSessions(navigatorId?: string): Promise<ClientInteractionSession[]>;
+  getClientInteractionSessionsByIds(sessionIds: string[]): Promise<ClientInteractionSession[]>;
   getUnexportedSessions(): Promise<ClientInteractionSession[]>;
   markSessionsAsExported(sessionIds: string[], exportBatchId: string): Promise<void>;
   getSessionsByExportBatch(exportBatchId: string): Promise<ClientInteractionSession[]>;
@@ -999,6 +1001,11 @@ export class DatabaseStorage implements IStorage {
     return calc;
   }
 
+  async getEligibilityCalculation(id: string): Promise<EligibilityCalculation | undefined> {
+    const [calc] = await db.select().from(eligibilityCalculations).where(eq(eligibilityCalculations.id, id));
+    return calc || undefined;
+  }
+
   async getEligibilityCalculations(userId?: string, limit: number = 50): Promise<EligibilityCalculation[]> {
     let query = db.select().from(eligibilityCalculations);
     
@@ -1112,6 +1119,18 @@ export class DatabaseStorage implements IStorage {
     }
     
     return await query.orderBy(desc(clientInteractionSessions.interactionDate));
+  }
+
+  async getClientInteractionSessionsByIds(sessionIds: string[]): Promise<ClientInteractionSession[]> {
+    if (sessionIds.length === 0) {
+      return [];
+    }
+    
+    return await db
+      .select()
+      .from(clientInteractionSessions)
+      .where(inArray(clientInteractionSessions.id, sessionIds))
+      .orderBy(desc(clientInteractionSessions.interactionDate));
   }
 
   async getUnexportedSessions(): Promise<ClientInteractionSession[]> {
