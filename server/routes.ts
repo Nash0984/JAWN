@@ -2122,6 +2122,7 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
   // Download an E&E export batch file
   app.get("/api/navigator/exports/:id/download", requireStaff, asyncHandler(async (req, res) => {
     const { id } = req.params;
+    const { eeExportService } = await import("./services/eeExportService");
     const exportBatch = await storage.getEEExportBatch(id);
 
     if (!exportBatch) {
@@ -2130,8 +2131,9 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
 
     // Get sessions for this export
     const sessions = await storage.getSessionsByExportBatch(id);
+    const sessionIds = sessions.map(s => s.id);
 
-    // Generate export file based on format
+    // Generate export file using enhanced service
     let content: string;
     let mimeType: string;
     let filename: string;
@@ -2139,50 +2141,15 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
     if (exportBatch.exportFormat === 'csv') {
       mimeType = 'text/csv';
       filename = `ee-export-${id}.csv`;
-      
-      // CSV headers
-      const headers = [
-        'Session ID', 'Client Case ID', 'Session Type', 'Date', 'Duration (min)',
-        'Location', 'Outcome', 'Topics', 'Action Items', 'Notes'
-      ].join(',');
-
-      // CSV rows
-      const rows = sessions.map(s => [
-        s.id,
-        s.clientCaseId || '',
-        s.sessionType,
-        new Date(s.interactionDate).toISOString(),
-        s.durationMinutes || '',
-        s.location || '',
-        s.outcomeStatus || '',
-        JSON.stringify(s.topicsDiscussed || []),
-        JSON.stringify(s.actionItems || []),
-        (s.notes || '').replace(/"/g, '""') // Escape quotes
-      ].map(v => `"${v}"`).join(','));
-
-      content = [headers, ...rows].join('\n');
+      content = await eeExportService.generateCSV(sessionIds);
     } else if (exportBatch.exportFormat === 'json') {
       mimeType = 'application/json';
       filename = `ee-export-${id}.json`;
-      content = JSON.stringify(sessions, null, 2);
+      content = await eeExportService.generateJSON(sessionIds);
     } else { // xml
       mimeType = 'application/xml';
       filename = `ee-export-${id}.xml`;
-      content = `<?xml version="1.0" encoding="UTF-8"?>
-<export>
-  <sessions>
-${sessions.map(s => `    <session>
-      <id>${s.id}</id>
-      <clientCaseId>${s.clientCaseId || ''}</clientCaseId>
-      <sessionType>${s.sessionType}</sessionType>
-      <date>${new Date(s.interactionDate).toISOString()}</date>
-      <duration>${s.durationMinutes || ''}</duration>
-      <location>${s.location || ''}</location>
-      <outcome>${s.outcomeStatus || ''}</outcome>
-      <notes>${(s.notes || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</notes>
-    </session>`).join('\n')}
-  </sessions>
-</export>`;
+      content = await eeExportService.generateXML(sessionIds);
     }
 
     res.setHeader('Content-Type', mimeType);
