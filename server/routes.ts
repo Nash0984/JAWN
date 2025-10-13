@@ -772,6 +772,89 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
     });
   }));
 
+  // Congress.gov API - Search bills by keywords (Real-time legislative keyword search)
+  // Note: For authoritative bill status, use GovInfo Bill Status XML API
+  app.post("/api/legislative/congress-search", requireAdmin, asyncHandler(async (req, res) => {
+    const { congressBillTracker } = await import("./services/congressBillTracker");
+    
+    const { 
+      keywords = ['SNAP', 'TANF', 'Medicaid', 'EITC', 'CTC', 'WIC', 'food assistance', 'poverty', 'low-income'],
+      congress = 119,
+      billType,
+      limit = 100
+    } = req.body;
+    
+    console.log(`Searching Congress.gov for bills with keywords: ${keywords.join(', ')}`);
+    
+    const result = await congressBillTracker.searchBills(keywords, congress, billType, limit);
+    
+    res.json({
+      success: result.success,
+      message: `Congress.gov keyword search ${result.success ? 'completed' : 'completed with errors'}`,
+      billsFound: result.billsFound,
+      billsTracked: result.billsTracked,
+      billsUpdated: result.billsUpdated,
+      errors: result.errors
+    });
+  }));
+
+  // Congress.gov API - Track specific bill by number (Real-time bill status)
+  app.post("/api/legislative/congress-track/:billNumber", requireAdmin, asyncHandler(async (req, res) => {
+    const { congressBillTracker } = await import("./services/congressBillTracker");
+    
+    const { billNumber } = req.params;
+    const { congress = 119 } = req.body;
+    
+    // Parse bill number (e.g., "HR 5376" -> type: "hr", number: "5376")
+    const billMatch = billNumber.match(/^([A-Z]+)\s*(\d+)$/i);
+    
+    if (!billMatch) {
+      return res.status(400).json({ 
+        error: "Invalid bill number format. Expected format: HR 5376, S 2345, etc." 
+      });
+    }
+    
+    const billType = billMatch[1].toLowerCase();
+    const billNum = billMatch[2];
+    
+    console.log(`Tracking ${billType.toUpperCase()} ${billNum} from Congress ${congress}`);
+    
+    const result = await congressBillTracker.trackBill(congress, billType, billNum);
+    
+    if (!result.success) {
+      return res.status(500).json({
+        success: false,
+        error: result.error,
+        billNumber: result.billNumber
+      });
+    }
+    
+    res.json({
+      success: true,
+      message: `Bill ${result.billNumber} ${result.updated ? 'updated' : 'tracked'} successfully`,
+      billId: result.billId,
+      billNumber: result.billNumber,
+      updated: result.updated
+    });
+  }));
+
+  // Congress.gov API - Sync all tracked bills (Update all bills in database)
+  app.post("/api/legislative/congress-sync", requireAdmin, asyncHandler(async (req, res) => {
+    const { congressBillTracker } = await import("./services/congressBillTracker");
+    
+    console.log("Starting sync of all tracked bills from Congress.gov...");
+    
+    const result = await congressBillTracker.syncTrackedBills();
+    
+    res.json({
+      success: result.success,
+      message: `Bill sync ${result.success ? 'completed' : 'completed with errors'}`,
+      totalBills: result.billsFound,
+      billsUpdated: result.billsUpdated,
+      errors: result.errors
+    });
+  }));
+
   // Model Management
   app.get("/api/models", requireAdmin, async (req, res) => {
     try {
