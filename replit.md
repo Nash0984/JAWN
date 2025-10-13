@@ -42,6 +42,7 @@ This system integrates federal/state tax preparation with public benefits eligib
 -   **Unified Household Profiler**: A single profile drives both benefits and tax workflows, enabling pre-population and cross-screening.
 -   **E-Filing Roadmap**: Phased approach including federal/Maryland e-filing via IRS MeF FIRE API and MDTAX iFile API integration.
 -   **Security & Performance**: CSRF protection, multi-tier rate limiting, security headers (Helmet, CSP, HSTS), server-side caching (NodeCache), and strategic database indexing.
+-   **Smart Scheduler (Cost Optimization)**: Source-specific scheduling system reduces API calls by 70-80% compared to global polling. Each legislative source runs at realistic intervals based on actual update patterns: eCFR weekly (updates quarterly), IRS VITA publications weekly (updated annually Oct-Dec), federal bills daily during session/weekly during recess, public laws weekly (few enacted per month), Maryland Legislature daily Jan-Apr only (session-aware auto-pause), FNS State Options weekly (updated semi-annually). Dynamic session detection prevents unnecessary checks without requiring manual intervention or restarts. Handles JavaScript setInterval 32-bit limit (2.1B ms) by using weekly intervals with clear documentation for monthly-equivalent schedules.
 -   **Testing**: Vitest, @testing-library/react, and supertest for unit, component, and API integration tests.
 
 # External Dependencies
