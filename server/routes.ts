@@ -5218,6 +5218,69 @@ If the question cannot be answered with the available information, say so clearl
   }));
 
   // ===========================
+  // COUNTY PERFORMANCE ANALYTICS
+  // ===========================
+
+  // Get county metrics for a specific county
+  app.get("/api/counties/:id/metrics", requireAuth, asyncHandler(async (req, res) => {
+    const { periodType, limit } = req.query;
+    
+    const metrics = await storage.getCountyMetrics(
+      req.params.id,
+      periodType as string,
+      limit ? parseInt(limit as string) : 10
+    );
+    
+    res.json(metrics);
+  }));
+
+  // Get latest county metric for comparison
+  app.get("/api/counties/:id/metrics/latest", requireAuth, asyncHandler(async (req, res) => {
+    const { periodType } = req.query;
+    
+    if (!periodType) {
+      throw validationError("periodType query parameter is required");
+    }
+    
+    const metric = await storage.getLatestCountyMetric(
+      req.params.id,
+      periodType as string
+    );
+    
+    res.json(metric || null);
+  }));
+
+  // Get all counties metrics for comparison (Admin only)
+  app.get("/api/county-analytics/comparison", requireAdmin, asyncHandler(async (req, res) => {
+    const { periodType } = req.query;
+    
+    if (!periodType) {
+      throw validationError("periodType query parameter is required");
+    }
+
+    // Get all active counties
+    const counties = await storage.getCounties({ isActive: true });
+    
+    // Fetch latest metrics for each county
+    const comparison = await Promise.all(
+      counties.map(async (county) => {
+        const metric = await storage.getLatestCountyMetric(county.id, periodType as string);
+        return {
+          county: {
+            id: county.id,
+            name: county.name,
+            code: county.code,
+            region: county.region
+          },
+          metrics: metric
+        };
+      })
+    );
+    
+    res.json(comparison);
+  }));
+
+  // ===========================
   // GAMIFICATION ROUTES - Navigator KPIs
   // ===========================
 
