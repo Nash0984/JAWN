@@ -21,6 +21,7 @@ import {
 } from "lucide-react";
 import { useMutation } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
+import QuickRating from "@/components/QuickRating";
 
 interface VerificationResult {
   documentType: string;
@@ -463,6 +464,16 @@ export default function DocumentVerificationInterface() {
               >
                 Verify Another Document
               </Button>
+            </div>
+
+            {/* Quick Rating - User feedback on verification quality */}
+            <div className="mt-4">
+              <QuickRating
+                ratingType="document_verification"
+                relatedEntityType="verification_document"
+                relatedEntityId={selectedFile?.name}
+                containerClassName="flex justify-end"
+              />
             </div>
           </CardContent>
         </Card>
