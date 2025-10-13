@@ -2029,6 +2029,233 @@ export const insertHouseholdProfileSchema = createInsertSchema(householdProfiles
   updatedAt: true,
 });
 
+// VITA Intake Sessions - Digital Form 13614-C for VITA tax assistance
+export const vitaIntakeSessions = pgTable("vita_intake_sessions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  
+  // Ownership & session management
+  userId: varchar("user_id").references(() => users.id).notNull(), // Navigator/preparer
+  clientCaseId: varchar("client_case_id").references(() => clientCases.id),
+  householdProfileId: varchar("household_profile_id").references(() => householdProfiles.id), // Optional pre-fill
+  
+  // Session status
+  status: text("status").notNull().default("in_progress"), // 'in_progress', 'review_needed', 'completed', 'filed'
+  currentStep: integer("current_step").default(1), // Which step of the wizard (1-5)
+  
+  // Section 1: Personal Information (Form 13614-C Page 1)
+  // Primary taxpayer
+  primaryFirstName: text("primary_first_name"),
+  primaryMiddleInitial: text("primary_middle_initial"),
+  primaryLastName: text("primary_last_name"),
+  primaryDateOfBirth: date("primary_date_of_birth"),
+  primaryJobTitle: text("primary_job_title"),
+  primaryTelephone: text("primary_telephone"),
+  primarySSN: text("primary_ssn"), // Encrypted in production
+  
+  // Spouse
+  spouseFirstName: text("spouse_first_name"),
+  spouseMiddleInitial: text("spouse_middle_initial"),
+  spouseLastName: text("spouse_last_name"),
+  spouseDateOfBirth: date("spouse_date_of_birth"),
+  spouseJobTitle: text("spouse_job_title"),
+  spouseTelephone: text("spouse_telephone"),
+  spouseSSN: text("spouse_ssn"), // Encrypted in production
+  
+  // Address
+  mailingAddress: text("mailing_address"),
+  aptNumber: text("apt_number"),
+  city: text("city"),
+  state: text("state").default("MD"),
+  zipCode: text("zip_code"),
+  email: text("email"),
+  
+  // Multi-state presence
+  livedOrWorkedInMultipleStates: boolean("lived_or_worked_in_multiple_states").default(false),
+  
+  // Status flags
+  canAnyoneClaimYou: boolean("can_anyone_claim_you").default(false),
+  primaryLegallyBlind: boolean("primary_legally_blind").default(false),
+  spouseLegallyBlind: boolean("spouse_legally_blind").default(false),
+  primaryUSCitizen: boolean("primary_us_citizen").default(true),
+  spouseUSCitizen: boolean("spouse_us_citizen").default(true),
+  primaryOnVisa: boolean("primary_on_visa").default(false),
+  spouseOnVisa: boolean("spouse_on_visa").default(false),
+  primaryFullTimeStudent: boolean("primary_full_time_student").default(false),
+  spouseFullTimeStudent: boolean("spouse_full_time_student").default(false),
+  primaryTotallyPermanentlyDisabled: boolean("primary_totally_permanently_disabled").default(false),
+  spouseTotallyPermanentlyDisabled: boolean("spouse_totally_permanently_disabled").default(false),
+  primaryIssuedIPPIN: boolean("primary_issued_ippin").default(false), // Identity Protection PIN
+  spouseIssuedIPPIN: boolean("spouse_issued_ippin").default(false),
+  primaryOwnerDigitalAssets: boolean("primary_owner_digital_assets").default(false),
+  spouseOwnerDigitalAssets: boolean("spouse_owner_digital_assets").default(false),
+  
+  // Refund preferences
+  refundMethod: text("refund_method"), // 'direct_deposit', 'check', 'apply_to_next_year'
+  bankAccountNumber: text("bank_account_number"),
+  bankRoutingNumber: text("bank_routing_number"),
+  
+  // IRS preferences
+  preferredIRSLanguage: text("preferred_irs_language"),
+  
+  // Presidential Election Campaign Fund
+  primaryPresidentialCampaignFund: boolean("primary_presidential_campaign_fund").default(false),
+  spousePresidentialCampaignFund: boolean("spouse_presidential_campaign_fund").default(false),
+  
+  // Section 2: Marital Status & Household (Form 13614-C Page 2)
+  maritalStatusDec31: text("marital_status_dec_31"), // 'single', 'married', 'divorced', 'widowed', 'legally_separated'
+  marriedOnLastDay: boolean("married_on_last_day"),
+  livedApartLast6Months: boolean("lived_apart_last_6_months").default(false),
+  separationDate: date("separation_date"),
+  divorceDate: date("divorce_date"),
+  
+  // Dependents - stored as JSONB array
+  // Each dependent: { name, dateOfBirth, relationship, monthsInHome, singleOrMarried, usCitizen, 
+  //   fullTimeStudent, permanentlyDisabled, issuedIPPIN, qualifyingChildOfOther, 
+  //   providedOwnSupport, hadIncomeLessThan5200, taxpayerProvidedSupport, taxpayerPaidHalfCostHome }
+  dependents: jsonb("dependents").default([]),
+  
+  // Section 3: Income (Form 13614-C Page 3)
+  // Employment income
+  hasW2Income: boolean("has_w2_income").default(false),
+  w2JobCount: integer("w2_job_count").default(0),
+  hasTips: boolean("has_tips").default(false),
+  
+  // Retirement & benefits
+  hasRetirementIncome: boolean("has_retirement_income").default(false),
+  hasQualifiedCharitableDistribution: boolean("has_qualified_charitable_distribution").default(false),
+  qcdAmount: real("qcd_amount").default(0),
+  hasDisabilityIncome: boolean("has_disability_income").default(false),
+  hasSocialSecurityIncome: boolean("has_social_security_income").default(false),
+  hasUnemploymentIncome: boolean("has_unemployment_income").default(false),
+  
+  // State/local refund
+  hasStateLocalRefund: boolean("has_state_local_refund").default(false),
+  stateLocalRefundAmount: real("state_local_refund_amount").default(0),
+  itemizedLastYear: boolean("itemized_last_year").default(false),
+  
+  // Investment income
+  hasInterestIncome: boolean("has_interest_income").default(false),
+  hasDividendIncome: boolean("has_dividend_income").default(false),
+  hasCapitalGains: boolean("has_capital_gains").default(false),
+  reportedLossLastYear: boolean("reported_loss_last_year").default(false),
+  hasCapitalLossCarryover: boolean("has_capital_loss_carryover").default(false),
+  
+  // Alimony
+  hasAlimonyIncome: boolean("has_alimony_income").default(false),
+  alimonyAmount: real("alimony_amount").default(0),
+  
+  // Rental income
+  hasRentalIncome: boolean("has_rental_income").default(false),
+  rentedDwellingAsResidence: boolean("rented_dwelling_as_residence").default(false),
+  rentedFewerThan15Days: boolean("rented_fewer_than_15_days").default(false),
+  rentalExpenseAmount: real("rental_expense_amount").default(0),
+  hasPersonalPropertyRental: boolean("has_personal_property_rental").default(false),
+  
+  // Gambling
+  hasGamblingIncome: boolean("has_gambling_income").default(false),
+  
+  // Self-employment
+  hasSelfEmploymentIncome: boolean("has_self_employment_income").default(false),
+  reportedSelfEmploymentLossLastYear: boolean("reported_self_employment_loss_last_year").default(false),
+  scheduleCExpenses: real("schedule_c_expenses").default(0),
+  
+  // Other income
+  hasOtherIncome: boolean("has_other_income").default(false),
+  otherIncomeDescription: text("other_income_description"),
+  
+  // Section 4: Deductions & Credits (Form 13614-C Page 4)
+  // Education
+  hasStudentLoanInterest: boolean("has_student_loan_interest").default(false),
+  hasTuitionExpenses: boolean("has_tuition_expenses").default(false),
+  
+  // Childcare & dependents
+  hasChildcareExpenses: boolean("has_childcare_expenses").default(false),
+  hasAdoptionExpenses: boolean("has_adoption_expenses").default(false),
+  
+  // Energy
+  hasEnergyImprovements: boolean("has_energy_improvements").default(false),
+  
+  // Health
+  hasHealthCoverage: boolean("has_health_coverage").default(false),
+  purchasedMarketplaceInsurance: boolean("purchased_marketplace_insurance").default(false),
+  hasForm1095A: boolean("has_form_1095a").default(false),
+  
+  // Charitable
+  hasCharitableContributions: boolean("has_charitable_contributions").default(false),
+  
+  // Homeownership
+  hasMortgageInterest: boolean("has_mortgage_interest").default(false),
+  soldHome: boolean("sold_home").default(false),
+  
+  // Medical
+  hasMedicalExpenses: boolean("has_medical_expenses").default(false),
+  
+  // Tax payments
+  hasEstimatedTaxPayments: boolean("has_estimated_tax_payments").default(false),
+  
+  // Retirement contributions
+  hasRetirementContributions: boolean("has_retirement_contributions").default(false),
+  
+  // Life events and situations (Page 5)
+  receivedAdvancedChildTaxCredit: boolean("received_advanced_child_tax_credit").default(false),
+  receivedEconomicImpactPayment: boolean("received_economic_impact_payment").default(false),
+  hadDebtForgiven: boolean("had_debt_forgiven").default(false),
+  receivedStateLocalStimulus: boolean("received_state_local_stimulus").default(false),
+  receivedDisasterRelief: boolean("received_disaster_relief").default(false),
+  
+  // Document tracking
+  uploadedDocuments: jsonb("uploaded_documents").default([]), // Array of { type, filename, extractedData }
+  missingDocuments: text("missing_documents").array(),
+  
+  // Quality review (for navigator)
+  reviewStatus: text("review_status"), // 'pending', 'in_review', 'approved', 'needs_correction'
+  reviewedBy: varchar("reviewed_by").references(() => users.id),
+  reviewedAt: timestamp("reviewed_at"),
+  reviewNotes: text("review_notes"),
+  certificationLevel: text("certification_level"), // 'basic', 'advanced', 'military'
+  
+  // Consent & signatures
+  globalCarryForwardConsent: boolean("global_carry_forward_consent").default(false),
+  primaryTaxpayerSignature: text("primary_taxpayer_signature"),
+  primaryTaxpayerSignedAt: timestamp("primary_taxpayer_signed_at"),
+  spouseTaxpayerSignature: text("spouse_taxpayer_signature"),
+  spouseTaxpayerSignedAt: timestamp("spouse_taxpayer_signed_at"),
+  
+  // Optional demographic questions (not transmitted to IRS)
+  englishConversationLevel: text("english_conversation_level"), // 'very_well', 'well', 'not_well', 'not_at_all', 'prefer_not_to_answer'
+  englishReadingLevel: text("english_reading_level"),
+  hasDisabilityInHousehold: boolean("has_disability_in_household"),
+  isVeteran: boolean("is_veteran"),
+  primaryRaceEthnicity: text("primary_race_ethnicity").array(),
+  spouseRaceEthnicity: text("spouse_race_ethnicity").array(),
+  
+  // Notes & metadata
+  additionalNotes: text("additional_notes"),
+  internalNotes: text("internal_notes"), // For navigator use only
+  
+  // Timestamps
+  completedAt: timestamp("completed_at"),
+  filedAt: timestamp("filed_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  userIdIdx: index("vita_intake_user_idx").on(table.userId),
+  clientCaseIdIdx: index("vita_intake_case_idx").on(table.clientCaseId),
+  statusIdx: index("vita_intake_status_idx").on(table.status),
+  reviewStatusIdx: index("vita_intake_review_idx").on(table.reviewStatus),
+  createdAtIdx: index("vita_intake_created_idx").on(table.createdAt),
+}));
+
+export type VitaIntakeSession = typeof vitaIntakeSessions.$inferSelect;
+export type InsertVitaIntakeSession = typeof vitaIntakeSessions.$inferInsert;
+
+// Insert schema for VITA intake sessions
+export const insertVitaIntakeSessionSchema = createInsertSchema(vitaIntakeSessions).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
 // Scenario comparisons - groups scenarios for side-by-side analysis
 export const scenarioComparisons = pgTable("scenario_comparisons", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),

@@ -171,6 +171,9 @@ import {
   householdProfiles,
   type HouseholdProfile,
   type InsertHouseholdProfile,
+  vitaIntakeSessions,
+  type VitaIntakeSession,
+  type InsertVitaIntakeSession,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and, ilike, sql, or, isNull, lte, gte } from "drizzle-orm";
@@ -560,6 +563,13 @@ export interface IStorage {
   getHouseholdProfiles(userId: string, filters?: { profileMode?: string; clientCaseId?: string; isActive?: boolean }): Promise<HouseholdProfile[]>;
   updateHouseholdProfile(id: string, updates: Partial<HouseholdProfile>): Promise<HouseholdProfile>;
   deleteHouseholdProfile(id: string): Promise<void>;
+  
+  // VITA Intake Sessions
+  createVitaIntakeSession(session: InsertVitaIntakeSession): Promise<VitaIntakeSession>;
+  getVitaIntakeSession(id: string): Promise<VitaIntakeSession | undefined>;
+  getVitaIntakeSessions(userId: string, filters?: { status?: string; clientCaseId?: string; reviewStatus?: string }): Promise<VitaIntakeSession[]>;
+  updateVitaIntakeSession(id: string, updates: Partial<VitaIntakeSession>): Promise<VitaIntakeSession>;
+  deleteVitaIntakeSession(id: string): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -2853,6 +2863,52 @@ export class DatabaseStorage implements IStorage {
 
   async deleteHouseholdProfile(id: string): Promise<void> {
     await db.delete(householdProfiles).where(eq(householdProfiles.id, id));
+  }
+
+  // VITA Intake Sessions
+  async createVitaIntakeSession(session: InsertVitaIntakeSession): Promise<VitaIntakeSession> {
+    const [created] = await db.insert(vitaIntakeSessions).values(session).returning();
+    return created;
+  }
+
+  async getVitaIntakeSession(id: string): Promise<VitaIntakeSession | undefined> {
+    return await db.query.vitaIntakeSessions.findFirst({
+      where: eq(vitaIntakeSessions.id, id),
+    });
+  }
+
+  async getVitaIntakeSessions(userId: string, filters?: { status?: string; clientCaseId?: string; reviewStatus?: string }): Promise<VitaIntakeSession[]> {
+    const conditions = [eq(vitaIntakeSessions.userId, userId)];
+
+    if (filters?.status) {
+      conditions.push(eq(vitaIntakeSessions.status, filters.status));
+    }
+
+    if (filters?.clientCaseId) {
+      conditions.push(eq(vitaIntakeSessions.clientCaseId, filters.clientCaseId));
+    }
+
+    if (filters?.reviewStatus) {
+      conditions.push(eq(vitaIntakeSessions.reviewStatus, filters.reviewStatus));
+    }
+
+    return await db.query.vitaIntakeSessions.findMany({
+      where: and(...conditions),
+      orderBy: [desc(vitaIntakeSessions.updatedAt)],
+    });
+  }
+
+  async updateVitaIntakeSession(id: string, updates: Partial<VitaIntakeSession>): Promise<VitaIntakeSession> {
+    const [updated] = await db
+      .update(vitaIntakeSessions)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(vitaIntakeSessions.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteVitaIntakeSession(id: string): Promise<void> {
+    await db.delete(vitaIntakeSessions).where(eq(vitaIntakeSessions.id, id));
   }
 }
 
