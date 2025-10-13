@@ -110,12 +110,19 @@ node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 - ✅ **AI services:** 20 requests per minute
 - ✅ Skip successful login attempts
 
-### 8. Request Size Limits
-**Location:** `server/index.ts`
+### 8. Request Size Limits & File Upload Security
+**Location:** `server/index.ts`, `server/middleware/fileUploadSecurity.ts`
 
 - ✅ JSON payload: 10MB max
 - ✅ URL-encoded payload: 10MB max
-- ✅ File uploads: 50MB max (configurable in multer)
+- ✅ **File Upload Security (NEW):**
+  - MIME type validation against whitelist
+  - File extension validation
+  - Magic number/file signature verification (prevents file spoofing)
+  - Filename sanitization (prevents directory traversal)
+  - Virus scanning hooks (ready for ClamAV integration)
+  - Type-specific size limits: Documents (50MB), Tax Docs (25MB), Images (10MB)
+  - SHA-256 file hash generation for integrity verification
 
 ### 9. Health Check & Monitoring
 **Endpoint:** `GET /api/health`
