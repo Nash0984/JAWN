@@ -4,6 +4,7 @@ import ConnectPgSimple from "connect-pg-simple";
 import rateLimit from "express-rate-limit";
 import { doubleCsrf } from "csrf-csrf";
 import helmet from "helmet";
+import cookieParser from "cookie-parser";
 import passport from "./auth";
 import { registerRoutes } from "./routes";
 import { initializeSystemData } from "./seedData";
@@ -54,6 +55,9 @@ app.use(helmet({
 // Parse JSON and URL-encoded bodies
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
+
+// Parse cookies (required for CSRF double-submit cookie pattern)
+app.use(cookieParser());
 
 // Rate limiting configuration
 // General API rate limiter - 100 requests per 15 minutes
@@ -132,7 +136,7 @@ app.use(passport.session());
 // CSRF Protection - using csrf-csrf with double-submit cookie pattern
 const csrfProtection = doubleCsrf({
   getSecret: () => process.env.SESSION_SECRET || "fallback-secret",
-  getSessionIdentifier: (req) => req.session?.id || "",
+  getSessionIdentifier: (req) => req.sessionID ?? (req.session as any)?.id ?? "",
   cookieName: "x-csrf-token",
   cookieOptions: {
     httpOnly: true,
@@ -150,7 +154,9 @@ app.get("/api/csrf-token", (req, res) => {
     // Detailed logging for debugging
     console.log("📋 CSRF token request received");
     console.log("   - Session exists:", !!req.session);
-    console.log("   - Session ID:", req.session?.id || "none");
+    console.log("   - Session ID (req.session?.id):", req.session?.id || "none");
+    console.log("   - Session ID (req.sessionID):", req.sessionID || "none");
+    console.log("   - Session object keys:", req.session ? Object.keys(req.session) : "no session");
     console.log("   - Headers:", JSON.stringify(req.headers.cookie || "no cookies"));
     
     // Generate CSRF token
