@@ -2958,6 +2958,26 @@ export const publicLaws = pgTable("public_laws", {
   congressIdx: index("public_laws_congress_idx").on(table.congress),
 }));
 
+// Version Check Logs - Track version checks for GovInfo data sources
+export const versionCheckLogs = pgTable("version_check_logs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  checkType: text("check_type").notNull(), // ecfr, bill_status, public_laws
+  checkedAt: timestamp("checked_at").defaultNow().notNull(),
+  currentVersion: timestamp("current_version"), // Current version we have
+  latestVersion: timestamp("latest_version"), // Latest version available
+  updateDetected: boolean("update_detected").notNull().default(false),
+  checksumCurrent: text("checksum_current"), // Optional hash for data integrity
+  checksumLatest: text("checksum_latest"), // Optional hash for latest version
+  metadata: jsonb("metadata"), // Additional check metadata (e.g., packages checked)
+  errorMessage: text("error_message"), // If check failed
+  triggeredBy: varchar("triggered_by").references(() => users.id), // Manual or scheduled
+  autoSyncTriggered: boolean("auto_sync_triggered").default(false).notNull(), // Did we trigger download?
+}, (table) => ({
+  checkTypeIdx: index("version_check_logs_type_idx").on(table.checkType),
+  checkedAtIdx: index("version_check_logs_checked_at_idx").on(table.checkedAt),
+  updateDetectedIdx: index("version_check_logs_update_detected_idx").on(table.updateDetected),
+}));
+
 // State Options & Waivers - Master list of 28 FNS SNAP options/waivers
 export const stateOptionsWaivers = pgTable("state_options_waivers", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -3104,6 +3124,11 @@ export const insertPublicLawSchema = createInsertSchema(publicLaws).omit({
   updatedAt: true,
 });
 
+export const insertVersionCheckLogSchema = createInsertSchema(versionCheckLogs).omit({
+  id: true,
+  checkedAt: true,
+});
+
 export const insertStateOptionWaiverSchema = createInsertSchema(stateOptionsWaivers).omit({
   id: true,
   createdAt: true,
@@ -3145,6 +3170,8 @@ export type InsertMarylandBill = z.infer<typeof insertMarylandBillSchema>;
 export type MarylandBill = typeof marylandBills.$inferSelect;
 export type InsertPublicLaw = z.infer<typeof insertPublicLawSchema>;
 export type PublicLaw = typeof publicLaws.$inferSelect;
+export type InsertVersionCheckLog = z.infer<typeof insertVersionCheckLogSchema>;
+export type VersionCheckLog = typeof versionCheckLogs.$inferSelect;
 export type InsertStateOptionWaiver = z.infer<typeof insertStateOptionWaiverSchema>;
 export type StateOptionWaiver = typeof stateOptionsWaivers.$inferSelect;
 export type InsertMarylandStateOptionStatus = z.infer<typeof insertMarylandStateOptionStatusSchema>;

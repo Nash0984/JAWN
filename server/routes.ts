@@ -772,6 +772,54 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
     });
   }));
 
+  // GovInfo Version Checker - Check for updates without downloading
+  app.post("/api/govinfo/check-versions", requireAdmin, asyncHandler(async (req, res) => {
+    const { govInfoVersionChecker } = await import("./services/govInfoVersionChecker");
+    
+    const { congress = 119 } = req.body;
+    console.log('🔍 Manually triggering GovInfo version check...');
+    
+    const summary = await govInfoVersionChecker.checkAllVersions(congress);
+    
+    res.json({
+      success: true,
+      message: `Version check completed - ${summary.totalUpdatesDetected} update(s) detected`,
+      timestamp: summary.timestamp,
+      results: summary.results,
+      totalUpdatesDetected: summary.totalUpdatesDetected,
+      overallNeedsSync: summary.overallNeedsSync,
+    });
+  }));
+
+  // Get current version status (latest check for each source)
+  app.get("/api/govinfo/version-status", requireAdmin, asyncHandler(async (req, res) => {
+    const { govInfoVersionChecker } = await import("./services/govInfoVersionChecker");
+    
+    const status = await govInfoVersionChecker.getCurrentVersionStatus();
+    
+    res.json({
+      success: true,
+      status,
+      timestamp: new Date(),
+    });
+  }));
+
+  // Get version check history
+  app.get("/api/govinfo/version-history", requireAdmin, asyncHandler(async (req, res) => {
+    const { govInfoVersionChecker } = await import("./services/govInfoVersionChecker");
+    
+    const { checkType, limit = 20 } = req.query;
+    const history = await govInfoVersionChecker.getVersionCheckHistory(
+      checkType as string | undefined,
+      parseInt(limit as string, 10)
+    );
+    
+    res.json({
+      success: true,
+      history,
+    });
+  }));
+
   // Congress.gov API - Search bills by keywords (Real-time legislative keyword search)
   // Note: For authoritative bill status, use GovInfo Bill Status XML API
   app.post("/api/legislative/congress-search", requireAdmin, asyncHandler(async (req, res) => {

@@ -78,9 +78,14 @@ export class GovInfoBillStatusDownloader {
     };
 
     try {
-      // Fetch all packages from BILLSTATUS collection
+      // Fetch all packages from BILLSTATUS collection for the entire Congress
       console.log(`📥 Fetching bill list from GovInfo API...`);
-      const packages = await govInfoClient.getAllPackages('BILLSTATUS', congress.toString());
+      const packages = await govInfoClient.getAllPackages(
+        'BILLSTATUS',
+        undefined,
+        undefined,
+        { congress: congress.toString() }
+      );
       console.log(`✅ Found ${packages.length} bills in Congress ${congress}\n`);
 
       // Filter bills by policy keywords

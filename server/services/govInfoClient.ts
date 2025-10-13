@@ -144,23 +144,33 @@ export class GovInfoClient {
    * Get collection list for a specific collection (e.g., BILLSTATUS, PLAW)
    * 
    * @param collection - Collection name (e.g., "BILLSTATUS", "PLAW")
-   * @param congress - Congress number (e.g., "119" for 119th Congress)
+   * @param startDate - Optional start date in ISO 8601 format (e.g., "2025-01-01T00:00:00Z")
+   * @param endDate - Optional end date in ISO 8601 format (e.g., "2025-12-31T23:59:59Z")
    * @param offset - Pagination offset (default: 0)
    * @param pageSize - Results per page (default: 100, max: 1000)
+   * @param filterParams - Optional filter parameters (e.g., { congress: "119" })
    */
   async getCollectionList(
     collection: string,
-    congress: string,
+    startDate?: string,
+    endDate?: string,
     offset = 0,
-    pageSize = 100
+    pageSize = 100,
+    filterParams?: Record<string, string>
   ): Promise<GovInfoCollectionResponse> {
     await this.rateLimit();
     
     return this.retryRequest(async () => {
-      const response = await this.client.get(`/collections/${collection}/${congress}`, {
+      // Build URL path - include dates only if both are provided
+      const urlPath = startDate && endDate 
+        ? `/collections/${collection}/${startDate}/${endDate}`
+        : `/collections/${collection}`;
+
+      const response = await this.client.get(urlPath, {
         params: {
           offset,
           pageSize,
+          ...filterParams,
           api_key: this.apiKey,
         },
       });
@@ -171,22 +181,42 @@ export class GovInfoClient {
 
   /**
    * Get all packages from a collection (handles pagination automatically)
+   * 
+   * @param collection - Collection name (e.g., "BILLSTATUS", "PLAW")
+   * @param startDate - Optional start date in ISO 8601 format (e.g., "2025-01-01T00:00:00Z")
+   * @param endDate - Optional end date in ISO 8601 format (e.g., "2025-12-31T23:59:59Z")
+   * @param filterParams - Optional filter parameters (e.g., { congress: "119" })
+   * @param pageSize - Results per page (default: 100, max: 1000)
+   * @param maxPages - Maximum number of pages to fetch (optional, for limiting during version checks)
    */
   async getAllPackages(
     collection: string,
-    congress: string,
-    pageSize = 100
+    startDate?: string,
+    endDate?: string,
+    filterParams?: Record<string, string>,
+    pageSize = 100,
+    maxPages?: number
   ): Promise<GovInfoCollectionItem[]> {
     const allPackages: GovInfoCollectionItem[] = [];
     let offset = 0;
     let hasMore = true;
+    let pageCount = 0;
     
     while (hasMore) {
-      const response = await this.getCollectionList(collection, congress, offset, pageSize);
+      const response = await this.getCollectionList(collection, startDate, endDate, offset, pageSize, filterParams);
       allPackages.push(...response.packages);
       
       offset += pageSize;
+      pageCount++;
       hasMore = response.nextPage !== undefined;
+      
+      // Stop if we've reached the max page limit
+      if (maxPages && pageCount >= maxPages) {
+        if (hasMore) {
+          console.log(`📥 Reached max page limit (${maxPages} pages, ${allPackages.length} packages)`);
+        }
+        break;
+      }
       
       if (hasMore) {
         console.log(`📥 Fetched ${allPackages.length} packages, continuing...`);
