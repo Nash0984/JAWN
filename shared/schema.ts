@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, timestamp, jsonb, integer, boolean, uuid, real, index } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, timestamp, jsonb, integer, boolean, uuid, real, index, date } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
@@ -1939,6 +1939,95 @@ export const scenarioCalculations = pgTable("scenario_calculations", {
   scenarioIdIdx: index("scenario_calculations_scenario_idx").on(table.scenarioId),
   calculatedAtIdx: index("scenario_calculations_calculated_idx").on(table.calculatedAt),
 }));
+
+// Household Profiles - Unified data collection for both benefits and tax
+export const householdProfiles = pgTable("household_profiles", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  
+  // Ownership
+  userId: varchar("user_id").references(() => users.id).notNull(), // Navigator/preparer who created profile
+  name: text("name").notNull(), // e.g., "Smith Family", "Client 12345"
+  
+  // Profile mode - determines which fields are required
+  profileMode: text("profile_mode").notNull(), // 'combined', 'benefits_only', 'tax_only'
+  
+  // Basic demographic info (all modes)
+  householdSize: integer("household_size").notNull(),
+  stateCode: text("state_code").notNull().default("MD"),
+  county: text("county"), // Maryland county for tax calculations
+  
+  // Income info (all modes)
+  employmentIncome: real("employment_income").default(0),
+  unearnedIncome: real("unearned_income").default(0),
+  selfEmploymentIncome: real("self_employment_income").default(0),
+  
+  // Benefits-specific fields
+  householdAssets: real("household_assets").default(0),
+  rentOrMortgage: real("rent_or_mortgage").default(0),
+  utilityCosts: real("utility_costs").default(0),
+  medicalExpenses: real("medical_expenses").default(0),
+  childcareExpenses: real("childcare_expenses").default(0),
+  elderlyOrDisabled: boolean("elderly_or_disabled").default(false),
+  
+  // Tax-specific fields
+  filingStatus: text("filing_status"), // 'single', 'married_joint', 'married_separate', 'head_of_household'
+  
+  // Taxpayer info (tax mode)
+  taxpayerFirstName: text("taxpayer_first_name"),
+  taxpayerLastName: text("taxpayer_last_name"),
+  taxpayerSSN: text("taxpayer_ssn"),
+  taxpayerDateOfBirth: date("taxpayer_date_of_birth"),
+  taxpayerBlind: boolean("taxpayer_blind").default(false),
+  taxpayerDisabled: boolean("taxpayer_disabled").default(false),
+  
+  // Spouse info (tax mode, married filers)
+  spouseFirstName: text("spouse_first_name"),
+  spouseLastName: text("spouse_last_name"),
+  spouseSSN: text("spouse_ssn"),
+  spouseDateOfBirth: date("spouse_date_of_birth"),
+  spouseBlind: boolean("spouse_blind").default(false),
+  spouseDisabled: boolean("spouse_disabled").default(false),
+  
+  // Address (tax mode)
+  streetAddress: text("street_address"),
+  aptNumber: text("apt_number"),
+  city: text("city"),
+  zipCode: text("zip_code"),
+  
+  // Dependents (stored as JSONB for flexibility)
+  dependents: jsonb("dependents").default([]), // Array of dependent objects
+  
+  // Additional tax info
+  wageWithholding: real("wage_withholding").default(0),
+  estimatedTaxPayments: real("estimated_tax_payments").default(0),
+  
+  // Client association
+  clientCaseId: varchar("client_case_id").references(() => clientCases.id),
+  clientIdentifier: text("client_identifier"), // Case number or other ID
+  
+  // Metadata
+  notes: text("notes"),
+  tags: text("tags").array(),
+  isActive: boolean("is_active").notNull().default(true),
+  
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  userIdIdx: index("household_profiles_user_idx").on(table.userId),
+  clientCaseIdIdx: index("household_profiles_case_idx").on(table.clientCaseId),
+  profileModeIdx: index("household_profiles_mode_idx").on(table.profileMode),
+  isActiveIdx: index("household_profiles_active_idx").on(table.isActive),
+}));
+
+export type HouseholdProfile = typeof householdProfiles.$inferSelect;
+export type InsertHouseholdProfile = typeof householdProfiles.$inferInsert;
+
+// Insert schema for household profiles
+export const insertHouseholdProfileSchema = createInsertSchema(householdProfiles).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
 
 // Scenario comparisons - groups scenarios for side-by-side analysis
 export const scenarioComparisons = pgTable("scenario_comparisons", {

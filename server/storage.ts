@@ -168,6 +168,9 @@ import {
   caseActivityEvents,
   type CaseActivityEvent,
   type InsertCaseActivityEvent,
+  householdProfiles,
+  type HouseholdProfile,
+  type InsertHouseholdProfile,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and, ilike, sql, or, isNull, lte, gte } from "drizzle-orm";
@@ -550,6 +553,13 @@ export interface IStorage {
   createCaseActivityEvent(event: InsertCaseActivityEvent): Promise<CaseActivityEvent>;
   getCaseActivityEvents(navigatorId: string, eventType?: string, limit?: number): Promise<CaseActivityEvent[]>;
   getCaseEvents(caseId: string): Promise<CaseActivityEvent[]>;
+
+  // Household Profiles
+  createHouseholdProfile(profile: InsertHouseholdProfile): Promise<HouseholdProfile>;
+  getHouseholdProfile(id: string): Promise<HouseholdProfile | undefined>;
+  getHouseholdProfiles(userId: string, filters?: { profileMode?: string; clientCaseId?: string; isActive?: boolean }): Promise<HouseholdProfile[]>;
+  updateHouseholdProfile(id: string, updates: Partial<HouseholdProfile>): Promise<HouseholdProfile>;
+  deleteHouseholdProfile(id: string): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -2797,6 +2807,52 @@ export class DatabaseStorage implements IStorage {
       where: eq(caseActivityEvents.caseId, caseId),
       orderBy: [desc(caseActivityEvents.occurredAt)],
     });
+  }
+
+  // Household Profiles
+  async createHouseholdProfile(profile: InsertHouseholdProfile): Promise<HouseholdProfile> {
+    const [created] = await db.insert(householdProfiles).values(profile).returning();
+    return created;
+  }
+
+  async getHouseholdProfile(id: string): Promise<HouseholdProfile | undefined> {
+    return await db.query.householdProfiles.findFirst({
+      where: eq(householdProfiles.id, id),
+    });
+  }
+
+  async getHouseholdProfiles(userId: string, filters?: { profileMode?: string; clientCaseId?: string; isActive?: boolean }): Promise<HouseholdProfile[]> {
+    const conditions = [eq(householdProfiles.userId, userId)];
+
+    if (filters?.profileMode) {
+      conditions.push(eq(householdProfiles.profileMode, filters.profileMode));
+    }
+
+    if (filters?.clientCaseId) {
+      conditions.push(eq(householdProfiles.clientCaseId, filters.clientCaseId));
+    }
+
+    if (filters?.isActive !== undefined) {
+      conditions.push(eq(householdProfiles.isActive, filters.isActive));
+    }
+
+    return await db.query.householdProfiles.findMany({
+      where: and(...conditions),
+      orderBy: [desc(householdProfiles.updatedAt)],
+    });
+  }
+
+  async updateHouseholdProfile(id: string, updates: Partial<HouseholdProfile>): Promise<HouseholdProfile> {
+    const [updated] = await db
+      .update(householdProfiles)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(householdProfiles.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteHouseholdProfile(id: string): Promise<void> {
+    await db.delete(householdProfiles).where(eq(householdProfiles.id, id));
   }
 }
 

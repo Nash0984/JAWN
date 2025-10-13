@@ -48,6 +48,7 @@ import Leaderboard from "@/pages/Leaderboard";
 import CountyAnalytics from "@/pages/CountyAnalytics";
 import VitaKnowledgeBase from "@/pages/VitaKnowledgeBase";
 import EvaluationFramework from "@/pages/EvaluationFramework";
+import HouseholdProfiler from "@/pages/HouseholdProfiler";
 import MobileBottomNav from "@/components/MobileBottomNav";
 import { BrandingProvider } from "@/contexts/BrandingContext";
 import { CountyHeader } from "@/components/CountyHeader";
@@ -206,6 +207,13 @@ function Router() {
             {() => (
               <ProtectedRoute requireStaff>
                 <ConsentManagement />
+              </ProtectedRoute>
+            )}
+          </Route>
+          <Route path="/household-profiler">
+            {() => (
+              <ProtectedRoute requireStaff>
+                <HouseholdProfiler />
               </ProtectedRoute>
             )}
           </Route>
