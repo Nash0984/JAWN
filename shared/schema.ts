@@ -429,6 +429,31 @@ export const auditLogs = pgTable("audit_logs", {
   indexed: boolean("indexed").default(false).notNull(), // For indexing/archival
 });
 
+// Quick Ratings - Simple thumbs up/down feedback for AI responses
+export const quickRatings = pgTable("quick_ratings", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id),
+  
+  // What is being rated
+  ratingType: text("rating_type").notNull(), // policy_search, document_verification, intake_copilot, ai_response
+  relatedEntityType: text("related_entity_type"), // search_query, verification_document, client_case
+  relatedEntityId: varchar("related_entity_id"), // ID of related entity
+  
+  // Rating
+  rating: text("rating").notNull(), // thumbs_up, thumbs_down
+  
+  // Optional follow-up
+  followUpComment: text("follow_up_comment"), // Optional brief comment
+  
+  // Metadata
+  metadata: jsonb("metadata"), // Additional context (page, session, etc.)
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+  userIdIdx: index("quick_ratings_user_id_idx").on(table.userId),
+  typeIdx: index("quick_ratings_type_idx").on(table.ratingType),
+  entityIdx: index("quick_ratings_entity_idx").on(table.relatedEntityType, table.relatedEntityId),
+}));
+
 // Feedback Submissions - User feedback on AI responses, eligibility results, policy content
 export const feedbackSubmissions = pgTable("feedback_submissions", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -1245,6 +1270,11 @@ export const insertClientVerificationDocumentSchema = createInsertSchema(clientV
   updatedAt: true,
 });
 
+export const insertQuickRatingSchema = createInsertSchema(quickRatings).omit({
+  id: true,
+  createdAt: true,
+});
+
 export const insertFeedbackSubmissionSchema = createInsertSchema(feedbackSubmissions).omit({
   id: true,
   createdAt: true,
@@ -1327,6 +1357,9 @@ export type VerificationRequirementMet = typeof verificationRequirementsMet.$inf
 
 export type InsertClientVerificationDocument = z.infer<typeof insertClientVerificationDocumentSchema>;
 export type ClientVerificationDocument = typeof clientVerificationDocuments.$inferSelect;
+
+export type InsertQuickRating = z.infer<typeof insertQuickRatingSchema>;
+export type QuickRating = typeof quickRatings.$inferSelect;
 
 export type InsertFeedbackSubmission = z.infer<typeof insertFeedbackSubmissionSchema>;
 export type FeedbackSubmission = typeof feedbackSubmissions.$inferSelect;

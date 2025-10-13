@@ -29,6 +29,7 @@ import {
   insertPolicySourceSchema,
   insertTrainingJobSchema,
   insertUserSchema,
+  insertQuickRatingSchema,
   insertFeedbackSubmissionSchema,
   insertComplianceRuleSchema,
   insertComplianceViolationSchema,
@@ -37,6 +38,7 @@ import {
   searchQueries,
   auditLogs,
   ruleChangeLogs,
+  quickRatings,
   feedbackSubmissions,
   users,
   documentRequirementTemplates,
@@ -2971,6 +2973,109 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
     });
     
     res.json(updatedFeedback);
+  }));
+
+  // Quick Rating Endpoints - Simple thumbs up/down feedback
+  
+  // Submit quick rating (authenticated users)
+  app.post("/api/quick-ratings", requireAuth, asyncHandler(async (req, res) => {
+    const userId = (req as any).userId;
+    
+    // Validate the request body
+    const ratingData = insertQuickRatingSchema.parse({
+      ...req.body,
+      userId,
+      metadata: {
+        ...(req.body.metadata ?? {}),
+        userAgent: req.headers['user-agent'],
+        ipAddress: req.ip
+      }
+    });
+    
+    const [rating] = await db
+      .insert(quickRatings)
+      .values(ratingData)
+      .returning();
+    
+    // Log the quick rating
+    await auditService.logAction({
+      action: "QUICK_RATING_SUBMITTED",
+      entityType: "quick_rating",
+      entityId: rating.id,
+      userId,
+      metadata: {
+        ratingType: rating.ratingType,
+        rating: rating.rating,
+        relatedEntityType: rating.relatedEntityType,
+        relatedEntityId: rating.relatedEntityId
+      }
+    });
+    
+    res.status(201).json(rating);
+  }));
+
+  // Get quick rating statistics (admin only)
+  app.get("/api/quick-ratings/stats", requireAuth, requireAdmin, asyncHandler(async (req, res) => {
+    const { ratingType, startDate, endDate, days = "30" } = req.query;
+    
+    const daysNum = parseInt(days as string);
+    const defaultStartDate = new Date();
+    defaultStartDate.setDate(defaultStartDate.getDate() - daysNum);
+    
+    const conditions = [];
+    
+    if (ratingType) {
+      conditions.push(eq(quickRatings.ratingType, ratingType as string));
+    }
+    if (startDate) {
+      conditions.push(gte(quickRatings.createdAt, new Date(startDate as string)));
+    } else {
+      conditions.push(gte(quickRatings.createdAt, defaultStartDate));
+    }
+    if (endDate) {
+      conditions.push(lte(quickRatings.createdAt, new Date(endDate as string)));
+    }
+    
+    // Get rating statistics
+    const stats = await db
+      .select({
+        ratingType: quickRatings.ratingType,
+        rating: quickRatings.rating,
+        count: sql<number>`COUNT(*)::int`
+      })
+      .from(quickRatings)
+      .where(conditions.length > 0 ? and(...conditions) : undefined)
+      .groupBy(quickRatings.ratingType, quickRatings.rating);
+    
+    // Format statistics by type
+    const formattedStats: Record<string, { thumbs_up: number; thumbs_down: number; total: number; satisfaction: number }> = {};
+    
+    stats.forEach(stat => {
+      if (!formattedStats[stat.ratingType]) {
+        formattedStats[stat.ratingType] = { thumbs_up: 0, thumbs_down: 0, total: 0, satisfaction: 0 };
+      }
+      
+      if (stat.rating === 'thumbs_up') {
+        formattedStats[stat.ratingType].thumbs_up = stat.count;
+      } else if (stat.rating === 'thumbs_down') {
+        formattedStats[stat.ratingType].thumbs_down = stat.count;
+      }
+      
+      formattedStats[stat.ratingType].total += stat.count;
+    });
+    
+    // Calculate satisfaction percentage
+    Object.keys(formattedStats).forEach(type => {
+      const { thumbs_up, total } = formattedStats[type];
+      formattedStats[type].satisfaction = total > 0 ? Math.round((thumbs_up / total) * 100) : 0;
+    });
+    
+    res.json({
+      stats: formattedStats,
+      period: startDate && endDate 
+        ? `${startDate} to ${endDate}` 
+        : `Last ${daysNum} days`
+    });
   }));
 
   // Notification API Routes

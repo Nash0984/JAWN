@@ -21,6 +21,7 @@ import { Send, MessageSquare, CheckCircle2, FileText, Loader2 } from "lucide-rea
 import { motion } from "framer-motion";
 import { fadeVariants, containerVariants } from "@/lib/animations";
 import { useToast } from "@/hooks/use-toast";
+import QuickRating from "@/components/QuickRating";
 
 interface IntakeSession {
   id: string;
@@ -327,32 +328,45 @@ export function IntakeCopilot() {
                           </div>
                         )}
                         {messages.map((message) => (
-                          <div
-                            key={message.id}
-                            className={`flex ${message.role === "user" ? "justify-end" : "justify-start"}`}
-                          >
+                          <div key={message.id}>
                             <div
-                              className={`max-w-[80%] rounded-lg p-4 ${
-                                message.role === "user"
-                                  ? "bg-primary text-primary-foreground"
-                                  : "bg-muted"
-                              }`}
-                              data-testid={`message-${message.role}-${message.id}`}
+                              className={`flex ${message.role === "user" ? "justify-end" : "justify-start"}`}
                             >
-                              <p className="whitespace-pre-wrap">{message.content}</p>
-                              {message.role === "assistant" && message.extractedFields && Object.keys(message.extractedFields).length > 0 && (
-                                <div className="mt-2 pt-2 border-t border-border/50">
-                                  <p className="text-xs font-medium mb-1">Extracted information:</p>
-                                  <div className="flex flex-wrap gap-1">
-                                    {Object.keys(message.extractedFields).map((field) => (
-                                      <Badge key={field} variant="outline" className="text-xs">
-                                        {field.replace("_", " ")}
-                                      </Badge>
-                                    ))}
+                              <div
+                                className={`max-w-[80%] rounded-lg p-4 ${
+                                  message.role === "user"
+                                    ? "bg-primary text-primary-foreground"
+                                    : "bg-muted"
+                                }`}
+                                data-testid={`message-${message.role}-${message.id}`}
+                              >
+                                <p className="whitespace-pre-wrap">{message.content}</p>
+                                {message.role === "assistant" && message.extractedFields && Object.keys(message.extractedFields).length > 0 && (
+                                  <div className="mt-2 pt-2 border-t border-border/50">
+                                    <p className="text-xs font-medium mb-1">Extracted information:</p>
+                                    <div className="flex flex-wrap gap-1">
+                                      {Object.keys(message.extractedFields).map((field) => (
+                                        <Badge key={field} variant="outline" className="text-xs">
+                                          {field.replace("_", " ")}
+                                        </Badge>
+                                      ))}
+                                    </div>
                                   </div>
-                                </div>
-                              )}
+                                )}
+                              </div>
                             </div>
+                            
+                            {/* Quick Rating - User feedback on AI responses */}
+                            {message.role === "assistant" && (
+                              <div className="flex justify-start ml-2 mt-1">
+                                <QuickRating
+                                  ratingType="intake_copilot"
+                                  relatedEntityType="copilot_message"
+                                  relatedEntityId={message.id}
+                                  containerClassName="scale-90"
+                                />
+                              </div>
+                            )}
                           </div>
                         ))}
                         

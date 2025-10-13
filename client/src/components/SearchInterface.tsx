@@ -11,6 +11,7 @@ import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { ExportButton } from "@/components/ExportButton";
 import FeedbackButton from "@/components/FeedbackButton";
+import QuickRating from "@/components/QuickRating";
 
 interface HybridSearchResult {
   answer: string;
@@ -60,6 +61,7 @@ const MAX_RECENT_SEARCHES = 5;
 
 export default function SearchInterface() {
   const [query, setQuery] = useState("");
+  const [executedQuery, setExecutedQuery] = useState("");
   const [searchResult, setSearchResult] = useState<HybridSearchResult | null>(null);
   const [recentSearches, setRecentSearches] = useState<string[]>([]);
   const { toast } = useToast();
@@ -131,6 +133,7 @@ export default function SearchInterface() {
       return;
     }
     addRecentSearch(queryToSearch);
+    setExecutedQuery(queryToSearch);
     searchMutation.mutate({ query: queryToSearch });
   };
 
@@ -582,6 +585,16 @@ export default function SearchInterface() {
               )}
             </CardContent>
           </Card>
+
+          {/* Quick Rating - User feedback on search quality */}
+          <div className="mt-4">
+            <QuickRating
+              ratingType="policy_search"
+              relatedEntityType="search_query"
+              relatedEntityId={executedQuery}
+              containerClassName="flex justify-end"
+            />
+          </div>
         </section>
       )}
     </div>
