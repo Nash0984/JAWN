@@ -46,6 +46,8 @@ import CountyManagement from "@/pages/CountyManagement";
 import NavigatorPerformance from "@/pages/NavigatorPerformance";
 import Leaderboard from "@/pages/Leaderboard";
 import MobileBottomNav from "@/components/MobileBottomNav";
+import { BrandingProvider } from "@/contexts/BrandingContext";
+import { CountyHeader } from "@/components/CountyHeader";
 
 function Router() {
   const [location] = useLocation();
@@ -61,6 +63,9 @@ function Router() {
       
       {/* Show navigation only on non-auth pages */}
       {!isAuthPage && <Navigation />}
+      
+      {/* County Branding Header - Only on non-auth pages */}
+      {!isAuthPage && <CountyHeader />}
       
       <main id="main-content" role="main" className="pb-20 md:pb-0">
         <Switch>
@@ -316,10 +321,12 @@ function Router() {
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
-      <TooltipProvider>
-        <Toaster />
-        <Router />
-      </TooltipProvider>
+      <BrandingProvider>
+        <TooltipProvider>
+          <Toaster />
+          <Router />
+        </TooltipProvider>
+      </BrandingProvider>
     </QueryClientProvider>
   );
 }

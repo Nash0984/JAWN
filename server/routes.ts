@@ -5195,6 +5195,28 @@ If the question cannot be answered with the available information, say so clearl
     res.json({ message: "User removed from county successfully" });
   }));
 
+  // Get current user's county branding
+  app.get("/api/branding/current", requireAuth, asyncHandler(async (req, res) => {
+    if (!req.user) {
+      return res.json(null);
+    }
+
+    const primaryCounty = await storage.getPrimaryCounty(req.user.id);
+    
+    if (!primaryCounty) {
+      return res.json(null);
+    }
+
+    res.json({
+      countyId: primaryCounty.id,
+      countyName: primaryCounty.name,
+      countyCode: primaryCounty.code,
+      brandingConfig: primaryCounty.brandingConfig,
+      welcomeMessage: primaryCounty.welcomeMessage,
+      contactInfo: primaryCounty.contactInfo
+    });
+  }));
+
   // ===========================
   // GAMIFICATION ROUTES - Navigator KPIs
   // ===========================
