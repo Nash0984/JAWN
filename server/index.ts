@@ -11,6 +11,7 @@ import { seedCountiesAndGamification } from "./seedCountiesAndGamification";
 import { setupVite, serveStatic, log } from "./vite";
 import { errorHandler } from "./middleware/errorHandler";
 import { requestLoggerMiddleware, timingHeadersMiddleware, performanceMonitoringMiddleware } from "./middleware/requestLogger";
+import { detectCountyContext } from "./middleware/countyContext";
 import { db } from "./db";
 
 const app = express();
@@ -127,6 +128,9 @@ app.use(sessionMiddleware);
 // Initialize Passport
 app.use(passport.initialize());
 app.use(passport.session());
+
+// County Context Middleware - detects user's county for tenant isolation
+app.use(detectCountyContext);
 
 // CSRF Protection - using csrf-csrf with double-submit cookie pattern
 const csrfProtection = doubleCsrf({
