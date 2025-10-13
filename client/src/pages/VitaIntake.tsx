@@ -17,6 +17,8 @@ import { Badge } from "@/components/ui/badge";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription } from "@/components/ui/form";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Switch } from "@/components/ui/switch";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -52,7 +54,8 @@ import {
   Lightbulb,
   FileHeart,
   Receipt,
-  Shield
+  Shield,
+  Import
 } from "lucide-react";
 import type { VitaIntakeSession, InsertVitaIntakeSession } from "@shared/schema";
 
@@ -104,6 +107,89 @@ const maskAccountNumber = (accountNum: string | null | undefined): string => {
   const digits = accountNum.replace(/\D/g, "");
   if (digits.length < 4) return accountNum;
   return `****${digits.slice(-4)}`;
+};
+
+// Mapping function to convert household profile to VITA intake data
+const mapHouseholdProfileToVitaIntake = (profile: any): Partial<VitaIntakeFormData> => {
+  // Determine marital status from filing status
+  let maritalStatus: "single" | "married" | "divorced" | "widowed" | "legally_separated" | undefined;
+  if (profile.filingStatus === "single") {
+    maritalStatus = "single";
+  } else if (profile.filingStatus === "married_joint" || profile.filingStatus === "married_separate") {
+    maritalStatus = "married";
+  } else if (profile.filingStatus === "head_of_household") {
+    maritalStatus = "single"; // Head of household is typically single with dependents
+  }
+
+  // Map dependents with field name conversions
+  const mappedDependents = (profile.dependents || []).map((dep: any) => ({
+    firstName: dep.name?.split(' ')[0] || dep.name || "",
+    lastName: dep.name?.split(' ').slice(1).join(' ') || "",
+    dateOfBirth: dep.dateOfBirth || "",
+    relationship: dep.relationship || "",
+    monthsInHome: 12,
+    singleOrMarried: "single" as const,
+    residentOfNorthAmerica: true,
+    usCitizen: true,
+    fullTimeStudent: false,
+    totallyPermanentlyDisabled: dep.disabled || false,
+    issuedIPPIN: false,
+    qualifyingChildOfAnotherPerson: false,
+    providedOwnSupport: false,
+    hadLessThan5200Income: true,
+    taxpayerProvidedSupport: true,
+    taxpayerPaidHomeExpenses: false,
+  }));
+
+  return {
+    currentStep: 1,
+    status: "in_progress",
+    householdProfileId: profile.id,
+    
+    // Primary taxpayer info
+    primaryFirstName: profile.taxpayerFirstName || "",
+    primaryLastName: profile.taxpayerLastName || "",
+    primarySSN: profile.taxpayerSSN || "",
+    primaryDateOfBirth: profile.taxpayerDateOfBirth || "",
+    primaryLegallyBlind: profile.taxpayerBlind || false,
+    primaryTotallyPermanentlyDisabled: profile.taxpayerDisabled || false,
+    
+    // Spouse info
+    hasSpouse: !!(profile.spouseFirstName || profile.spouseLastName || profile.spouseSSN),
+    spouseFirstName: profile.spouseFirstName || "",
+    spouseLastName: profile.spouseLastName || "",
+    spouseSSN: profile.spouseSSN || "",
+    spouseDateOfBirth: profile.spouseDateOfBirth || "",
+    spouseLegallyBlind: profile.spouseBlind || false,
+    spouseTotallyPermanentlyDisabled: profile.spouseDisabled || false,
+    
+    // Address
+    mailingAddress: profile.streetAddress || "",
+    aptNumber: profile.aptNumber || "",
+    city: profile.city || "",
+    zipCode: profile.zipCode || "",
+    state: profile.stateCode || "MD",
+    
+    // Marital status
+    maritalStatusDec31: maritalStatus,
+    marriedOnLastDay: maritalStatus === "married" ? true : undefined,
+    
+    // Dependents
+    dependents: mappedDependents,
+    
+    // Income indicators (set booleans based on amounts > 0)
+    hasW2Income: (profile.employmentIncome || 0) > 0,
+    hasSelfEmploymentIncome: (profile.selfEmploymentIncome || 0) > 0,
+    hasInterestIncome: (profile.unearnedIncome || 0) > 0,
+    
+    // Expense indicators
+    hasMedicalExpenses: (profile.medicalExpenses || 0) > 0,
+    hasChildcareExpenses: (profile.childcareExpenses || 0) > 0,
+    hasMortgageInterest: (profile.rentOrMortgage || 0) > 0,
+    
+    // Tax payments
+    hasEstimatedTaxPayments: (profile.estimatedTaxPayments || 0) > 0,
+  };
 };
 
 // Form schema with step-based validation
@@ -320,10 +406,16 @@ export default function VitaIntake() {
   const [showPrimarySSN, setShowPrimarySSN] = useState(false);
   const [showSpouseSSN, setShowSpouseSSN] = useState(false);
   const [showAccountNumber, setShowAccountNumber] = useState(false);
+  const [importDialogOpen, setImportDialogOpen] = useState(false);
 
   // Fetch all sessions for the current user
   const { data: sessions = [], isLoading: sessionsLoading } = useQuery<VitaIntakeSession[]>({
     queryKey: ["/api/vita-intake"],
+  });
+
+  // Fetch household profiles for import
+  const { data: householdProfiles = [], isLoading: profilesLoading } = useQuery<any[]>({
+    queryKey: ["/api/household-profiles"],
   });
 
   // Fetch selected session
@@ -683,6 +775,29 @@ export default function VitaIntake() {
     form.reset();
   };
 
+  // Import from household profile
+  const handleImportProfile = (profileId: string) => {
+    const profile = householdProfiles.find((p: any) => p.id === profileId);
+    if (!profile) return;
+
+    const mappedData = mapHouseholdProfileToVitaIntake(profile);
+    
+    // Merge with default values to ensure all required fields are present
+    const completeData = {
+      ...form.formState.defaultValues,
+      ...mappedData,
+    };
+    
+    form.reset(completeData);
+    setCurrentStep(1);
+    setImportDialogOpen(false);
+    
+    toast({
+      title: "Profile imported successfully",
+      description: `Data from "${profile.name}" has been imported. Review and update information as needed.`,
+    });
+  };
+
   // Navigate steps
   const handlePrevious = () => {
     if (currentStep > 1) {
@@ -809,13 +924,90 @@ export default function VitaIntake() {
             <CardContent>
               <Button
                 onClick={handleStartNew}
-                className="w-full mb-4"
+                className="w-full mb-2"
                 variant="outline"
                 data-testid="button-start-new"
               >
                 <Plus className="h-4 w-4 mr-2" />
                 Start New Intake
               </Button>
+
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <div className="w-full mb-4">
+                      <Dialog open={importDialogOpen} onOpenChange={setImportDialogOpen}>
+                        <DialogTrigger asChild>
+                          <Button
+                            className="w-full"
+                            variant="outline"
+                            disabled={householdProfiles.length === 0}
+                            data-testid="button-import-profile"
+                          >
+                            <Import className="h-4 w-4 mr-2" />
+                            Import from Household Profile
+                          </Button>
+                        </DialogTrigger>
+                        <DialogContent className="max-w-2xl max-h-[80vh]" data-testid="dialog-import-profile">
+                          <DialogHeader>
+                            <DialogTitle>Import Household Profile</DialogTitle>
+                            <DialogDescription>
+                              Select a household profile to pre-fill your VITA intake form. You can review and update the imported information.
+                            </DialogDescription>
+                          </DialogHeader>
+                          <ScrollArea className="max-h-[60vh] pr-4">
+                            <div className="space-y-2">
+                              {profilesLoading ? (
+                                <p className="text-sm text-muted-foreground">Loading profiles...</p>
+                              ) : householdProfiles.length === 0 ? (
+                                <div className="text-center py-8">
+                                  <p className="text-sm text-muted-foreground">No household profiles available</p>
+                                  <p className="text-xs text-muted-foreground mt-1">Create a household profile first to use this feature</p>
+                                </div>
+                              ) : (
+                                householdProfiles.map((profile: any) => (
+                                  <Button
+                                    key={profile.id}
+                                    variant="outline"
+                                    className="w-full justify-start text-left h-auto py-4"
+                                    onClick={() => handleImportProfile(profile.id)}
+                                    data-testid={`select-profile-${profile.id}`}
+                                  >
+                                    <div className="flex-1">
+                                      <div className="flex items-center justify-between mb-1">
+                                        <div className="font-medium">{profile.name}</div>
+                                        <Badge variant="secondary" className="capitalize">
+                                          {profile.profileMode?.replace('_', ' ') || 'Combined'}
+                                        </Badge>
+                                      </div>
+                                      <div className="text-xs text-muted-foreground space-y-1">
+                                        {profile.taxpayerFirstName && profile.taxpayerLastName && (
+                                          <div>Primary: {profile.taxpayerFirstName} {profile.taxpayerLastName}</div>
+                                        )}
+                                        {profile.spouseFirstName && profile.spouseLastName && (
+                                          <div>Spouse: {profile.spouseFirstName} {profile.spouseLastName}</div>
+                                        )}
+                                        {profile.updatedAt && (
+                                          <div>Last updated: {new Date(profile.updatedAt).toLocaleDateString()}</div>
+                                        )}
+                                      </div>
+                                    </div>
+                                  </Button>
+                                ))
+                              )}
+                            </div>
+                          </ScrollArea>
+                        </DialogContent>
+                      </Dialog>
+                    </div>
+                  </TooltipTrigger>
+                  {householdProfiles.length === 0 && (
+                    <TooltipContent>
+                      <p>No profiles available</p>
+                    </TooltipContent>
+                  )}
+                </Tooltip>
+              </TooltipProvider>
 
               <ScrollArea className="h-[500px]">
                 <div className="space-y-2">
@@ -860,13 +1052,19 @@ export default function VitaIntake() {
           <Card className="lg:col-span-3">
             <CardHeader>
               <div className="flex items-center justify-between mb-4">
-                <div>
+                <div className="flex-1">
                   <CardTitle className="flex items-center gap-2">
                     {currentStepInfo && <currentStepInfo.icon className="h-5 w-5" />}
                     {currentStepInfo?.title}
                   </CardTitle>
-                  <CardDescription className="mt-1">
+                  <CardDescription className="mt-1 flex items-center gap-2">
                     {currentStepInfo?.description}
+                    {form.watch("householdProfileId") && (
+                      <Badge variant="outline" className="ml-2 gap-1" data-testid="badge-imported-profile">
+                        <FileText className="h-3 w-3" />
+                        Imported from Profile
+                      </Badge>
+                    )}
                   </CardDescription>
                 </div>
                 <div className="text-right">
