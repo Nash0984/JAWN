@@ -15,6 +15,11 @@ export const users = pgTable("users", {
   // Maryland DHS staff fields
   dhsEmployeeId: text("dhs_employee_id"), // for navigators and caseworkers
   officeLocation: text("office_location"), // local DHS office location
+  // IRS VITA certification tracking (for tax preparation quality review)
+  vitaCertificationLevel: text("vita_certification_level"), // basic, advanced, military, none
+  vitaCertificationDate: timestamp("vita_certification_date"), // when certification was earned
+  vitaCertificationExpiry: timestamp("vita_certification_expiry"), // expiration date (typically Dec 31 annually)
+  vitaCertificationNumber: text("vita_certification_number"), // IRS-issued certification ID
   isActive: boolean("is_active").default(true).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
@@ -415,19 +420,6 @@ export const ruleChangeLogs = pgTable("rule_change_logs", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
-// Audit Logs - Comprehensive audit trail for all system events
-export const auditLogs = pgTable("audit_logs", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  action: text("action").notNull(), // e.g., "API_REQUEST", "ERROR", "AUTH_LOGIN", "ADMIN_UPDATE", "DOCUMENT_UPLOAD"
-  entityType: text("entity_type"), // e.g., "USER", "RULE", "DOCUMENT", "REQUEST"
-  entityId: varchar("entity_id"), // ID of the affected entity
-  userId: varchar("user_id").references(() => users.id), // User who performed the action
-  metadata: jsonb("metadata").notNull().default({}), // Additional context
-  ipAddress: text("ip_address"), // IP address of the request
-  userAgent: text("user_agent"), // User agent string
-  timestamp: timestamp("timestamp").defaultNow().notNull(),
-  indexed: boolean("indexed").default(false).notNull(), // For indexing/archival
-});
 
 // Quick Ratings - Simple thumbs up/down feedback for AI responses
 export const quickRatings = pgTable("quick_ratings", {
@@ -1201,11 +1193,6 @@ export const insertRuleChangeLogSchema = createInsertSchema(ruleChangeLogs).omit
   createdAt: true,
 });
 
-export const insertAuditLogSchema = createInsertSchema(auditLogs).omit({
-  id: true,
-  timestamp: true,
-});
-
 export const insertClientCaseSchema = createInsertSchema(clientCases).omit({
   id: true,
   createdAt: true,
@@ -1321,9 +1308,6 @@ export type EligibilityCalculation = typeof eligibilityCalculations.$inferSelect
 
 export type InsertRuleChangeLog = z.infer<typeof insertRuleChangeLogSchema>;
 export type RuleChangeLog = typeof ruleChangeLogs.$inferSelect;
-
-export type InsertAuditLog = z.infer<typeof insertAuditLogSchema>;
-export type AuditLog = typeof auditLogs.$inferSelect;
 
 export type InsertClientCase = z.infer<typeof insertClientCaseSchema>;
 export type ClientCase = typeof clientCases.$inferSelect;
@@ -3800,6 +3784,117 @@ export const caseActivityEvents = pgTable("case_activity_events", {
   caseIdx: index("case_events_case_idx").on(table.caseId),
   eventTypeIdx: index("case_events_type_idx").on(table.eventType),
 }));
+
+// ============================================================================
+// AUDIT LOGGING - Comprehensive audit trail for compliance and security
+// ============================================================================
+
+export const auditLogs = pgTable("audit_logs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  
+  // Who performed the action
+  userId: varchar("user_id").references(() => users.id),
+  username: text("username"), // Cached for performance
+  userRole: text("user_role"), // Cached role at time of action
+  
+  // What was done
+  action: text("action").notNull(), // CREATE, READ, UPDATE, DELETE, EXPORT, LOGIN, LOGOUT, etc.
+  resource: text("resource").notNull(), // user, client_case, document, tax_return, etc.
+  resourceId: varchar("resource_id"), // ID of affected resource
+  
+  // Details
+  details: jsonb("details"), // Action-specific details
+  changesBefore: jsonb("changes_before"), // State before change (for UPDATE/DELETE)
+  changesAfter: jsonb("changes_after"), // State after change (for UPDATE/CREATE)
+  
+  // Context
+  ipAddress: text("ip_address"), // Client IP
+  userAgent: text("user_agent"), // Browser/client info
+  sessionId: text("session_id"), // Session identifier
+  requestId: text("request_id"), // Request correlation ID
+  
+  // Security flags
+  sensitiveDataAccessed: boolean("sensitive_data_accessed").default(false), // SSN, bank account, etc.
+  piiFields: text("pii_fields").array(), // List of PII fields accessed
+  
+  // Outcome
+  success: boolean("success").notNull().default(true),
+  errorMessage: text("error_message"), // If action failed
+  
+  // Metadata
+  countyId: varchar("county_id").references(() => counties.id), // Multi-tenant context
+  
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+  userIdx: index("audit_logs_user_idx").on(table.userId, table.createdAt),
+  resourceIdx: index("audit_logs_resource_idx").on(table.resource, table.resourceId),
+  actionIdx: index("audit_logs_action_idx").on(table.action),
+  sensitiveIdx: index("audit_logs_sensitive_idx").on(table.sensitiveDataAccessed, table.createdAt),
+  createdAtIdx: index("audit_logs_created_at_idx").on(table.createdAt),
+}));
+
+// Audit log insert/select types
+export const insertAuditLogSchema = createInsertSchema(auditLogs).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertAuditLog = z.infer<typeof insertAuditLogSchema>;
+export type AuditLog = typeof auditLogs.$inferSelect;
+
+// ============================================================================
+// SECURITY MONITORING - Failed logins, suspicious activity tracking
+// ============================================================================
+
+export const securityEvents = pgTable("security_events", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  
+  // Event classification
+  eventType: text("event_type").notNull(), // failed_login, suspicious_activity, rate_limit_exceeded, brute_force_attempt, etc.
+  severity: text("severity").notNull().default("low"), // low, medium, high, critical
+  
+  // User context (nullable for unauthenticated events)
+  userId: varchar("user_id").references(() => users.id),
+  username: text("username"), // Attempted username (even if user doesn't exist)
+  
+  // Request context
+  ipAddress: text("ip_address").notNull(),
+  userAgent: text("user_agent"),
+  requestPath: text("request_path"),
+  requestMethod: text("request_method"),
+  
+  // Event details
+  details: jsonb("details").notNull(), // Event-specific information
+  
+  // Response
+  blocked: boolean("blocked").default(false), // Was request blocked
+  actionTaken: text("action_taken"), // account_locked, ip_banned, alert_sent, etc.
+  
+  // Investigation
+  reviewed: boolean("reviewed").default(false),
+  reviewedBy: varchar("reviewed_by").references(() => users.id),
+  reviewedAt: timestamp("reviewed_at"),
+  reviewNotes: text("review_notes"),
+  falsePositive: boolean("false_positive").default(false),
+  
+  occurredAt: timestamp("occurred_at").defaultNow().notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+  eventTypeIdx: index("security_events_type_idx").on(table.eventType, table.occurredAt),
+  ipIdx: index("security_events_ip_idx").on(table.ipAddress, table.occurredAt),
+  userIdx: index("security_events_user_idx").on(table.userId, table.occurredAt),
+  severityIdx: index("security_events_severity_idx").on(table.severity, table.occurredAt),
+  reviewedIdx: index("security_events_reviewed_idx").on(table.reviewed),
+}));
+
+// Security event insert/select types
+export const insertSecurityEventSchema = createInsertSchema(securityEvents).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertSecurityEvent = z.infer<typeof insertSecurityEventSchema>;
+export type SecurityEvent = typeof securityEvents.$inferSelect;
 
 // Multi-county schema insert/select types
 export const insertCountySchema = createInsertSchema(counties).omit({

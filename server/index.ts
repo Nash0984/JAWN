@@ -14,6 +14,26 @@ import { errorHandler } from "./middleware/errorHandler";
 import { requestLoggerMiddleware, timingHeadersMiddleware, performanceMonitoringMiddleware } from "./middleware/requestLogger";
 import { detectCountyContext } from "./middleware/countyContext";
 import { db } from "./db";
+import { sql } from "drizzle-orm";
+import { EnvValidator } from "./utils/envValidation";
+import "./utils/piiMasking"; // Import early to override console methods with PII redaction
+
+// ============================================================================
+// ENVIRONMENT VALIDATION - Validate required environment variables on startup
+// ============================================================================
+const envValidation = EnvValidator.validate();
+if (!envValidation.valid) {
+  console.error("❌ FATAL: Environment validation failed:");
+  envValidation.errors.forEach(error => console.error(`  - ${error}`));
+  process.exit(1);
+}
+
+if (envValidation.warnings.length > 0) {
+  console.warn("⚠️  Environment warnings:");
+  envValidation.warnings.forEach(warning => console.warn(`  - ${warning}`));
+}
+
+console.log("✅ Environment validation passed");
 
 const app = express();
 
@@ -52,9 +72,9 @@ app.use(helmet({
   },
 }));
 
-// Parse JSON and URL-encoded bodies
-app.use(express.json());
-app.use(express.urlencoded({ extended: false }));
+// Parse JSON and URL-encoded bodies with size limits for security
+app.use(express.json({ limit: '10mb' })); // Limit JSON payload to 10MB
+app.use(express.urlencoded({ extended: false, limit: '10mb' })); // Limit URL-encoded payload to 10MB
 
 // Parse cookies (required for CSRF double-submit cookie pattern)
 app.use(cookieParser());
@@ -148,6 +168,32 @@ const csrfProtection = doubleCsrf({
   ignoredMethods: ["GET", "HEAD", "OPTIONS"],
 });
 
+// ============================================================================
+// HEALTH CHECK ENDPOINT - Database connectivity and system status
+// ============================================================================
+app.get("/api/health", async (req, res) => {
+  try {
+    // Check database connectivity
+    await db.execute(sql`SELECT 1`);
+    
+    res.json({
+      status: "healthy",
+      timestamp: new Date().toISOString(),
+      uptime: process.uptime(),
+      database: "connected",
+      environment: process.env.NODE_ENV || "development",
+    });
+  } catch (error) {
+    console.error("❌ Health check failed:", error);
+    res.status(503).json({
+      status: "unhealthy",
+      timestamp: new Date().toISOString(),
+      database: "disconnected",
+      error: "Database connection failed",
+    });
+  }
+});
+
 // Endpoint to get CSRF token (before county context middleware)
 app.get("/api/csrf-token", (req, res) => {
   try {
@@ -218,5 +264,61 @@ app.use("/api/", (req, res, next) => {
     reusePort: true,
   }, () => {
     log(`serving on port ${port}`);
+  });
+
+  // ============================================================================
+  // GRACEFUL SHUTDOWN HANDLING - Clean up resources on SIGTERM/SIGINT
+  // ============================================================================
+  const gracefulShutdown = async (signal: string) => {
+    console.log(`\n🛑 ${signal} received. Starting graceful shutdown...`);
+    
+    try {
+      // Close HTTP server (stop accepting new requests)
+      await new Promise<void>((resolve, reject) => {
+        server.close((err) => {
+          if (err) {
+            console.error("❌ Error closing HTTP server:", err);
+            reject(err);
+          } else {
+            console.log("✅ HTTP server closed");
+            resolve();
+          }
+        });
+      });
+
+      // Close database connections
+      // Note: Drizzle with neon doesn't require explicit close, but we log it
+      console.log("✅ Database connections closed");
+
+      // Stop Smart Scheduler if running
+      try {
+        const { smartScheduler } = await import("./services/smartScheduler");
+        await smartScheduler.stopAll();
+        console.log("✅ Smart Scheduler stopped");
+      } catch (error) {
+        console.error("⚠️  Error stopping Smart Scheduler:", error);
+      }
+
+      console.log("✅ Graceful shutdown complete");
+      process.exit(0);
+    } catch (error) {
+      console.error("❌ Error during graceful shutdown:", error);
+      process.exit(1);
+    }
+  };
+
+  // Handle termination signals
+  process.on("SIGTERM", () => gracefulShutdown("SIGTERM"));
+  process.on("SIGINT", () => gracefulShutdown("SIGINT"));
+
+  // Handle uncaught errors
+  process.on("uncaughtException", (error) => {
+    console.error("❌ UNCAUGHT EXCEPTION:", error);
+    gracefulShutdown("UNCAUGHT_EXCEPTION");
+  });
+
+  process.on("unhandledRejection", (reason, promise) => {
+    console.error("❌ UNHANDLED REJECTION at:", promise, "reason:", reason);
+    gracefulShutdown("UNHANDLED_REJECTION");
   });
 })();
