@@ -18,6 +18,7 @@ import { cacheService, CACHE_KEYS, invalidateRulesCache } from "./services/cache
 import { kpiTrackingService } from "./services/kpiTracking.service";
 import { achievementSystemService } from "./services/achievementSystem.service";
 import { leaderboardService } from "./services/leaderboard.service";
+import { taxDocExtractor } from "./services/taxDocumentExtraction";
 import { GoogleGenAI } from "@google/genai";
 import { asyncHandler, validationError, notFoundError, externalServiceError, authorizationError } from "./middleware/errorHandler";
 import { requireAuth, requireStaff, requireAdmin } from "./middleware/auth";
@@ -37,6 +38,7 @@ import {
   insertCountySchema,
   insertHouseholdProfileSchema,
   insertVitaIntakeSessionSchema,
+  insertTaxDocumentSchema,
   searchQueries,
   auditLogs,
   ruleChangeLogs,
@@ -5197,6 +5199,116 @@ If the question cannot be answered with the available information, say so clearl
     }
     
     await storage.deleteVitaIntakeSession(req.params.id);
+    res.json({ success: true });
+  }));
+
+  // ==========================================
+  // VITA Tax Document Upload Routes
+  // ==========================================
+
+  // Get presigned URL for tax document upload
+  app.post("/api/vita-intake/:sessionId/tax-documents/upload-url", requireStaff, asyncHandler(async (req, res) => {
+    const session = await storage.getVitaIntakeSession(req.params.sessionId);
+    
+    if (!session) {
+      throw notFoundError("VITA intake session not found");
+    }
+    
+    if (session.userId !== req.user!.id) {
+      throw authorizationError();
+    }
+
+    const objectStorageService = new ObjectStorageService();
+    const uploadURL = await objectStorageService.getObjectEntityUploadURL();
+    
+    res.json({ uploadURL });
+  }));
+
+  // Create tax document record and trigger extraction
+  app.post("/api/vita-intake/:sessionId/tax-documents", requireStaff, asyncHandler(async (req, res) => {
+    const session = await storage.getVitaIntakeSession(req.params.sessionId);
+    
+    if (!session) {
+      throw notFoundError("VITA intake session not found");
+    }
+    
+    if (session.userId !== req.user!.id) {
+      throw authorizationError();
+    }
+
+    const { filename, originalName, objectPath, fileSize, mimeType, documentType } = req.body;
+
+    // First create the document record in the documents table
+    const document = await storage.createDocument({
+      filename,
+      originalName,
+      objectPath,
+      fileSize,
+      mimeType,
+      status: "processing",
+    });
+
+    // Process and store tax document with extraction
+    const result = await taxDocExtractor.processAndStoreTaxDocument(
+      document.id,
+      undefined,
+      undefined
+    );
+
+    // Update the tax document with vitaSessionId
+    const updatedTaxDoc = await storage.updateTaxDocument(result.taxDocument.id, {
+      vitaSessionId: req.params.sessionId,
+    });
+
+    res.json({
+      taxDocument: updatedTaxDoc,
+      extractedData: result.extractedData,
+      requiresManualReview: result.requiresManualReview,
+    });
+  }));
+
+  // List all tax documents for a VITA session
+  app.get("/api/vita-intake/:sessionId/tax-documents", requireStaff, asyncHandler(async (req, res) => {
+    const session = await storage.getVitaIntakeSession(req.params.sessionId);
+    
+    if (!session) {
+      throw notFoundError("VITA intake session not found");
+    }
+    
+    if (session.userId !== req.user!.id) {
+      throw authorizationError();
+    }
+
+    const taxDocs = await storage.getTaxDocuments({
+      vitaSessionId: req.params.sessionId,
+    });
+
+    res.json(taxDocs);
+  }));
+
+  // Delete a tax document
+  app.delete("/api/vita-intake/:sessionId/tax-documents/:id", requireStaff, asyncHandler(async (req, res) => {
+    const session = await storage.getVitaIntakeSession(req.params.sessionId);
+    
+    if (!session) {
+      throw notFoundError("VITA intake session not found");
+    }
+    
+    if (session.userId !== req.user!.id) {
+      throw authorizationError();
+    }
+
+    const taxDoc = await storage.getTaxDocument(req.params.id);
+    
+    if (!taxDoc) {
+      throw notFoundError("Tax document not found");
+    }
+
+    if (taxDoc.vitaSessionId !== req.params.sessionId) {
+      throw authorizationError();
+    }
+
+    await storage.deleteTaxDocument(req.params.id);
     res.json({ success: true });
   }));
 
