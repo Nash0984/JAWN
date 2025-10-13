@@ -49,6 +49,7 @@ import CountyAnalytics from "@/pages/CountyAnalytics";
 import VitaKnowledgeBase from "@/pages/VitaKnowledgeBase";
 import EvaluationFramework from "@/pages/EvaluationFramework";
 import HouseholdProfiler from "@/pages/HouseholdProfiler";
+import VitaIntake from "@/pages/VitaIntake";
 import MobileBottomNav from "@/components/MobileBottomNav";
 import { BrandingProvider } from "@/contexts/BrandingContext";
 import { CountyHeader } from "@/components/CountyHeader";
@@ -184,6 +185,13 @@ function Router() {
             {() => (
               <ProtectedRoute>
                 <VitaKnowledgeBase />
+              </ProtectedRoute>
+            )}
+          </Route>
+          <Route path="/vita-intake">
+            {() => (
+              <ProtectedRoute>
+                <VitaIntake />
               </ProtectedRoute>
             )}
           </Route>

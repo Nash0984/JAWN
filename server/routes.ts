@@ -36,6 +36,7 @@ import {
   insertIntakeSessionSchema,
   insertCountySchema,
   insertHouseholdProfileSchema,
+  insertVitaIntakeSessionSchema,
   searchQueries,
   auditLogs,
   ruleChangeLogs,
@@ -5098,6 +5099,91 @@ If the question cannot be answered with the available information, say so clearl
     }
     
     await storage.deleteHouseholdProfile(req.params.id);
+    res.json({ success: true });
+  }));
+
+  // ==========================================
+  // VITA Intake Routes
+  // ==========================================
+
+  // Create VITA intake session
+  app.post("/api/vita-intake", requireStaff, asyncHandler(async (req, res) => {
+    const validated = insertVitaIntakeSessionSchema.parse({
+      ...req.body,
+      userId: req.user!.id
+    });
+
+    const session = await storage.createVitaIntakeSession(validated);
+    res.json(session);
+  }));
+
+  // Get all VITA intake sessions for user with optional filters
+  app.get("/api/vita-intake", requireStaff, asyncHandler(async (req, res) => {
+    const filters: { status?: string; clientCaseId?: string; reviewStatus?: string } = {};
+
+    if (req.query.status) {
+      filters.status = req.query.status as string;
+    }
+    if (req.query.clientCaseId) {
+      filters.clientCaseId = req.query.clientCaseId as string;
+    }
+    if (req.query.reviewStatus) {
+      filters.reviewStatus = req.query.reviewStatus as string;
+    }
+
+    const sessions = await storage.getVitaIntakeSessions(req.user!.id, filters);
+    res.json(sessions);
+  }));
+
+  // Get single VITA intake session
+  app.get("/api/vita-intake/:id", requireStaff, asyncHandler(async (req, res) => {
+    const session = await storage.getVitaIntakeSession(req.params.id);
+    
+    if (!session) {
+      throw notFoundError("VITA intake session not found");
+    }
+    
+    if (session.userId !== req.user!.id) {
+      throw authorizationError();
+    }
+    
+    res.json(session);
+  }));
+
+  // Update VITA intake session
+  app.patch("/api/vita-intake/:id", requireStaff, asyncHandler(async (req, res) => {
+    const session = await storage.getVitaIntakeSession(req.params.id);
+    
+    if (!session) {
+      throw notFoundError("VITA intake session not found");
+    }
+    
+    if (session.userId !== req.user!.id) {
+      throw authorizationError();
+    }
+
+    const validated = insertVitaIntakeSessionSchema.partial().parse(req.body);
+    
+    // Remove protected fields that shouldn't be updated via API
+    const { userId, createdAt, updatedAt, ...updateData } = validated as any;
+    
+    const updated = await storage.updateVitaIntakeSession(req.params.id, updateData);
+    res.json(updated);
+  }));
+
+  // Delete VITA intake session
+  app.delete("/api/vita-intake/:id", requireStaff, asyncHandler(async (req, res) => {
+    const session = await storage.getVitaIntakeSession(req.params.id);
+    
+    if (!session) {
+      throw notFoundError("VITA intake session not found");
+    }
+    
+    if (session.userId !== req.user!.id) {
+      throw authorizationError();
+    }
+    
+    await storage.deleteVitaIntakeSession(req.params.id);
     res.json({ success: true });
   }));
 
