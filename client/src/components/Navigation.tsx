@@ -35,6 +35,7 @@ export default function Navigation() {
     { name: t("nav.search"), href: "/search", icon: Search, roles: ["public", "client", "navigator", "caseworker", "admin", "super_admin"] },
     { name: "Applicant Tools", href: "/public/documents", icon: Globe, roles: ["public", "client", "navigator", "caseworker", "admin", "super_admin"] },
     { name: "Eligibility Check", href: "/eligibility", icon: Calculator, roles: ["client", "navigator", "caseworker", "admin", "super_admin"] },
+    { name: "VITA Tax Help", href: "/vita", icon: BookOpen, roles: ["navigator", "caseworker", "admin", "super_admin"] },
     { name: "Verify Documents", href: "/verify", icon: FileCheck, roles: ["navigator", "caseworker", "admin", "super_admin"] },
     { name: "Navigator Workspace", href: "/navigator", icon: Users, roles: ["navigator", "caseworker", "admin", "super_admin"] },
     { name: "Consent Forms", href: "/consent", icon: Shield, roles: ["navigator", "caseworker", "admin", "super_admin"] },

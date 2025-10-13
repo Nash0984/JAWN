@@ -153,8 +153,10 @@ export class IRSDirectDownloader {
       const objectPath = objectStorageService.normalizeObjectEntityPath(uploadUrl);
       
       // Extract text for RAG processing
-      const pdfParseModule = await import('pdf-parse');
-      const pdfParse = (pdfParseModule as any).default || pdfParseModule;
+      // Use createRequire to load CommonJS pdf-parse in ESM
+      const { createRequire } = (await import('module')) as any;
+      const require = createRequire(import.meta.url);
+      const pdfParse = require('pdf-parse');
       const pdfData = await pdfParse(pdfBuffer);
       const pdfText = pdfData.text;
       
@@ -231,8 +233,10 @@ export class IRSDirectDownloader {
    */
   private async extractRevisionInfo(pdfBuffer: Buffer): Promise<string | null> {
     try {
-      const pdfParseModule = await import('pdf-parse');
-      const pdfParse = (pdfParseModule as any).default || pdfParseModule;
+      // Use createRequire to load CommonJS pdf-parse in ESM
+      const { createRequire } = (await import('module')) as any;
+      const require = createRequire(import.meta.url);
+      const pdfParse = require('pdf-parse');
       const pdfData = await pdfParse(pdfBuffer);
       const pdfText = pdfData.text;
       

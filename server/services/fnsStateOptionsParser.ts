@@ -43,8 +43,10 @@ export class FNSStateOptionsParser {
     console.log(`✅ Downloaded PDF (${Math.round(pdfBuffer.length / 1024 / 1024 * 10) / 10} MB)`);
     
     // Extract text from PDF
-    const pdfParseModule = await import('pdf-parse');
-    const pdfParse = (pdfParseModule as any).default || pdfParseModule;
+    // Use createRequire to load CommonJS pdf-parse in ESM
+    const { createRequire } = (await import('module')) as any;
+    const require = createRequire(import.meta.url);
+    const pdfParse = require('pdf-parse');
     const pdfData = await pdfParse(pdfBuffer);
     const pdfText = pdfData.text;
     
