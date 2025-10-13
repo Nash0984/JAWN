@@ -141,10 +141,13 @@ const sessionMiddleware = session({
   saveUninitialized: true, // Changed to true to ensure session cookie is always set
   cookie: {
     maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "lax",
+    httpOnly: true, // Prevent XSS attacks by making cookie inaccessible to JavaScript
+    secure: process.env.NODE_ENV === "production", // Only send cookie over HTTPS in production
+    sameSite: process.env.NODE_ENV === "production" ? "strict" : "lax", // CSRF protection: strict in prod, lax in dev
+    path: "/", // Cookie available for entire domain
   },
+  rolling: true, // Extend session on activity (rolling session timeout)
+  name: "sessionId", // Custom cookie name (security through obscurity - don't reveal tech stack)
 });
 
 app.use(sessionMiddleware);

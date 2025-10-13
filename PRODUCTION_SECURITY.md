@@ -142,7 +142,21 @@ node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
   - `POST /api/auth/change-password` - Change password (requires auth)
 - ✅ **Audit logging:** Password changes logged with strength score
 
-### 10. Health Check & Monitoring
+### 10. Session Security
+**Location:** `server/index.ts`
+
+- ✅ **Secure session configuration:**
+  - PostgreSQL session storage (connect-pg-simple)
+  - SESSION_SECRET required (enforced at startup)
+  - httpOnly: true (prevents XSS cookie theft)
+  - secure: true in production (HTTPS-only)
+  - sameSite: 'strict' in production, 'lax' in development (CSRF protection)
+  - Custom cookie name: "sessionId" (don't reveal tech stack)
+- ✅ **Rolling sessions:** Session timeout extends on activity
+- ✅ **Session lifetime:** 30 days with automatic cleanup
+- ✅ **Session regeneration:** Login/logout properly handled via Passport.js
+
+### 11. Health Check & Monitoring
 **Endpoint:** `GET /api/health`
 
 **Response:**
