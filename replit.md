@@ -32,7 +32,7 @@ The backend uses Express.js with TypeScript and PostgreSQL via Drizzle ORM on Ne
 ### Tax Preparation System
 Integrates federal/state tax preparation with public benefits eligibility.
 -   **Tax Document Extraction Service**: Gemini Vision-powered extraction from tax forms (W-2, 1099-MISC, 1099-NEC, 1099-INT, 1099-DIV, SSA-1099, 1099-R, 1095-A, 1098 forms). Uses Gemini 2.5 Flash model with confidence scoring (threshold 0.85 for auto-approval) and quality flags for invalid EIN/SSN data.
--   **VITA Tax Document Upload**: Integrated uploader in VITA Step 3 (Income) with auto-population of intake fields. Supports 12 document types, real-time extraction progress, document list with confidence scores, manual review badges, and delete functionality. Auto-increments W-2 job count, toggles income type flags (1099, interest, dividends, Social Security, retirement, health insurance marketplace).
+-   **VITA Tax Document Upload**: Integrated uploader in VITA Step 3 (Income) with auto-population of intake fields. Supports 12 document types, real-time extraction progress, document list with confidence scores, manual review badges, and delete functionality. Auto-increments W-2 job count, toggles income type flags (1099, interest, dividends, Social Security, retirement, health insurance marketplace). **VITA Step 3 Bugs Fixed (Oct 2025)**: (1) Added missing `count` import from drizzle-orm to fix ReferenceError in notifications API, (2) Fixed `storage.getCountyById()` to `storage.getCounty()` in county context middleware, (3) Fixed undefined `sessionId` variable to `selectedSessionId` in TaxDocumentUploader component, (4) Corrected invalid form schema fields for proper auto-population. VITA intake now loads all 5 steps without crashes.
 -   **PolicyEngine Tax Calculation Service**: Federal tax calculations using PolicyEngine US.
 -   **Form 1040 PDF Generator**: IRS-compliant Form 1040 PDF generation.
 -   **Maryland Form 502 Generator**: State tax PDF generation with progressive tax brackets (2%-5.75%), all 24 county tax calculations, MD EITC (50% of federal), property tax credit, and renter's credit.
@@ -46,7 +46,7 @@ Tracks performance and awards achievements to motivate navigators using operatio
 
 ## System Design Choices
 -   **Data Management**: PostgreSQL for core data, Google Cloud Storage for files.
--   **Authentication & Authorization**: Basic user authentication with roles, object-level security via Google Cloud Storage ACLs.
+-   **Authentication & Authorization**: Basic user authentication with roles, object-level security via Google Cloud Storage ACLs. **CSRF Protection Fixed (Oct 2025)**: Three-part fix implemented: (1) Added cookie-parser middleware for double-submit cookie pattern, (2) Updated getSessionIdentifier to use req.sessionID for consistent session tracking, (3) Changed saveUninitialized to true to ensure session persistence across requests. Session cookies now persist correctly and CSRF validation works system-wide.
 -   **Unified Household Profiler**: Single profile for benefits and tax workflows.
 -   **E-Filing Roadmap**: Phased approach for federal/Maryland e-filing.
 -   **Security & Performance**: CSRF protection, rate limiting, security headers, server-side caching, database indexing.
