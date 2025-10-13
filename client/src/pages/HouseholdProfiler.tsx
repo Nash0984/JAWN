@@ -154,10 +154,10 @@ export default function HouseholdProfiler() {
         description: "Your household profile has been saved successfully.",
         action: (
           <div className="flex gap-2">
-            <Button variant="outline" size="sm" onClick={() => window.location.href = "/navigator"}>
+            <Button variant="outline" size="sm" onClick={() => window.location.href = "/navigator"} data-testid="button-use-navigator">
               Use in Navigator
             </Button>
-            <Button variant="outline" size="sm" onClick={() => window.location.href = "/tax"}>
+            <Button variant="outline" size="sm" onClick={() => window.location.href = "/tax"} data-testid="button-use-tax">
               Use in Tax Prep
             </Button>
           </div>
@@ -611,10 +611,10 @@ export default function HouseholdProfiler() {
                                   </SelectTrigger>
                                 </FormControl>
                                 <SelectContent>
-                                  <SelectItem value="single">Single</SelectItem>
-                                  <SelectItem value="married_joint">Married Filing Jointly</SelectItem>
-                                  <SelectItem value="married_separate">Married Filing Separately</SelectItem>
-                                  <SelectItem value="head_of_household">Head of Household</SelectItem>
+                                  <SelectItem value="single" data-testid="option-filing-single">Single</SelectItem>
+                                  <SelectItem value="married_joint" data-testid="option-filing-married-joint">Married Filing Jointly</SelectItem>
+                                  <SelectItem value="married_separate" data-testid="option-filing-married-separate">Married Filing Separately</SelectItem>
+                                  <SelectItem value="head_of_household" data-testid="option-filing-head-of-household">Head of Household</SelectItem>
                                 </SelectContent>
                               </Select>
                               <FormMessage />
