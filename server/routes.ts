@@ -22,6 +22,12 @@ import { taxDocExtractor } from "./services/taxDocumentExtraction";
 import { GoogleGenAI } from "@google/genai";
 import { asyncHandler, validationError, notFoundError, externalServiceError, authorizationError } from "./middleware/errorHandler";
 import { requireAuth, requireStaff, requireAdmin } from "./middleware/auth";
+import { 
+  verifyHouseholdProfileOwnership, 
+  verifyVitaSessionOwnership, 
+  verifyTaxDocumentOwnership,
+  verifyNotificationOwnership 
+} from "./middleware/ownership";
 import { vitaCertificationValidationService } from "./services/vitaCertificationValidation.service";
 import { db } from "./db";
 import { sql, eq, and, desc, gte, lte, or, ilike, count } from "drizzle-orm";
@@ -5151,8 +5157,8 @@ If the question cannot be answered with the available information, say so clearl
     res.json(profiles);
   }));
 
-  // Get single household profile
-  app.get("/api/household-profiles/:id", requireStaff, asyncHandler(async (req, res) => {
+  // Get single household profile (with ownership verification)
+  app.get("/api/household-profiles/:id", requireStaff, verifyHouseholdProfileOwnership(), asyncHandler(async (req, res) => {
     const profile = await storage.getHouseholdProfile(req.params.id);
     
     if (!profile) {
@@ -5166,8 +5172,8 @@ If the question cannot be answered with the available information, say so clearl
     res.json(profile);
   }));
 
-  // Update household profile
-  app.patch("/api/household-profiles/:id", requireStaff, asyncHandler(async (req, res) => {
+  // Update household profile (with ownership verification)
+  app.patch("/api/household-profiles/:id", requireStaff, verifyHouseholdProfileOwnership(), asyncHandler(async (req, res) => {
     const profile = await storage.getHouseholdProfile(req.params.id);
     
     if (!profile) {
@@ -5187,8 +5193,8 @@ If the question cannot be answered with the available information, say so clearl
     res.json(updated);
   }));
 
-  // Delete household profile
-  app.delete("/api/household-profiles/:id", requireStaff, asyncHandler(async (req, res) => {
+  // Delete household profile (with ownership verification)
+  app.delete("/api/household-profiles/:id", requireStaff, verifyHouseholdProfileOwnership(), asyncHandler(async (req, res) => {
     const profile = await storage.getHouseholdProfile(req.params.id);
     
     if (!profile) {
@@ -5236,8 +5242,8 @@ If the question cannot be answered with the available information, say so clearl
     res.json(sessions);
   }));
 
-  // Get single VITA intake session
-  app.get("/api/vita-intake/:id", requireStaff, asyncHandler(async (req, res) => {
+  // Get single VITA intake session (with ownership verification)
+  app.get("/api/vita-intake/:id", requireStaff, verifyVitaSessionOwnership(), asyncHandler(async (req, res) => {
     const session = await storage.getVitaIntakeSession(req.params.id);
     
     if (!session) {
@@ -5251,8 +5257,8 @@ If the question cannot be answered with the available information, say so clearl
     res.json(session);
   }));
 
-  // Update VITA intake session
-  app.patch("/api/vita-intake/:id", requireStaff, asyncHandler(async (req, res) => {
+  // Update VITA intake session (with ownership verification)
+  app.patch("/api/vita-intake/:id", requireStaff, verifyVitaSessionOwnership(), asyncHandler(async (req, res) => {
     const session = await storage.getVitaIntakeSession(req.params.id);
     
     if (!session) {
@@ -5285,8 +5291,8 @@ If the question cannot be answered with the available information, say so clearl
     res.json(updated);
   }));
 
-  // Delete VITA intake session
-  app.delete("/api/vita-intake/:id", requireStaff, asyncHandler(async (req, res) => {
+  // Delete VITA intake session (with ownership verification)
+  app.delete("/api/vita-intake/:id", requireStaff, verifyVitaSessionOwnership(), asyncHandler(async (req, res) => {
     const session = await storage.getVitaIntakeSession(req.params.id);
     
     if (!session) {
@@ -5385,8 +5391,8 @@ If the question cannot be answered with the available information, say so clearl
     res.json(taxDocs);
   }));
 
-  // Delete a tax document
-  app.delete("/api/vita-intake/:sessionId/tax-documents/:id", requireStaff, asyncHandler(async (req, res) => {
+  // Delete a tax document (with ownership verification via session)
+  app.delete("/api/vita-intake/:sessionId/tax-documents/:id", requireStaff, verifyVitaSessionOwnership(), asyncHandler(async (req, res) => {
     const session = await storage.getVitaIntakeSession(req.params.sessionId);
     
     if (!session) {
