@@ -3407,7 +3407,7 @@ export const leaderboards = pgTable("leaderboards", {
   periodStart: timestamp("period_start").notNull(),
   periodEnd: timestamp("period_end").notNull(),
   
-  // Rankings (JSON array of { rank, navigatorId, navigatorName, value, countyName })
+  // Rankings (JSON array with full KPI breakdown: { rank, navigatorId, navigatorName, value, countyName, countyId, casesClosed, totalBenefitsSecured, successRate, avgResponseTime, performanceScore })
   rankings: jsonb("rankings").notNull(),
   
   // Metadata
