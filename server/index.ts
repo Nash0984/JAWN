@@ -149,8 +149,31 @@ const csrfProtection = doubleCsrf({
 
 // Endpoint to get CSRF token
 app.get("/api/csrf-token", (req, res) => {
-  const csrfToken = csrfProtection.generateCsrfToken(req, res);
-  res.json({ token: csrfToken });
+  try {
+    // Ensure session exists
+    if (!req.session) {
+      console.error("❌ CSRF token request: No session object");
+      return res.status(500).json({ error: "Session not initialized" });
+    }
+    
+    // Generate session ID if it doesn't exist
+    if (!req.session.id) {
+      console.log("⚠️ CSRF token request: Session has no ID, will be generated on save");
+    }
+    
+    const csrfToken = csrfProtection.generateCsrfToken(req, res);
+    
+    if (!csrfToken) {
+      console.error("❌ CSRF token request: Failed to generate token");
+      return res.status(500).json({ error: "Failed to generate CSRF token" });
+    }
+    
+    console.log("✅ CSRF token generated successfully");
+    res.json({ token: csrfToken });
+  } catch (error) {
+    console.error("❌ CSRF token generation error:", error);
+    res.status(500).json({ error: "Internal server error generating CSRF token" });
+  }
 });
 
 // Apply CSRF protection to all state-changing routes

@@ -51,19 +51,13 @@ export function VITAChatWidget({ compact = false, onClose }: VITAChatWidgetProps
 
   const searchMutation = useMutation({
     mutationFn: async (query: string) => {
-      const response = await apiRequest('/api/vita/search', {
-        method: 'POST',
-        body: JSON.stringify({
-          query,
-          topK: 5,
-          minScore: 0.7,
-          includeAnswer: true
-        }),
-        headers: {
-          'Content-Type': 'application/json'
-        }
+      const response = await apiRequest('POST', '/api/vita/search', {
+        query,
+        topK: 5,
+        minScore: 0.7,
+        includeAnswer: true
       });
-      return response;
+      return response.json();
     },
     onSuccess: (data, query) => {
       const assistantMessage: ChatMessage = {

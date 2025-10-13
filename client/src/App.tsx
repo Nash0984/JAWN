@@ -46,6 +46,7 @@ import CountyManagement from "@/pages/CountyManagement";
 import NavigatorPerformance from "@/pages/NavigatorPerformance";
 import Leaderboard from "@/pages/Leaderboard";
 import CountyAnalytics from "@/pages/CountyAnalytics";
+import VitaKnowledgeBase from "@/pages/VitaKnowledgeBase";
 import MobileBottomNav from "@/components/MobileBottomNav";
 import { BrandingProvider } from "@/contexts/BrandingContext";
 import { CountyHeader } from "@/components/CountyHeader";
@@ -174,6 +175,13 @@ function Router() {
             {() => (
               <ProtectedRoute>
                 <TaxPreparation />
+              </ProtectedRoute>
+            )}
+          </Route>
+          <Route path="/vita">
+            {() => (
+              <ProtectedRoute>
+                <VitaKnowledgeBase />
               </ProtectedRoute>
             )}
           </Route>
