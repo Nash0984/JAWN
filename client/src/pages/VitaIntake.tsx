@@ -2722,9 +2722,9 @@ export default function VitaIntake() {
                     {currentStep === 3 && (
                       <div className="space-y-6">
                         {/* Tax Document Upload Section */}
-                        {sessionId && (
+                        {selectedSessionId && (
                           <TaxDocumentUploader
-                            vitaSessionId={sessionId}
+                            vitaSessionId={selectedSessionId}
                             onUploadComplete={(extractedData, documentType) => {
                               // Auto-populate form fields based on extracted tax document data
                               if (documentType === 'w2') {
@@ -2737,7 +2737,7 @@ export default function VitaIntake() {
                                   description: `W-2 from ${extractedData.employerName || 'employer'} has been uploaded. Review extracted data in the list below.`,
                                 });
                               } else if (documentType === '1099-misc' || documentType === '1099-nec') {
-                                form.setValue('has1099Income', true);
+                                form.setValue('hasOtherIncome', true);
                                 toast({
                                   title: "1099 Processed!",
                                   description: "1099 form has been uploaded. Review extracted data in the list below.",
@@ -2767,7 +2767,8 @@ export default function VitaIntake() {
                                   description: "Retirement distribution form has been uploaded.",
                                 });
                               } else if (documentType === '1095-a') {
-                                form.setValue('hasHealthInsuranceMarketplace', true);
+                                form.setValue('purchasedMarketplaceInsurance', true);
+                                form.setValue('hasForm1095A', true);
                                 toast({
                                   title: "1095-A Processed!",
                                   description: "Health insurance marketplace statement has been uploaded.",

@@ -23,7 +23,7 @@ import { GoogleGenAI } from "@google/genai";
 import { asyncHandler, validationError, notFoundError, externalServiceError, authorizationError } from "./middleware/errorHandler";
 import { requireAuth, requireStaff, requireAdmin } from "./middleware/auth";
 import { db } from "./db";
-import { sql, eq, and, desc, gte, lte, or, ilike } from "drizzle-orm";
+import { sql, eq, and, desc, gte, lte, or, ilike, count } from "drizzle-orm";
 import { 
   insertDocumentSchema, 
   insertSearchQuerySchema, 
