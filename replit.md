@@ -31,7 +31,8 @@ The backend uses Express.js with TypeScript and PostgreSQL via Drizzle ORM on Ne
 
 ### Tax Preparation System
 Integrates federal/state tax preparation with public benefits eligibility.
--   **Tax Document Extraction Service**: Gemini Vision-powered extraction from tax forms.
+-   **Tax Document Extraction Service**: Gemini Vision-powered extraction from tax forms (W-2, 1099-MISC, 1099-NEC, 1099-INT, 1099-DIV, SSA-1099, 1099-R, 1095-A, 1098 forms). Uses Gemini 2.5 Flash model with confidence scoring (threshold 0.85 for auto-approval) and quality flags for invalid EIN/SSN data.
+-   **VITA Tax Document Upload**: Integrated uploader in VITA Step 3 (Income) with auto-population of intake fields. Supports 12 document types, real-time extraction progress, document list with confidence scores, manual review badges, and delete functionality. Auto-increments W-2 job count, toggles income type flags (1099, interest, dividends, Social Security, retirement, health insurance marketplace).
 -   **PolicyEngine Tax Calculation Service**: Federal tax calculations using PolicyEngine US.
 -   **Form 1040 PDF Generator**: IRS-compliant Form 1040 PDF generation.
 -   **Maryland Form 502 Generator**: State tax PDF generation with progressive tax brackets (2%-5.75%), all 24 county tax calculations, MD EITC (50% of federal), property tax credit, and renter's credit.
