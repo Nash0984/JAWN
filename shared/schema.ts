@@ -3184,3 +3184,327 @@ export type InsertScenarioStateOption = z.infer<typeof insertScenarioStateOption
 export type ScenarioStateOption = typeof scenarioStateOptions.$inferSelect;
 export type InsertStateOptionStatusHistory = z.infer<typeof insertStateOptionStatusHistorySchema>;
 export type StateOptionStatusHistory = typeof stateOptionStatusHistory.$inferSelect;
+
+// ============================================================================
+// MULTI-COUNTY DEPLOYMENT SYSTEM
+// ============================================================================
+
+// Counties/LDSSs - Maryland jurisdictions with customized experiences
+export const counties = pgTable("counties", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull(), // "Baltimore City", "Montgomery County", etc.
+  code: text("code").notNull().unique(), // "BALTIMORE_CITY", "MONTGOMERY", etc.
+  countyType: text("county_type").notNull().default("ldss"), // ldss, pilot, demo
+  
+  // Branding configuration
+  brandingConfig: jsonb("branding_config"), // { primaryColor, secondaryColor, logoUrl, headerText }
+  contactInfo: jsonb("contact_info"), // { phone, email, address, hours }
+  welcomeMessage: text("welcome_message"), // Custom welcome message for county
+  
+  // Geographic and demographic info
+  region: text("region"), // "central", "southern", "western", "eastern"
+  population: integer("population"),
+  coverage: text("coverage").array(), // ZIP codes or service areas
+  
+  // System configuration
+  enabledPrograms: text("enabled_programs").array(), // Which programs this county offers
+  customPolicies: jsonb("custom_policies"), // County-specific policy variations (future use)
+  features: jsonb("features"), // Feature flags per county { enableGamification: true, etc. }
+  
+  // Status
+  isActive: boolean("is_active").default(true).notNull(),
+  isPilot: boolean("is_pilot").default(false).notNull(), // Pilot LDSS marker
+  launchDate: timestamp("launch_date"),
+  
+  // Metadata
+  createdBy: varchar("created_by").references(() => users.id),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  codeIdx: index("counties_code_idx").on(table.code),
+  regionIdx: index("counties_region_idx").on(table.region),
+}));
+
+// County Users - Junction table for user-county assignments
+export const countyUsers = pgTable("county_users", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  countyId: varchar("county_id").references(() => counties.id, { onDelete: "cascade" }).notNull(),
+  userId: varchar("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+  
+  // Assignment details
+  role: text("role").notNull(), // "navigator", "caseworker", "supervisor", "admin"
+  isPrimary: boolean("is_primary").default(true).notNull(), // Primary county assignment
+  accessLevel: text("access_level").default("full"), // full, readonly, limited
+  
+  // Assignment period
+  assignedAt: timestamp("assigned_at").defaultNow().notNull(),
+  assignedBy: varchar("assigned_by").references(() => users.id),
+  deactivatedAt: timestamp("deactivated_at"),
+  
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+  countyUserIdx: index("county_users_county_user_idx").on(table.countyId, table.userId),
+  userIdx: index("county_users_user_idx").on(table.userId),
+  primaryIdx: index("county_users_primary_idx").on(table.isPrimary),
+}));
+
+// County Metrics - Aggregate performance metrics per county
+export const countyMetrics = pgTable("county_metrics", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  countyId: varchar("county_id").references(() => counties.id, { onDelete: "cascade" }).notNull(),
+  
+  // Time period
+  periodType: text("period_type").notNull(), // daily, weekly, monthly, quarterly
+  periodStart: timestamp("period_start").notNull(),
+  periodEnd: timestamp("period_end").notNull(),
+  
+  // Case metrics
+  totalCases: integer("total_cases").default(0),
+  casesOpened: integer("cases_opened").default(0),
+  casesClosed: integer("cases_closed").default(0),
+  casesApproved: integer("cases_approved").default(0),
+  casesDenied: integer("cases_denied").default(0),
+  
+  // Benefit metrics
+  totalBenefitsSecured: real("total_benefits_secured").default(0), // In dollars
+  avgBenefitPerCase: real("avg_benefit_per_case").default(0),
+  
+  // Performance metrics
+  avgResponseTime: real("avg_response_time").default(0), // In hours
+  avgCaseCompletionTime: real("avg_case_completion_time").default(0), // In days
+  successRate: real("success_rate").default(0), // Percentage
+  
+  // Staff metrics
+  activeNavigators: integer("active_navigators").default(0),
+  activeCaseworkers: integer("active_caseworkers").default(0),
+  avgCasesPerNavigator: real("avg_cases_per_navigator").default(0),
+  
+  // Document metrics
+  documentsProcessed: integer("documents_processed").default(0),
+  avgDocumentQuality: real("avg_document_quality").default(0), // Gemini confidence avg
+  
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+  countyPeriodIdx: index("county_metrics_county_period_idx").on(table.countyId, table.periodType, table.periodStart),
+}));
+
+// ============================================================================
+// GAMIFICATION & NAVIGATOR PERFORMANCE SYSTEM
+// ============================================================================
+
+// Navigator KPIs - Track individual navigator performance metrics
+export const navigatorKpis = pgTable("navigator_kpis", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  navigatorId: varchar("navigator_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+  countyId: varchar("county_id").references(() => counties.id), // Optional county context
+  
+  // Time period
+  periodType: text("period_type").notNull(), // daily, weekly, monthly, all_time
+  periodStart: timestamp("period_start").notNull(),
+  periodEnd: timestamp("period_end").notNull(),
+  
+  // Case KPIs
+  casesClosed: integer("cases_closed").default(0),
+  casesApproved: integer("cases_approved").default(0),
+  casesDenied: integer("cases_denied").default(0),
+  successRate: real("success_rate").default(0), // Approval rate percentage
+  
+  // Benefit KPIs
+  totalBenefitsSecured: real("total_benefits_secured").default(0), // Total $ amount
+  avgBenefitPerCase: real("avg_benefit_per_case").default(0),
+  highValueCases: integer("high_value_cases").default(0), // Cases > $1000/month
+  
+  // Efficiency KPIs
+  avgResponseTime: real("avg_response_time").default(0), // Hours to first response
+  avgCaseCompletionTime: real("avg_case_completion_time").default(0), // Days to close
+  documentsProcessed: integer("documents_processed").default(0),
+  documentsVerified: integer("documents_verified").default(0),
+  
+  // Quality KPIs
+  avgDocumentQuality: real("avg_document_quality").default(0), // Avg Gemini confidence
+  crossEnrollmentsIdentified: integer("cross_enrollments_identified").default(0),
+  aiRecommendationsAccepted: integer("ai_recommendations_accepted").default(0),
+  
+  // Composite score (weighted combination of metrics)
+  performanceScore: real("performance_score").default(0), // 0-100 calculated score
+  
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  navigatorPeriodIdx: index("navigator_kpis_nav_period_idx").on(table.navigatorId, table.periodType, table.periodStart),
+  countyIdx: index("navigator_kpis_county_idx").on(table.countyId),
+  scoreIdx: index("navigator_kpis_score_idx").on(table.performanceScore),
+}));
+
+// Achievements - Gamification achievement definitions
+export const achievements = pgTable("achievements", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  
+  // Achievement details
+  name: text("name").notNull(), // "First Case Closed", "$10K Benefits Unlocked"
+  slug: text("slug").notNull().unique(), // first_case, benefits_10k
+  description: text("description").notNull(),
+  category: text("category").notNull(), // milestone, performance, quality, teamwork
+  tier: text("tier").notNull().default("bronze"), // bronze, silver, gold, platinum
+  
+  // Visual
+  iconName: text("icon_name"), // Lucide icon name
+  iconColor: text("icon_color"),
+  badgeUrl: text("badge_url"), // Optional custom badge image
+  
+  // Criteria (JSON-based flexible criteria)
+  criteriaType: text("criteria_type").notNull(), // kpi_threshold, case_count, benefit_amount, streak, rate
+  criteriaConfig: jsonb("criteria_config").notNull(), // { metric: "casesClosed", threshold: 10, operator: "gte" }
+  
+  // Rewards
+  pointsAwarded: integer("points_awarded").default(0),
+  
+  // Visibility and status
+  isVisible: boolean("is_visible").default(true).notNull(),
+  isActive: boolean("is_active").default(true).notNull(),
+  sortOrder: integer("sort_order").default(0),
+  
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+// Navigator Achievements - Track earned achievements
+export const navigatorAchievements = pgTable("navigator_achievements", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  navigatorId: varchar("navigator_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+  achievementId: varchar("achievement_id").references(() => achievements.id, { onDelete: "cascade" }).notNull(),
+  
+  // Achievement details
+  earnedAt: timestamp("earned_at").defaultNow().notNull(),
+  triggerMetric: text("trigger_metric"), // Which KPI triggered the achievement
+  triggerValue: real("trigger_value"), // Value that triggered it
+  
+  // Context
+  countyId: varchar("county_id").references(() => counties.id), // County where earned
+  relatedCaseId: varchar("related_case_id").references(() => clientCases.id), // Case that triggered it
+  
+  // Notification
+  notified: boolean("notified").default(false),
+  notifiedAt: timestamp("notified_at"),
+  
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+  navigatorAchievementIdx: index("nav_achievements_nav_achievement_idx").on(table.navigatorId, table.achievementId),
+  earnedAtIdx: index("nav_achievements_earned_at_idx").on(table.earnedAt),
+}));
+
+// Leaderboards - Cached leaderboard rankings
+export const leaderboards = pgTable("leaderboards", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  
+  // Leaderboard configuration
+  leaderboardType: text("leaderboard_type").notNull(), // cases_closed, benefits_amount, success_rate, performance_score
+  scope: text("scope").notNull(), // county, statewide
+  countyId: varchar("county_id").references(() => counties.id), // null for statewide
+  
+  // Time period
+  periodType: text("period_type").notNull(), // daily, weekly, monthly, all_time
+  periodStart: timestamp("period_start").notNull(),
+  periodEnd: timestamp("period_end").notNull(),
+  
+  // Rankings (JSON array of { rank, navigatorId, navigatorName, value, countyName })
+  rankings: jsonb("rankings").notNull(),
+  
+  // Metadata
+  totalParticipants: integer("total_participants").default(0),
+  lastUpdated: timestamp("last_updated").defaultNow().notNull(),
+  
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+  typesScopeIdx: index("leaderboards_type_scope_period_idx").on(table.leaderboardType, table.scope, table.periodType),
+  countyIdx: index("leaderboards_county_idx").on(table.countyId),
+}));
+
+// Case Activity Events - Track navigator actions for KPI calculation
+export const caseActivityEvents = pgTable("case_activity_events", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  
+  // Who and where
+  navigatorId: varchar("navigator_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+  caseId: varchar("case_id").references(() => clientCases.id, { onDelete: "cascade" }),
+  countyId: varchar("county_id").references(() => counties.id),
+  
+  // Event details
+  eventType: text("event_type").notNull(), // case_opened, case_closed, case_approved, case_denied, document_verified, cross_enrollment_identified, ai_recommendation_accepted
+  eventData: jsonb("event_data"), // Additional context
+  
+  // Metrics tracked
+  benefitAmount: real("benefit_amount"), // Monthly benefit secured (if applicable)
+  responseTime: real("response_time"), // Hours (if applicable)
+  documentQuality: real("document_quality"), // Gemini confidence (if applicable)
+  
+  occurredAt: timestamp("occurred_at").defaultNow().notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+  navigatorIdx: index("case_events_navigator_idx").on(table.navigatorId, table.occurredAt),
+  caseIdx: index("case_events_case_idx").on(table.caseId),
+  eventTypeIdx: index("case_events_type_idx").on(table.eventType),
+}));
+
+// Multi-county schema insert/select types
+export const insertCountySchema = createInsertSchema(counties).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertCountyUserSchema = createInsertSchema(countyUsers).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertCountyMetricSchema = createInsertSchema(countyMetrics).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertCounty = z.infer<typeof insertCountySchema>;
+export type County = typeof counties.$inferSelect;
+export type InsertCountyUser = z.infer<typeof insertCountyUserSchema>;
+export type CountyUser = typeof countyUsers.$inferSelect;
+export type InsertCountyMetric = z.infer<typeof insertCountyMetricSchema>;
+export type CountyMetric = typeof countyMetrics.$inferSelect;
+
+// Gamification schema insert/select types
+export const insertNavigatorKpiSchema = createInsertSchema(navigatorKpis).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertAchievementSchema = createInsertSchema(achievements).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertNavigatorAchievementSchema = createInsertSchema(navigatorAchievements).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertLeaderboardSchema = createInsertSchema(leaderboards).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertCaseActivityEventSchema = createInsertSchema(caseActivityEvents).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertNavigatorKpi = z.infer<typeof insertNavigatorKpiSchema>;
+export type NavigatorKpi = typeof navigatorKpis.$inferSelect;
+export type InsertAchievement = z.infer<typeof insertAchievementSchema>;
+export type Achievement = typeof achievements.$inferSelect;
+export type InsertNavigatorAchievement = z.infer<typeof insertNavigatorAchievementSchema>;
+export type NavigatorAchievement = typeof navigatorAchievements.$inferSelect;
+export type InsertLeaderboard = z.infer<typeof insertLeaderboardSchema>;
+export type Leaderboard = typeof leaderboards.$inferSelect;
+export type InsertCaseActivityEvent = z.infer<typeof insertCaseActivityEventSchema>;
+export type CaseActivityEvent = typeof caseActivityEvents.$inferSelect;

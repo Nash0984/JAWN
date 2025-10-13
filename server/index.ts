@@ -7,6 +7,7 @@ import helmet from "helmet";
 import passport from "./auth";
 import { registerRoutes } from "./routes";
 import { initializeSystemData } from "./seedData";
+import { seedCountiesAndGamification } from "./seedCountiesAndGamification";
 import { setupVite, serveStatic, log } from "./vite";
 import { errorHandler } from "./middleware/errorHandler";
 import { requestLoggerMiddleware, timingHeadersMiddleware, performanceMonitoringMiddleware } from "./middleware/requestLogger";
@@ -161,6 +162,9 @@ app.use("/api/", (req, res, next) => {
 (async () => {
   // Initialize system data (benefit programs, etc.)
   await initializeSystemData();
+  
+  // Seed multi-county and gamification data
+  await seedCountiesAndGamification();
   
   // Start Smart Scheduler with source-specific intervals
   // Checks each data source based on realistic update frequencies (70-80% reduction in API calls)

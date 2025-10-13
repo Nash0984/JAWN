@@ -144,6 +144,30 @@ import {
   crossEnrollmentAuditEvents,
   type CrossEnrollmentAuditEvent,
   type InsertCrossEnrollmentAuditEvent,
+  counties,
+  type County,
+  type InsertCounty,
+  countyUsers,
+  type CountyUser,
+  type InsertCountyUser,
+  countyMetrics,
+  type CountyMetric,
+  type InsertCountyMetric,
+  navigatorKpis,
+  type NavigatorKpi,
+  type InsertNavigatorKpi,
+  achievements,
+  type Achievement,
+  type InsertAchievement,
+  navigatorAchievements,
+  type NavigatorAchievement,
+  type InsertNavigatorAchievement,
+  leaderboards,
+  type Leaderboard,
+  type InsertLeaderboard,
+  caseActivityEvents,
+  type CaseActivityEvent,
+  type InsertCaseActivityEvent,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and, ilike, sql, or, isNull, lte, gte } from "drizzle-orm";
@@ -464,6 +488,66 @@ export interface IStorage {
     eventType?: string;
     userId?: string;
   }): Promise<CrossEnrollmentAuditEvent[]>;
+
+  // ============================================================================
+  // Multi-County Deployment
+  // ============================================================================
+  
+  // Counties
+  createCounty(county: InsertCounty): Promise<County>;
+  getCounty(id: string): Promise<County | undefined>;
+  getCountyByCode(code: string): Promise<County | undefined>;
+  getCounties(filters?: { isActive?: boolean; isPilot?: boolean; region?: string }): Promise<County[]>;
+  updateCounty(id: string, updates: Partial<County>): Promise<County>;
+  deleteCounty(id: string): Promise<void>;
+
+  // County Users - User-County Assignments
+  assignUserToCounty(assignment: InsertCountyUser): Promise<CountyUser>;
+  getUserCounties(userId: string): Promise<CountyUser[]>;
+  getCountyUsers(countyId: string, role?: string): Promise<CountyUser[]>;
+  getPrimaryCounty(userId: string): Promise<County | undefined>;
+  removeUserFromCounty(id: string): Promise<void>;
+  updateCountyUserAssignment(id: string, updates: Partial<CountyUser>): Promise<CountyUser>;
+
+  // County Metrics
+  createCountyMetric(metric: InsertCountyMetric): Promise<CountyMetric>;
+  getCountyMetrics(countyId: string, periodType?: string, limit?: number): Promise<CountyMetric[]>;
+  getLatestCountyMetric(countyId: string, periodType: string): Promise<CountyMetric | undefined>;
+
+  // ============================================================================
+  // Gamification & Navigator Performance
+  // ============================================================================
+
+  // Navigator KPIs
+  createNavigatorKpi(kpi: InsertNavigatorKpi): Promise<NavigatorKpi>;
+  getNavigatorKpi(id: string): Promise<NavigatorKpi | undefined>;
+  getNavigatorKpis(navigatorId: string, periodType?: string, limit?: number): Promise<NavigatorKpi[]>;
+  getLatestNavigatorKpi(navigatorId: string, periodType: string): Promise<NavigatorKpi | undefined>;
+  updateNavigatorKpi(id: string, updates: Partial<NavigatorKpi>): Promise<NavigatorKpi>;
+
+  // Achievements
+  createAchievement(achievement: InsertAchievement): Promise<Achievement>;
+  getAchievement(id: string): Promise<Achievement | undefined>;
+  getAchievements(filters?: { category?: string; tier?: string; isActive?: boolean }): Promise<Achievement[]>;
+  updateAchievement(id: string, updates: Partial<Achievement>): Promise<Achievement>;
+  deleteAchievement(id: string): Promise<void>;
+
+  // Navigator Achievements
+  awardAchievement(award: InsertNavigatorAchievement): Promise<NavigatorAchievement>;
+  getNavigatorAchievements(navigatorId: string): Promise<NavigatorAchievement[]>;
+  getUnnotifiedAchievements(navigatorId: string): Promise<NavigatorAchievement[]>;
+  markAchievementNotified(id: string): Promise<void>;
+
+  // Leaderboards
+  createLeaderboard(leaderboard: InsertLeaderboard): Promise<Leaderboard>;
+  getLeaderboard(id: string): Promise<Leaderboard | undefined>;
+  getLeaderboards(filters: { leaderboardType: string; scope: string; periodType: string; countyId?: string }): Promise<Leaderboard[]>;
+  updateLeaderboard(id: string, updates: Partial<Leaderboard>): Promise<Leaderboard>;
+
+  // Case Activity Events
+  createCaseActivityEvent(event: InsertCaseActivityEvent): Promise<CaseActivityEvent>;
+  getCaseActivityEvents(navigatorId: string, eventType?: string, limit?: number): Promise<CaseActivityEvent[]>;
+  getCaseEvents(caseId: string): Promise<CaseActivityEvent[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -2357,6 +2441,343 @@ export class DatabaseStorage implements IStorage {
 
   async deleteTaxDocument(id: string): Promise<void> {
     await db.delete(taxDocuments).where(eq(taxDocuments.id, id));
+  }
+
+  // ============================================================================
+  // Multi-County Deployment
+  // ============================================================================
+
+  // Counties
+  async createCounty(county: InsertCounty): Promise<County> {
+    const [created] = await db.insert(counties).values(county).returning();
+    return created;
+  }
+
+  async getCounty(id: string): Promise<County | undefined> {
+    return await db.query.counties.findFirst({
+      where: eq(counties.id, id),
+    });
+  }
+
+  async getCountyByCode(code: string): Promise<County | undefined> {
+    return await db.query.counties.findFirst({
+      where: eq(counties.code, code),
+    });
+  }
+
+  async getCounties(filters?: { isActive?: boolean; isPilot?: boolean; region?: string }): Promise<County[]> {
+    let query = db.select().from(counties);
+    
+    const conditions = [];
+    if (filters?.isActive !== undefined) {
+      conditions.push(eq(counties.isActive, filters.isActive));
+    }
+    if (filters?.isPilot !== undefined) {
+      conditions.push(eq(counties.isPilot, filters.isPilot));
+    }
+    if (filters?.region) {
+      conditions.push(eq(counties.region, filters.region));
+    }
+    
+    if (conditions.length > 0) {
+      query = query.where(and(...conditions)) as any;
+    }
+    
+    return await query.orderBy(counties.name);
+  }
+
+  async updateCounty(id: string, updates: Partial<County>): Promise<County> {
+    const [updated] = await db
+      .update(counties)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(counties.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteCounty(id: string): Promise<void> {
+    await db.delete(counties).where(eq(counties.id, id));
+  }
+
+  // County Users
+  async assignUserToCounty(assignment: InsertCountyUser): Promise<CountyUser> {
+    const [created] = await db.insert(countyUsers).values(assignment).returning();
+    return created;
+  }
+
+  async getUserCounties(userId: string): Promise<CountyUser[]> {
+    return await db.query.countyUsers.findMany({
+      where: eq(countyUsers.userId, userId),
+      orderBy: [desc(countyUsers.isPrimary), desc(countyUsers.assignedAt)],
+    });
+  }
+
+  async getCountyUsers(countyId: string, role?: string): Promise<CountyUser[]> {
+    let query = db.select().from(countyUsers).where(eq(countyUsers.countyId, countyId));
+    
+    if (role) {
+      query = query.where(and(eq(countyUsers.countyId, countyId), eq(countyUsers.role, role))) as any;
+    }
+    
+    return await query.orderBy(desc(countyUsers.assignedAt));
+  }
+
+  async getPrimaryCounty(userId: string): Promise<County | undefined> {
+    const primaryAssignment = await db.query.countyUsers.findFirst({
+      where: and(
+        eq(countyUsers.userId, userId),
+        eq(countyUsers.isPrimary, true),
+        isNull(countyUsers.deactivatedAt)
+      ),
+    });
+
+    if (!primaryAssignment) {
+      return undefined;
+    }
+
+    return await this.getCounty(primaryAssignment.countyId);
+  }
+
+  async removeUserFromCounty(id: string): Promise<void> {
+    await db.delete(countyUsers).where(eq(countyUsers.id, id));
+  }
+
+  async updateCountyUserAssignment(id: string, updates: Partial<CountyUser>): Promise<CountyUser> {
+    const [updated] = await db
+      .update(countyUsers)
+      .set(updates)
+      .where(eq(countyUsers.id, id))
+      .returning();
+    return updated;
+  }
+
+  // County Metrics
+  async createCountyMetric(metric: InsertCountyMetric): Promise<CountyMetric> {
+    const [created] = await db.insert(countyMetrics).values(metric).returning();
+    return created;
+  }
+
+  async getCountyMetrics(countyId: string, periodType?: string, limit: number = 10): Promise<CountyMetric[]> {
+    let query = db.select().from(countyMetrics).where(eq(countyMetrics.countyId, countyId));
+    
+    if (periodType) {
+      query = query.where(and(eq(countyMetrics.countyId, countyId), eq(countyMetrics.periodType, periodType))) as any;
+    }
+    
+    return await query
+      .orderBy(desc(countyMetrics.periodStart))
+      .limit(limit);
+  }
+
+  async getLatestCountyMetric(countyId: string, periodType: string): Promise<CountyMetric | undefined> {
+    return await db.query.countyMetrics.findFirst({
+      where: and(
+        eq(countyMetrics.countyId, countyId),
+        eq(countyMetrics.periodType, periodType)
+      ),
+      orderBy: [desc(countyMetrics.periodStart)],
+    });
+  }
+
+  // ============================================================================
+  // Gamification & Navigator Performance
+  // ============================================================================
+
+  // Navigator KPIs
+  async createNavigatorKpi(kpi: InsertNavigatorKpi): Promise<NavigatorKpi> {
+    const [created] = await db.insert(navigatorKpis).values(kpi).returning();
+    return created;
+  }
+
+  async getNavigatorKpi(id: string): Promise<NavigatorKpi | undefined> {
+    return await db.query.navigatorKpis.findFirst({
+      where: eq(navigatorKpis.id, id),
+    });
+  }
+
+  async getNavigatorKpis(navigatorId: string, periodType?: string, limit: number = 10): Promise<NavigatorKpi[]> {
+    let query = db.select().from(navigatorKpis).where(eq(navigatorKpis.navigatorId, navigatorId));
+    
+    if (periodType) {
+      query = query.where(
+        and(
+          eq(navigatorKpis.navigatorId, navigatorId), 
+          eq(navigatorKpis.periodType, periodType)
+        )
+      ) as any;
+    }
+    
+    return await query
+      .orderBy(desc(navigatorKpis.periodStart))
+      .limit(limit);
+  }
+
+  async getLatestNavigatorKpi(navigatorId: string, periodType: string): Promise<NavigatorKpi | undefined> {
+    return await db.query.navigatorKpis.findFirst({
+      where: and(
+        eq(navigatorKpis.navigatorId, navigatorId),
+        eq(navigatorKpis.periodType, periodType)
+      ),
+      orderBy: [desc(navigatorKpis.periodStart)],
+    });
+  }
+
+  async updateNavigatorKpi(id: string, updates: Partial<NavigatorKpi>): Promise<NavigatorKpi> {
+    const [updated] = await db
+      .update(navigatorKpis)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(navigatorKpis.id, id))
+      .returning();
+    return updated;
+  }
+
+  // Achievements
+  async createAchievement(achievement: InsertAchievement): Promise<Achievement> {
+    const [created] = await db.insert(achievements).values(achievement).returning();
+    return created;
+  }
+
+  async getAchievement(id: string): Promise<Achievement | undefined> {
+    return await db.query.achievements.findFirst({
+      where: eq(achievements.id, id),
+    });
+  }
+
+  async getAchievements(filters?: { category?: string; tier?: string; isActive?: boolean }): Promise<Achievement[]> {
+    let query = db.select().from(achievements);
+    
+    const conditions = [];
+    if (filters?.category) {
+      conditions.push(eq(achievements.category, filters.category));
+    }
+    if (filters?.tier) {
+      conditions.push(eq(achievements.tier, filters.tier));
+    }
+    if (filters?.isActive !== undefined) {
+      conditions.push(eq(achievements.isActive, filters.isActive));
+    }
+    
+    if (conditions.length > 0) {
+      query = query.where(and(...conditions)) as any;
+    }
+    
+    return await query.orderBy(achievements.sortOrder, achievements.name);
+  }
+
+  async updateAchievement(id: string, updates: Partial<Achievement>): Promise<Achievement> {
+    const [updated] = await db
+      .update(achievements)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(achievements.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteAchievement(id: string): Promise<void> {
+    await db.delete(achievements).where(eq(achievements.id, id));
+  }
+
+  // Navigator Achievements
+  async awardAchievement(award: InsertNavigatorAchievement): Promise<NavigatorAchievement> {
+    const [created] = await db.insert(navigatorAchievements).values(award).returning();
+    return created;
+  }
+
+  async getNavigatorAchievements(navigatorId: string): Promise<NavigatorAchievement[]> {
+    return await db.query.navigatorAchievements.findMany({
+      where: eq(navigatorAchievements.navigatorId, navigatorId),
+      orderBy: [desc(navigatorAchievements.earnedAt)],
+    });
+  }
+
+  async getUnnotifiedAchievements(navigatorId: string): Promise<NavigatorAchievement[]> {
+    return await db.query.navigatorAchievements.findMany({
+      where: and(
+        eq(navigatorAchievements.navigatorId, navigatorId),
+        eq(navigatorAchievements.notified, false)
+      ),
+      orderBy: [desc(navigatorAchievements.earnedAt)],
+    });
+  }
+
+  async markAchievementNotified(id: string): Promise<void> {
+    await db
+      .update(navigatorAchievements)
+      .set({ notified: true, notifiedAt: new Date() })
+      .where(eq(navigatorAchievements.id, id));
+  }
+
+  // Leaderboards
+  async createLeaderboard(leaderboard: InsertLeaderboard): Promise<Leaderboard> {
+    const [created] = await db.insert(leaderboards).values(leaderboard).returning();
+    return created;
+  }
+
+  async getLeaderboard(id: string): Promise<Leaderboard | undefined> {
+    return await db.query.leaderboards.findFirst({
+      where: eq(leaderboards.id, id),
+    });
+  }
+
+  async getLeaderboards(filters: { 
+    leaderboardType: string; 
+    scope: string; 
+    periodType: string; 
+    countyId?: string 
+  }): Promise<Leaderboard[]> {
+    const conditions = [
+      eq(leaderboards.leaderboardType, filters.leaderboardType),
+      eq(leaderboards.scope, filters.scope),
+      eq(leaderboards.periodType, filters.periodType),
+    ];
+
+    if (filters.countyId) {
+      conditions.push(eq(leaderboards.countyId, filters.countyId));
+    }
+
+    return await db.query.leaderboards.findMany({
+      where: and(...conditions),
+      orderBy: [desc(leaderboards.periodStart)],
+    });
+  }
+
+  async updateLeaderboard(id: string, updates: Partial<Leaderboard>): Promise<Leaderboard> {
+    const [updated] = await db
+      .update(leaderboards)
+      .set({ ...updates, lastUpdated: new Date() })
+      .where(eq(leaderboards.id, id))
+      .returning();
+    return updated;
+  }
+
+  // Case Activity Events
+  async createCaseActivityEvent(event: InsertCaseActivityEvent): Promise<CaseActivityEvent> {
+    const [created] = await db.insert(caseActivityEvents).values(event).returning();
+    return created;
+  }
+
+  async getCaseActivityEvents(navigatorId: string, eventType?: string, limit: number = 50): Promise<CaseActivityEvent[]> {
+    let query = db.select().from(caseActivityEvents).where(eq(caseActivityEvents.navigatorId, navigatorId));
+    
+    if (eventType) {
+      query = query.where(
+        and(
+          eq(caseActivityEvents.navigatorId, navigatorId),
+          eq(caseActivityEvents.eventType, eventType)
+        )
+      ) as any;
+    }
+    
+    return await query
+      .orderBy(desc(caseActivityEvents.occurredAt))
+      .limit(limit);
+  }
+
+  async getCaseEvents(caseId: string): Promise<CaseActivityEvent[]> {
+    return await db.query.caseActivityEvents.findMany({
+      where: eq(caseActivityEvents.caseId, caseId),
+      orderBy: [desc(caseActivityEvents.occurredAt)],
+    });
   }
 }
 
