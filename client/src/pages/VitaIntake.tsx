@@ -407,6 +407,9 @@ export default function VitaIntake() {
   const [showSpouseSSN, setShowSpouseSSN] = useState(false);
   const [showAccountNumber, setShowAccountNumber] = useState(false);
   const [importDialogOpen, setImportDialogOpen] = useState(false);
+  const [reviewMode, setReviewMode] = useState(false);
+  const [reviewNotes, setReviewNotes] = useState("");
+  const [reviewStatusSelection, setReviewStatusSelection] = useState<"approved" | "needs_correction" | "">("");
 
   // Fetch all sessions for the current user
   const { data: sessions = [], isLoading: sessionsLoading } = useQuery<VitaIntakeSession[]>({
@@ -734,6 +737,146 @@ export default function VitaIntake() {
       form.reset();
     },
   });
+
+  // Review mutation
+  const reviewMutation = useMutation({
+    mutationFn: async ({ id, reviewStatus, reviewNotes, certificationLevel }: { 
+      id: string; 
+      reviewStatus: string; 
+      reviewNotes: string;
+      certificationLevel: string;
+    }) => {
+      return await apiRequest(`/api/vita-intake/${id}`, "PATCH", {
+        reviewStatus,
+        reviewNotes,
+        certificationLevel,
+      }) as unknown as VitaIntakeSession;
+    },
+    onSuccess: (data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/vita-intake"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/vita-intake", selectedSessionId] });
+      
+      if (variables.reviewStatus === "approved") {
+        toast({
+          title: "Intake Approved",
+          description: "Intake approved and ready for tax preparation.",
+        });
+      } else if (variables.reviewStatus === "needs_correction") {
+        toast({
+          title: "Corrections Requested",
+          description: "Corrections requested. Taxpayer will be notified.",
+        });
+      }
+      
+      setReviewMode(false);
+      setReviewNotes("");
+      setReviewStatusSelection("");
+    },
+  });
+
+  // Helper function: Detect required certification level
+  const detectCertificationLevel = (formData: VitaIntakeFormData): { 
+    level: "basic" | "advanced" | "military"; 
+    reasons: string[];
+  } => {
+    const reasons: string[] = [];
+    
+    // Check for Military certification requirements
+    // Note: Military-specific fields would need to be added to the form schema
+    // For now, we'll focus on Basic vs Advanced
+    
+    // Check for Advanced certification requirements
+    if (formData.hasSelfEmploymentIncome) {
+      reasons.push("Self-employment income (Schedule C)");
+      return { level: "advanced", reasons };
+    }
+    
+    if (formData.hasRentalIncome) {
+      reasons.push("Rental income");
+      return { level: "advanced", reasons };
+    }
+    
+    if (formData.hasCapitalGains) {
+      reasons.push("Capital gains");
+      return { level: "advanced", reasons };
+    }
+    
+    if (formData.hasTuitionExpenses || formData.hasStudentLoanInterest) {
+      reasons.push("Education credits (tuition, student loan interest)");
+      return { level: "advanced", reasons };
+    }
+    
+    if (formData.hasRetirementContributions) {
+      reasons.push("Retirement contributions");
+      return { level: "advanced", reasons };
+    }
+    
+    // Basic certification is sufficient for all other cases
+    return { level: "basic", reasons: [] };
+  };
+
+  // Helper function: Check completeness
+  const checkCompleteness = (formData: VitaIntakeFormData) => {
+    const checks = {
+      personalInfo: false,
+      income: false,
+      dependents: true, // Optional
+      signatures: false,
+      documents: true, // Assuming documents are optional for now
+    };
+    
+    // Check personal info
+    checks.personalInfo = !!(
+      formData.primaryFirstName &&
+      formData.primaryLastName &&
+      formData.primaryDateOfBirth &&
+      formData.primaryTelephone &&
+      formData.primarySSN &&
+      formData.mailingAddress &&
+      formData.city &&
+      formData.zipCode
+    );
+    
+    // Check if spouse info is complete (if has spouse)
+    if (formData.hasSpouse || formData.maritalStatusDec31 === "married") {
+      checks.personalInfo = checks.personalInfo && !!(
+        formData.spouseFirstName &&
+        formData.spouseLastName &&
+        formData.spouseDateOfBirth &&
+        formData.spouseSSN
+      );
+    }
+    
+    // Check income sources documented
+    const hasAnyIncome = formData.hasW2Income || 
+                         formData.hasRetirementIncome || 
+                         formData.hasSocialSecurityIncome || 
+                         formData.hasUnemploymentIncome || 
+                         formData.hasInterestIncome || 
+                         formData.hasDividendIncome ||
+                         formData.hasSelfEmploymentIncome ||
+                         formData.hasRentalIncome ||
+                         formData.hasCapitalGains;
+    checks.income = hasAnyIncome;
+    
+    // Check dependents (only if they exist)
+    if (formData.dependents && formData.dependents.length > 0) {
+      checks.dependents = formData.dependents.every(dep => 
+        dep.firstName && 
+        dep.lastName && 
+        dep.dateOfBirth && 
+        dep.relationship
+      );
+    }
+    
+    // Check signatures
+    checks.signatures = !!(formData.primaryTaxpayerSignature && formData.primaryCertifyAccurate);
+    if (formData.hasSpouse || formData.maritalStatusDec31 === "married") {
+      checks.signatures = checks.signatures && !!(formData.spouseTaxpayerSignature && formData.spouseCertifyAccurate);
+    }
+    
+    return checks;
+  };
 
   // Auto-save when step changes
   const handleStepChange = (newStep: number) => {
@@ -1100,6 +1243,31 @@ export default function VitaIntake() {
                   </button>
                 ))}
               </div>
+
+              {/* Review Mode Toggle (only shown for review_needed status) */}
+              {selectedSession?.status === "review_needed" && (
+                <div className="mt-4">
+                  <Button
+                    type="button"
+                    variant={reviewMode ? "secondary" : "outline"}
+                    onClick={() => setReviewMode(!reviewMode)}
+                    className="w-full"
+                    data-testid="button-enter-review-mode"
+                  >
+                    {reviewMode ? (
+                      <>
+                        <EyeOff className="h-4 w-4 mr-2" />
+                        Exit Review Mode
+                      </>
+                    ) : (
+                      <>
+                        <Eye className="h-4 w-4 mr-2" />
+                        Enter Review Mode
+                      </>
+                    )}
+                  </Button>
+                </div>
+              )}
             </CardHeader>
 
             <Separator />
@@ -1107,7 +1275,8 @@ export default function VitaIntake() {
             <CardContent className="pt-6">
               <Form {...form}>
                 <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-                  {/* Step Content */}
+                  {/* Step Content - Disabled when in review mode */}
+                  <fieldset disabled={reviewMode} className="space-y-6">
                   <ScrollArea className="h-[600px] pr-4">
                     {currentStep === 1 && (
                       <div className="space-y-6">
@@ -4209,61 +4378,267 @@ export default function VitaIntake() {
                       </div>
                     )}
                   </ScrollArea>
+                  </fieldset>
+
+                  {/* Review Panel (only shown when in review mode) */}
+                  {reviewMode && selectedSession && (
+                    <>
+                      <Separator className="my-6" />
+                      <Card className="border-2 border-primary" data-testid="panel-review">
+                        <CardHeader>
+                          <CardTitle className="flex items-center gap-2">
+                            <Shield className="h-5 w-5 text-primary" />
+                            Navigator Review Panel
+                          </CardTitle>
+                          <CardDescription>
+                            Review the intake form for completeness and validate certification requirements
+                          </CardDescription>
+                        </CardHeader>
+                        <CardContent className="space-y-6">
+                          {/* Certification Level Detection */}
+                          <div className="space-y-3">
+                            <h3 className="text-sm font-semibold">Certification Level Required</h3>
+                            <div className="flex items-center gap-2">
+                              <Badge 
+                                variant={detectCertificationLevel(form.getValues()).level === "advanced" ? "destructive" : "default"}
+                                className="text-sm"
+                                data-testid="text-cert-level-required"
+                              >
+                                {detectCertificationLevel(form.getValues()).level.toUpperCase()}
+                              </Badge>
+                            </div>
+                            {detectCertificationLevel(form.getValues()).reasons.length > 0 && (
+                              <div className="bg-amber-50 dark:bg-amber-950 border border-amber-200 dark:border-amber-800 rounded-lg p-3">
+                                <p className="text-sm font-medium text-amber-900 dark:text-amber-100 mb-2">
+                                  Advanced Certification Required Because:
+                                </p>
+                                <ul className="list-disc list-inside text-sm text-amber-800 dark:text-amber-200 space-y-1">
+                                  {detectCertificationLevel(form.getValues()).reasons.map((reason, idx) => (
+                                    <li key={idx}>{reason}</li>
+                                  ))}
+                                </ul>
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Completeness Checklist */}
+                          <div className="space-y-3">
+                            <h3 className="text-sm font-semibold">Completeness Checklist</h3>
+                            <div className="space-y-2">
+                              <div className="flex items-center gap-2" data-testid="checkbox-complete-personal">
+                                {checkCompleteness(form.getValues()).personalInfo ? (
+                                  <CheckCircle2 className="h-4 w-4 text-green-600" />
+                                ) : (
+                                  <AlertCircle className="h-4 w-4 text-destructive" />
+                                )}
+                                <span className="text-sm">All required personal information complete</span>
+                              </div>
+                              <div className="flex items-center gap-2" data-testid="checkbox-complete-income">
+                                {checkCompleteness(form.getValues()).income ? (
+                                  <CheckCircle2 className="h-4 w-4 text-green-600" />
+                                ) : (
+                                  <AlertCircle className="h-4 w-4 text-destructive" />
+                                )}
+                                <span className="text-sm">All income sources documented</span>
+                              </div>
+                              <div className="flex items-center gap-2" data-testid="checkbox-complete-dependents">
+                                {checkCompleteness(form.getValues()).dependents ? (
+                                  <CheckCircle2 className="h-4 w-4 text-green-600" />
+                                ) : (
+                                  <AlertCircle className="h-4 w-4 text-destructive" />
+                                )}
+                                <span className="text-sm">Dependents information complete (if applicable)</span>
+                              </div>
+                              <div className="flex items-center gap-2" data-testid="checkbox-complete-signatures">
+                                {checkCompleteness(form.getValues()).signatures ? (
+                                  <CheckCircle2 className="h-4 w-4 text-green-600" />
+                                ) : (
+                                  <AlertCircle className="h-4 w-4 text-destructive" />
+                                )}
+                                <span className="text-sm">Signatures obtained</span>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                {checkCompleteness(form.getValues()).documents ? (
+                                  <CheckCircle2 className="h-4 w-4 text-green-600" />
+                                ) : (
+                                  <AlertCircle className="h-4 w-4 text-amber-600" />
+                                )}
+                                <span className="text-sm">Supporting documents uploaded/listed</span>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Review Notes */}
+                          <div className="space-y-2">
+                            <Label htmlFor="review-notes">Review Notes {reviewStatusSelection === "needs_correction" && <span className="text-destructive">*</span>}</Label>
+                            <Textarea
+                              id="review-notes"
+                              placeholder="Add notes about the review, corrections needed, or observations..."
+                              value={reviewNotes}
+                              onChange={(e) => setReviewNotes(e.target.value)}
+                              rows={4}
+                              data-testid="textarea-review-notes"
+                            />
+                          </div>
+
+                          {/* Review Status Selection */}
+                          <div className="space-y-2">
+                            <Label htmlFor="review-status">Review Decision *</Label>
+                            <Select value={reviewStatusSelection} onValueChange={(value: any) => setReviewStatusSelection(value)}>
+                              <SelectTrigger id="review-status" data-testid="select-review-status">
+                                <SelectValue placeholder="Select review decision" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="approved">Approve - Ready for Tax Preparation</SelectItem>
+                                <SelectItem value="needs_correction">Request Corrections from Taxpayer</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+
+                          {/* Review Actions */}
+                          <div className="flex gap-3 pt-4">
+                            <AlertDialog>
+                              <AlertDialogTrigger asChild>
+                                <Button
+                                  variant="default"
+                                  disabled={!reviewStatusSelection || reviewStatusSelection !== "approved"}
+                                  className="flex-1"
+                                  data-testid="button-approve-intake"
+                                >
+                                  <CheckCircle2 className="h-4 w-4 mr-2" />
+                                  Approve & Continue
+                                </Button>
+                              </AlertDialogTrigger>
+                              <AlertDialogContent>
+                                <AlertDialogHeader>
+                                  <AlertDialogTitle>Approve VITA Intake?</AlertDialogTitle>
+                                  <AlertDialogDescription>
+                                    This will mark the intake as approved and ready for tax preparation. The taxpayer will be notified that their intake is being processed.
+                                  </AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter>
+                                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                  <AlertDialogAction
+                                    onClick={() => {
+                                      if (selectedSessionId) {
+                                        reviewMutation.mutate({
+                                          id: selectedSessionId,
+                                          reviewStatus: "approved",
+                                          reviewNotes: reviewNotes,
+                                          certificationLevel: detectCertificationLevel(form.getValues()).level,
+                                        });
+                                      }
+                                    }}
+                                  >
+                                    Approve Intake
+                                  </AlertDialogAction>
+                                </AlertDialogFooter>
+                              </AlertDialogContent>
+                            </AlertDialog>
+
+                            <AlertDialog>
+                              <AlertDialogTrigger asChild>
+                                <Button
+                                  variant="destructive"
+                                  disabled={!reviewStatusSelection || reviewStatusSelection !== "needs_correction" || !reviewNotes.trim()}
+                                  className="flex-1"
+                                  data-testid="button-request-corrections"
+                                >
+                                  <AlertCircle className="h-4 w-4 mr-2" />
+                                  Request Corrections
+                                </Button>
+                              </AlertDialogTrigger>
+                              <AlertDialogContent>
+                                <AlertDialogHeader>
+                                  <AlertDialogTitle>Request Corrections?</AlertDialogTitle>
+                                  <AlertDialogDescription>
+                                    This will notify the taxpayer that corrections are needed. They will receive your notes and be able to update the intake form.
+                                    {!reviewNotes.trim() && (
+                                      <p className="text-destructive mt-2">Please add review notes explaining what corrections are needed.</p>
+                                    )}
+                                  </AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter>
+                                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                  <AlertDialogAction
+                                    onClick={() => {
+                                      if (selectedSessionId && reviewNotes.trim()) {
+                                        reviewMutation.mutate({
+                                          id: selectedSessionId,
+                                          reviewStatus: "needs_correction",
+                                          reviewNotes: reviewNotes,
+                                          certificationLevel: detectCertificationLevel(form.getValues()).level,
+                                        });
+                                      }
+                                    }}
+                                  >
+                                    Send Correction Request
+                                  </AlertDialogAction>
+                                </AlertDialogFooter>
+                              </AlertDialogContent>
+                            </AlertDialog>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    </>
+                  )}
 
                   <Separator />
 
-                  {/* Navigation Buttons */}
-                  <div className="flex items-center justify-between pt-4">
-                    <div className="flex gap-2">
-                      <Button
-                        type="button"
-                        variant="outline"
-                        onClick={handlePrevious}
-                        disabled={currentStep === 1}
-                        data-testid="button-previous"
-                      >
-                        <ChevronLeft className="h-4 w-4 mr-1" />
-                        Previous
-                      </Button>
-                    </div>
-
-                    <div className="flex gap-2">
-                      <Button
-                        type="button"
-                        variant="outline"
-                        onClick={handleSaveAndExit}
-                        disabled={!selectedSessionId}
-                        data-testid="button-save-draft"
-                      >
-                        <Save className="h-4 w-4 mr-1" />
-                        Save & Exit
-                      </Button>
-
-                      {currentStep < 5 ? (
+                  {/* Navigation Buttons - Hidden in review mode */}
+                  {!reviewMode && (
+                    <div className="flex items-center justify-between pt-4">
+                      <div className="flex gap-2">
                         <Button
                           type="button"
-                          onClick={handleNext}
-                          data-testid="button-next"
+                          variant="outline"
+                          onClick={handlePrevious}
+                          disabled={currentStep === 1}
+                          data-testid="button-previous"
                         >
-                          Next
-                          <ChevronRight className="h-4 w-4 ml-1" />
+                          <ChevronLeft className="h-4 w-4 mr-1" />
+                          Previous
                         </Button>
-                      ) : (
+                      </div>
+
+                      <div className="flex gap-2">
                         <Button
-                          type="submit"
-                          data-testid="button-complete-intake"
-                          disabled={
-                            !primaryTaxpayerSignature || 
-                            !primaryCertifyAccurate || 
-                            ((maritalStatusDec31 === "married" || hasSpouse) && (!spouseTaxpayerSignature || !spouseCertifyAccurate))
-                          }
+                          type="button"
+                          variant="outline"
+                          onClick={handleSaveAndExit}
+                          disabled={!selectedSessionId}
+                          data-testid="button-save-draft"
                         >
-                          <CheckCircle2 className="h-4 w-4 mr-1" />
-                          Complete Intake
+                          <Save className="h-4 w-4 mr-1" />
+                          Save & Exit
                         </Button>
-                      )}
+
+                        {currentStep < 5 ? (
+                          <Button
+                            type="button"
+                            onClick={handleNext}
+                            data-testid="button-next"
+                          >
+                            Next
+                            <ChevronRight className="h-4 w-4 ml-1" />
+                          </Button>
+                        ) : (
+                          <Button
+                            type="submit"
+                            data-testid="button-complete-intake"
+                            disabled={
+                              !primaryTaxpayerSignature || 
+                              !primaryCertifyAccurate || 
+                              ((maritalStatusDec31 === "married" || hasSpouse) && (!spouseTaxpayerSignature || !spouseCertifyAccurate))
+                            }
+                          >
+                            <CheckCircle2 className="h-4 w-4 mr-1" />
+                            Complete Intake
+                          </Button>
+                        )}
+                      </div>
                     </div>
-                  </div>
+                  )}
                 </form>
               </Form>
             </CardContent>
