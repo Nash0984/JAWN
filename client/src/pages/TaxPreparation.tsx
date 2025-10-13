@@ -18,8 +18,9 @@ import { useToast } from "@/hooks/use-toast";
 import { 
   Upload, FileText, Download, Loader2, CheckCircle2, AlertCircle, 
   Calculator, DollarSign, Users, Home as HomeIcon, Info,
-  ChevronRight, X, Eye, FileCheck
+  ChevronRight, X, Eye, FileCheck, TrendingUp, Network, Clock, ArrowRight
 } from "lucide-react";
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { motion } from "framer-motion";
 import { fadeVariants } from "@/lib/animations";
 
@@ -44,6 +45,68 @@ interface TaxCalculation {
   childTaxCredit: number;
   additionalChildTaxCredit: number;
   refundAmount: number;
+  marylandTax?: {
+    marylandAGI: number;
+    marylandStateTax: number;
+    countyTax: number;
+    totalMarylandTax: number;
+    marylandEITC: number;
+    marylandRefund: number;
+    countyRate: number;
+  };
+}
+
+interface CrossEnrollmentOpportunity {
+  id: string;
+  type: 'tax_to_benefit' | 'benefit_to_tax';
+  priority: 'high' | 'medium' | 'low';
+  category: string;
+  trigger: {
+    source: string;
+    value: number | string;
+    threshold?: number;
+  };
+  recommendation: {
+    program: string;
+    estimatedValue: number;
+    action: string;
+    automationAvailable: boolean;
+  };
+  evidence: {
+    incomeIndicators?: {
+      agi: number;
+      eitc: number;
+      wages: number;
+    };
+    householdIndicators?: {
+      dependents: number;
+      medicalExpenses?: number;
+      childcareExpenses?: number;
+    };
+    programEligibility?: {
+      snapIncomeLimitMonthly: number;
+      currentIncomeMonthly: number;
+      likelyEligible: boolean;
+    };
+  };
+  navigatorNotes: string;
+  urgency: 'immediate' | 'within_30_days' | 'annual' | 'future_planning';
+}
+
+interface CrossEnrollmentAnalysis {
+  opportunities: CrossEnrollmentOpportunity[];
+  summary: {
+    totalPotentialValue: number;
+    highPriorityCount: number;
+    autoEnrollableCount: number;
+  };
+  householdProfile: {
+    agi: number;
+    householdSize: number;
+    dependents: number;
+    hasDisability: boolean;
+    hasElderly: boolean;
+  };
 }
 
 export default function TaxPreparation() {
@@ -54,6 +117,7 @@ export default function TaxPreparation() {
   const [taxYear, setTaxYear] = useState<number>(new Date().getFullYear() - 1);
   const [uploading, setUploading] = useState(false);
   const [calculationResult, setCalculationResult] = useState<TaxCalculation | null>(null);
+  const [crossEnrollmentAnalysis, setCrossEnrollmentAnalysis] = useState<CrossEnrollmentAnalysis | null>(null);
   const [showPreviewDialog, setShowPreviewDialog] = useState(false);
   const [selectedDoc, setSelectedDoc] = useState<TaxDocument | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -81,6 +145,7 @@ export default function TaxPreparation() {
     aptNumber: "",
     city: "",
     state: "MD",
+    county: "Baltimore City",
     zipCode: "",
     filingStatus: "single",
     virtualCurrency: false
@@ -133,7 +198,7 @@ export default function TaxPreparation() {
   });
 
   // Tax calculation mutation
-  const calculateMutation = useMutation<TaxCalculation, Error, void>({
+  const calculateMutation = useMutation<TaxCalculation & { taxInput: any }, Error, void>({
     mutationFn: async () => {
       // Build household tax input from forms and extracted documents
       
@@ -237,13 +302,30 @@ export default function TaxPreparation() {
         })
       };
 
-      return await apiRequest("/api/tax/calculate", "POST", taxInput) as unknown as TaxCalculation;
+      const federalResult = await apiRequest("/api/tax/calculate", "POST", taxInput) as unknown as TaxCalculation;
+      
+      const marylandResult = await apiRequest("/api/tax/maryland/calculate", "POST", {
+        federalAGI: federalResult.adjustedGrossIncome,
+        federalEITC: federalResult.eitcAmount,
+        filingStatus: personalInfo.filingStatus,
+        county: personalInfo.county,
+        marylandInput: {},
+        federalDeduction: 0,
+        federalItemizedDeduction: 0
+      }) as unknown as TaxCalculation['marylandTax'];
+
+      return { ...federalResult, marylandTax: marylandResult, taxInput };
     },
-    onSuccess: (data: TaxCalculation) => {
-      setCalculationResult(data);
+    onSuccess: (data: TaxCalculation & { taxInput: any }) => {
+      const { taxInput, ...taxCalcResult } = data;
+      setCalculationResult(taxCalcResult);
+      
+      // Automatically trigger cross-enrollment analysis
+      crossEnrollmentMutation.mutate(taxInput);
+      
       toast({
         title: "Calculation Complete",
-        description: `Estimated refund: $${data.refundAmount.toFixed(2)}`,
+        description: `Federal refund: $${taxCalcResult.refundAmount.toFixed(2)}${taxCalcResult.marylandTax ? `, MD refund: $${taxCalcResult.marylandTax.marylandRefund.toFixed(2)}` : ''}`,
       });
       setActiveTab("review");
     },
@@ -251,6 +333,32 @@ export default function TaxPreparation() {
       toast({
         title: "Calculation Failed",
         description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Cross-enrollment analysis mutation
+  const crossEnrollmentMutation = useMutation<CrossEnrollmentAnalysis, Error, any>({
+    mutationFn: async (taxInput: any) => {
+      const response = await apiRequest("/api/tax/cross-enrollment/analyze", "POST", { taxInput });
+      return response as unknown as CrossEnrollmentAnalysis;
+    },
+    onSuccess: (data: CrossEnrollmentAnalysis) => {
+      setCrossEnrollmentAnalysis(data);
+      
+      if (data.summary.highPriorityCount > 0) {
+        toast({
+          title: "Benefit Opportunities Found!",
+          description: `Found ${data.opportunities.length} benefit opportunities worth up to $${data.summary.totalPotentialValue.toLocaleString()}/year`,
+        });
+      }
+    },
+    onError: (error: Error) => {
+      console.error("Cross-enrollment analysis failed:", error);
+      toast({
+        title: "Cross-Enrollment Analysis Failed",
+        description: error.message || "Unable to analyze benefit opportunities. Please try again.",
         variant: "destructive",
       });
     },
@@ -291,9 +399,75 @@ export default function TaxPreparation() {
       window.URL.revokeObjectURL(url);
       document.body.removeChild(a);
 
+      window.open(url, '_blank');
+
       toast({
         title: "Form 1040 Generated",
         description: "PDF downloaded successfully",
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Generation Failed",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Maryland Form 502 PDF generation
+  const generateForm502Mutation = useMutation({
+    mutationFn: async () => {
+      if (!calculationResult) {
+        throw new Error("No calculation available");
+      }
+
+      const response = await fetch('/api/tax/form502/generate', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          personalInfo: {
+            taxpayerFirstName: personalInfo.taxpayerFirstName,
+            taxpayerLastName: personalInfo.taxpayerLastName,
+            taxpayerSSN: personalInfo.taxpayerSSN,
+            spouseFirstName: personalInfo.spouseFirstName,
+            spouseLastName: personalInfo.spouseLastName,
+            spouseSSN: personalInfo.spouseSSN,
+            streetAddress: personalInfo.streetAddress,
+            city: personalInfo.city,
+            state: personalInfo.state,
+            county: personalInfo.county,
+            zipCode: personalInfo.zipCode,
+            filingStatus: personalInfo.filingStatus
+          },
+          calculationResult,
+          taxYear
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to generate Maryland Form 502');
+      }
+
+      const blob = await response.blob();
+      return blob;
+    },
+    onSuccess: (pdfBlob) => {
+      const url = window.URL.createObjectURL(pdfBlob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `Form_502_MD_${taxYear}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+
+      window.open(url, '_blank');
+
+      toast({
+        title: "Maryland Form 502 Generated",
+        description: "PDF downloaded and opened in new tab",
       });
     },
     onError: (error: Error) => {
@@ -345,7 +519,7 @@ export default function TaxPreparation() {
 
         {/* Main Tabs */}
         <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList className="grid w-full grid-cols-4">
+          <TabsList className="grid w-full grid-cols-5">
             <TabsTrigger value="documents" data-testid="tab-documents">
               <FileText className="h-4 w-4 mr-2" />
               Documents
@@ -361,6 +535,10 @@ export default function TaxPreparation() {
             <TabsTrigger value="review" data-testid="tab-review" disabled={!calculationResult}>
               <FileCheck className="h-4 w-4 mr-2" />
               Review & File
+            </TabsTrigger>
+            <TabsTrigger value="opportunities" data-testid="tab-opportunities" disabled={!crossEnrollmentAnalysis}>
+              <TrendingUp className="h-4 w-4 mr-2" />
+              Benefit Opportunities
             </TabsTrigger>
           </TabsList>
 
@@ -750,7 +928,7 @@ export default function TaxPreparation() {
                     data-testid="input-street"
                   />
                 </div>
-                <div className="grid grid-cols-3 gap-4">
+                <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label htmlFor="city">City</Label>
                     <Input
@@ -760,6 +938,42 @@ export default function TaxPreparation() {
                       data-testid="input-city"
                     />
                   </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="county">County (for MD taxes)</Label>
+                    <Select value={personalInfo.county} onValueChange={(v) => setPersonalInfo({...personalInfo, county: v})}>
+                      <SelectTrigger id="county" data-testid="select-county">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="Allegany">Allegany</SelectItem>
+                        <SelectItem value="Anne Arundel">Anne Arundel</SelectItem>
+                        <SelectItem value="Baltimore City">Baltimore City</SelectItem>
+                        <SelectItem value="Baltimore">Baltimore County</SelectItem>
+                        <SelectItem value="Calvert">Calvert</SelectItem>
+                        <SelectItem value="Caroline">Caroline</SelectItem>
+                        <SelectItem value="Carroll">Carroll</SelectItem>
+                        <SelectItem value="Cecil">Cecil</SelectItem>
+                        <SelectItem value="Charles">Charles</SelectItem>
+                        <SelectItem value="Dorchester">Dorchester</SelectItem>
+                        <SelectItem value="Frederick">Frederick</SelectItem>
+                        <SelectItem value="Garrett">Garrett</SelectItem>
+                        <SelectItem value="Harford">Harford</SelectItem>
+                        <SelectItem value="Howard">Howard</SelectItem>
+                        <SelectItem value="Kent">Kent</SelectItem>
+                        <SelectItem value="Montgomery">Montgomery</SelectItem>
+                        <SelectItem value="Prince Georges">Prince George's</SelectItem>
+                        <SelectItem value="Queen Annes">Queen Anne's</SelectItem>
+                        <SelectItem value="Somerset">Somerset</SelectItem>
+                        <SelectItem value="St. Marys">St. Mary's</SelectItem>
+                        <SelectItem value="Talbot">Talbot</SelectItem>
+                        <SelectItem value="Washington">Washington</SelectItem>
+                        <SelectItem value="Wicomico">Wicomico</SelectItem>
+                        <SelectItem value="Worcester">Worcester</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label htmlFor="state">State</Label>
                     <Input
@@ -844,9 +1058,70 @@ export default function TaxPreparation() {
           <TabsContent value="review" className="space-y-6">
             {calculationResult && (
               <>
+                {calculationResult.marylandTax && (
+                  <Card className="border-primary">
+                    <CardHeader>
+                      <CardTitle className="flex items-center gap-2">
+                        <DollarSign className="h-5 w-5 text-primary" />
+                        Maryland State Tax Summary
+                      </CardTitle>
+                      <CardDescription>
+                        {personalInfo.county} County • Tax Year {calculationResult.taxYear}
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-6">
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <Label className="text-muted-foreground">Maryland AGI</Label>
+                          <p className="text-2xl font-bold" data-testid="text-md-agi">
+                            ${calculationResult.marylandTax.marylandAGI.toLocaleString()}
+                          </p>
+                        </div>
+                        <div className="space-y-2">
+                          <Label className="text-muted-foreground">MD State Tax</Label>
+                          <p className="text-2xl font-bold" data-testid="text-md-state-tax">
+                            ${calculationResult.marylandTax.marylandStateTax.toLocaleString()}
+                          </p>
+                        </div>
+                        <div className="space-y-2">
+                          <Label className="text-muted-foreground">
+                            {personalInfo.county} County Tax ({(calculationResult.marylandTax.countyRate * 100).toFixed(2)}%)
+                          </Label>
+                          <p className="text-2xl font-bold" data-testid="text-county-tax">
+                            ${calculationResult.marylandTax.countyTax.toLocaleString()}
+                          </p>
+                        </div>
+                        <div className="space-y-2">
+                          <Label className="text-muted-foreground">Total MD Tax</Label>
+                          <p className="text-2xl font-bold" data-testid="text-total-md-tax">
+                            ${calculationResult.marylandTax.totalMarylandTax.toLocaleString()}
+                          </p>
+                        </div>
+                        <div className="space-y-2">
+                          <Label className="text-muted-foreground">MD EITC (50% of Federal)</Label>
+                          <p className="text-2xl font-bold text-green-600" data-testid="text-md-eitc">
+                            ${calculationResult.marylandTax.marylandEITC.toLocaleString()}
+                          </p>
+                        </div>
+                        <div className="space-y-2">
+                          <Label className="text-muted-foreground">
+                            {calculationResult.marylandTax.marylandRefund >= 0 ? 'MD Refund' : 'MD Amount Owed'}
+                          </Label>
+                          <p 
+                            className={`text-3xl font-bold ${calculationResult.marylandTax.marylandRefund >= 0 ? 'text-green-600' : 'text-red-600'}`}
+                            data-testid="text-md-refund"
+                          >
+                            ${Math.abs(calculationResult.marylandTax.marylandRefund).toLocaleString()}
+                          </p>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
+
                 <Card>
                   <CardHeader>
-                    <CardTitle>Tax Calculation Results</CardTitle>
+                    <CardTitle>Federal Tax Calculation Results</CardTitle>
                     <CardDescription>Tax Year {calculationResult.taxYear}</CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-6">
@@ -896,22 +1171,37 @@ export default function TaxPreparation() {
 
                     <Separator />
 
-                    <div className="flex gap-4">
-                      <Button
-                        className="flex-1"
-                        variant="outline"
-                        onClick={() => generateForm1040Mutation.mutate()}
-                        disabled={generateForm1040Mutation.isPending}
-                        data-testid="button-download-form1040"
-                      >
-                        {generateForm1040Mutation.isPending ? (
-                          <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Generating...</>
-                        ) : (
-                          <><Download className="h-4 w-4 mr-2" /> Download Form 1040 PDF</>
-                        )}
-                      </Button>
+                    <div className="space-y-4">
+                      <div className="flex gap-4">
+                        <Button
+                          className="flex-1"
+                          variant="outline"
+                          onClick={() => generateForm1040Mutation.mutate()}
+                          disabled={generateForm1040Mutation.isPending}
+                          data-testid="button-download-form1040"
+                        >
+                          {generateForm1040Mutation.isPending ? (
+                            <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Generating...</>
+                          ) : (
+                            <><Download className="h-4 w-4 mr-2" /> Generate Form 1040</>
+                          )}
+                        </Button>
+                        <Button
+                          className="flex-1"
+                          variant="outline"
+                          onClick={() => generateForm502Mutation.mutate()}
+                          disabled={generateForm502Mutation.isPending || !calculationResult?.marylandTax}
+                          data-testid="button-download-form502"
+                        >
+                          {generateForm502Mutation.isPending ? (
+                            <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Generating...</>
+                          ) : (
+                            <><Download className="h-4 w-4 mr-2" /> Generate MD Form 502</>
+                          )}
+                        </Button>
+                      </div>
                       <Button 
-                        className="flex-1"
+                        className="w-full"
                         data-testid="button-file-electronically"
                       >
                         <FileCheck className="h-4 w-4 mr-2" />
@@ -934,6 +1224,292 @@ export default function TaxPreparation() {
                   </AlertDescription>
                 </Alert>
               </>
+            )}
+          </TabsContent>
+
+          {/* Cross-Enrollment Opportunities Tab */}
+          <TabsContent value="opportunities" className="space-y-6">
+            {crossEnrollmentMutation.isPending ? (
+              <div className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <Skeleton className="h-32" />
+                  <Skeleton className="h-32" />
+                  <Skeleton className="h-32" />
+                </div>
+                <Skeleton className="h-64" />
+                <Skeleton className="h-48" />
+              </div>
+            ) : crossEnrollmentAnalysis ? (
+              <>
+                {/* Summary Cards */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <Card>
+                    <CardHeader className="pb-3">
+                      <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+                        <DollarSign className="h-4 w-4" />
+                        Total Potential Value
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="text-3xl font-bold text-green-600" data-testid="text-total-value">
+                        ${crossEnrollmentAnalysis.summary.totalPotentialValue.toLocaleString()}/year
+                      </div>
+                      <p className="text-sm text-muted-foreground mt-1">
+                        Across all opportunities
+                      </p>
+                    </CardContent>
+                  </Card>
+
+                  <Card>
+                    <CardHeader className="pb-3">
+                      <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+                        <AlertCircle className="h-4 w-4" />
+                        High Priority
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="text-3xl font-bold text-red-600" data-testid="text-high-priority-count">
+                        {crossEnrollmentAnalysis.summary.highPriorityCount}
+                      </div>
+                      <p className="text-sm text-muted-foreground mt-1">
+                        Immediate action needed
+                      </p>
+                    </CardContent>
+                  </Card>
+
+                  <Card>
+                    <CardHeader className="pb-3">
+                      <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+                        <CheckCircle2 className="h-4 w-4" />
+                        Auto-Enrollable
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="text-3xl font-bold text-blue-600" data-testid="text-auto-enrollable-count">
+                        {crossEnrollmentAnalysis.summary.autoEnrollableCount}
+                      </div>
+                      <p className="text-sm text-muted-foreground mt-1">
+                        Can pre-fill from tax data
+                      </p>
+                    </CardContent>
+                  </Card>
+                </div>
+
+                {/* Opportunities List */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <Network className="h-5 w-5" />
+                      Benefit Opportunities ({crossEnrollmentAnalysis.opportunities?.length || 0})
+                    </CardTitle>
+                    <CardDescription>
+                      AI-identified benefit programs based on your tax return data
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    {!crossEnrollmentAnalysis.opportunities || crossEnrollmentAnalysis.opportunities.length === 0 ? (
+                      <Alert>
+                        <CheckCircle2 className="h-4 w-4" />
+                        <AlertTitle>No New Opportunities</AlertTitle>
+                        <AlertDescription>
+                          Based on your tax return, you appear to be enrolled in all eligible benefit programs.
+                        </AlertDescription>
+                      </Alert>
+                    ) : (
+                      <Accordion type="single" collapsible className="w-full">
+                        {crossEnrollmentAnalysis.opportunities.map((opportunity) => {
+                          const priorityColors = {
+                            high: 'bg-red-100 dark:bg-red-950 text-red-800 dark:text-red-200 border-red-200 dark:border-red-800',
+                            medium: 'bg-yellow-100 dark:bg-yellow-950 text-yellow-800 dark:text-yellow-200 border-yellow-200 dark:border-yellow-800',
+                            low: 'bg-blue-100 dark:bg-blue-950 text-blue-800 dark:text-blue-200 border-blue-200 dark:border-blue-800'
+                          };
+
+                          const urgencyIcons = {
+                            immediate: <AlertCircle className="h-4 w-4 text-red-600" />,
+                            within_30_days: <Clock className="h-4 w-4 text-yellow-600" />,
+                            annual: <Info className="h-4 w-4 text-blue-600" />,
+                            future_planning: <Info className="h-4 w-4 text-gray-600" />
+                          };
+
+                          return (
+                            <AccordionItem 
+                              key={opportunity.id} 
+                              value={opportunity.id}
+                              className={`border ${priorityColors[opportunity.priority]} rounded-lg mb-3 px-4`}
+                              data-testid={`opportunity-${opportunity.id}`}
+                            >
+                              <AccordionTrigger className="hover:no-underline">
+                                <div className="flex items-start justify-between w-full pr-4">
+                                  <div className="flex items-start gap-3 text-left">
+                                    <div className="mt-1">
+                                      {urgencyIcons[opportunity.urgency]}
+                                    </div>
+                                    <div>
+                                      <div className="flex items-center gap-2 mb-1">
+                                        <h4 className="font-semibold text-base">
+                                          {opportunity.recommendation.program}
+                                        </h4>
+                                        <Badge 
+                                          variant={opportunity.priority === 'high' ? 'destructive' : opportunity.priority === 'medium' ? 'default' : 'secondary'}
+                                          data-testid={`badge-priority-${opportunity.id}`}
+                                        >
+                                          {opportunity.priority.toUpperCase()}
+                                        </Badge>
+                                      </div>
+                                      <p className="text-sm opacity-90">
+                                        {opportunity.trigger.source}
+                                      </p>
+                                    </div>
+                                  </div>
+                                  <div className="text-right">
+                                    <p className="text-lg font-bold" data-testid={`text-value-${opportunity.id}`}>
+                                      ${opportunity.recommendation.estimatedValue.toLocaleString()}
+                                    </p>
+                                    <p className="text-xs opacity-75">
+                                      {opportunity.category.includes('SNAP') || opportunity.category.includes('Child Care') ? '/month' : '/year'}
+                                    </p>
+                                  </div>
+                                </div>
+                              </AccordionTrigger>
+                              <AccordionContent className="pt-4">
+                                <div className="space-y-4">
+                                  {/* Trigger Details */}
+                                  <div className="bg-white/50 dark:bg-black/20 rounded-lg p-3">
+                                    <Label className="text-xs font-semibold uppercase tracking-wide opacity-70">
+                                      Why This Opportunity?
+                                    </Label>
+                                    <p className="text-sm mt-1">
+                                      {opportunity.trigger.source}
+                                      {opportunity.trigger.threshold && (
+                                        <span className="ml-2 text-muted-foreground">
+                                          (Threshold: ${typeof opportunity.trigger.value === 'number' ? opportunity.trigger.value.toLocaleString() : opportunity.trigger.value})
+                                        </span>
+                                      )}
+                                    </p>
+                                  </div>
+
+                                  {/* Evidence */}
+                                  {opportunity.evidence.incomeIndicators && (
+                                    <div className="grid grid-cols-3 gap-3 text-sm">
+                                      {opportunity.evidence.incomeIndicators.agi !== undefined && (
+                                        <div>
+                                          <Label className="text-xs opacity-70">AGI</Label>
+                                          <p className="font-medium">${opportunity.evidence.incomeIndicators.agi.toLocaleString()}</p>
+                                        </div>
+                                      )}
+                                      {opportunity.evidence.incomeIndicators.eitc !== undefined && (
+                                        <div>
+                                          <Label className="text-xs opacity-70">EITC</Label>
+                                          <p className="font-medium">${opportunity.evidence.incomeIndicators.eitc.toLocaleString()}</p>
+                                        </div>
+                                      )}
+                                      {opportunity.evidence.incomeIndicators.wages !== undefined && (
+                                        <div>
+                                          <Label className="text-xs opacity-70">Wages</Label>
+                                          <p className="font-medium">${opportunity.evidence.incomeIndicators.wages.toLocaleString()}</p>
+                                        </div>
+                                      )}
+                                    </div>
+                                  )}
+
+                                  {/* Recommended Action */}
+                                  <div className="bg-white/50 dark:bg-black/20 rounded-lg p-3">
+                                    <Label className="text-xs font-semibold uppercase tracking-wide opacity-70">
+                                      Recommended Action
+                                    </Label>
+                                    <p className="text-sm mt-1 font-medium">
+                                      {opportunity.recommendation.action}
+                                    </p>
+                                    {opportunity.recommendation.automationAvailable && (
+                                      <Badge variant="outline" className="mt-2">
+                                        <CheckCircle2 className="h-3 w-3 mr-1" />
+                                        Auto-fillable from tax data
+                                      </Badge>
+                                    )}
+                                  </div>
+
+                                  {/* Navigator Notes */}
+                                  <div className="bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 rounded-lg p-3">
+                                    <Label className="text-xs font-semibold uppercase tracking-wide text-blue-700 dark:text-blue-300">
+                                      Navigator Notes
+                                    </Label>
+                                    <p className="text-sm mt-1 text-blue-900 dark:text-blue-100">
+                                      {opportunity.navigatorNotes}
+                                    </p>
+                                  </div>
+
+                                  {/* Action Buttons */}
+                                  <div className="flex gap-3 pt-2">
+                                    <Button 
+                                      className="flex-1"
+                                      data-testid={`button-start-application-${opportunity.id}`}
+                                    >
+                                      <ArrowRight className="h-4 w-4 mr-2" />
+                                      Start Application
+                                    </Button>
+                                    <Button 
+                                      variant="outline" 
+                                      className="flex-1"
+                                      data-testid={`button-send-to-navigator-${opportunity.id}`}
+                                    >
+                                      <FileText className="h-4 w-4 mr-2" />
+                                      Send to Navigator
+                                    </Button>
+                                  </div>
+                                </div>
+                              </AccordionContent>
+                            </AccordionItem>
+                          );
+                        })}
+                      </Accordion>
+                    )}
+                  </CardContent>
+                </Card>
+
+                {/* Household Profile Summary */}
+                {crossEnrollmentAnalysis.householdProfile && (
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="flex items-center gap-2">
+                        <Users className="h-5 w-5" />
+                        Household Profile
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="grid grid-cols-2 md:grid-cols-5 gap-4 text-sm">
+                        <div>
+                          <Label className="text-xs text-muted-foreground">AGI</Label>
+                          <p className="font-semibold">${crossEnrollmentAnalysis.householdProfile.agi.toLocaleString()}</p>
+                        </div>
+                        <div>
+                          <Label className="text-xs text-muted-foreground">Household Size</Label>
+                          <p className="font-semibold">{crossEnrollmentAnalysis.householdProfile.householdSize}</p>
+                        </div>
+                        <div>
+                          <Label className="text-xs text-muted-foreground">Dependents</Label>
+                          <p className="font-semibold">{crossEnrollmentAnalysis.householdProfile.dependents}</p>
+                        </div>
+                        <div>
+                          <Label className="text-xs text-muted-foreground">Has Disability</Label>
+                          <p className="font-semibold">{crossEnrollmentAnalysis.householdProfile.hasDisability ? 'Yes' : 'No'}</p>
+                        </div>
+                        <div>
+                          <Label className="text-xs text-muted-foreground">Has Elderly (65+)</Label>
+                          <p className="font-semibold">{crossEnrollmentAnalysis.householdProfile.hasElderly ? 'Yes' : 'No'}</p>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
+              </>
+            ) : (
+              <Alert>
+                <Info className="h-4 w-4" />
+                <AlertTitle>No Analysis Available</AlertTitle>
+                <AlertDescription>
+                  Complete your tax calculation to see benefit enrollment opportunities.
+                </AlertDescription>
+              </Alert>
             )}
           </TabsContent>
         </Tabs>

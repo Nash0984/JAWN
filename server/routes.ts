@@ -4217,6 +4217,168 @@ If the question cannot be answered with the available information, say so clearl
     res.send(pdfBuffer);
   }));
 
+  // Generate Maryland Form 502 PDF (from saved tax return)
+  app.post("/api/tax/form502/generate", requireAuth, asyncHandler(async (req, res) => {
+    const { Form502Generator } = await import("./services/form502Generator");
+    
+    const schema = z.object({
+      federalTaxReturnId: z.string().optional(),
+      personalInfo: z.object({
+        taxpayerFirstName: z.string(),
+        taxpayerLastName: z.string(),
+        taxpayerSSN: z.string(),
+        spouseFirstName: z.string().optional(),
+        spouseLastName: z.string().optional(),
+        spouseSSN: z.string().optional(),
+        streetAddress: z.string(),
+        city: z.string(),
+        state: z.string(),
+        county: z.string(),
+        zipCode: z.string(),
+        filingStatus: z.string()
+      }).optional(),
+      calculationResult: z.object({
+        adjustedGrossIncome: z.number(),
+        taxableIncome: z.number(),
+        totalTax: z.number(),
+        eitcAmount: z.number(),
+        childTaxCredit: z.number(),
+        deduction: z.number().optional(),
+        marylandTax: z.object({
+          marylandAGI: z.number(),
+          marylandStateTax: z.number(),
+          countyTax: z.number(),
+          totalMarylandTax: z.number(),
+          marylandEITC: z.number(),
+          marylandRefund: z.number()
+        }).optional()
+      }).optional(),
+      taxYear: z.number().optional()
+    });
+
+    const validated = schema.parse(req.body);
+
+    const form502Generator = new Form502Generator();
+
+    // Use provided data or fetch from database
+    if (validated.federalTaxReturnId) {
+      const federalTaxReturn = await storage.getFederalTaxReturn(validated.federalTaxReturnId);
+      if (!federalTaxReturn) {
+        return res.status(404).json({ error: "Federal tax return not found" });
+      }
+
+      const result = await form502Generator.generateForm502(
+        federalTaxReturn.form1040Data.personalInfo,
+        federalTaxReturn.form1040Data.taxInput,
+        federalTaxReturn.form1040Data.taxResult,
+        federalTaxReturn.form1040Data.marylandInput || {},
+        {
+          taxYear: federalTaxReturn.taxYear,
+          preparerName: req.user?.username,
+          preparationDate: new Date(),
+          includeWatermark: true
+        }
+      );
+
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `attachment; filename="Form-502-MD-${federalTaxReturn.taxYear}.pdf"`);
+      res.send(result.pdf);
+    } else if (validated.personalInfo && validated.calculationResult && validated.taxYear) {
+      // Direct generation from provided data
+      const personalInfoForForm = {
+        ...validated.personalInfo,
+        county: validated.personalInfo.county
+      };
+
+      const taxInput = {
+        filingStatus: validated.personalInfo.filingStatus as any
+      };
+
+      const taxResult = {
+        adjustedGrossIncome: validated.calculationResult.adjustedGrossIncome,
+        taxableIncome: validated.calculationResult.taxableIncome,
+        incomeTax: validated.calculationResult.totalTax,
+        eitc: validated.calculationResult.eitcAmount,
+        childTaxCredit: validated.calculationResult.childTaxCredit,
+        deductionBreakdown: {
+          standardDeduction: validated.calculationResult.deduction || 0,
+          itemizedDeduction: 0
+        }
+      } as any;
+
+      const result = await form502Generator.generateForm502(
+        personalInfoForForm,
+        taxInput,
+        taxResult,
+        {},
+        {
+          taxYear: validated.taxYear,
+          preparerName: req.user?.username,
+          preparationDate: new Date(),
+          includeWatermark: true
+        }
+      );
+
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `attachment; filename="Form-502-MD-${validated.taxYear}.pdf"`);
+      res.send(result.pdf);
+    } else {
+      return res.status(400).json({ error: "Either federalTaxReturnId or complete form data must be provided" });
+    }
+  }));
+
+  // Calculate Maryland tax from federal AGI
+  app.post("/api/tax/maryland/calculate", requireAuth, asyncHandler(async (req, res) => {
+    const { Form502Generator } = await import("./services/form502Generator");
+    
+    const schema = z.object({
+      federalAGI: z.number(),
+      federalEITC: z.number().default(0),
+      filingStatus: z.enum(['single', 'married_joint', 'married_separate', 'head_of_household', 'qualifying_widow']),
+      county: z.string(),
+      marylandInput: z.object({
+        stateTaxRefund: z.number().optional(),
+        socialSecurityBenefits: z.number().optional(),
+        railroadRetirement: z.number().optional(),
+        pensionIncome: z.number().optional(),
+        propertyTaxPaid: z.number().optional(),
+        rentPaid: z.number().optional(),
+        childcareExpenses: z.number().optional(),
+        marylandWithholding: z.number().optional()
+      }).optional(),
+      federalDeduction: z.number().default(0),
+      federalItemizedDeduction: z.number().default(0)
+    });
+
+    const validated = schema.parse(req.body);
+
+    const form502Generator = new Form502Generator();
+
+    // Create minimal tax result for Maryland calculation
+    const federalTaxResult = {
+      adjustedGrossIncome: validated.federalAGI,
+      eitc: validated.federalEITC,
+      deductionBreakdown: {
+        standardDeduction: validated.federalDeduction,
+        itemizedDeduction: validated.federalItemizedDeduction
+      }
+    } as any;
+
+    const taxInput = {
+      filingStatus: validated.filingStatus
+    } as any;
+
+    // Calculate Maryland tax
+    const marylandTaxResult = form502Generator.calculateMarylandTax(
+      federalTaxResult,
+      taxInput,
+      validated.marylandInput || {},
+      validated.county
+    );
+
+    res.json({ marylandTax: marylandTaxResult });
+  }));
+
   // Get cross-enrollment opportunities from tax data
   app.post("/api/tax/cross-enrollment/analyze", requireAuth, asyncHandler(async (req, res) => {
     const { crossEnrollmentIntelligenceService } = await import("./services/crossEnrollmentIntelligence");
