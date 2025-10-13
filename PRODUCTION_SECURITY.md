@@ -156,7 +156,29 @@ node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 - ✅ **Session lifetime:** 30 days with automatic cleanup
 - ✅ **Session regeneration:** Login/logout properly handled via Passport.js
 
-### 11. Health Check & Monitoring
+### 11. Authorization & Ownership Controls
+**Location:** `server/middleware/ownership.ts`
+
+- ✅ **Ownership verification middleware:**
+  - `verifyHouseholdProfileOwnership` - Ensures users access only their household profiles
+  - `verifyVitaSessionOwnership` - Protects VITA intake session access
+  - `verifyTaxDocumentOwnership` - Secures tax document access
+  - `verifyNotificationOwnership` - Personal notification protection
+  - `verifyOwnership` - Generic ownership verification factory
+- ✅ **Role-based access control:**
+  - `allowAdmin = true` by default (admins can access all resources for auditing)
+  - **`allowStaff = false` by default** (prevents horizontal privilege escalation)
+  - Staff must explicitly opt-in for supervisor/review workflows
+  - Field-level user ID verification
+  - Custom error messages per resource type
+- ✅ **Security features:**
+  - **Prevents horizontal privilege escalation** (staff cannot access each other's data)
+  - Resource existence validation
+  - Authentication state verification
+  - Applied to: household profiles (GET/PATCH/DELETE), VITA sessions (GET/PATCH/DELETE)
+- 🚧 **Remaining work:** Apply to notifications, tax documents, and bulk listing endpoints
+
+### 12. Health Check & Monitoring
 **Endpoint:** `GET /api/health`
 
 **Response:**
