@@ -45,6 +45,7 @@ import TaxPreparation from "@/pages/TaxPreparation";
 import CountyManagement from "@/pages/CountyManagement";
 import NavigatorPerformance from "@/pages/NavigatorPerformance";
 import Leaderboard from "@/pages/Leaderboard";
+import CountyAnalytics from "@/pages/CountyAnalytics";
 import MobileBottomNav from "@/components/MobileBottomNav";
 import { BrandingProvider } from "@/contexts/BrandingContext";
 import { CountyHeader } from "@/components/CountyHeader";
@@ -275,6 +276,13 @@ function Router() {
             {() => (
               <ProtectedRoute requireAdmin>
                 <CountyManagement />
+              </ProtectedRoute>
+            )}
+          </Route>
+          <Route path="/admin/county-analytics">
+            {() => (
+              <ProtectedRoute requireAdmin>
+                <CountyAnalytics />
               </ProtectedRoute>
             )}
           </Route>
