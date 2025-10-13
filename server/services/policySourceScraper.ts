@@ -4,6 +4,8 @@ import crypto from 'crypto';
 import { storage } from '../storage';
 import type { InsertPolicySource, InsertDocument } from '../../shared/schema';
 import { documentProcessor } from './documentProcessor';
+import { ecfrBulkDownloader } from './ecfrBulkDownloader';
+import { irsDirectDownloader } from './irsDirectDownloader';
 
 // Official Policy Sources Configuration
 export const OFFICIAL_SOURCES: Omit<InsertPolicySource, 'benefitProgramId'>[] = [
@@ -12,14 +14,14 @@ export const OFFICIAL_SOURCES: Omit<InsertPolicySource, 'benefitProgramId'>[] = 
     name: '7 CFR Part 273 - SNAP Regulations',
     sourceType: 'federal_regulation',
     jurisdiction: 'federal',
-    description: 'Code of Federal Regulations - Supplemental Nutrition Assistance Program',
+    description: 'Code of Federal Regulations - Supplemental Nutrition Assistance Program (GovInfo XML download)',
     url: 'https://www.ecfr.gov/current/title-7/subtitle-B/chapter-II/subchapter-C/part-273',
-    syncType: 'web_scraping',
+    syncType: 'bulk_download',
     syncSchedule: 'weekly',
     priority: 100,
     isActive: true,
     syncConfig: {
-      scrapeType: 'ecfr',
+      scrapeType: 'ecfr_bulk_download',
       sections: ['273.1', '273.2', '273.7', '273.8', '273.9', '273.10', '273.11', '273.12']
     }
   },
@@ -360,14 +362,14 @@ export const OFFICIAL_SOURCES: Omit<InsertPolicySource, 'benefitProgramId'>[] = 
     name: 'IRS Pub 4012 - VITA/TCE Volunteer Resource Guide',
     sourceType: 'federal_guidance',
     jurisdiction: 'federal',
-    description: 'Primary VITA reference guide for volunteer tax preparation (2025 tax year)',
+    description: 'Primary VITA reference guide for volunteer tax preparation (2025 tax year) - Direct IRS download',
     url: 'https://www.irs.gov/pub/irs-pdf/p4012.pdf',
-    syncType: 'web_scraping',
+    syncType: 'direct_download',
     syncSchedule: 'weekly',
     priority: 100,
     isActive: true,
     syncConfig: {
-      scrapeType: 'irs_vita_pdf',
+      scrapeType: 'irs_direct_download',
       publicationNumber: '4012',
       minRevisionYear: 2025,
       extractTaxLaw: true,
@@ -379,14 +381,14 @@ export const OFFICIAL_SOURCES: Omit<InsertPolicySource, 'benefitProgramId'>[] = 
     name: 'IRS Pub 4491 - VITA/TCE Training Guide',
     sourceType: 'federal_guidance',
     jurisdiction: 'federal',
-    description: 'Core VITA training guide with lessons for all certification levels (2025 tax year)',
+    description: 'Core VITA training guide with lessons for all certification levels (2025 tax year) - Direct IRS download',
     url: 'https://www.irs.gov/pub/irs-pdf/p4491.pdf',
-    syncType: 'web_scraping',
+    syncType: 'direct_download',
     syncSchedule: 'weekly',
     priority: 95,
     isActive: true,
     syncConfig: {
-      scrapeType: 'irs_vita_pdf',
+      scrapeType: 'irs_direct_download',
       publicationNumber: '4491',
       minRevisionYear: 2025,
       extractTrainingContent: true,
@@ -398,14 +400,14 @@ export const OFFICIAL_SOURCES: Omit<InsertPolicySource, 'benefitProgramId'>[] = 
     name: 'IRS Pub 4491-X - VITA/TCE Training Supplement',
     sourceType: 'federal_guidance',
     jurisdiction: 'federal',
-    description: 'Updates to VITA training materials after initial printing (Rev. 1-2025)',
+    description: 'Updates to VITA training materials after initial printing (Rev. 1-2025) - Direct IRS download',
     url: 'https://www.irs.gov/pub/irs-pdf/p4491x.pdf',
-    syncType: 'web_scraping',
+    syncType: 'direct_download',
     syncSchedule: 'weekly',
     priority: 98,
     isActive: true,
     syncConfig: {
-      scrapeType: 'irs_vita_pdf',
+      scrapeType: 'irs_direct_download',
       publicationNumber: '4491-X',
       minRevisionYear: 2025,
       revisionMonth: 1,
@@ -418,14 +420,14 @@ export const OFFICIAL_SOURCES: Omit<InsertPolicySource, 'benefitProgramId'>[] = 
     name: 'IRS Pub 4961 - VITA/TCE Volunteer Standards of Conduct',
     sourceType: 'federal_guidance',
     jurisdiction: 'federal',
-    description: 'Required ethics training for all VITA volunteers (Rev. 5-2025)',
+    description: 'Required ethics training for all VITA volunteers (Rev. 5-2025) - Direct IRS download',
     url: 'https://www.irs.gov/pub/irs-pdf/p4961.pdf',
-    syncType: 'web_scraping',
+    syncType: 'direct_download',
     syncSchedule: 'weekly',
     priority: 100,
     isActive: true,
     syncConfig: {
-      scrapeType: 'irs_vita_pdf',
+      scrapeType: 'irs_direct_download',
       publicationNumber: '4961',
       minRevisionYear: 2025,
       revisionMonth: 5,
@@ -438,14 +440,14 @@ export const OFFICIAL_SOURCES: Omit<InsertPolicySource, 'benefitProgramId'>[] = 
     name: 'IRS Form 6744 - VITA/TCE Volunteer Assistor Test/Retest',
     sourceType: 'federal_guidance',
     jurisdiction: 'federal',
-    description: 'Practice scenarios and certification test questions (2025 tax returns)',
+    description: 'Practice scenarios and certification test questions (2025 tax returns) - Direct IRS download',
     url: 'https://www.irs.gov/pub/irs-pdf/f6744.pdf',
-    syncType: 'web_scraping',
+    syncType: 'direct_download',
     syncSchedule: 'weekly',
     priority: 90,
     isActive: true,
     syncConfig: {
-      scrapeType: 'irs_vita_pdf',
+      scrapeType: 'irs_direct_download',
       formNumber: '6744',
       taxYear: 2025,
       extractTestQuestions: true,
@@ -1879,6 +1881,57 @@ export class PolicySourceScraper {
       
       let documents: ScrapedDocument[] = [];
       const config = source.syncConfig as any;
+      
+      // Handle bulk download services (they already create documents and process them)
+      if (config?.scrapeType === 'ecfr_bulk_download') {
+        console.log('📥 Using eCFR Bulk Download Service...');
+        const result = await ecfrBulkDownloader.downloadSNAPRegulations(source.benefitProgramId || undefined);
+        
+        if (result.success) {
+          await storage.updatePolicySource(policySourceId, {
+            syncStatus: 'success',
+            lastSuccessfulSyncAt: new Date(),
+            documentCount: result.documentIds.length,
+            syncError: null
+          });
+          console.log(`✅ eCFR Bulk Download complete: ${result.documentIds.length} documents`);
+          return result.documentIds.length;
+        } else {
+          throw new Error(result.error || 'eCFR bulk download failed');
+        }
+      } else if (config?.scrapeType === 'irs_direct_download') {
+        console.log('📥 Using IRS Direct Download Service...');
+        
+        // Construct publication object from config
+        const publicationNumber = config.publicationNumber || config.formNumber;
+        if (!publicationNumber) {
+          throw new Error('Publication number not found in config');
+        }
+        
+        const publication = {
+          number: publicationNumber.toLowerCase(),
+          name: source.name,
+          url: source.url || `https://www.irs.gov/pub/irs-pdf/${publicationNumber.toLowerCase()}.pdf`,
+          type: config.formNumber ? 'form' : 'publication',
+          minRevisionYear: config.minRevisionYear,
+          revisionMonth: config.revisionMonth,
+          description: source.description || ''
+        };
+        
+        const documentIds = await irsDirectDownloader.downloadPublication(
+          publication as any,
+          source.benefitProgramId || ''
+        );
+        
+        await storage.updatePolicySource(policySourceId, {
+          syncStatus: 'success',
+          lastSuccessfulSyncAt: new Date(),
+          documentCount: documentIds.length,
+          syncError: null
+        });
+        console.log(`✅ IRS Direct Download complete: ${documentIds.length} documents`);
+        return documentIds.length;
+      }
       
       // Route to appropriate scraper based on scrapeType
       if (config?.scrapeType === 'md_transmittals') {
