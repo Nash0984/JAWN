@@ -9,12 +9,15 @@ This document provides a comprehensive security checklist and deployment guide f
 ## 🔒 Security Features Implemented
 
 ### 1. Field-Level Encryption (AES-256-GCM)
-**Location:** `server/services/encryption.service.ts`
+**Location:** `server/services/encryption.service.ts`, `server/utils/encryptedFields.ts`
 
 - ✅ Encrypts sensitive PII fields (SSN, bank accounts, tax data)
 - ✅ Uses AES-256-GCM with authentication tags
 - ✅ Separate encryption for each field with unique IVs
 - ✅ Automatic key rotation support
+- ✅ **APPLIED TO DATABASE:** All SSN and bank account fields now stored as encrypted JSONB
+- ✅ **Tables encrypted:** household_profiles, vita_intake_sessions, ee_clients
+- ✅ **Utilities created:** encryptSensitiveFields(), decryptSensitiveFields(), maskSensitiveFields()
 
 **Required Environment Variables:**
 ```bash
