@@ -162,14 +162,13 @@ app.use("/api/", (req, res, next) => {
   // Initialize system data (benefit programs, etc.)
   await initializeSystemData();
   
-  // Schedule GovInfo version checks (every 6 hours)
-  // This detects when new regulations/legislation are published without downloading
+  // Start Smart Scheduler with source-specific intervals
+  // Checks each data source based on realistic update frequencies (70-80% reduction in API calls)
   try {
-    const { govInfoVersionChecker } = await import("./services/govInfoVersionChecker");
-    govInfoVersionChecker.scheduleVersionChecks(6);
-    log("✅ GovInfo version checks scheduled (every 6 hours)");
+    const { smartScheduler } = await import("./services/smartScheduler");
+    await smartScheduler.startAll();
   } catch (error) {
-    console.error("❌ Failed to schedule GovInfo version checks:", error);
+    console.error("❌ Failed to start Smart Scheduler:", error);
   }
   
   const server = await registerRoutes(app, sessionMiddleware);

@@ -820,6 +820,39 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
     });
   }));
 
+  // Smart Scheduler - Get current schedule status
+  app.get("/api/scheduler/status", requireAdmin, asyncHandler(async (req, res) => {
+    const { smartScheduler } = await import("./services/smartScheduler");
+    
+    const status = smartScheduler.getStatus();
+    
+    res.json({
+      success: true,
+      ...status,
+    });
+  }));
+
+  // Smart Scheduler - Manually trigger a specific source check
+  app.post("/api/scheduler/trigger/:source", requireAdmin, asyncHandler(async (req, res) => {
+    const { smartScheduler } = await import("./services/smartScheduler");
+    const { source } = req.params;
+    
+    console.log(`🔧 Manually triggering ${source} check...`);
+    
+    try {
+      await smartScheduler.triggerCheck(source);
+      res.json({
+        success: true,
+        message: `Successfully triggered ${source} check`,
+      });
+    } catch (error) {
+      res.status(400).json({
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
+    }
+  }));
+
   // Congress.gov API - Search bills by keywords (Real-time legislative keyword search)
   // Note: For authoritative bill status, use GovInfo Bill Status XML API
   app.post("/api/legislative/congress-search", requireAdmin, asyncHandler(async (req, res) => {
