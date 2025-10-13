@@ -64,7 +64,7 @@ export async function detectCountyContext(
 
     // Get county details for primary assignment
     const primaryCounty = userCounties[0];
-    const county = await storage.getCountyById(primaryCounty.countyId);
+    const county = await storage.getCounty(primaryCounty.countyId);
 
     req.countyContext = {
       countyId: primaryCounty.countyId,

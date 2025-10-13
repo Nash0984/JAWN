@@ -118,7 +118,7 @@ const sessionMiddleware = session({
   }),
   secret: process.env.SESSION_SECRET,
   resave: false,
-  saveUninitialized: false,
+  saveUninitialized: true, // Changed to true to ensure session cookie is always set
   cookie: {
     maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
     httpOnly: true,
@@ -151,37 +151,13 @@ const csrfProtection = doubleCsrf({
 // Endpoint to get CSRF token (before county context middleware)
 app.get("/api/csrf-token", (req, res) => {
   try {
-    // Detailed logging for debugging
-    console.log("📋 CSRF token request received");
-    console.log("   - Session exists:", !!req.session);
-    console.log("   - Session ID (req.session?.id):", req.session?.id || "none");
-    console.log("   - Session ID (req.sessionID):", req.sessionID || "none");
-    console.log("   - Session object keys:", req.session ? Object.keys(req.session) : "no session");
-    console.log("   - Headers:", JSON.stringify(req.headers.cookie || "no cookies"));
-    
-    // Generate CSRF token
-    let csrfToken;
-    try {
-      csrfToken = csrfProtection.generateCsrfToken(req, res);
-      console.log("   - Token generation attempt completed");
-    } catch (genError) {
-      console.error("❌ csrfProtection.generateCsrfToken threw error:", genError);
-      console.error("   Stack:", (genError as Error).stack);
-      throw genError;
-    }
-    
+    const csrfToken = csrfProtection.generateCsrfToken(req, res);
     if (!csrfToken) {
-      console.error("❌ CSRF token request: generateCsrfToken returned falsy value:", csrfToken);
       return res.status(500).json({ error: "Failed to generate CSRF token" });
     }
-    
-    console.log("✅ CSRF token generated successfully, length:", csrfToken.length);
     res.json({ token: csrfToken });
   } catch (error) {
-    console.error("❌ CSRF token generation error (outer catch):", error);
-    console.error("   Error type:", (error as Error).constructor.name);
-    console.error("   Error message:", (error as Error).message);
-    console.error("   Stack:", (error as Error).stack);
+    console.error("❌ CSRF token generation error:", error);
     res.status(500).json({ error: "Internal server error generating CSRF token" });
   }
 });
