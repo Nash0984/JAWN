@@ -18,7 +18,7 @@ import { useToast } from "@/hooks/use-toast";
 import { 
   Upload, FileText, Download, Loader2, CheckCircle2, AlertCircle, 
   Calculator, DollarSign, Users, Home as HomeIcon, Info,
-  ChevronRight, X, Eye, FileCheck, TrendingUp, Network, Clock, ArrowRight
+  ChevronRight, X, Eye, FileCheck, TrendingUp, Network, Clock, ArrowRight, UserCircle, ExternalLink
 } from "lucide-react";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { motion } from "framer-motion";
@@ -109,6 +109,25 @@ interface CrossEnrollmentAnalysis {
   };
 }
 
+interface HouseholdProfile {
+  id: string;
+  name: string;
+  profileMode: string;
+  householdSize: number;
+  filingStatus?: string;
+  employmentIncome: number;
+  unearnedIncome: number;
+  selfEmploymentIncome: number;
+  wageWithholding: number;
+  estimatedTaxPayments: number;
+  dependents: any[];
+  taxpayerBlind: boolean;
+  taxpayerDisabled: boolean;
+  spouseBlind: boolean;
+  spouseDisabled: boolean;
+  stateCode: string;
+}
+
 export default function TaxPreparation() {
   const { user } = useAuth();
   const { toast } = useToast();
@@ -120,7 +139,14 @@ export default function TaxPreparation() {
   const [crossEnrollmentAnalysis, setCrossEnrollmentAnalysis] = useState<CrossEnrollmentAnalysis | null>(null);
   const [showPreviewDialog, setShowPreviewDialog] = useState(false);
   const [selectedDoc, setSelectedDoc] = useState<TaxDocument | null>(null);
+  const [selectedProfileId, setSelectedProfileId] = useState<string>("");
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Fetch household profiles
+  const { data: profiles = [] } = useQuery<HouseholdProfile[]>({
+    queryKey: ['/api/household-profiles'],
+    select: (data) => data.filter((p: any) => p.profileMode === 'combined' || p.profileMode === 'tax_only')
+  });
 
   // Fetch tax documents
   const { data: documents = [], isLoading: loadingDocs } = useQuery<TaxDocument[]>({
@@ -672,6 +698,74 @@ export default function TaxPreparation() {
 
           {/* Personal Info Tab */}
           <TabsContent value="personal" className="space-y-6">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <UserCircle className="h-5 w-5" />
+                  Load from Household Profile
+                </CardTitle>
+                <CardDescription>
+                  Pre-fill tax information from a saved household profile
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex gap-2">
+                  <Select 
+                    value={selectedProfileId} 
+                    onValueChange={(value) => {
+                      setSelectedProfileId(value);
+                      const profile = profiles.find(p => p.id === value);
+                      if (profile) {
+                        setPersonalInfo({
+                          ...personalInfo,
+                          filingStatus: profile.filingStatus || personalInfo.filingStatus,
+                          taxpayerBlind: profile.taxpayerBlind,
+                          taxpayerDisabled: profile.taxpayerDisabled,
+                          spouseBlind: profile.spouseBlind,
+                          spouseDisabled: profile.spouseDisabled,
+                          state: profile.stateCode
+                        });
+                        setDependents(profile.dependents || []);
+                        toast({
+                          title: "Profile Loaded",
+                          description: `Household data loaded from "${profile.name}"`
+                        });
+                      }
+                    }}
+                  >
+                    <SelectTrigger data-testid="select-household-profile-tax">
+                      <SelectValue placeholder="Select a household profile" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {profiles.map((profile) => (
+                        <SelectItem key={profile.id} value={profile.id}>
+                          {profile.name} ({profile.householdSize} {profile.householdSize === 1 ? 'member' : 'members'})
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    onClick={() => window.open('/profiler', '_blank')}
+                    data-testid="button-open-profiler-tax"
+                    title="Open Household Profiler"
+                  >
+                    <ExternalLink className="h-4 w-4" />
+                  </Button>
+                </div>
+                {selectedProfileId && (
+                  <Alert>
+                    <Info className="h-4 w-4" />
+                    <AlertDescription>
+                      Profile data has been loaded. You can still modify individual fields below.
+                    </AlertDescription>
+                  </Alert>
+                )}
+              </CardContent>
+            </Card>
+
             <Card>
               <CardHeader>
                 <CardTitle>Taxpayer Information</CardTitle>
