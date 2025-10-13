@@ -124,7 +124,25 @@ node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
   - Type-specific size limits: Documents (50MB), Tax Docs (25MB), Images (10MB)
   - SHA-256 file hash generation for integrity verification
 
-### 9. Health Check & Monitoring
+### 9. Password Security & Strength Enforcement
+**Location:** `server/services/passwordSecurity.service.ts`
+
+- ✅ **Strong password requirements enforced:**
+  - Minimum 12 characters (NIST SP 800-63B compliant)
+  - Uppercase, lowercase, number, and special character required
+  - No common passwords (dictionary check)
+  - No sequential or repeated characters (123, abc, aaa)
+- ✅ **Bcrypt cost factor: 12 rounds** (~250ms hashing time, 2025 standard)
+  - Automatic rehashing when cost factor is updated
+  - Password hash format verification
+- ✅ **Password strength scoring (0-100)**
+  - weak < 40, fair < 60, good < 80, strong ≥ 80
+- ✅ **API endpoints:**
+  - `GET /api/auth/password-requirements` - Get requirements
+  - `POST /api/auth/change-password` - Change password (requires auth)
+- ✅ **Audit logging:** Password changes logged with strength score
+
+### 10. Health Check & Monitoring
 **Endpoint:** `GET /api/health`
 
 **Response:**

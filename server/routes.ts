@@ -59,6 +59,7 @@ import {
   verifyFileMiddleware,
   getFileHash
 } from "./middleware/fileUploadSecurity";
+import { passwordSecurityService } from "./services/passwordSecurity.service";
 
 // Configure secure file uploaders for different use cases
 const documentUpload = createSecureUploader('documents', {
@@ -360,8 +361,11 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
       throw validationError("Username already exists");
     }
 
-    // Hash password
-    const hashedPassword = await bcrypt.hash(validatedData.password, 10);
+    // Validate and hash password with secure cost factor (12 rounds)
+    const { hash: hashedPassword, validation } = await passwordSecurityService.createPasswordHash(validatedData.password);
+    
+    // Log password strength for monitoring (not the password itself)
+    console.log(`✅ New user password strength: ${validation.strength} (score: ${validation.score}/100)`);
 
     // Create user
     const user = await storage.createUser({
@@ -418,6 +422,56 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
       res.json({ message: "Logged out successfully" });
     });
   });
+  
+  // Get password requirements
+  app.get("/api/auth/password-requirements", (req, res) => {
+    res.json({
+      requirements: passwordSecurityService.getRequirements(),
+      message: `Password must:
+- Be at least 12 characters long
+- Contain at least one uppercase letter (A-Z)
+- Contain at least one lowercase letter (a-z)
+- Contain at least one number (0-9)
+- Contain at least one special character (!@#$%^&* etc.)
+- Not be a commonly used password
+- Not contain sequential or repeated characters`
+    });
+  });
+  
+  // Change password (requires authentication)
+  app.post("/api/auth/change-password", requireAuth, asyncHandler(async (req, res) => {
+    const { currentPassword, newPassword } = req.body;
+    
+    if (!currentPassword || !newPassword) {
+      throw validationError("Current password and new password are required");
+    }
+    
+    // Get user from database to verify current password
+    const user = await storage.getUserById(req.user!.id);
+    if (!user) {
+      throw notFoundError("User not found");
+    }
+    
+    // Verify current password
+    const isValidPassword = await bcrypt.compare(currentPassword, user.password);
+    if (!isValidPassword) {
+      throw authorizationError("Current password is incorrect");
+    }
+    
+    // Validate and hash new password
+    const { hash: newHashedPassword, validation } = await passwordSecurityService.createPasswordHash(newPassword);
+    
+    // Update password in database
+    await storage.updateUser(user.id, { password: newHashedPassword });
+    
+    // Log password change for security audit
+    console.log(`✅ Password changed for user ${user.username} (strength: ${validation.strength})`);
+    
+    res.json({ 
+      message: "Password changed successfully",
+      passwordStrength: validation.strength
+    });
+  }));
 
   // Get current user
   app.get("/api/auth/me", (req, res) => {
