@@ -855,6 +855,25 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
     });
   }));
 
+  // Maryland Legislature Scraper - Scrape state bills from mgaleg.maryland.gov
+  app.post("/api/legislative/maryland-scrape", requireAdmin, asyncHandler(async (req, res) => {
+    const { marylandLegislatureScraper } = await import("./services/marylandLegislatureScraper");
+    
+    const session = req.body.session || '2025RS'; // Default to 2025 Regular Session
+    console.log(`Starting Maryland Legislature scrape for session ${session}...`);
+    
+    const result = await marylandLegislatureScraper.scrapeBills(session);
+    
+    res.json({
+      success: result.success,
+      message: `Maryland Legislature scrape ${result.success ? 'completed' : 'completed with errors'}`,
+      billsFound: result.billsFound,
+      billsStored: result.billsStored,
+      billsUpdated: result.billsUpdated,
+      errors: result.errors
+    });
+  }));
+
   // Model Management
   app.get("/api/models", requireAdmin, async (req, res) => {
     try {
