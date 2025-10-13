@@ -17,7 +17,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { z } from "zod";
-import { Users, FileText, Download, Plus, Calendar, Clock, CheckCircle2, AlertCircle, FileDown, BarChart } from "lucide-react";
+import { Users, FileText, Download, Plus, Calendar, Clock, CheckCircle2, AlertCircle, FileDown, BarChart, UserCircle, ExternalLink } from "lucide-react";
 import { PolicyChatWidget } from "@/components/PolicyChatWidget";
 import { DataCompletenessChecker } from "@/components/DataCompletenessChecker";
 import { DataQualityDashboard } from "@/components/DataQualityDashboard";
@@ -80,10 +80,25 @@ const exportFormSchema = z.object({
 
 type ExportFormData = z.infer<typeof exportFormSchema>;
 
+interface HouseholdProfile {
+  id: string;
+  name: string;
+  profileMode: string;
+  clientCaseId?: string;
+  householdSize: number;
+}
+
 export default function NavigatorWorkspace() {
   const { toast } = useToast();
   const [isSessionDialogOpen, setIsSessionDialogOpen] = useState(false);
   const [isExportDialogOpen, setIsExportDialogOpen] = useState(false);
+  const [selectedProfileId, setSelectedProfileId] = useState<string>("");
+
+  // Fetch household profiles
+  const { data: profiles = [] } = useQuery<HouseholdProfile[]>({
+    queryKey: ['/api/household-profiles'],
+    select: (data) => data.filter((p: any) => p.profileMode === 'combined' || p.profileMode === 'benefits_only')
+  });
 
   // Fetch sessions
   const { data: sessions = [], isLoading: sessionsLoading } = useQuery<ClientInteractionSession[]>({
@@ -284,6 +299,45 @@ export default function NavigatorWorkspace() {
                     </DialogHeader>
                     <Form {...sessionForm}>
                       <form onSubmit={sessionForm.handleSubmit((data) => createSessionMutation.mutate(data))} className="space-y-4">
+                        <div className="space-y-2">
+                          <Label htmlFor="profile-select">Household Profile (Optional)</Label>
+                          <div className="flex gap-2">
+                            <Select 
+                              value={selectedProfileId} 
+                              onValueChange={(value) => {
+                                setSelectedProfileId(value);
+                                const profile = profiles.find(p => p.id === value);
+                                if (profile?.clientCaseId) {
+                                  sessionForm.setValue('clientCaseId', profile.clientCaseId);
+                                }
+                              }}
+                            >
+                              <SelectTrigger id="profile-select" data-testid="select-household-profile">
+                                <SelectValue placeholder="Select a household profile" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {profiles.map((profile) => (
+                                  <SelectItem key={profile.id} value={profile.id}>
+                                    {profile.name} ({profile.householdSize} {profile.householdSize === 1 ? 'member' : 'members'})
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="icon"
+                              onClick={() => window.open('/profiler', '_blank')}
+                              data-testid="button-open-profiler"
+                              title="Open Household Profiler"
+                            >
+                              <ExternalLink className="h-4 w-4" />
+                            </Button>
+                          </div>
+                          <p className="text-sm text-muted-foreground">
+                            Link this session to an existing household profile or create a new one
+                          </p>
+                        </div>
                         <FormField
                           control={sessionForm.control}
                           name="clientCaseId"
@@ -293,6 +347,9 @@ export default function NavigatorWorkspace() {
                               <FormControl>
                                 <Input placeholder="Enter case ID if available" {...field} data-testid="input-client-case-id" />
                               </FormControl>
+                              <FormDescription>
+                                Auto-filled from selected profile or enter manually
+                              </FormDescription>
                               <FormMessage />
                             </FormItem>
                           )}
