@@ -853,6 +853,52 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
     }
   }));
 
+  // Cache Management - Get aggregated cache statistics
+  app.get("/api/admin/cache/stats", requireAdmin, asyncHandler(async (req, res) => {
+    const { cacheMetrics } = await import("./services/cacheMetrics");
+    
+    const metrics = cacheMetrics.getAggregatedMetrics();
+    
+    res.json({
+      success: true,
+      ...metrics,
+    });
+  }));
+
+  // Cache Management - Get cost savings report
+  app.get("/api/admin/cache/cost-savings", requireAdmin, asyncHandler(async (req, res) => {
+    const { cacheMetrics } = await import("./services/cacheMetrics");
+    
+    const report = cacheMetrics.getCostSavingsReport();
+    
+    res.json({
+      success: true,
+      ...report,
+    });
+  }));
+
+  // Cache Management - Clear specific cache
+  app.post("/api/admin/cache/clear/:type", requireAdmin, asyncHandler(async (req, res) => {
+    const { cacheMetrics } = await import("./services/cacheMetrics");
+    const { type } = req.params;
+    
+    const validTypes = ['embedding', 'rag', 'documentAnalysis', 'policyEngine', 'all'];
+    
+    if (!validTypes.includes(type)) {
+      return res.status(400).json({
+        success: false,
+        error: `Invalid cache type. Must be one of: ${validTypes.join(', ')}`
+      });
+    }
+    
+    cacheMetrics.clearCache(type as any);
+    
+    res.json({
+      success: true,
+      message: `Successfully cleared ${type} cache`,
+    });
+  }));
+
   // Congress.gov API - Search bills by keywords (Real-time legislative keyword search)
   // Note: For authoritative bill status, use GovInfo Bill Status XML API
   app.post("/api/legislative/congress-search", requireAdmin, asyncHandler(async (req, res) => {

@@ -471,6 +471,8 @@ export class PolicySourceScraper {
   
   /**
    * Initialize all official policy sources in the database
+   * 
+   * OPTIMIZED: Fetches all sources once to avoid N+1 query pattern
    */
   async seedPolicySources(): Promise<void> {
     try {
@@ -488,9 +490,11 @@ export class PolicySourceScraper {
       const ohepProgram = await storage.getBenefitProgramByCode('MD_OHEP');
       const vitaProgram = await storage.getBenefitProgramByCode('VITA');
       
+      // OPTIMIZATION: Fetch all sources once before the loop (avoid N+1)
+      const allSources = await storage.getPolicySources();
+      
       for (const sourceConfig of OFFICIAL_SOURCES) {
-        // Check if source already exists
-        const allSources = await storage.getPolicySources();
+        // Check if source already exists in the fetched list
         const existing = allSources.find(s => 
           s.name === sourceConfig.name && s.jurisdiction === sourceConfig.jurisdiction
         );
