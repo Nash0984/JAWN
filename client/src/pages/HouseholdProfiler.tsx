@@ -132,17 +132,17 @@ export default function HouseholdProfiler() {
   useEffect(() => {
     if (selectedProfile) {
       form.reset({
-        ...selectedProfile,
-        dependents: selectedProfile.dependents || [],
+        ...selectedProfile as any,
+        dependents: (selectedProfile as any).dependents || [],
       });
-      setDependentList(selectedProfile.dependents || []);
+      setDependentList((selectedProfile as any).dependents || []);
     }
   }, [selectedProfile, form]);
 
   // Create mutation
   const createMutation = useMutation({
     mutationFn: async (data: HouseholdProfileFormData) => {
-      return await apiRequest("/api/household-profiles", {
+      return await apiRequest<{ id: string }>("/api/household-profiles", {
         method: "POST",
         body: JSON.stringify(data),
       });
