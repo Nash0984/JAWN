@@ -5769,6 +5769,119 @@ If the question cannot be answered with the available information, say so clearl
     });
   }));
 
+  // ===========================
+  // EVALUATION FRAMEWORK ROUTES
+  // ===========================
+
+  // Get all test cases with optional filters
+  app.get("/api/evaluation/test-cases", requireAuth, asyncHandler(async (req, res) => {
+    const { program, category, isActive } = req.query;
+    
+    const filters: any = {};
+    if (program) filters.program = program as string;
+    if (category) filters.category = category as string;
+    if (isActive !== undefined) filters.isActive = isActive === 'true';
+    
+    const testCases = await storage.getEvaluationTestCases(filters);
+    res.json(testCases);
+  }));
+
+  // Get single test case
+  app.get("/api/evaluation/test-cases/:id", requireAuth, asyncHandler(async (req, res) => {
+    const testCase = await storage.getEvaluationTestCase(req.params.id);
+    if (!testCase) {
+      throw notFoundError("Test case not found");
+    }
+    res.json(testCase);
+  }));
+
+  // Create test case
+  app.post("/api/evaluation/test-cases", requireAuth, asyncHandler(async (req, res) => {
+    const { insertEvaluationTestCaseSchema } = await import("@shared/schema");
+    const validated = insertEvaluationTestCaseSchema.parse(req.body);
+    
+    const testCase = await storage.createEvaluationTestCase({
+      ...validated,
+      createdBy: req.user!.id
+    });
+    
+    res.status(201).json(testCase);
+  }));
+
+  // Update test case
+  app.patch("/api/evaluation/test-cases/:id", requireAuth, asyncHandler(async (req, res) => {
+    const testCase = await storage.updateEvaluationTestCase(req.params.id, req.body);
+    res.json(testCase);
+  }));
+
+  // Delete test case
+  app.delete("/api/evaluation/test-cases/:id", requireAuth, asyncHandler(async (req, res) => {
+    await storage.deleteEvaluationTestCase(req.params.id);
+    res.status(204).send();
+  }));
+
+  // Get all evaluation runs with optional filters
+  app.get("/api/evaluation/runs", requireAuth, asyncHandler(async (req, res) => {
+    const { program, status, limit } = req.query;
+    
+    const filters: any = {};
+    if (program) filters.program = program as string;
+    if (status) filters.status = status as string;
+    if (limit) filters.limit = parseInt(limit as string);
+    
+    const runs = await storage.getEvaluationRuns(filters);
+    res.json(runs);
+  }));
+
+  // Get single evaluation run
+  app.get("/api/evaluation/runs/:id", requireAuth, asyncHandler(async (req, res) => {
+    const run = await storage.getEvaluationRun(req.params.id);
+    if (!run) {
+      throw notFoundError("Evaluation run not found");
+    }
+    res.json(run);
+  }));
+
+  // Create evaluation run
+  app.post("/api/evaluation/runs", requireAuth, asyncHandler(async (req, res) => {
+    const { insertEvaluationRunSchema } = await import("@shared/schema");
+    const validated = insertEvaluationRunSchema.parse(req.body);
+    
+    const run = await storage.createEvaluationRun({
+      ...validated,
+      runBy: req.user!.id
+    });
+    
+    res.status(201).json(run);
+  }));
+
+  // Update evaluation run
+  app.patch("/api/evaluation/runs/:id", requireAuth, asyncHandler(async (req, res) => {
+    const run = await storage.updateEvaluationRun(req.params.id, req.body);
+    res.json(run);
+  }));
+
+  // Get results for a specific run
+  app.get("/api/evaluation/runs/:runId/results", requireAuth, asyncHandler(async (req, res) => {
+    const results = await storage.getEvaluationResultsByRun(req.params.runId);
+    res.json(results);
+  }));
+
+  // Create evaluation result
+  app.post("/api/evaluation/results", requireAuth, asyncHandler(async (req, res) => {
+    const { insertEvaluationResultSchema } = await import("@shared/schema");
+    const validated = insertEvaluationResultSchema.parse(req.body);
+    
+    const result = await storage.createEvaluationResult(validated);
+    res.status(201).json(result);
+  }));
+
+  // Get results for a specific test case
+  app.get("/api/evaluation/test-cases/:testCaseId/results", requireAuth, asyncHandler(async (req, res) => {
+    const results = await storage.getEvaluationResultsByTestCase(req.params.testCaseId);
+    res.json(results);
+  }));
+
   const httpServer = createServer(app);
   
   // Initialize WebSocket service for real-time notifications
