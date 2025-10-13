@@ -44,6 +44,7 @@ import DocumentReviewQueue from "@/pages/DocumentReviewQueue";
 import TaxPreparation from "@/pages/TaxPreparation";
 import CountyManagement from "@/pages/CountyManagement";
 import NavigatorPerformance from "@/pages/NavigatorPerformance";
+import Leaderboard from "@/pages/Leaderboard";
 import MobileBottomNav from "@/components/MobileBottomNav";
 
 function Router() {
@@ -95,6 +96,13 @@ function Router() {
             {() => (
               <ProtectedRoute requireStaff>
                 <NavigatorPerformance />
+              </ProtectedRoute>
+            )}
+          </Route>
+          <Route path="/leaderboard">
+            {() => (
+              <ProtectedRoute requireStaff>
+                <Leaderboard />
               </ProtectedRoute>
             )}
           </Route>

@@ -13,6 +13,12 @@ interface LeaderboardEntry {
   value: number;
   countyName?: string;
   countyId?: string;
+  // Full KPI breakdown for UI display
+  casesClosed: number;
+  totalBenefitsSecured: number;
+  successRate: number;
+  avgResponseTime: number;
+  performanceScore: number;
 }
 
 class LeaderboardService {
@@ -138,6 +144,12 @@ class LeaderboardService {
         value,
         countyName,
         countyId: userCountyId,
+        // Include full KPI breakdown for UI display
+        casesClosed: kpi.casesClosed || 0,
+        totalBenefitsSecured: kpi.totalBenefitsSecured || 0,
+        successRate: kpi.successRate || 0,
+        avgResponseTime: kpi.avgResponseTime || 0,
+        performanceScore: kpi.performanceScore || 0,
       });
     }
 

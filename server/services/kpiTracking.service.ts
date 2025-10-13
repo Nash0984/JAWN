@@ -1,5 +1,6 @@
 import { storage } from "../storage";
 import type { InsertNavigatorKpi, InsertCaseActivityEvent, NavigatorKpi } from "@shared/schema";
+import { achievementSystemService } from "./achievementSystem.service";
 
 /**
  * KPI Tracking Service
@@ -128,14 +129,22 @@ class KpiTrackingService {
       ...metrics,
     };
 
+    let updatedKpi: NavigatorKpi;
+    
     if (existingKpi && 
         existingKpi.periodStart.getTime() === periodStart.getTime() &&
         existingKpi.periodEnd.getTime() === periodEnd.getTime()) {
       // Update existing
       await storage.updateNavigatorKpi(existingKpi.id, kpiData);
+      updatedKpi = { ...existingKpi, ...kpiData };
     } else {
       // Create new
-      await storage.createNavigatorKpi(kpiData);
+      updatedKpi = await storage.createNavigatorKpi(kpiData);
+    }
+
+    // Auto-evaluate achievements based on updated KPIs (only for all_time period)
+    if (periodType === 'all_time') {
+      await achievementSystemService.evaluateAchievements(navigatorId, updatedKpi);
     }
   }
 

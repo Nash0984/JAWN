@@ -62,11 +62,11 @@ class AchievementSystemService {
       }
 
       case 'case_count': {
-        return kpi.casesClosed >= (config.threshold || 0);
+        return (kpi.casesClosed || 0) >= (config.threshold || 0);
       }
 
       case 'benefit_amount': {
-        return kpi.totalBenefitsSecured >= (config.threshold || 0);
+        return (kpi.totalBenefitsSecured || 0) >= (config.threshold || 0);
       }
 
       case 'rate': {
