@@ -15,6 +15,9 @@ import { documentVerificationService } from "./services/documentVerificationServ
 import { textGenerationService } from "./services/textGenerationService";
 import { notificationService } from "./services/notification.service";
 import { cacheService, CACHE_KEYS, invalidateRulesCache } from "./services/cacheService";
+import { kpiTrackingService } from "./services/kpiTracking.service";
+import { achievementSystemService } from "./services/achievementSystem.service";
+import { leaderboardService } from "./services/leaderboard.service";
 import { GoogleGenAI } from "@google/genai";
 import { asyncHandler, validationError, notFoundError, externalServiceError, authorizationError } from "./middleware/errorHandler";
 import { requireAuth, requireStaff, requireAdmin } from "./middleware/auth";
@@ -30,6 +33,7 @@ import {
   insertComplianceRuleSchema,
   insertComplianceViolationSchema,
   insertIntakeSessionSchema,
+  insertCountySchema,
   searchQueries,
   auditLogs,
   ruleChangeLogs,
@@ -5103,6 +5107,346 @@ If the question cannot be answered with the available information, say so clearl
       updated: updatedCount,
       requested: validated.documentIds.length,
       status: validated.verificationStatus
+    });
+  }));
+
+  // ===========================
+  // COUNTY ROUTES
+  // ===========================
+
+  // Get all counties with filters
+  app.get("/api/counties", asyncHandler(async (req, res) => {
+    const { isActive, isPilot, region } = req.query;
+    
+    const filters: any = {};
+    if (isActive !== undefined) filters.isActive = isActive === 'true';
+    if (isPilot !== undefined) filters.isPilot = isPilot === 'true';
+    if (region) filters.region = region as string;
+    
+    const counties = await storage.getCounties(filters);
+    res.json(counties);
+  }));
+
+  // Create county (admin only)
+  app.post("/api/counties", requireAdmin, asyncHandler(async (req, res) => {
+    const validated = insertCountySchema.parse(req.body);
+    const county = await storage.createCounty(validated);
+    res.status(201).json(county);
+  }));
+
+  // Get county by ID
+  app.get("/api/counties/:id", asyncHandler(async (req, res) => {
+    const county = await storage.getCounty(req.params.id);
+    if (!county) {
+      throw notFoundError("County not found");
+    }
+    res.json(county);
+  }));
+
+  // Update county (admin only)
+  app.patch("/api/counties/:id", requireAdmin, asyncHandler(async (req, res) => {
+    const validated = insertCountySchema.partial().parse(req.body);
+    const county = await storage.updateCounty(req.params.id, validated);
+    if (!county) {
+      throw notFoundError("County not found");
+    }
+    res.json(county);
+  }));
+
+  // Delete county (admin only)
+  app.delete("/api/counties/:id", requireAdmin, asyncHandler(async (req, res) => {
+    await storage.deleteCounty(req.params.id);
+    res.json({ message: "County deleted successfully" });
+  }));
+
+  // Assign user to county (admin only)
+  app.post("/api/counties/:id/users", requireAdmin, asyncHandler(async (req, res) => {
+    const { userId, role } = req.body;
+    
+    if (!userId) {
+      throw validationError("userId is required");
+    }
+    
+    const countyUser = await storage.assignUserToCounty({
+      countyId: req.params.id,
+      userId,
+      role: role || 'navigator',
+      isActive: true
+    });
+    
+    res.status(201).json(countyUser);
+  }));
+
+  // Get county users
+  app.get("/api/counties/:id/users", asyncHandler(async (req, res) => {
+    const users = await storage.getCountyUsers(req.params.id);
+    res.json(users);
+  }));
+
+  // Get user's counties
+  app.get("/api/users/:userId/counties", asyncHandler(async (req, res) => {
+    const counties = await storage.getUserCounties(req.params.userId);
+    res.json(counties);
+  }));
+
+  // Remove user from county (admin only)
+  app.delete("/api/county-users/:id", requireAdmin, asyncHandler(async (req, res) => {
+    await storage.removeUserFromCounty(req.params.id);
+    res.json({ message: "User removed from county successfully" });
+  }));
+
+  // ===========================
+  // GAMIFICATION ROUTES - Navigator KPIs
+  // ===========================
+
+  // Get navigator KPIs (filtered by periodType)
+  app.get("/api/navigators/:id/kpis", asyncHandler(async (req, res) => {
+    const { periodType } = req.query;
+    
+    if (!periodType) {
+      throw validationError("periodType query parameter is required");
+    }
+    
+    const kpis = await storage.getNavigatorKpis(
+      req.params.id, 
+      periodType as 'daily' | 'weekly' | 'monthly' | 'all_time'
+    );
+    res.json(kpis);
+  }));
+
+  // Get latest performance summary
+  app.get("/api/navigators/:id/performance", asyncHandler(async (req, res) => {
+    const kpi = await storage.getLatestNavigatorKpi(req.params.id, 'daily');
+    
+    if (!kpi) {
+      return res.json({
+        navigatorId: req.params.id,
+        casesClosed: 0,
+        successRate: 0,
+        totalBenefitsSecured: 0,
+        message: "No performance data available"
+      });
+    }
+    
+    res.json({
+      navigatorId: kpi.navigatorId,
+      casesClosed: kpi.casesClosed,
+      casesApproved: kpi.casesApproved,
+      successRate: kpi.successRate,
+      totalBenefitsSecured: kpi.totalBenefitsSecured,
+      avgBenefitPerCase: kpi.avgBenefitPerCase,
+      avgResponseTime: kpi.avgResponseTime,
+      documentsVerified: kpi.documentsVerified,
+      avgDocumentQuality: kpi.avgDocumentQuality,
+      crossEnrollmentsIdentified: kpi.crossEnrollmentsIdentified,
+      performanceScore: kpi.performanceScore,
+      periodType: kpi.periodType,
+      periodStart: kpi.periodStart,
+      periodEnd: kpi.periodEnd
+    });
+  }));
+
+  // Track case closure event
+  app.post("/api/kpis/track-case-closed", requireAuth, asyncHandler(async (req, res) => {
+    const { navigatorId, caseId, countyId, benefitAmount, isApproved, responseTimeHours, completionTimeDays } = req.body;
+    
+    if (!navigatorId || !caseId) {
+      throw validationError("navigatorId and caseId are required");
+    }
+    
+    await kpiTrackingService.trackCaseClosed({
+      navigatorId,
+      caseId,
+      countyId,
+      benefitAmount,
+      isApproved: isApproved ?? true,
+      responseTimeHours,
+      completionTimeDays
+    });
+    
+    res.json({ message: "Case closure tracked successfully" });
+  }));
+
+  // Track document verification
+  app.post("/api/kpis/track-document-verified", requireAuth, asyncHandler(async (req, res) => {
+    const { navigatorId, caseId, countyId, documentQuality } = req.body;
+    
+    if (!navigatorId || !caseId || documentQuality === undefined) {
+      throw validationError("navigatorId, caseId, and documentQuality are required");
+    }
+    
+    await kpiTrackingService.trackDocumentVerified({
+      navigatorId,
+      caseId,
+      countyId,
+      documentQuality
+    });
+    
+    res.json({ message: "Document verification tracked successfully" });
+  }));
+
+  // Track cross-enrollment identification
+  app.post("/api/kpis/track-cross-enrollment", requireAuth, asyncHandler(async (req, res) => {
+    const { navigatorId, caseId, countyId, potentialBenefitAmount } = req.body;
+    
+    if (!navigatorId || !caseId || !potentialBenefitAmount) {
+      throw validationError("navigatorId, caseId, and potentialBenefitAmount are required");
+    }
+    
+    await kpiTrackingService.trackCrossEnrollmentIdentified({
+      navigatorId,
+      caseId,
+      countyId,
+      potentialBenefitAmount
+    });
+    
+    res.json({ message: "Cross-enrollment tracked successfully" });
+  }));
+
+  // ===========================
+  // GAMIFICATION ROUTES - Achievements
+  // ===========================
+
+  // Get all achievements (filtered)
+  app.get("/api/achievements", asyncHandler(async (req, res) => {
+    const { category, tier, isActive } = req.query;
+    
+    const filters: any = {};
+    if (category) filters.category = category as string;
+    if (tier) filters.tier = tier as string;
+    if (isActive !== undefined) filters.isActive = isActive === 'true';
+    
+    const achievements = await storage.getAchievements(filters);
+    res.json(achievements);
+  }));
+
+  // Create achievement (admin only)
+  app.post("/api/achievements", requireAdmin, asyncHandler(async (req, res) => {
+    const achievementData = req.body;
+    const achievement = await storage.createAchievement(achievementData);
+    res.status(201).json(achievement);
+  }));
+
+  // Get achievement by ID
+  app.get("/api/achievements/:id", asyncHandler(async (req, res) => {
+    const achievement = await storage.getAchievement(req.params.id);
+    if (!achievement) {
+      throw notFoundError("Achievement not found");
+    }
+    res.json(achievement);
+  }));
+
+  // Update achievement (admin only)
+  app.patch("/api/achievements/:id", requireAdmin, asyncHandler(async (req, res) => {
+    const achievementData = req.body;
+    const achievement = await storage.updateAchievement(req.params.id, achievementData);
+    if (!achievement) {
+      throw notFoundError("Achievement not found");
+    }
+    res.json(achievement);
+  }));
+
+  // Delete achievement (admin only)
+  app.delete("/api/achievements/:id", requireAdmin, asyncHandler(async (req, res) => {
+    await storage.deleteAchievement(req.params.id);
+    res.json({ message: "Achievement deleted successfully" });
+  }));
+
+  // Get navigator's achievements
+  app.get("/api/navigators/:id/achievements", asyncHandler(async (req, res) => {
+    const achievements = await storage.getNavigatorAchievements(req.params.id);
+    res.json(achievements);
+  }));
+
+  // Get unnotified achievements
+  app.get("/api/navigators/:id/achievements/unnotified", asyncHandler(async (req, res) => {
+    const achievements = await storage.getNavigatorAchievements(req.params.id);
+    const unnotified = achievements.filter(a => !a.notified);
+    res.json(unnotified);
+  }));
+
+  // Mark achievements as notified
+  app.post("/api/navigator-achievements/mark-notified", asyncHandler(async (req, res) => {
+    const { achievementIds } = req.body;
+    
+    if (!Array.isArray(achievementIds) || achievementIds.length === 0) {
+      throw validationError("achievementIds array is required");
+    }
+    
+    for (const achievementId of achievementIds) {
+      await storage.markAchievementNotified(achievementId);
+    }
+    
+    res.json({ message: "Achievements marked as notified", count: achievementIds.length });
+  }));
+
+  // ===========================
+  // GAMIFICATION ROUTES - Leaderboards
+  // ===========================
+
+  // Get leaderboard
+  app.get("/api/leaderboards", asyncHandler(async (req, res) => {
+    const { type, scope, period, countyId } = req.query;
+    
+    if (!type || !scope || !period) {
+      throw validationError("type, scope, and period query parameters are required");
+    }
+    
+    const leaderboard = await leaderboardService.getLeaderboard(
+      type as string,
+      scope as string,
+      period as string,
+      countyId as string | undefined
+    );
+    
+    if (!leaderboard) {
+      return res.json({
+        leaderboardType: type,
+        scope,
+        periodType: period,
+        rankings: [],
+        totalParticipants: 0,
+        message: "No leaderboard data available"
+      });
+    }
+    
+    res.json(leaderboard);
+  }));
+
+  // Refresh all leaderboards (admin only)
+  app.get("/api/leaderboards/refresh", requireAdmin, asyncHandler(async (req, res) => {
+    await leaderboardService.refreshAllLeaderboards();
+    res.json({ message: "All leaderboards refreshed successfully" });
+  }));
+
+  // Get navigator's rank
+  app.get("/api/navigators/:id/rank", asyncHandler(async (req, res) => {
+    const { type, scope, period, countyId } = req.query;
+    
+    if (!type || !scope || !period) {
+      throw validationError("type, scope, and period query parameters are required");
+    }
+    
+    const rank = await leaderboardService.getNavigatorRank(
+      req.params.id,
+      type as string,
+      scope as string,
+      period as string,
+      countyId as string | undefined
+    );
+    
+    if (!rank) {
+      return res.json({
+        navigatorId: req.params.id,
+        rank: -1,
+        totalParticipants: 0,
+        message: "No ranking data available"
+      });
+    }
+    
+    res.json({
+      navigatorId: req.params.id,
+      ...rank
     });
   }));
 
