@@ -42,6 +42,8 @@ import AbawdVerificationAdmin from "@/pages/AbawdVerificationAdmin";
 import CrossEnrollmentAdmin from "@/pages/CrossEnrollmentAdmin";
 import DocumentReviewQueue from "@/pages/DocumentReviewQueue";
 import TaxPreparation from "@/pages/TaxPreparation";
+import CountyManagement from "@/pages/CountyManagement";
+import NavigatorPerformance from "@/pages/NavigatorPerformance";
 import MobileBottomNav from "@/components/MobileBottomNav";
 
 function Router() {
@@ -86,6 +88,13 @@ function Router() {
             {() => (
               <ProtectedRoute requireStaff>
                 <NavigatorDashboard />
+              </ProtectedRoute>
+            )}
+          </Route>
+          <Route path="/performance">
+            {() => (
+              <ProtectedRoute requireStaff>
+                <NavigatorPerformance />
               </ProtectedRoute>
             )}
           </Route>
@@ -246,6 +255,13 @@ function Router() {
             {() => (
               <ProtectedRoute requireAdmin>
                 <FeedbackManagement />
+              </ProtectedRoute>
+            )}
+          </Route>
+          <Route path="/admin/counties">
+            {() => (
+              <ProtectedRoute requireAdmin>
+                <CountyManagement />
               </ProtectedRoute>
             )}
           </Route>
