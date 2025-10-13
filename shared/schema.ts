@@ -1959,7 +1959,7 @@ export const householdProfiles = pgTable("household_profiles", {
   // Taxpayer info (tax mode)
   taxpayerFirstName: text("taxpayer_first_name"),
   taxpayerLastName: text("taxpayer_last_name"),
-  taxpayerSSN: text("taxpayer_ssn"),
+  taxpayerSSN: jsonb("taxpayer_ssn"), // Encrypted EncryptionResult
   taxpayerDateOfBirth: date("taxpayer_date_of_birth"),
   taxpayerBlind: boolean("taxpayer_blind").default(false),
   taxpayerDisabled: boolean("taxpayer_disabled").default(false),
@@ -1967,7 +1967,7 @@ export const householdProfiles = pgTable("household_profiles", {
   // Spouse info (tax mode, married filers)
   spouseFirstName: text("spouse_first_name"),
   spouseLastName: text("spouse_last_name"),
-  spouseSSN: text("spouse_ssn"),
+  spouseSSN: jsonb("spouse_ssn"), // Encrypted EncryptionResult
   spouseDateOfBirth: date("spouse_date_of_birth"),
   spouseBlind: boolean("spouse_blind").default(false),
   spouseDisabled: boolean("spouse_disabled").default(false),
@@ -2034,7 +2034,7 @@ export const vitaIntakeSessions = pgTable("vita_intake_sessions", {
   primaryDateOfBirth: date("primary_date_of_birth"),
   primaryJobTitle: text("primary_job_title"),
   primaryTelephone: text("primary_telephone"),
-  primarySSN: text("primary_ssn"), // Encrypted in production
+  primarySSN: jsonb("primary_ssn"), // Encrypted EncryptionResult
   
   // Spouse
   spouseFirstName: text("spouse_first_name"),
@@ -2043,7 +2043,7 @@ export const vitaIntakeSessions = pgTable("vita_intake_sessions", {
   spouseDateOfBirth: date("spouse_date_of_birth"),
   spouseJobTitle: text("spouse_job_title"),
   spouseTelephone: text("spouse_telephone"),
-  spouseSSN: text("spouse_ssn"), // Encrypted in production
+  spouseSSN: jsonb("spouse_ssn"), // Encrypted EncryptionResult
   
   // Address
   mailingAddress: text("mailing_address"),
@@ -2075,8 +2075,8 @@ export const vitaIntakeSessions = pgTable("vita_intake_sessions", {
   
   // Refund preferences
   refundMethod: text("refund_method"), // 'direct_deposit', 'check', 'apply_to_next_year'
-  bankAccountNumber: text("bank_account_number"),
-  bankRoutingNumber: text("bank_routing_number"),
+  bankAccountNumber: jsonb("bank_account_number"), // Encrypted EncryptionResult
+  bankRoutingNumber: jsonb("bank_routing_number"), // Encrypted EncryptionResult
   
   // IRS preferences
   preferredIRSLanguage: text("preferred_irs_language"),
@@ -2697,9 +2697,9 @@ export const eeClients = pgTable("ee_clients", {
   datasetId: varchar("dataset_id").references(() => eeDatasets.id, { onDelete: "cascade" }).notNull(),
   
   // Encrypted PII (stored encrypted at rest)
-  clientName: text("client_name").notNull(), // Encrypted
-  ssnLast4: text("ssn_last_4").notNull(), // Encrypted
-  dateOfBirth: timestamp("date_of_birth"), // Encrypted
+  clientName: jsonb("client_name").notNull(), // Encrypted EncryptionResult
+  ssnLast4: jsonb("ssn_last_4").notNull(), // Encrypted EncryptionResult
+  dateOfBirth: jsonb("date_of_birth"), // Encrypted EncryptionResult
   
   // Hashed identifiers for matching (not reversible)
   clientNameHash: text("client_name_hash"), // Phonetic hash (Double Metaphone)
