@@ -27,14 +27,15 @@ The backend uses Express.js with TypeScript and PostgreSQL via Drizzle ORM on Ne
 -   **Anonymous Benefit Screener**: Public-facing eligibility check tool.
 -   **Household Scenario Workspace**: Modeling tool for navigators.
 -   **VITA Tax Assistant**: Knowledge base for federal tax assistance.
--   **Maryland Evaluation Framework**: Accuracy testing system for policy rules.
+-   **Maryland Evaluation Framework**: Comprehensive accuracy testing system with test case management, evaluation run execution, KPI dashboard showing pass rates and variance metrics, benchmark visualization against Column Tax baseline (41% strict, 61% lenient), and detailed test results with JSON diff comparison.
 
 ### Tax Preparation System
 Integrates federal/state tax preparation with public benefits eligibility.
 -   **Tax Document Extraction Service**: Gemini Vision-powered extraction from tax forms.
 -   **PolicyEngine Tax Calculation Service**: Federal tax calculations using PolicyEngine US.
 -   **Form 1040 PDF Generator**: IRS-compliant Form 1040 PDF generation.
--   **Cross-Enrollment Intelligence Engine**: AI-powered analysis to identify missed benefits.
+-   **Maryland Form 502 Generator**: State tax PDF generation with progressive tax brackets (2%-5.75%), all 24 county tax calculations, MD EITC (50% of federal), property tax credit, and renter's credit.
+-   **Cross-Enrollment Intelligence Engine**: AI-powered analysis to identify missed benefits. Displays AI-powered recommendations for unclaimed benefits in the tax preparation interface.
 
 ### Multi-County Deployment System
 Supports 24 Maryland counties with county-specific branding, data isolation, and localized experiences. Includes a `counties` table for metadata and branding, `county_users` for role assignments, and data filtering by county context. Pilot deployment includes Baltimore City, Baltimore County, Montgomery County, and Prince George's County.

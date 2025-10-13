@@ -129,9 +129,6 @@ app.use(sessionMiddleware);
 app.use(passport.initialize());
 app.use(passport.session());
 
-// County Context Middleware - detects user's county for tenant isolation
-app.use(detectCountyContext);
-
 // CSRF Protection - using csrf-csrf with double-submit cookie pattern
 const csrfProtection = doubleCsrf({
   getSecret: () => process.env.SESSION_SECRET || "fallback-secret",
@@ -147,7 +144,7 @@ const csrfProtection = doubleCsrf({
   ignoredMethods: ["GET", "HEAD", "OPTIONS"],
 });
 
-// Endpoint to get CSRF token
+// Endpoint to get CSRF token (before county context middleware)
 app.get("/api/csrf-token", (req, res) => {
   try {
     // Ensure session exists
@@ -175,6 +172,9 @@ app.get("/api/csrf-token", (req, res) => {
     res.status(500).json({ error: "Internal server error generating CSRF token" });
   }
 });
+
+// County Context Middleware - detects user's county for tenant isolation
+app.use(detectCountyContext);
 
 // Apply CSRF protection to all state-changing routes
 app.use("/api/", (req, res, next) => {
