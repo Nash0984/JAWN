@@ -5167,6 +5167,19 @@ If the question cannot be answered with the available information, say so clearl
     // Remove protected fields that shouldn't be updated via API
     const { userId, createdAt, updatedAt, ...updateData } = validated as any;
     
+    // Handle review operations - set server-side timestamps and reviewer
+    if (updateData.reviewStatus) {
+      updateData.reviewedBy = req.user!.id;
+      updateData.reviewedAt = new Date();
+      
+      // Update session status based on review decision
+      if (updateData.reviewStatus === 'approved') {
+        updateData.status = 'completed';
+      } else if (updateData.reviewStatus === 'needs_correction') {
+        updateData.status = 'needs_correction';
+      }
+    }
+    
     const updated = await storage.updateVitaIntakeSession(req.params.id, updateData);
     res.json(updated);
   }));
