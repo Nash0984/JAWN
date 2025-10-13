@@ -35,6 +35,7 @@ import {
   insertComplianceViolationSchema,
   insertIntakeSessionSchema,
   insertCountySchema,
+  insertHouseholdProfileSchema,
   searchQueries,
   auditLogs,
   ruleChangeLogs,
@@ -5012,6 +5013,91 @@ If the question cannot be answered with the available information, say so clearl
     }
     
     await storage.deleteScenarioComparison(req.params.id);
+    res.json({ success: true });
+  }));
+
+  // ==========================================
+  // Household Profiler Routes
+  // ==========================================
+
+  // Create household profile
+  app.post("/api/household-profiles", requireStaff, asyncHandler(async (req, res) => {
+    const validated = insertHouseholdProfileSchema.parse({
+      ...req.body,
+      userId: req.user!.id
+    });
+
+    const profile = await storage.createHouseholdProfile(validated);
+    res.json(profile);
+  }));
+
+  // Get all household profiles for user with optional filters
+  app.get("/api/household-profiles", requireStaff, asyncHandler(async (req, res) => {
+    const filters: { profileMode?: string; clientCaseId?: string; isActive?: boolean } = {};
+
+    if (req.query.profileMode) {
+      filters.profileMode = req.query.profileMode as string;
+    }
+    if (req.query.clientCaseId) {
+      filters.clientCaseId = req.query.clientCaseId as string;
+    }
+    if (req.query.isActive !== undefined) {
+      filters.isActive = req.query.isActive === 'true';
+    }
+
+    const profiles = await storage.getHouseholdProfiles(req.user!.id, filters);
+    res.json(profiles);
+  }));
+
+  // Get single household profile
+  app.get("/api/household-profiles/:id", requireStaff, asyncHandler(async (req, res) => {
+    const profile = await storage.getHouseholdProfile(req.params.id);
+    
+    if (!profile) {
+      throw notFoundError("Household profile not found");
+    }
+    
+    if (profile.userId !== req.user!.id) {
+      throw authorizationError();
+    }
+    
+    res.json(profile);
+  }));
+
+  // Update household profile
+  app.patch("/api/household-profiles/:id", requireStaff, asyncHandler(async (req, res) => {
+    const profile = await storage.getHouseholdProfile(req.params.id);
+    
+    if (!profile) {
+      throw notFoundError("Household profile not found");
+    }
+    
+    if (profile.userId !== req.user!.id) {
+      throw authorizationError();
+    }
+
+    const validated = insertHouseholdProfileSchema.partial().parse(req.body);
+    
+    // Remove protected fields that shouldn't be updated via API
+    const { userId, createdAt, updatedAt, ...updateData } = validated as any;
+    
+    const updated = await storage.updateHouseholdProfile(req.params.id, updateData);
+    res.json(updated);
+  }));
+
+  // Delete household profile
+  app.delete("/api/household-profiles/:id", requireStaff, asyncHandler(async (req, res) => {
+    const profile = await storage.getHouseholdProfile(req.params.id);
+    
+    if (!profile) {
+      throw notFoundError("Household profile not found");
+    }
+    
+    if (profile.userId !== req.user!.id) {
+      throw authorizationError();
+    }
+    
+    await storage.deleteHouseholdProfile(req.params.id);
     res.json({ success: true });
   }));
 
