@@ -58,6 +58,7 @@ import {
   Import
 } from "lucide-react";
 import type { VitaIntakeSession, InsertVitaIntakeSession } from "@shared/schema";
+import { TaxDocumentUploader } from "@/components/TaxDocumentUploader";
 
 // Step configuration
 const STEPS = [
@@ -2720,6 +2721,74 @@ export default function VitaIntake() {
 
                     {currentStep === 3 && (
                       <div className="space-y-6">
+                        {/* Tax Document Upload Section */}
+                        {sessionId && (
+                          <TaxDocumentUploader
+                            vitaSessionId={sessionId}
+                            onUploadComplete={(extractedData, documentType) => {
+                              // Auto-populate form fields based on extracted tax document data
+                              if (documentType === 'w2') {
+                                form.setValue('hasW2Income', true);
+                                // Coerce to number to prevent string concatenation
+                                const currentCount = Number(form.getValues('w2JobCount') ?? 0);
+                                form.setValue('w2JobCount', currentCount + 1, { shouldDirty: true });
+                                toast({
+                                  title: "W-2 Processed!",
+                                  description: `W-2 from ${extractedData.employerName || 'employer'} has been uploaded. Review extracted data in the list below.`,
+                                });
+                              } else if (documentType === '1099-misc' || documentType === '1099-nec') {
+                                form.setValue('has1099Income', true);
+                                toast({
+                                  title: "1099 Processed!",
+                                  description: "1099 form has been uploaded. Review extracted data in the list below.",
+                                });
+                              } else if (documentType === '1099-int') {
+                                form.setValue('hasInterestIncome', true);
+                                toast({
+                                  title: "1099-INT Processed!",
+                                  description: "Interest income form has been uploaded.",
+                                });
+                              } else if (documentType === '1099-div') {
+                                form.setValue('hasDividendIncome', true);
+                                toast({
+                                  title: "1099-DIV Processed!",
+                                  description: "Dividend income form has been uploaded.",
+                                });
+                              } else if (documentType === 'ssa-1099') {
+                                form.setValue('hasSocialSecurityIncome', true);
+                                toast({
+                                  title: "SSA-1099 Processed!",
+                                  description: "Social Security benefits statement has been uploaded.",
+                                });
+                              } else if (documentType === '1099-r') {
+                                form.setValue('hasRetirementIncome', true);
+                                toast({
+                                  title: "1099-R Processed!",
+                                  description: "Retirement distribution form has been uploaded.",
+                                });
+                              } else if (documentType === '1095-a') {
+                                form.setValue('hasHealthInsuranceMarketplace', true);
+                                toast({
+                                  title: "1095-A Processed!",
+                                  description: "Health insurance marketplace statement has been uploaded.",
+                                });
+                              } else {
+                                toast({
+                                  title: "Document Processed!",
+                                  description: `${documentType.toUpperCase()} has been uploaded and processed.`,
+                                });
+                              }
+                            }}
+                            onError={(error) => {
+                              toast({
+                                title: "Upload Failed",
+                                description: error,
+                                variant: "destructive",
+                              });
+                            }}
+                          />
+                        )}
+                        
                         {/* Employment Income */}
                         <Card>
                           <CardHeader>
