@@ -22,6 +22,7 @@ import { taxDocExtractor } from "./services/taxDocumentExtraction";
 import { GoogleGenAI } from "@google/genai";
 import { asyncHandler, validationError, notFoundError, externalServiceError, authorizationError } from "./middleware/errorHandler";
 import { requireAuth, requireStaff, requireAdmin } from "./middleware/auth";
+import { vitaCertificationValidationService } from "./services/vitaCertificationValidation.service";
 import { db } from "./db";
 import { sql, eq, and, desc, gte, lte, or, ilike, count } from "drizzle-orm";
 import { 
@@ -101,6 +102,35 @@ async function generateTextWithGemini(prompt: string): Promise<string> {
   });
   return response.text || "";
 }
+
+// ============================================================================
+// VITA CERTIFICATION VALIDATION MIDDLEWARE
+// ============================================================================
+const requireVitaCertification = (minimumLevel: 'basic' | 'advanced' | 'military' = 'basic') => {
+  return asyncHandler(async (req, res, next) => {
+    // Get tax return data from request body or session
+    const taxReturnData = req.body.taxReturnData || req.body;
+    
+    // Determine required certification
+    const requirement = vitaCertificationValidationService.determineCertificationRequirement(taxReturnData);
+    
+    // Validate user's certification
+    const validation = await vitaCertificationValidationService.validateCertification(req.user!.id, requirement);
+    
+    if (!validation.isValid) {
+      return res.status(403).json({
+        error: "Insufficient VITA certification",
+        message: validation.errorMessage || "You do not have the required VITA certification to approve this tax return",
+        required: validation.requiredCertification,
+        current: validation.reviewerCertification,
+        certificationExpired: validation.certificationExpired,
+        warnings: validation.warnings
+      });
+    }
+    
+    next();
+  });
+};
 
 export async function registerRoutes(app: Express, sessionMiddleware?: any): Promise<Server> {
   

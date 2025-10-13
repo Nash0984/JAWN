@@ -174,6 +174,12 @@ import {
   vitaIntakeSessions,
   type VitaIntakeSession,
   type InsertVitaIntakeSession,
+  auditLogs,
+  type AuditLog,
+  type InsertAuditLog,
+  securityEvents,
+  type SecurityEvent,
+  type InsertSecurityEvent,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and, ilike, sql, or, isNull, lte, gte } from "drizzle-orm";
@@ -182,7 +188,9 @@ export interface IStorage {
   // Users
   getUser(id: string): Promise<User | undefined>;
   getUserByUsername(username: string): Promise<User | undefined>;
+  getUsers(filters?: { role?: string; countyId?: string }): Promise<User[]>;
   createUser(user: InsertUser): Promise<User>;
+  updateUser(id: string, updates: Partial<User>): Promise<User>;
 
   // Documents
   createDocument(document: InsertDocument): Promise<Document>;
@@ -570,6 +578,40 @@ export interface IStorage {
   getVitaIntakeSessions(userId: string, filters?: { status?: string; clientCaseId?: string; reviewStatus?: string }): Promise<VitaIntakeSession[]>;
   updateVitaIntakeSession(id: string, updates: Partial<VitaIntakeSession>): Promise<VitaIntakeSession>;
   deleteVitaIntakeSession(id: string): Promise<void>;
+
+  // ============================================================================
+  // Audit Logging & Security Monitoring
+  // ============================================================================
+
+  // Audit Logs
+  createAuditLog(log: InsertAuditLog): Promise<AuditLog>;
+  getAuditLog(id: string): Promise<AuditLog | undefined>;
+  getAuditLogs(filters?: {
+    userId?: string;
+    action?: string;
+    resource?: string;
+    resourceId?: string;
+    sensitiveDataAccessed?: boolean;
+    success?: boolean;
+    startDate?: Date;
+    endDate?: Date;
+    limit?: number;
+  }): Promise<AuditLog[]>;
+
+  // Security Events
+  createSecurityEvent(event: InsertSecurityEvent): Promise<SecurityEvent>;
+  getSecurityEvent(id: string): Promise<SecurityEvent | undefined>;
+  getSecurityEvents(filters?: {
+    eventType?: string;
+    severity?: string;
+    userId?: string;
+    ipAddress?: string;
+    reviewed?: boolean;
+    startDate?: Date;
+    endDate?: Date;
+    limit?: number;
+  }): Promise<SecurityEvent[]>;
+  updateSecurityEvent(id: string, updates: Partial<SecurityEvent>): Promise<SecurityEvent>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -586,6 +628,30 @@ export class DatabaseStorage implements IStorage {
 
   async createUser(insertUser: InsertUser): Promise<User> {
     const [user] = await db.insert(users).values(insertUser).returning();
+    return user;
+  }
+
+  async getUsers(filters?: { role?: string; countyId?: string }): Promise<User[]> {
+    let query = db.select().from(users);
+    
+    const conditions = [];
+    if (filters?.role) {
+      conditions.push(eq(users.role, filters.role));
+    }
+    
+    if (conditions.length > 0) {
+      query = query.where(and(...conditions));
+    }
+    
+    return await query.orderBy(users.fullName);
+  }
+
+  async updateUser(id: string, updates: Partial<User>): Promise<User> {
+    const [user] = await db
+      .update(users)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(users.id, id))
+      .returning();
     return user;
   }
 
@@ -2913,6 +2979,147 @@ export class DatabaseStorage implements IStorage {
 
   async deleteVitaIntakeSession(id: string): Promise<void> {
     await db.delete(vitaIntakeSessions).where(eq(vitaIntakeSessions.id, id));
+  }
+
+  // ============================================================================
+  // Audit Logging & Security Monitoring
+  // ============================================================================
+
+  // Audit Logs
+  async createAuditLog(log: InsertAuditLog): Promise<AuditLog> {
+    const [created] = await db.insert(auditLogs).values(log).returning();
+    return created;
+  }
+
+  async getAuditLog(id: string): Promise<AuditLog | undefined> {
+    return await db.query.auditLogs.findFirst({
+      where: eq(auditLogs.id, id),
+    });
+  }
+
+  async getAuditLogs(filters?: {
+    userId?: string;
+    action?: string;
+    resource?: string;
+    resourceId?: string;
+    sensitiveDataAccessed?: boolean;
+    success?: boolean;
+    startDate?: Date;
+    endDate?: Date;
+    limit?: number;
+  }): Promise<AuditLog[]> {
+    const conditions = [];
+
+    if (filters?.userId) {
+      conditions.push(eq(auditLogs.userId, filters.userId));
+    }
+    if (filters?.action) {
+      conditions.push(eq(auditLogs.action, filters.action));
+    }
+    if (filters?.resource) {
+      conditions.push(eq(auditLogs.resource, filters.resource));
+    }
+    if (filters?.resourceId) {
+      conditions.push(eq(auditLogs.resourceId, filters.resourceId));
+    }
+    if (filters?.sensitiveDataAccessed !== undefined) {
+      conditions.push(eq(auditLogs.sensitiveDataAccessed, filters.sensitiveDataAccessed));
+    }
+    if (filters?.success !== undefined) {
+      conditions.push(eq(auditLogs.success, filters.success));
+    }
+    if (filters?.startDate) {
+      conditions.push(gte(auditLogs.createdAt, filters.startDate));
+    }
+    if (filters?.endDate) {
+      conditions.push(lte(auditLogs.createdAt, filters.endDate));
+    }
+
+    let query = db
+      .select()
+      .from(auditLogs)
+      .orderBy(desc(auditLogs.createdAt));
+
+    if (conditions.length > 0) {
+      query = query.where(and(...conditions));
+    }
+
+    if (filters?.limit) {
+      query = query.limit(filters.limit);
+    }
+
+    return await query;
+  }
+
+  // Security Events
+  async createSecurityEvent(event: InsertSecurityEvent): Promise<SecurityEvent> {
+    const [created] = await db.insert(securityEvents).values(event).returning();
+    return created;
+  }
+
+  async getSecurityEvent(id: string): Promise<SecurityEvent | undefined> {
+    return await db.query.securityEvents.findFirst({
+      where: eq(securityEvents.id, id),
+    });
+  }
+
+  async getSecurityEvents(filters?: {
+    eventType?: string;
+    severity?: string;
+    userId?: string;
+    ipAddress?: string;
+    reviewed?: boolean;
+    startDate?: Date;
+    endDate?: Date;
+    limit?: number;
+  }): Promise<SecurityEvent[]> {
+    const conditions = [];
+
+    if (filters?.eventType) {
+      conditions.push(eq(securityEvents.eventType, filters.eventType));
+    }
+    if (filters?.severity) {
+      conditions.push(eq(securityEvents.severity, filters.severity));
+    }
+    if (filters?.userId) {
+      conditions.push(eq(securityEvents.userId, filters.userId));
+    }
+    if (filters?.ipAddress) {
+      conditions.push(eq(securityEvents.ipAddress, filters.ipAddress));
+    }
+    if (filters?.reviewed !== undefined) {
+      conditions.push(eq(securityEvents.reviewed, filters.reviewed));
+    }
+    if (filters?.startDate) {
+      conditions.push(gte(securityEvents.occurredAt, filters.startDate));
+    }
+    if (filters?.endDate) {
+      conditions.push(lte(securityEvents.occurredAt, filters.endDate));
+    }
+
+    let query = db
+      .select()
+      .from(securityEvents)
+      .orderBy(desc(securityEvents.occurredAt));
+
+    if (conditions.length > 0) {
+      query = query.where(and(...conditions));
+    }
+
+    if (filters?.limit) {
+      query = query.limit(filters.limit);
+    }
+
+    return await query;
+  }
+
+  async updateSecurityEvent(id: string, updates: Partial<SecurityEvent>): Promise<SecurityEvent> {
+    const [updated] = await db
+      .update(securityEvents)
+      .set(updates)
+      .where(eq(securityEvents.id, id))
+      .returning();
+    return updated;
   }
 }
 
