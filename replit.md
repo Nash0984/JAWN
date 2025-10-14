@@ -17,6 +17,7 @@ The backend uses Express.js with TypeScript and PostgreSQL via Drizzle ORM on Ne
 ## Feature Specifications
 ### Core Platform Features
 -   **Navigator Workspace**: Client management and E&E export.
+-   **Financial Opportunity Radar**: Real-time cross-program eligibility tracking widget with dynamic benefit calculations, change detection, and smart alerts. Displays instant eligibility updates across all 6 Maryland programs (SNAP, Medicaid, TANF, EITC, CTC, SSI) as household data changes, featuring visual change indicators (↑↓ arrows, "New" badges), summary dashboard (total monthly/annual benefits, program count), and AI-powered cross-enrollment recommendations. Integrated into Household Profiler with 300ms debounced calculations, abort controller for request cancellation, and CSRF-protected API calls.
 -   **Feedback Collection System**: Gathers user feedback on AI responses.
 -   **Admin Enhancement Tools**: Audit logging, security monitoring, API documentation, feedback management.
 -   **Notification System**: In-app alerts and updates.

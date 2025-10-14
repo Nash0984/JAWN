@@ -142,6 +142,72 @@ The Maryland SNAP Policy Manual System is a comprehensive AI-powered platform de
 
 **Theming:** All components support Maryland Digital Style Guide theming via CSS custom properties
 
+### Financial Opportunity Radar (Real-Time Eligibility Widget)
+
+#### client/src/components/FinancialOpportunityRadar.tsx
+**Purpose:** Persistent sidebar widget for real-time cross-program eligibility tracking
+**Key Features:**
+- Real-time eligibility display across all 6 Maryland programs (SNAP, Medicaid, TANF, EITC, CTC, SSI)
+- Dynamic change indicators with visual feedback (↑↓ arrows, green "New" badges)
+- Summary dashboard showing total monthly/annual benefits and program count
+- Smart alerts with AI-powered cross-enrollment recommendations
+- Framer Motion animations for smooth transitions and change highlights
+- Skeleton loading states during calculations
+- Error handling with user-friendly messages
+
+**Visual Components:**
+- Program eligibility cards with status icons (✅ Eligible, ⚠️ Needs Info, ❌ Ineligible)
+- Change indicators showing benefit increases/decreases with amounts and percentages
+- Summary metrics panel with total benefit calculations
+- Alert system for optimization opportunities and unclaimed benefits
+
+#### client/src/hooks/useEligibilityRadar.ts
+**Purpose:** Real-time eligibility calculation engine with smart request management
+**Key Features:**
+- 300ms debounced calculations for optimal performance
+- AbortController integration for request cancellation on rapid field changes
+- CSRF token handling for secure state-changing requests
+- Change detection with previousResultsRef for delta tracking
+- Comprehensive error handling including AbortError management
+- Automatic cache invalidation and state updates
+
+**Technical Implementation:**
+- useWatch hook tracks 16+ household form fields for instant updates
+- Parallel fetch operations: CSRF token → eligibility calculation
+- Request flow: Field change → debounce → abort previous → fetch token → calculate → update state
+- Change detection: Server compares current vs. previous results, returns 'new'/'changed' indicators
+- Security: Includes x-csrf-token header, credentials: 'include', proper error boundaries
+
+**State Management:**
+```typescript
+interface RadarState {
+  programs: ProgramEligibility[];  // Current eligibility for all programs
+  alerts: SmartAlert[];            // Cross-enrollment recommendations
+  summary: {
+    totalMonthly: number;
+    totalAnnual: number;
+    programCount: number;
+  };
+  isCalculating: boolean;
+  error: string | null;
+}
+```
+
+#### Integration in HouseholdProfiler
+**Location:** client/src/pages/HouseholdProfiler.tsx
+**Layout:** Responsive 3-column grid with radar widget in right sidebar
+**Data Flow:**
+1. useWatch monitors all form fields (adults, children, income, expenses, etc.)
+2. Any field change triggers useEffect with field dependencies
+3. useEligibilityRadar calculates eligibility with 300ms debounce
+4. Results displayed in persistent sidebar with change indicators
+5. Bidirectional updates: Form changes update radar, radar shows impact
+
+**Mobile Responsiveness:**
+- Desktop: 3-column layout (form | preview | radar)
+- Tablet: 2-column stacked layout
+- Mobile: Single column with collapsible radar
+
 ---
 
 ## Backend Architecture (server/)
