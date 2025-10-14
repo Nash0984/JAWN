@@ -64,6 +64,12 @@ app.use(express.urlencoded({ extended: false, limit: '10mb' })); // Limit URL-en
 // Parse cookies (required for CSRF double-submit cookie pattern)
 app.use(cookieParser());
 
+// ============================================================================
+// XSS SANITIZATION - Prevent Cross-Site Scripting attacks
+// ============================================================================
+import { xssSanitization } from "./middleware/xssSanitization";
+app.use(xssSanitization()); // Sanitize all request data (body, query, params)
+
 // Rate limiting configuration
 // General API rate limiter - 100 requests per 15 minutes
 const generalLimiter = rateLimit({

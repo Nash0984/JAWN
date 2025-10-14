@@ -88,21 +88,45 @@ node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 - SESSION_SECRET (required, 32+ chars)
 - GEMINI_API_KEY or GOOGLE_API_KEY (required)
 - ENCRYPTION_KEY (required in production)
+- ALLOWED_ORIGINS (required for production/staging, comma-separated URLs)
 
-### 6. Security Headers (Helmet.js)
-**Location:** `server/index.ts`
+### 6. CORS Security Policy
+**Location:** `server/middleware/corsConfig.ts`
 
-- ✅ Content Security Policy (CSP)
-- ✅ HTTP Strict Transport Security (HSTS)
+- ✅ Environment-based origin whitelisting
+- ✅ No wildcard origins with credentials (prevents CSRF)
+- ✅ Comprehensive localhost coverage for dev/test (ports 5000, 5173, 3000, 4173)
+- ✅ Production requires explicit ALLOWED_ORIGINS configuration
+- ✅ Credential support with strict origin checking
+- ✅ Preflight caching and restricted HTTP methods
+
+**Environment Configuration:**
+- **Development/Test:** Localhost whitelist (all common dev ports + Replit dev domain)
+- **Production/Staging:** REQUIRED `ALLOWED_ORIGINS` env var, fatal exit if missing
+- **Security:** No wildcard with credentials, prevents unauthorized cross-origin access
+
+**Required Environment Variables (Production/Staging):**
+```bash
+ALLOWED_ORIGINS=https://myapp.com,https://www.myapp.com
+```
+
+### 7. Security Response Headers (Helmet.js)
+**Location:** `server/middleware/securityHeaders.ts`
+
+- ✅ Content Security Policy (CSP) with environment-aware configuration
+- ✅ HTTP Strict Transport Security (HSTS) with preload
 - ✅ X-Content-Type-Options: nosniff
 - ✅ X-Frame-Options: DENY
-- ✅ Cross-Origin policies
+- ✅ X-Download-Options: noopen
+- ✅ Permissions-Policy for feature restrictions
+- ✅ Upgrade insecure requests in production
 
 **CSP Configuration:**
-- Development: Allows unsafe-inline/eval for Vite HMR
-- Production: Strict CSP with no unsafe directives
+- **Development:** Permissive for Vite HMR (unsafe-inline, unsafe-eval for scripts/styles)
+- **Production:** Strict policy with upgrade-insecure-requests, no unsafe directives
+- **Features:** Web share, geolocation, and camera disabled by default via Permissions-Policy
 
-### 7. Rate Limiting (Tiered)
+### 8. Rate Limiting (Tiered)
 **Location:** `server/index.ts`
 
 - ✅ **Authentication endpoints:** 5 requests per 15 minutes
@@ -110,7 +134,7 @@ node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 - ✅ **AI services:** 20 requests per minute
 - ✅ Skip successful login attempts
 
-### 8. Request Size Limits & File Upload Security
+### 9. Request Size Limits & File Upload Security
 **Location:** `server/index.ts`, `server/middleware/fileUploadSecurity.ts`
 
 - ✅ JSON payload: 10MB max
@@ -124,7 +148,7 @@ node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
   - Type-specific size limits: Documents (50MB), Tax Docs (25MB), Images (10MB)
   - SHA-256 file hash generation for integrity verification
 
-### 9. Password Security & Strength Enforcement
+### 10. Password Security & Strength Enforcement
 **Location:** `server/services/passwordSecurity.service.ts`
 
 - ✅ **Strong password requirements enforced:**
@@ -142,7 +166,7 @@ node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
   - `POST /api/auth/change-password` - Change password (requires auth)
 - ✅ **Audit logging:** Password changes logged with strength score
 
-### 10. Session Security
+### 11. Session Security
 **Location:** `server/index.ts`
 
 - ✅ **Secure session configuration:**
@@ -156,7 +180,7 @@ node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 - ✅ **Session lifetime:** 30 days with automatic cleanup
 - ✅ **Session regeneration:** Login/logout properly handled via Passport.js
 
-### 11. Authorization & Ownership Controls
+### 12. Authorization & Ownership Controls
 **Location:** `server/middleware/ownership.ts`
 
 - ✅ **Ownership verification middleware:**
@@ -178,7 +202,34 @@ node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
   - Applied to: household profiles (GET/PATCH/DELETE), VITA sessions (GET/PATCH/DELETE)
 - 🚧 **Remaining work:** Apply to notifications, tax documents, and bulk listing endpoints
 
-### 12. Health Check & Monitoring
+### 13. XSS Prevention & Input Sanitization
+**Location:** `server/middleware/xssSanitization.ts`
+
+- ✅ **Global input sanitization middleware:**
+  - Removes dangerous XSS patterns (script tags, event handlers, iframes, etc.)
+  - Escapes HTML entities to prevent code injection
+  - Sanitizes request body, query params, and URL params
+  - Field-specific HTML whitelist for rich text content
+- ✅ **XSS Pattern Detection:**
+  - Script tags and JavaScript protocols
+  - Event handlers (onclick, onerror, onload, etc.)
+  - Iframe, embed, and object tags
+  - VBScript protocols and CSS expressions
+  - Malicious link tags
+- ✅ **HTML Whitelisting:**
+  - Allowed fields: content, description, notes, message, body, policyText, explanation
+  - Strict mode for authentication endpoints (no HTML allowed)
+  - Query/URL params always sanitized strictly
+- ✅ **Applied globally:** All API routes automatically protected
+- ✅ **Export sanitization:** Manual sanitization function available for custom use
+
+**Security Benefits:**
+- Prevents stored XSS attacks (malicious scripts in database)
+- Prevents reflected XSS attacks (malicious scripts in URLs/query params)
+- Prevents DOM-based XSS attacks (client-side script injection)
+- Protects against CSS expression attacks and protocol-based XSS
+
+### 14. Health Check & Monitoring
 **Endpoint:** `GET /api/health`
 
 **Response:**
@@ -192,7 +243,7 @@ node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 }
 ```
 
-### 10. Graceful Shutdown
+### 15. Graceful Shutdown
 **Location:** `server/index.ts`
 
 - ✅ Handles SIGTERM and SIGINT signals
@@ -200,7 +251,7 @@ node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 - ✅ Stops background services (Smart Scheduler)
 - ✅ Handles uncaught exceptions and unhandled rejections
 
-### 11. Security Events Monitoring
+### 16. Security Events Monitoring
 **Location:** `server/services/auditLog.service.ts`
 
 - ✅ Tracks security events (failed logins, suspicious activity)
