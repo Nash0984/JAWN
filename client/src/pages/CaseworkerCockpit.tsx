@@ -12,6 +12,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { AlertTriangle, TrendingUp, TrendingDown, BookOpen, FileText, HelpCircle, Search, ChevronDown, ChevronUp } from "lucide-react";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, Legend, ResponsiveContainer } from "recharts";
 import { format } from "date-fns";
+import { ERROR_CATEGORY_LABELS } from "@shared/qcConstants";
 
 interface FlaggedCase {
   id: string;
@@ -56,15 +57,6 @@ interface TrainingIntervention {
   impactScore: number;
   completedDate: string;
 }
-
-const ERROR_CATEGORY_LABELS: Record<string, string> = {
-  shelter_utility: "Shelter & Utility",
-  income_verification: "Income Verification",
-  asset_verification: "Asset Verification",
-  categorical_eligibility: "Categorical Eligibility",
-  earned_income: "Earned Income Errors",
-  unearned_income: "Unearned Income Errors",
-};
 
 export default function CaseworkerCockpit() {
   const [expandedCaseId, setExpandedCaseId] = useState<string | null>(null);
