@@ -476,6 +476,537 @@ interface RadarState {
 
 ---
 
+## Public Portal Features (No Login Required)
+
+### Quick Screener
+**Location:** `client/src/pages/public/QuickScreener.tsx`  
+**Purpose:** Ultra-minimal 5-question eligibility pre-screening
+
+**Key Features:**
+- 5 core questions optimized for 2-minute completion
+- Indexes toward inclusivity (reduces false negatives)
+- 70% approval rate optimization based on mRelief best practices
+- No benefit estimates (keeps it simple and privacy-focused)
+- Clear "You may qualify!" messaging
+- Mobile-optimized progressive disclosure pattern
+
+**Technical Implementation:**
+- React Hook Form with Zod validation
+- Simple decision tree algorithm (household size + income thresholds)
+- No API calls - fully client-side for privacy
+- Optional account creation to save results
+
+### Document Checklist Generator
+**Location:** `client/src/pages/public/DocumentChecklist.tsx`  
+**Purpose:** AI-powered personalized document requirement lists
+
+**Key Features:**
+- Program selection or DHS notice upload
+- Gemini-powered requirement extraction
+- Program-specific document requirements
+- Printable PDF output with jsPDF
+- Mobile photo upload support
+
+**API Integration:**
+- `POST /api/public/generate-checklist` - Gemini analysis of requirements
+- Returns structured checklist with program mappings
+- PDF generation client-side for offline printing
+
+### Notice Explainer
+**Location:** `client/src/pages/public/NoticeExplainer.tsx`  
+**Purpose:** Plain-language DHS notice interpretation
+
+**Key Features:**
+- Upload or paste notice text
+- Gemini-powered analysis and simplification
+- Reading level: Grade 6-8 (Flesch-Kincaid validated)
+- Action items extraction with deadlines
+- Multi-language support (10 languages)
+- Deadline highlighting and countdown
+
+**Processing Pipeline:**
+1. Notice text input (paste or OCR from upload)
+2. Gemini 1.5-pro analysis to identify key information
+3. Reading level simplification
+4. Action item extraction with dates
+5. Plain English summary generation
+6. Multi-language translation (if requested)
+
+### Simplified Policy Search
+**Location:** `client/src/pages/public/SimplifiedSearch.tsx`  
+**Purpose:** Public access to Maryland SNAP policy manual
+
+**Key Features:**
+- Natural language queries without login
+- RAG-powered search (same engine as authenticated search)
+- Public policy content only (no sensitive data)
+- Official policy citations
+- Mobile-responsive interface
+
+**Access Control:**
+- Public policies only (filtered by access level)
+- No user data or case information accessible
+- Rate limiting: 10 requests/minute per IP
+
+---
+
+## Staff Dashboard Features
+
+### Navigator Dashboard
+**Location:** `client/src/pages/NavigatorDashboard.tsx`  
+**Purpose:** Personal navigator metrics and tasks
+
+**Key Features:**
+- Active cases overview with status indicators
+- Document review task queue
+- Performance metrics (cases completed, satisfaction scores)
+- Achievement tracking (gamification)
+- Quick actions panel (start screening, upload document)
+- Recent activity feed
+
+**Data Sources:**
+- `navigator_cases` - Active client cases
+- `navigator_sessions` - Interaction logs
+- `navigator_documents` - Pending document reviews
+- `achievements` - Earned badges and points
+- `notifications` - Real-time alerts
+
+### Navigator Performance
+**Location:** `client/src/pages/NavigatorPerformance.tsx`  
+**Purpose:** Individual performance analytics
+
+**Key Features:**
+- Case completion rates (monthly/quarterly trends)
+- Client satisfaction scores (NPS tracking)
+- Document processing speed (average time to approval)
+- Benefit maximization metrics (total $ secured for clients)
+- Monthly trends visualization (Recharts)
+- Goal tracking and progress indicators
+
+**Analytics Calculations:**
+- Average case completion time
+- Success rate (approved / total applications)
+- Cross-enrollment success rate
+- Benefit amount optimization percentage
+- Quality score (based on error-free submissions)
+
+### Client Dashboard
+**Location:** `client/src/pages/ClientDashboard.tsx`  
+**Purpose:** Applicant self-service portal
+
+**Key Features:**
+- Application status tracking with timeline
+- Document upload with drag-and-drop
+- Benefit status overview (current enrollments)
+- Appointment scheduling interface
+- Message center for navigator communication
+- Notification preferences
+
+**Real-Time Updates:**
+- WebSocket notifications for status changes
+- Document review status updates
+- Appointment reminders
+- Benefit determination notifications
+
+### Caseworker Dashboard
+**Location:** `client/src/pages/CaseworkerDashboard.tsx`  
+**Purpose:** Caseworker tools with QC integration
+
+**Key Features:**
+- Assigned cases with priority flagging
+- Document review workflow
+- Quality control checklist
+- Quick access to job aids
+- Error pattern alerts
+- Integration with Caseworker Cockpit
+
+---
+
+## Quality Control & Compliance Features
+
+### Caseworker Cockpit
+**Location:** `client/src/pages/CaseworkerCockpit.tsx`  
+**Purpose:** Personal QA dashboard with error prevention
+
+**Key Features:**
+- Flagged cases panel with AI-powered risk scores
+- Error trend analytics tracking performance over 4 quarters
+- AI-recommended training interventions based on error patterns
+- Quick job aids library (7 comprehensive guides)
+- Context-aware tips dialog for proactive quality improvement
+- Performance metrics with Payment Error Rate (PER) tracking
+
+**Maryland SNAP Error Categories (6):**
+1. Shelter & Utility Errors (`shelter_utility`)
+2. Income Verification Errors (`income_verification`)
+3. Asset Verification Errors (`asset_verification`)
+4. Categorical Eligibility Errors (`categorical_eligibility`)
+5. Earned Income Errors (`earned_income`)
+6. Unearned Income Errors (`unearned_income`)
+
+**Technical Implementation:**
+- Database: `qc_error_patterns`, `flagged_cases`, `job_aids`
+- Synthetic data generation for training (no real PII)
+- Predictive analytics using historical error patterns
+- Case format: `Case #XXXXX` (synthetic IDs)
+
+### Supervisor Cockpit
+**Location:** `client/src/pages/SupervisorCockpit.tsx`  
+**Purpose:** Team-wide QA oversight and predictive analytics
+
+**Key Features:**
+- Team error trend alerts with spike detection (e.g., 500% increases)
+- Diagnostic drill-downs by error category with subtype analysis
+- Proactive case flagging system for high-risk applications
+- Training impact analytics showing before/after error rate improvements
+- Real-time team performance metrics
+- Payment Error Rate (PER) tracking across team
+
+**Predictive Analytics:**
+- Pattern recognition across all 6 error categories
+- Early warning system for quality issues
+- Training intervention effectiveness tracking
+- Team comparison and benchmarking
+
+### ABAWD Verification Admin
+**Location:** `client/src/pages/AbawdVerificationAdmin.tsx`  
+**Purpose:** ABAWD work requirement exemption management
+
+**Key Features:**
+- Exemption verification workflow
+- Work requirement tracking (80 hours/month)
+- Compliance monitoring dashboard
+- Exemption documentation storage
+- Federal reporting tools
+- Appeal management
+
+**Database:**
+- `abawd_exemptions` - Exemption records
+- Status tracking: pending, approved, denied, expired
+- Automatic expiration alerts (3-month time limits)
+
+### Compliance Assurance Suite
+**Location:** `client/src/pages/ComplianceAdmin.tsx`  
+**Purpose:** Automated compliance validation
+
+**Key Features:**
+- WCAG 2.1 AA compliance checking
+- LEP (Limited English Proficiency) validation
+- Federal regulation alignment (7 CFR Part 273)
+- Policy change impact analysis
+- Gemini-powered validation engine
+- Violation tracking and remediation workflow
+
+**Compliance Rules Engine:**
+- Rule definitions in `compliance_rules` table
+- Automated validation triggers
+- Violation logging in `compliance_violations`
+- Remediation tracking and closure
+
+---
+
+## Administration & Developer Tools
+
+### AI Monitoring Dashboard
+**Location:** `client/src/pages/AIMonitoring.tsx`  
+**Purpose:** AI model performance tracking and cost analysis
+
+**Key Features:**
+- Model accuracy metrics by task type (RAG, extraction, classification)
+- API usage and cost tracking (Gemini API)
+- Response time monitoring (P50, P95, P99)
+- Error rate tracking by model and endpoint
+- A/B test results visualization
+- Model version management and rollback
+
+**Metrics Tracked:**
+- RAG search accuracy (relevance scoring)
+- Document extraction accuracy (field-level)
+- Classification accuracy (document types)
+- Total API cost per day/week/month
+- Request volume by model (gemini-1.5-pro, text-embedding-004)
+
+### Developer Portal
+**Location:** `client/src/pages/DeveloperPortal.tsx`  
+**Purpose:** Third-party API integration management
+
+**Key Features:**
+- API key generation and rotation
+- Webhook configuration (event subscriptions)
+- Integration guides and documentation
+- Testing sandbox with sample data
+- Code examples (JavaScript, Python, cURL)
+- SDK downloads (planned)
+
+**API Key Management:**
+- Scoped permissions (read-only, read-write, admin)
+- Key expiration and rotation
+- Usage limits and throttling
+- Request logging and analytics
+
+### API Documentation (Swagger)
+**Location:** `client/src/pages/ApiDocs.tsx`  
+**Purpose:** Interactive API documentation
+
+**Key Features:**
+- Swagger UI interface
+- Try-it-out functionality with authentication
+- Request/response examples
+- Authentication testing (session, API keys)
+- Endpoint search and filtering
+- Export OpenAPI 3.0 spec
+
+**Integration:**
+- Auto-generated from Express routes
+- Real-time testing against development API
+- Example responses from production data
+
+### Security Monitoring Dashboard
+**Location:** `client/src/pages/SecurityMonitoring.tsx`  
+**Purpose:** Security audit and threat monitoring
+
+**Key Features:**
+- Failed login tracking with IP analysis
+- Suspicious activity detection (brute force, unusual patterns)
+- API abuse monitoring (rate limit violations)
+- Rate limit visualization by endpoint
+- Access pattern analysis
+- Real-time threat alerts
+
+**Security Events Tracked:**
+- Failed logins (threshold: 5 attempts in 15 minutes)
+- API key misuse
+- Unusual access patterns (geographic, temporal)
+- Data export events (audit trail)
+
+### County Management
+**Location:** `client/src/pages/CountyManagement.tsx`  
+**Purpose:** Multi-county deployment configuration
+
+**Key Features:**
+- County-specific branding (logos, colors, names)
+- Contact information management
+- Staff assignment by county (role-based)
+- Program availability by county (not all counties offer all programs)
+- Localized content and resources
+- Data isolation and tenant separation
+
+**Maryland Counties Supported:** 24 counties
+- Baltimore City, Baltimore County, Montgomery County, Prince George's County (pilot deployments)
+- All 23 other Maryland counties
+
+**Technical Implementation:**
+- `counties` table with branding and config
+- Tenant isolation via county_id foreign keys
+- Dynamic theming based on county selection
+- Separate analytics per county
+
+### County Analytics
+**Location:** `client/src/pages/CountyAnalytics.tsx`  
+**Purpose:** County-level performance metrics and comparison
+
+**Key Features:**
+- Application volume by county (daily/weekly/monthly)
+- Approval rates comparison across counties
+- Navigator performance by county
+- Program utilization metrics (which programs are used most)
+- Demographic insights (age, household size distributions)
+- Trend analysis and forecasting
+
+**Visualization:**
+- Recharts multi-county comparison charts
+- Heat maps for geographic patterns
+- Time series for trend analysis
+
+### Cross-Enrollment Admin
+**Location:** `client/src/pages/CrossEnrollmentAdmin.tsx`  
+**Purpose:** Cross-program enrollment pipeline management
+
+**Key Features:**
+- Enrollment pipeline configuration (program pairs)
+- Success rate tracking (e.g., SNAP → Medicaid conversion rate)
+- Barrier identification (why enrollments fail)
+- AI-powered optimization recommendations
+- Performance metrics dashboard
+- Impact analysis ($ value of cross-enrollments)
+
+**Analytics:**
+- Cross-enrollment success rates by program pair
+- Common barriers (documentation, eligibility gaps)
+- Time to enrollment (average days)
+- Total benefit value from cross-enrollments
+
+---
+
+## Infrastructure & Mobile Features
+
+### Notification System
+**Location:** `client/src/pages/NotificationCenter.tsx`  
+**Purpose:** Real-time in-app notification management
+
+**Key Features:**
+- Notification bell with unread count badge
+- Real-time WebSocket updates
+- Mark as read/unread functionality
+- Notification filtering (by type, date)
+- Priority alerts (urgent/normal)
+- Email backup option
+
+**Notification Types:**
+- Document review status updates
+- Application status changes
+- Appointment reminders
+- Training assignments
+- System alerts
+- Achievement unlocks
+
+**Technical Implementation:**
+- WebSocket server for real-time delivery
+- Database: `notifications` table
+- Fallback: polling for older browsers
+- Email integration via SendGrid (planned)
+
+### Notification Settings
+**Location:** `client/src/pages/NotificationSettings.tsx`  
+**Purpose:** Notification preference management
+
+**Key Features:**
+- Channel preferences (in-app, email, SMS planned)
+- Notification type selection (checkboxes per type)
+- Quiet hours configuration (time ranges)
+- Frequency settings (instant, digest, daily summary)
+- Opt-out controls with granular selection
+
+**Database:**
+- `notification_preferences` table
+- User-specific preference storage
+- Default preferences for new users
+
+### PWA Installation
+**Location:** `client/src/components/InstallPrompt.tsx`  
+**Purpose:** Progressive Web App offline support
+
+**Key Features:**
+- Install prompt with A2HS (Add to Home Screen)
+- Offline functionality via Service Workers
+- Cached critical data (benefit programs, policy excerpts)
+- Background sync for form submissions
+- Push notifications (planned)
+
+**Technical Stack:**
+- Service Worker registration in `vite.config.ts`
+- IndexedDB for offline data caching
+- Workbox for caching strategies
+- Manifest.json for PWA metadata
+
+**Offline Capabilities:**
+- View cached household profiles
+- Access recent eligibility calculations
+- Draft application forms (sync when online)
+- Offline policy search (limited to cached content)
+
+### Mobile Bottom Navigation
+**Location:** `client/src/components/MobileBottomNav.tsx`  
+**Purpose:** Mobile-optimized touch navigation
+
+**Key Features:**
+- Bottom tab navigation (iOS/Android pattern)
+- Touch-optimized targets (44x44pt minimum)
+- Role-based menu items (different nav for user/navigator/admin)
+- Badge notifications on tabs
+- Quick actions (FAB - Floating Action Button)
+- Swipe gestures for tab switching
+
+**Responsive Breakpoints:**
+- Desktop: Hidden (top nav only)
+- Tablet (< 1024px): Optional (user preference)
+- Mobile (< 768px): Always visible
+
+### Command Palette
+**Location:** `client/src/components/CommandPalette.tsx`  
+**Purpose:** Keyboard-driven quick navigation and actions
+
+**Key Features:**
+- Global keyboard shortcut (Cmd/Ctrl+K)
+- Fuzzy search across all pages and actions
+- Role-based filtering (only show permitted actions)
+- Recent items tracking
+- Quick actions (create case, start screening, upload document)
+- Full keyboard navigation (↑↓ arrows, Enter to select)
+
+**Technical Implementation:**
+- `cmdk` library for command menu
+- Global hotkey listener
+- Search index of all routes and actions
+- Usage analytics for popular commands
+
+### Training Module
+**Location:** `client/src/pages/Training.tsx`  
+**Purpose:** Staff training and certification tracking
+
+**Key Features:**
+- Training material access (videos, PDFs, interactive modules)
+- Certification tracking (SNAP certification, VITA certification)
+- Interactive tutorials with progress tracking
+- Knowledge assessments (quizzes)
+- Progress tracking per staff member
+- Certificate generation (PDF)
+
+**Database:**
+- `training_modules` - Course content
+- `training_progress` - User completion tracking
+- `certifications` - Earned certifications
+
+### Consent Management
+**Location:** `client/src/pages/ConsentManagement.tsx`  
+**Purpose:** Digital consent form system
+
+**Key Features:**
+- Consent form creation from templates
+- Digital signature capture (canvas-based)
+- Version control (track consent changes over time)
+- Expiration tracking and renewal reminders
+- Revocation support (withdraw consent)
+- Audit trail (who consented, when, to what version)
+
+**Legal Compliance:**
+- Timestamped consent records
+- IP address logging
+- Version history preservation
+- Withdrawal confirmation
+- GDPR-ready architecture
+
+**Database:**
+- `consent_forms` - Form templates
+- `client_consents` - Individual consent records
+- Status: active, expired, revoked
+
+### Gamification System
+**Location:** `client/src/pages/Leaderboard.tsx`  
+**Purpose:** Navigator performance gamification
+
+**Key Features:**
+- Navigator rankings (weekly, monthly, all-time)
+- Achievement badges (case milestones, quality awards)
+- Point system (cases completed, benefits maximized)
+- Weekly/monthly competitions
+- Team comparisons (county vs county)
+- Reward tracking
+
+**Achievement Types:**
+- Case Milestones (10 cases, 50 cases, 100 cases)
+- Quality Awards (error-free month, 95%+ satisfaction)
+- Speed Awards (fastest document review)
+- Impact Awards (highest $ benefits secured)
+
+**Technical Implementation:**
+- Component: `AchievementNotification` for popups
+- Real-time leaderboard updates
+- Point calculation algorithms
+- Badge SVG assets
+
+---
+
 ## Monitoring and Analytics
 
 ### System Health Monitoring
