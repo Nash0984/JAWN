@@ -41,6 +41,7 @@ import {
 import { format } from "date-fns";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { ERROR_CATEGORY_LABELS } from "@shared/qcConstants";
 
 interface ErrorPattern {
   id: string;
@@ -84,15 +85,6 @@ interface TrainingIntervention {
   postTrainingErrorRate: number | null;
   impactScore: number | null;
 }
-
-const ERROR_CATEGORY_LABELS: Record<string, string> = {
-  shelter_utility: "Shelter & Utility",
-  income_verification: "Income Verification",
-  asset_verification: "Asset Verification",
-  categorical_eligibility: "Categorical Eligibility",
-  earned_income: "Earned Income Errors",
-  unearned_income: "Unearned Income Errors",
-};
 
 const COLORS = ['#ef4444', '#f59e0b', '#3b82f6', '#10b981', '#8b5cf6'];
 
