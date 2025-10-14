@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Offline - MD Benefits Navigator</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      background: linear-gradient(135deg, #0D4F8B 0%, #1a5a9e 100%);
+      color: #333;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+
+    .container {
+      background: white;
+      border-radius: 12px;
+      padding: 40px;
+      max-width: 500px;
+      width: 100%;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+      text-align: center;
+    }
+
+    .icon {
+      width: 80px;
+      height: 80px;
+      margin: 0 auto 24px;
+      background: #f3f4f6;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .icon svg {
+      width: 40px;
+      height: 40px;
+      color: #0D4F8B;
+    }
+
+    h1 {
+      color: #0D4F8B;
+      font-size: 28px;
+      margin-bottom: 16px;
+      font-weight: 600;
+    }
+
+    p {
+      color: #6b7280;
+      font-size: 16px;
+      line-height: 1.6;
+      margin-bottom: 24px;
+    }
+
+    .features {
+      background: #f9fafb;
+      border-radius: 8px;
+      padding: 20px;
+      margin-top: 24px;
+      text-align: left;
+    }
+
+    .features h2 {
+      color: #0D4F8B;
+      font-size: 18px;
+      margin-bottom: 12px;
+      font-weight: 600;
+    }
+
+    .features ul {
+      list-style: none;
+    }
+
+    .features li {
+      color: #6b7280;
+      font-size: 14px;
+      padding: 8px 0;
+      padding-left: 24px;
+      position: relative;
+    }
+
+    .features li:before {
+      content: "✓";
+      position: absolute;
+      left: 0;
+      color: #10b981;
+      font-weight: bold;
+    }
+
+    .retry-button {
+      background: #0D4F8B;
+      color: white;
+      border: none;
+      padding: 12px 24px;
+      border-radius: 6px;
+      font-size: 16px;
+      font-weight: 500;
+      cursor: pointer;
+      margin-top: 20px;
+      transition: background 0.2s;
+    }
+
+    .retry-button:hover {
+      background: #0a3d6b;
+    }
+
+    .seal {
+      width: 60px;
+      height: 60px;
+      margin: 0 auto 20px;
+    }
+
+    @media (max-width: 480px) {
+      .container {
+        padding: 30px 20px;
+      }
+
+      h1 {
+        font-size: 24px;
+      }
+
+      p {
+        font-size: 14px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="seal">
+      <svg viewBox="0 0 720 720" xmlns="http://www.w3.org/2000/svg">
+        <circle cx="360" cy="360" r="340" fill="#0D4F8B" stroke="#fff" stroke-width="20"/>
+        <text x="360" y="380" text-anchor="middle" fill="#fff" font-size="80" font-weight="bold">MD</text>
+      </svg>
+    </div>
+    
+    <div class="icon">
+      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 5.636a9 9 0 010 12.728m0 0l-2.829-2.829m2.829 2.829L21 21M15.536 8.464a5 5 0 010 7.072m0 0l-2.829-2.829m-4.243 2.829a4.978 4.978 0 01-1.414-2.83m-1.414 5.658a9 9 0 01-2.167-9.238m7.824 2.167a1 1 0 111.414 1.414m-1.414-1.414L3 3m8.293 8.293l1.414 1.414" />
+      </svg>
+    </div>
+
+    <h1>You're Offline</h1>
+    <p>The Maryland Benefits Navigator requires an internet connection for some features. Please check your connection and try again.</p>
+
+    <div class="features">
+      <h2>When you're back online, you can:</h2>
+      <ul>
+        <li>Check benefit eligibility for 6 Maryland programs</li>
+        <li>Prepare federal and state tax returns</li>
+        <li>Access VITA tax assistance resources</li>
+        <li>Get AI-powered financial guidance</li>
+      </ul>
+    </div>
+
+    <button class="retry-button" onclick="window.location.reload()">
+      Try Again
+    </button>
+  </div>
+</body>
+</html>

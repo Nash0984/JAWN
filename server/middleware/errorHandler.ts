@@ -1,5 +1,7 @@
 import type { Request, Response, NextFunction } from "express";
 import { AuditService } from "../services/auditService";
+import { captureException, setUserContext as setSentryUser, addBreadcrumb } from "../services/sentryService";
+import { metricsService } from "../services/metricsService";
 
 export interface AppError extends Error {
   statusCode?: number;
@@ -174,11 +176,60 @@ class ErrorHandler {
   }
 
   /**
-   * Handle async route errors
+   * Handle async route errors with Sentry integration
    */
   public static asyncHandler(fn: Function) {
     return (req: Request, res: Response, next: NextFunction) => {
-      Promise.resolve(fn(req, res, next)).catch(next);
+      Promise.resolve(fn(req, res, next)).catch((error) => {
+        // Extract tenantId from tenant middleware context
+        const tenantId = req.tenant?.tenant?.id || null;
+        
+        // Capture exception in Sentry with request context including tenant
+        captureException(error, {
+          level: error.statusCode && error.statusCode < 500 ? 'warning' : 'error',
+          tags: {
+            method: req.method,
+            endpoint: req.path,
+            statusCode: error.statusCode?.toString() || '500',
+            tenantId: tenantId || 'none',
+          },
+          extra: {
+            url: req.url,
+            headers: {
+              ...req.headers,
+              authorization: undefined, // Don't send auth headers
+              cookie: undefined, // Don't send cookies
+            },
+            query: req.query,
+            params: req.params,
+            errorDetails: error.details,
+            tenantName: req.tenant?.tenant?.name,
+          },
+          user: req.user ? {
+            id: req.user.id,
+            username: req.user.username,
+          } : undefined,
+          tenant: tenantId ? {
+            id: tenantId,
+            name: req.tenant?.tenant?.name,
+          } : undefined,
+        });
+        
+        // Record error metric with proper tenantId
+        metricsService.recordMetric(
+          'error',
+          1,
+          {
+            errorType: error.name || 'Error',
+            endpoint: req.path,
+            method: req.method,
+            statusCode: error.statusCode || 500,
+          },
+          tenantId
+        ).catch(console.error);
+        
+        next(error);
+      });
     };
   }
 

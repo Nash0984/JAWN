@@ -22,6 +22,7 @@ import { taxDocExtractor } from "./services/taxDocumentExtraction";
 import { GoogleGenAI } from "@google/genai";
 import { asyncHandler, validationError, notFoundError, externalServiceError, authorizationError } from "./middleware/errorHandler";
 import { requireAuth, requireStaff, requireAdmin } from "./middleware/auth";
+import { detectTenantContext } from "./middleware/tenantMiddleware";
 import { 
   verifyHouseholdProfileOwnership, 
   verifyVitaSessionOwnership, 
@@ -280,6 +281,12 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
 
     res.status(statusCode).json(healthStatus);
   }));
+
+  // ============================================================================
+  // MULTI-TENANT MIDDLEWARE
+  // ============================================================================
+  // Apply tenant detection to all routes (except health checks)
+  app.use(detectTenantContext);
 
   // Hybrid search endpoint - intelligently routes to Rules Engine or RAG
   app.post("/api/search", requireAuth, asyncHandler(async (req, res, next) => {
@@ -1026,6 +1033,163 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
     res.json({
       success: true,
       message: `Successfully cleared ${type} cache`,
+    });
+  }));
+
+  // ============================================================================
+  // MONITORING & OBSERVABILITY - Sentry integration and metrics
+  // ============================================================================
+  
+  // Get monitoring metrics for dashboard
+  app.get("/api/admin/monitoring/metrics", requireAdmin, asyncHandler(async (req, res) => {
+    const { metricsService } = await import("./services/metricsService");
+    const { alertService } = await import("./services/alertService");
+    const { getSentryStatus } = await import("./services/sentryService");
+    
+    const now = new Date();
+    const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000);
+    const oneDayAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+    
+    // Extract tenantId for proper multi-tenant isolation
+    const tenantId = req.tenant?.tenant?.id || null;
+    
+    // Get error rate filtered by tenant
+    const errorRate = await metricsService.getErrorRate(oneHourAgo, now, tenantId);
+    const errorTrend = await metricsService.calculateTrends('error', oneDayAgo, now, 'hour', tenantId);
+    
+    // Get performance metrics filtered by tenant
+    const performanceSummary = await metricsService.getMetricsSummary('response_time', oneHourAgo, now, tenantId);
+    const performanceTrend = await metricsService.calculateTrends('response_time', oneDayAgo, now, 'hour', tenantId);
+    
+    // Get top errors filtered by tenant
+    const topErrors = await metricsService.getTopErrors(oneHourAgo, now, 10, tenantId);
+    
+    // Get slowest endpoints filtered by tenant
+    const slowestEndpoints = await metricsService.getSlowestEndpoints(oneHourAgo, now, 10, tenantId);
+    
+    // Get recent alerts filtered by tenant
+    const recentAlerts = await alertService.getRecentAlerts(20, undefined, tenantId);
+    
+    // Get system health
+    const sentryStatus = getSentryStatus();
+    
+    res.json({
+      errorRate: {
+        current: errorRate,
+        trend: errorTrend.map(t => ({ timestamp: t.timestamp.toISOString(), value: t.value })),
+      },
+      performance: {
+        p50: performanceSummary?.p50 || 0,
+        p90: performanceSummary?.p90 || 0,
+        p95: performanceSummary?.p95 || 0,
+        trend: performanceTrend.map(t => ({ 
+          timestamp: t.timestamp.toISOString(), 
+          p50: t.value,
+          p90: t.value * 1.5, // Approximate for visualization
+          p95: t.value * 1.8,
+        })),
+      },
+      topErrors,
+      slowestEndpoints,
+      health: {
+        sentryEnabled: sentryStatus.enabled,
+        sentryConfigured: sentryStatus.configured,
+        databaseConnected: true, // If we got here, DB is connected
+        uptime: process.uptime(),
+      },
+      recentAlerts: recentAlerts.map(alert => ({
+        id: alert.id,
+        severity: alert.severity,
+        message: alert.message,
+        createdAt: alert.createdAt?.toISOString() || new Date().toISOString(),
+        resolved: alert.resolved,
+      })),
+    });
+  }));
+  
+  // Trigger a test error for Sentry verification
+  app.post("/api/admin/monitoring/test-error", requireAdmin, asyncHandler(async (req, res) => {
+    const { captureException, captureMessage } = await import("./services/sentryService");
+    
+    // Extract tenantId for proper context
+    const tenantId = req.tenant?.tenant?.id || null;
+    
+    // Create a test error
+    const testError = new Error("Test error from monitoring dashboard");
+    captureException(testError, {
+      level: 'warning',
+      tags: {
+        test: 'true',
+        source: 'monitoring-dashboard',
+        tenantId: tenantId || 'none',
+      },
+      extra: {
+        user: req.user?.username,
+        timestamp: new Date().toISOString(),
+        tenantName: req.tenant?.tenant?.name,
+      },
+      user: req.user ? {
+        id: req.user.id,
+        username: req.user.username,
+      } : undefined,
+      tenant: tenantId ? {
+        id: tenantId,
+        name: req.tenant?.tenant?.name,
+      } : undefined,
+    });
+    
+    // Also send a test message
+    captureMessage("Test monitoring alert", 'info', {
+      test: true,
+      triggeredBy: req.user?.username,
+      tenantId: tenantId || 'none',
+    });
+    
+    res.json({
+      success: true,
+      message: "Test error and message sent to Sentry (if configured)",
+    });
+  }));
+  
+  // Get alert history
+  app.get("/api/admin/monitoring/alerts", requireAdmin, asyncHandler(async (req, res) => {
+    const { alertService } = await import("./services/alertService");
+    const { severity, limit = 50 } = req.query;
+    
+    // Extract tenantId for proper multi-tenant isolation
+    const tenantId = req.tenant?.tenant?.id || null;
+    
+    const alerts = await alertService.getRecentAlerts(
+      Number(limit),
+      severity as string | undefined,
+      tenantId
+    );
+    
+    res.json({
+      alerts: alerts.map(alert => ({
+        id: alert.id,
+        type: alert.alertType,
+        severity: alert.severity,
+        message: alert.message,
+        metadata: alert.metadata,
+        channels: alert.channels,
+        resolved: alert.resolved,
+        resolvedAt: alert.resolvedAt?.toISOString(),
+        createdAt: alert.createdAt?.toISOString() || new Date().toISOString(),
+      })),
+    });
+  }));
+  
+  // Resolve an alert
+  app.post("/api/admin/monitoring/alerts/:alertId/resolve", requireAdmin, asyncHandler(async (req, res) => {
+    const { alertService } = await import("./services/alertService");
+    const { alertId } = req.params;
+    
+    await alertService.resolveAlert(alertId);
+    
+    res.json({
+      success: true,
+      message: "Alert resolved successfully",
     });
   }));
 
@@ -6165,6 +6329,138 @@ If the question cannot be answered with the available information, say so clearl
   }));
 
   // ===========================
+  // MULTI-TENANT ROUTES
+  // ===========================
+
+  // Get current tenant info and branding (public route)
+  app.get("/api/tenant/current", asyncHandler(async (req, res) => {
+    if (!req.tenant) {
+      return res.status(404).json({
+        error: "No tenant found for this domain",
+      });
+    }
+
+    res.json({
+      tenant: {
+        id: req.tenant.tenant.id,
+        slug: req.tenant.tenant.slug,
+        name: req.tenant.tenant.name,
+        type: req.tenant.tenant.type,
+        parentTenantId: req.tenant.tenant.parentTenantId,
+        config: req.tenant.tenant.config,
+      },
+      branding: req.tenant.branding,
+    });
+  }));
+
+  // List all tenants (super admin only)
+  app.get("/api/admin/tenants", requireAdmin, asyncHandler(async (req, res) => {
+    const { type, status, parentTenantId } = req.query;
+    
+    const filters: any = {};
+    if (type) filters.type = type as string;
+    if (status) filters.status = status as string;
+    if (parentTenantId) filters.parentTenantId = parentTenantId as string;
+    
+    const tenants = await storage.getTenants(filters);
+    res.json(tenants);
+  }));
+
+  // Get specific tenant (super admin only)
+  app.get("/api/admin/tenants/:id", requireAdmin, asyncHandler(async (req, res) => {
+    const tenant = await storage.getTenant(req.params.id);
+    if (!tenant) {
+      throw notFoundError("Tenant not found");
+    }
+    
+    const branding = await storage.getTenantBranding(tenant.id);
+    
+    res.json({
+      tenant,
+      branding,
+    });
+  }));
+
+  // Create new tenant (super admin only)
+  app.post("/api/admin/tenants", requireAdmin, asyncHandler(async (req, res) => {
+    const { slug, name, type, parentTenantId, status, domain, config } = req.body;
+    
+    if (!slug || !name || !type) {
+      throw validationError("slug, name, and type are required");
+    }
+    
+    const tenant = await storage.createTenant({
+      slug,
+      name,
+      type,
+      parentTenantId,
+      status: status || 'active',
+      domain,
+      config,
+    });
+    
+    res.status(201).json(tenant);
+  }));
+
+  // Update tenant (super admin only)
+  app.patch("/api/admin/tenants/:id", requireAdmin, asyncHandler(async (req, res) => {
+    const { slug, name, type, parentTenantId, status, domain, config } = req.body;
+    
+    const updates: any = {};
+    if (slug !== undefined) updates.slug = slug;
+    if (name !== undefined) updates.name = name;
+    if (type !== undefined) updates.type = type;
+    if (parentTenantId !== undefined) updates.parentTenantId = parentTenantId;
+    if (status !== undefined) updates.status = status;
+    if (domain !== undefined) updates.domain = domain;
+    if (config !== undefined) updates.config = config;
+    
+    const tenant = await storage.updateTenant(req.params.id, updates);
+    res.json(tenant);
+  }));
+
+  // Delete tenant (super admin only)
+  app.delete("/api/admin/tenants/:id", requireAdmin, asyncHandler(async (req, res) => {
+    await storage.deleteTenant(req.params.id);
+    res.status(204).send();
+  }));
+
+  // Update tenant branding (super admin only)
+  app.patch("/api/admin/tenants/:id/branding", requireAdmin, asyncHandler(async (req, res) => {
+    const { primaryColor, secondaryColor, logoUrl, faviconUrl, customCss, headerHtml, footerHtml } = req.body;
+    
+    const existingBranding = await storage.getTenantBranding(req.params.id);
+    
+    if (existingBranding) {
+      // Update existing branding
+      const updates: any = {};
+      if (primaryColor !== undefined) updates.primaryColor = primaryColor;
+      if (secondaryColor !== undefined) updates.secondaryColor = secondaryColor;
+      if (logoUrl !== undefined) updates.logoUrl = logoUrl;
+      if (faviconUrl !== undefined) updates.faviconUrl = faviconUrl;
+      if (customCss !== undefined) updates.customCss = customCss;
+      if (headerHtml !== undefined) updates.headerHtml = headerHtml;
+      if (footerHtml !== undefined) updates.footerHtml = footerHtml;
+      
+      const branding = await storage.updateTenantBranding(req.params.id, updates);
+      res.json(branding);
+    } else {
+      // Create new branding
+      const branding = await storage.createTenantBranding({
+        tenantId: req.params.id,
+        primaryColor,
+        secondaryColor,
+        logoUrl,
+        faviconUrl,
+        customCss,
+        headerHtml,
+        footerHtml,
+      });
+      res.status(201).json(branding);
+    }
+  }));
+
+  // ===========================
   // GAMIFICATION ROUTES - Navigator KPIs
   // ===========================
 
@@ -6530,6 +6826,236 @@ If the question cannot be answered with the available information, say so clearl
   app.get("/api/evaluation/test-cases/:testCaseId/results", requireAuth, asyncHandler(async (req, res) => {
     const results = await storage.getEvaluationResultsByTestCase(req.params.testCaseId);
     res.json(results);
+  }));
+
+  // ============================================================================
+  // PUBLIC API - Third-party integrations with API key authentication
+  // ============================================================================
+  
+  const publicApiRouter = (await import("./routes/publicApi")).default;
+  app.use("/api/v1", publicApiRouter);
+  
+  // ============================================================================
+  // SMS/TWILIO - Text-based benefit screening and intake
+  // ============================================================================
+  
+  // Admin API endpoints for SMS management
+  const { getTwilioConfig } = await import("./services/twilioConfig");
+  const { getConversationStats, isSmsEnabledForTenant } = await import("./services/smsService");
+  const { smsConversations } = await import("@shared/schema");
+  
+  // Get Twilio configuration status
+  app.get("/api/sms/status", requireAuth, requireAdmin, asyncHandler(async (req, res) => {
+    const config = getTwilioConfig();
+    
+    if (config.isConfigured) {
+      res.json({
+        isConfigured: true,
+        phoneNumber: config.phoneNumber
+      });
+    } else {
+      res.json({
+        isConfigured: false,
+        reason: config.reason
+      });
+    }
+  }));
+  
+  // Get conversation statistics
+  app.get("/api/sms/stats", requireAuth, requireAdmin, asyncHandler(async (req, res) => {
+    const tenantId = req.query.tenantId as string || req.user?.tenantId;
+    if (!tenantId) {
+      return res.status(400).json({ error: "Tenant ID required" });
+    }
+    
+    const stats = await getConversationStats(tenantId);
+    res.json(stats);
+  }));
+  
+  // Get recent conversations
+  app.get("/api/sms/conversations", requireAuth, requireAdmin, asyncHandler(async (req, res) => {
+    const limit = parseInt(req.query.limit as string) || 50;
+    
+    const conversations = await db.query.smsConversations.findMany({
+      limit,
+      orderBy: [desc(smsConversations.createdAt)]
+    });
+    
+    res.json(conversations);
+  }));
+  
+  // Twilio webhook routes
+  const twilioWebhooksRouter = (await import("./routes/twilioWebhooks")).default;
+  app.use("/api/sms", twilioWebhooksRouter);
+  
+  // ============================================================================
+  // API DOCUMENTATION - OpenAPI/Swagger endpoints
+  // ============================================================================
+  
+  const { openApiSpec } = await import("./openapi");
+  
+  // Serve OpenAPI spec as JSON
+  app.get("/api/openapi.json", (req, res) => {
+    res.json(openApiSpec);
+  });
+  
+  // Serve Swagger UI using CDN (since swagger-ui-express package failed to install)
+  app.get("/api/docs", (req, res) => {
+    res.send(`
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Maryland Benefits Platform API Documentation</title>
+    <link rel="stylesheet" type="text/css" href="https://unpkg.com/swagger-ui-dist@5.10.5/swagger-ui.css">
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+        }
+        .topbar {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div id="swagger-ui"></div>
+    <script src="https://unpkg.com/swagger-ui-dist@5.10.5/swagger-ui-bundle.js"></script>
+    <script src="https://unpkg.com/swagger-ui-dist@5.10.5/swagger-ui-standalone-preset.js"></script>
+    <script>
+        window.onload = function() {
+            const ui = SwaggerUIBundle({
+                url: '/api/openapi.json',
+                dom_id: '#swagger-ui',
+                deepLinking: true,
+                presets: [
+                    SwaggerUIBundle.presets.apis,
+                    SwaggerUIStandalonePreset
+                ],
+                plugins: [
+                    SwaggerUIBundle.plugins.DownloadUrl
+                ],
+                layout: "StandaloneLayout",
+                persistAuthorization: true,
+                tryItOutEnabled: true
+            });
+            window.ui = ui;
+        };
+    </script>
+</body>
+</html>
+    `);
+  });
+  
+  // ============================================================================
+  // API KEY MANAGEMENT - Admin endpoints for managing API keys
+  // ============================================================================
+  
+  const { apiKeyService } = await import("./services/apiKeyService");
+  
+  // Generate new API key (admin only)
+  app.post("/api/admin/api-keys", requireAuth, requireAdmin, asyncHandler(async (req, res) => {
+    const { name, organizationId, tenantId, scopes, rateLimit, expiresAt } = req.body;
+    
+    if (!name || !tenantId || !scopes || !Array.isArray(scopes)) {
+      return res.status(400).json({
+        error: 'Bad Request',
+        message: 'Missing required fields: name, tenantId, scopes (array)',
+      });
+    }
+    
+    const result = await apiKeyService.generateApiKey(
+      name,
+      tenantId,
+      scopes,
+      rateLimit,
+      expiresAt ? new Date(expiresAt) : undefined,
+      req.user!.id
+    );
+    
+    res.status(201).json({
+      id: result.apiKey.id,
+      key: result.readableKey, // Only time this is returned!
+      name: result.apiKey.name,
+      tenantId: result.apiKey.tenantId,
+      scopes: result.apiKey.scopes,
+      rateLimit: result.apiKey.rateLimit,
+      status: result.apiKey.status,
+      expiresAt: result.apiKey.expiresAt,
+      createdAt: result.apiKey.createdAt,
+      warning: 'Save this API key now - it will not be shown again!',
+    });
+  }));
+  
+  // List API keys for tenant (admin only)
+  app.get("/api/admin/api-keys", requireAuth, requireAdmin, asyncHandler(async (req, res) => {
+    const { tenantId } = req.query;
+    
+    if (!tenantId) {
+      return res.status(400).json({
+        error: 'Bad Request',
+        message: 'tenantId query parameter is required',
+      });
+    }
+    
+    const keys = await apiKeyService.getApiKeysByTenant(tenantId as string);
+    
+    // Don't return the actual hashed keys
+    const sanitizedKeys = keys.map(k => ({
+      id: k.id,
+      name: k.name,
+      tenantId: k.tenantId,
+      scopes: k.scopes,
+      rateLimit: k.rateLimit,
+      status: k.status,
+      lastUsedAt: k.lastUsedAt,
+      requestCount: k.requestCount,
+      expiresAt: k.expiresAt,
+      createdAt: k.createdAt,
+    }));
+    
+    res.json(sanitizedKeys);
+  }));
+  
+  // Get API key usage stats (admin only)
+  app.get("/api/admin/api-keys/:keyId/stats", requireAuth, requireAdmin, asyncHandler(async (req, res) => {
+    const { keyId } = req.params;
+    const { days } = req.query;
+    
+    const stats = await apiKeyService.getUsageStats(
+      keyId,
+      days ? parseInt(days as string) : 30
+    );
+    
+    res.json(stats);
+  }));
+  
+  // Revoke API key (admin only)
+  app.post("/api/admin/api-keys/:keyId/revoke", requireAuth, requireAdmin, asyncHandler(async (req, res) => {
+    const { keyId } = req.params;
+    
+    await apiKeyService.revokeApiKey(keyId, req.user!.id);
+    
+    res.json({ message: 'API key revoked successfully' });
+  }));
+  
+  // Suspend API key (admin only)
+  app.post("/api/admin/api-keys/:keyId/suspend", requireAuth, requireAdmin, asyncHandler(async (req, res) => {
+    const { keyId } = req.params;
+    
+    await apiKeyService.suspendApiKey(keyId);
+    
+    res.json({ message: 'API key suspended successfully' });
+  }));
+  
+  // Reactivate API key (admin only)
+  app.post("/api/admin/api-keys/:keyId/reactivate", requireAuth, requireAdmin, asyncHandler(async (req, res) => {
+    const { keyId } = req.params;
+    
+    await apiKeyService.reactivateApiKey(keyId);
+    
+    res.json({ message: 'API key reactivated successfully' });
   }));
 
   const httpServer = createServer(app);

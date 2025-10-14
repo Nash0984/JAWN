@@ -11,7 +11,9 @@ export const users = pgTable("users", {
   email: text("email"),
   fullName: text("full_name"),
   phone: text("phone"),
-  role: text("role").notNull().default("client"), // client, navigator, caseworker, admin
+  role: text("role").notNull().default("client"), // client, navigator, caseworker, admin, super_admin
+  // Multi-tenant isolation
+  tenantId: varchar("tenant_id").references((): any => tenants.id), // References tenant for data isolation
   // Maryland DHS staff fields
   dhsEmployeeId: text("dhs_employee_id"), // for navigators and caseworkers
   officeLocation: text("office_location"), // local DHS office location
@@ -62,6 +64,7 @@ export const documents = pgTable("documents", {
   fileSize: integer("file_size"), // in bytes
   mimeType: text("mime_type"),
   uploadedBy: varchar("uploaded_by").references(() => users.id),
+  tenantId: varchar("tenant_id").references((): any => tenants.id), // Multi-tenant isolation
   status: text("status").notNull().default("uploaded"), // uploaded, processing, processed, failed
   processingStatus: jsonb("processing_status"), // detailed processing info
   qualityScore: real("quality_score"), // 0-1 quality assessment
@@ -544,6 +547,7 @@ export const clientCases = pgTable("client_cases", {
   clientIdentifier: text("client_identifier"), // Last 4 SSN or case number
   benefitProgramId: varchar("benefit_program_id").references(() => benefitPrograms.id).notNull(),
   assignedNavigator: varchar("assigned_navigator").references(() => users.id),
+  tenantId: varchar("tenant_id").references((): any => tenants.id), // Multi-tenant isolation
   status: text("status").notNull().default("screening"), // screening, documents_pending, submitted, approved, denied
   householdSize: integer("household_size"),
   estimatedIncome: integer("estimated_income"), // in cents
@@ -2019,6 +2023,7 @@ export const vitaIntakeSessions = pgTable("vita_intake_sessions", {
   
   // Ownership & session management
   userId: varchar("user_id").references(() => users.id).notNull(), // Navigator/preparer
+  tenantId: varchar("tenant_id").references((): any => tenants.id), // Multi-tenant isolation
   clientCaseId: varchar("client_case_id").references(() => clientCases.id),
   householdProfileId: varchar("household_profile_id").references(() => householdProfiles.id), // Optional pre-fill
   
@@ -3628,6 +3633,49 @@ export const countyMetrics = pgTable("county_metrics", {
 }));
 
 // ============================================================================
+// WHITE-LABEL MULTI-TENANT SYSTEM
+// ============================================================================
+
+// Tenants - State/County level organizations with custom branding and data isolation
+export const tenants = pgTable("tenants", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  slug: text("slug").notNull().unique(), // URL identifier: "maryland", "virginia", "baltimore-county"
+  name: text("name").notNull(), // Display name: "Maryland Department of Human Services"
+  type: text("type").notNull(), // "state" or "county"
+  parentTenantId: varchar("parent_tenant_id").references((): any => tenants.id), // For counties under states
+  status: text("status").notNull().default("active"), // active, inactive, demo
+  domain: text("domain").unique(), // Custom domain: "benefits.maryland.gov"
+  config: jsonb("config"), // Feature toggles, settings, etc.
+  
+  // Metadata
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  slugIdx: index("tenants_slug_idx").on(table.slug),
+  domainIdx: index("tenants_domain_idx").on(table.domain),
+  typeIdx: index("tenants_type_idx").on(table.type),
+  parentTenantIdx: index("tenants_parent_tenant_idx").on(table.parentTenantId),
+}));
+
+// Tenant Branding - Custom visual identity per tenant
+export const tenantBranding = pgTable("tenant_branding", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").references(() => tenants.id, { onDelete: "cascade" }).notNull().unique(),
+  primaryColor: text("primary_color"), // Hex color: "#0D4F8B"
+  secondaryColor: text("secondary_color"),
+  logoUrl: text("logo_url"),
+  faviconUrl: text("favicon_url"),
+  customCss: text("custom_css"),
+  headerHtml: text("header_html"),
+  footerHtml: text("footer_html"),
+  
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  tenantIdIdx: index("tenant_branding_tenant_idx").on(table.tenantId),
+}));
+
+// ============================================================================
 // GAMIFICATION & NAVIGATOR PERFORMANCE SYSTEM
 // ============================================================================
 
@@ -3896,6 +3944,148 @@ export const insertSecurityEventSchema = createInsertSchema(securityEvents).omit
 export type InsertSecurityEvent = z.infer<typeof insertSecurityEventSchema>;
 export type SecurityEvent = typeof securityEvents.$inferSelect;
 
+// ============================================================================
+// API KEYS - Third-party API access management
+// ============================================================================
+
+export const apiKeys = pgTable("api_keys", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  
+  // API key (hashed like passwords)
+  key: text("key").notNull().unique(), // Hashed API key (bcrypt)
+  
+  // Organization info
+  name: text("name").notNull(), // Organization/partner name
+  organizationId: varchar("organization_id"), // Optional link to organization entity
+  tenantId: varchar("tenant_id").references((): any => tenants.id).notNull(), // Multi-tenant isolation
+  
+  // Permissions and limits
+  scopes: jsonb("scopes").notNull(), // Array of scopes: ['eligibility:read', 'documents:write', etc.]
+  rateLimit: integer("rate_limit").notNull().default(1000), // Requests per hour
+  
+  // Status
+  status: text("status").notNull().default("active"), // active, suspended, revoked
+  
+  // Usage tracking
+  lastUsedAt: timestamp("last_used_at"),
+  requestCount: integer("request_count").notNull().default(0), // Total requests made
+  
+  // Expiration
+  expiresAt: timestamp("expires_at"), // Optional expiration date
+  
+  // Audit
+  createdBy: varchar("created_by").references(() => users.id),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  revokedAt: timestamp("revoked_at"),
+  revokedBy: varchar("revoked_by").references(() => users.id),
+}, (table) => ({
+  tenantIdx: index("api_keys_tenant_idx").on(table.tenantId),
+  statusIdx: index("api_keys_status_idx").on(table.status),
+  organizationIdx: index("api_keys_organization_idx").on(table.organizationId),
+}));
+
+// API key insert/select types
+export const insertApiKeySchema = createInsertSchema(apiKeys).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+  requestCount: true,
+});
+
+export type InsertApiKey = z.infer<typeof insertApiKeySchema>;
+export type ApiKey = typeof apiKeys.$inferSelect;
+
+// ============================================================================
+// API USAGE LOGS - Track API usage for analytics and billing
+// ============================================================================
+
+export const apiUsageLogs = pgTable("api_usage_logs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  
+  // API key reference
+  apiKeyId: varchar("api_key_id").references(() => apiKeys.id, { onDelete: "cascade" }).notNull(),
+  
+  // Request details
+  endpoint: text("endpoint").notNull(), // /api/v1/eligibility/check
+  method: text("method").notNull(), // GET, POST, etc.
+  statusCode: integer("status_code").notNull(), // 200, 400, 500, etc.
+  responseTime: integer("response_time"), // Response time in milliseconds
+  
+  // Request metadata
+  ipAddress: text("ip_address"),
+  userAgent: text("user_agent"),
+  requestSize: integer("request_size"), // Request body size in bytes
+  responseSize: integer("response_size"), // Response body size in bytes
+  
+  // Error tracking
+  errorMessage: text("error_message"), // Error message if failed
+  errorCode: text("error_code"), // Standardized error code
+  
+  // Additional metadata
+  metadata: jsonb("metadata"), // Any additional context
+  
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+  apiKeyIdx: index("api_usage_logs_key_idx").on(table.apiKeyId, table.createdAt),
+  endpointIdx: index("api_usage_logs_endpoint_idx").on(table.endpoint, table.createdAt),
+  statusIdx: index("api_usage_logs_status_idx").on(table.statusCode, table.createdAt),
+  createdAtIdx: index("api_usage_logs_created_at_idx").on(table.createdAt),
+}));
+
+// API usage log insert/select types
+export const insertApiUsageLogSchema = createInsertSchema(apiUsageLogs).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertApiUsageLog = z.infer<typeof insertApiUsageLogSchema>;
+export type ApiUsageLog = typeof apiUsageLogs.$inferSelect;
+
+// ============================================================================
+// WEBHOOKS - Partner event notification system
+// ============================================================================
+
+export const webhooks = pgTable("webhooks", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  
+  // API key reference
+  apiKeyId: varchar("api_key_id").references(() => apiKeys.id, { onDelete: "cascade" }).notNull(),
+  
+  // Webhook config
+  url: text("url").notNull(), // Partner's webhook URL
+  events: jsonb("events").notNull(), // Array of event types: ['eligibility.checked', 'document.verified']
+  secret: text("secret").notNull(), // HMAC secret for signature verification
+  
+  // Status
+  status: text("status").notNull().default("active"), // active, paused, failed
+  
+  // Delivery tracking
+  lastDeliveryAt: timestamp("last_delivery_at"),
+  lastDeliveryStatus: text("last_delivery_status"), // success, failed
+  failureCount: integer("failure_count").notNull().default(0),
+  
+  // Config
+  retryConfig: jsonb("retry_config"), // Retry configuration
+  
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  apiKeyIdx: index("webhooks_api_key_idx").on(table.apiKeyId),
+  statusIdx: index("webhooks_status_idx").on(table.status),
+}));
+
+// Webhook insert/select types
+export const insertWebhookSchema = createInsertSchema(webhooks).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+  failureCount: true,
+});
+
+export type InsertWebhook = z.infer<typeof insertWebhookSchema>;
+export type Webhook = typeof webhooks.$inferSelect;
+
 // Multi-county schema insert/select types
 export const insertCountySchema = createInsertSchema(counties).omit({
   id: true,
@@ -3958,3 +4148,185 @@ export type InsertLeaderboard = z.infer<typeof insertLeaderboardSchema>;
 export type Leaderboard = typeof leaderboards.$inferSelect;
 export type InsertCaseActivityEvent = z.infer<typeof insertCaseActivityEventSchema>;
 export type CaseActivityEvent = typeof caseActivityEvents.$inferSelect;
+
+// ============================================================================
+// SMS INTEGRATION FOR TEXT-BASED BENEFIT SCREENING & INTAKE
+// ============================================================================
+
+// SMS Conversations - Track SMS-based benefit screening and intake sessions
+export const smsConversations = pgTable("sms_conversations", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").references(() => tenants.id).notNull(), // Which tenant/state
+  phoneNumber: text("phone_number").notNull(), // User's phone (normalized E.164 format)
+  sessionType: text("session_type").notNull(), // 'screener', 'intake', 'document_help', 'general_inquiry'
+  state: text("state").notNull().default("started"), // 'started', 'collecting_info', 'completed', 'abandoned'
+  context: jsonb("context"), // Store conversation data (household size, income, answers, etc.)
+  lastMessageAt: timestamp("last_message_at").defaultNow().notNull(),
+  completedAt: timestamp("completed_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+  tenantPhoneIdx: index("sms_conversations_tenant_phone_idx").on(table.tenantId, table.phoneNumber),
+  stateIdx: index("sms_conversations_state_idx").on(table.state),
+  lastMessageIdx: index("sms_conversations_last_message_idx").on(table.lastMessageAt),
+}));
+
+// SMS Messages - Individual text messages in conversations
+export const smsMessages = pgTable("sms_messages", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  conversationId: varchar("conversation_id").references(() => smsConversations.id, { onDelete: "cascade" }).notNull(),
+  direction: text("direction").notNull(), // 'inbound' or 'outbound'
+  messageBody: text("message_body").notNull(),
+  twilioSid: text("twilio_sid"), // Twilio message ID
+  status: text("status").notNull().default("sent"), // 'sent', 'delivered', 'failed', 'received'
+  sentAt: timestamp("sent_at").defaultNow().notNull(),
+}, (table) => ({
+  conversationIdIdx: index("sms_messages_conversation_idx").on(table.conversationId),
+  twilioSidIdx: index("sms_messages_twilio_sid_idx").on(table.twilioSid),
+  statusIdx: index("sms_messages_status_idx").on(table.status),
+}));
+
+// SMS Tenant Configuration - Map Twilio phone numbers to tenants
+export const smsTenantConfig = pgTable("sms_tenant_config", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").references(() => tenants.id, { onDelete: "cascade" }).notNull().unique(),
+  twilioPhoneNumber: text("twilio_phone_number").notNull().unique(), // Tenant's Twilio number in E.164 format
+  isActive: boolean("is_active").default(true).notNull(),
+  config: jsonb("config"), // SMS-specific configuration (templates, keywords, etc.)
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  phoneNumberIdx: index("sms_tenant_config_phone_idx").on(table.twilioPhoneNumber),
+}));
+
+// Relations for SMS tables
+export const smsConversationsRelations = relations(smsConversations, ({ one, many }) => ({
+  tenant: one(tenants, {
+    fields: [smsConversations.tenantId],
+    references: [tenants.id],
+  }),
+  messages: many(smsMessages),
+}));
+
+export const smsMessagesRelations = relations(smsMessages, ({ one }) => ({
+  conversation: one(smsConversations, {
+    fields: [smsMessages.conversationId],
+    references: [smsConversations.id],
+  }),
+}));
+
+export const smsTenantConfigRelations = relations(smsTenantConfig, ({ one }) => ({
+  tenant: one(tenants, {
+    fields: [smsTenantConfig.tenantId],
+    references: [tenants.id],
+  }),
+}));
+
+// SMS schema insert/select types
+export const insertSmsConversationSchema = createInsertSchema(smsConversations).omit({
+  id: true,
+  createdAt: true,
+  lastMessageAt: true,
+});
+
+export const insertSmsMessageSchema = createInsertSchema(smsMessages).omit({
+  id: true,
+  sentAt: true,
+});
+
+export const insertSmsTenantConfigSchema = createInsertSchema(smsTenantConfig).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type InsertSmsConversation = z.infer<typeof insertSmsConversationSchema>;
+export type SmsConversation = typeof smsConversations.$inferSelect;
+export type InsertSmsMessage = z.infer<typeof insertSmsMessageSchema>;
+export type SmsMessage = typeof smsMessages.$inferSelect;
+export type InsertSmsTenantConfig = z.infer<typeof insertSmsTenantConfigSchema>;
+export type SmsTenantConfig = typeof smsTenantConfig.$inferSelect;
+
+// Tenant schema insert/select types
+export const insertTenantSchema = createInsertSchema(tenants).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertTenantBrandingSchema = createInsertSchema(tenantBranding).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type InsertTenant = z.infer<typeof insertTenantSchema>;
+export type Tenant = typeof tenants.$inferSelect;
+export type InsertTenantBranding = z.infer<typeof insertTenantBrandingSchema>;
+export type TenantBranding = typeof tenantBranding.$inferSelect;
+
+// ============================================================================
+// MONITORING METRICS - Error tracking and performance monitoring
+// ============================================================================
+
+export const monitoringMetrics = pgTable("monitoring_metrics", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  timestamp: timestamp("timestamp").defaultNow().notNull(),
+  metricType: text("metric_type").notNull(), // error_rate, response_time, cache_hit, database_query, api_latency, etc.
+  metricValue: real("metric_value").notNull(), // Numeric value of the metric
+  metadata: jsonb("metadata"), // Additional context: endpoint, tenant, error type, user, etc.
+  tenantId: varchar("tenant_id").references(() => tenants.id), // Multi-tenant isolation
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+  typeIdx: index("monitoring_metrics_type_idx").on(table.metricType),
+  timestampIdx: index("monitoring_metrics_timestamp_idx").on(table.timestamp),
+  tenantIdx: index("monitoring_metrics_tenant_idx").on(table.tenantId),
+}));
+
+export const alertHistory = pgTable("alert_history", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  alertType: text("alert_type").notNull(), // error_rate, slow_response, database_error, api_failure, etc.
+  severity: text("severity").notNull(), // critical, warning, info
+  message: text("message").notNull(),
+  metadata: jsonb("metadata"), // Additional alert context
+  channels: jsonb("channels"), // Where the alert was sent (email, slack, etc.)
+  resolved: boolean("resolved").default(false).notNull(),
+  resolvedAt: timestamp("resolved_at"),
+  tenantId: varchar("tenant_id").references(() => tenants.id),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+  typeIdx: index("alert_history_type_idx").on(table.alertType),
+  severityIdx: index("alert_history_severity_idx").on(table.severity),
+  resolvedIdx: index("alert_history_resolved_idx").on(table.resolved),
+  createdAtIdx: index("alert_history_created_at_idx").on(table.createdAt),
+}));
+
+// Relations
+export const monitoringMetricsRelations = relations(monitoringMetrics, ({ one }) => ({
+  tenant: one(tenants, {
+    fields: [monitoringMetrics.tenantId],
+    references: [tenants.id],
+  }),
+}));
+
+export const alertHistoryRelations = relations(alertHistory, ({ one }) => ({
+  tenant: one(tenants, {
+    fields: [alertHistory.tenantId],
+    references: [tenants.id],
+  }),
+}));
+
+// Insert/select schemas
+export const insertMonitoringMetricSchema = createInsertSchema(monitoringMetrics).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertAlertHistorySchema = createInsertSchema(alertHistory).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertMonitoringMetric = z.infer<typeof insertMonitoringMetricSchema>;
+export type MonitoringMetric = typeof monitoringMetrics.$inferSelect;
+export type InsertAlertHistory = z.infer<typeof insertAlertHistorySchema>;
+export type AlertHistory = typeof alertHistory.$inferSelect;

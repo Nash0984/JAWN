@@ -153,6 +153,12 @@ import {
   countyMetrics,
   type CountyMetric,
   type InsertCountyMetric,
+  tenants,
+  type Tenant,
+  type InsertTenant,
+  tenantBranding,
+  type TenantBranding,
+  type InsertTenantBranding,
   navigatorKpis,
   type NavigatorKpi,
   type InsertNavigatorKpi,
@@ -529,6 +535,21 @@ export interface IStorage {
   createCountyMetric(metric: InsertCountyMetric): Promise<CountyMetric>;
   getCountyMetrics(countyId: string, periodType?: string, limit?: number): Promise<CountyMetric[]>;
   getLatestCountyMetric(countyId: string, periodType: string): Promise<CountyMetric | undefined>;
+
+  // Tenants - Multi-tenant system
+  getTenant(id: string): Promise<Tenant | undefined>;
+  getTenantBySlug(slug: string): Promise<Tenant | undefined>;
+  getTenantByDomain(domain: string): Promise<Tenant | undefined>;
+  getTenants(filters?: { type?: string; status?: string; parentTenantId?: string }): Promise<Tenant[]>;
+  createTenant(tenant: InsertTenant): Promise<Tenant>;
+  updateTenant(id: string, updates: Partial<Tenant>): Promise<Tenant>;
+  deleteTenant(id: string): Promise<void>;
+
+  // Tenant Branding
+  getTenantBranding(tenantId: string): Promise<TenantBranding | undefined>;
+  createTenantBranding(branding: InsertTenantBranding): Promise<TenantBranding>;
+  updateTenantBranding(tenantId: string, updates: Partial<TenantBranding>): Promise<TenantBranding>;
+  deleteTenantBranding(tenantId: string): Promise<void>;
 
   // ============================================================================
   // Gamification & Navigator Performance
@@ -2690,6 +2711,102 @@ export class DatabaseStorage implements IStorage {
       ),
       orderBy: [desc(countyMetrics.periodStart)],
     });
+  }
+
+  // ============================================================================
+  // Multi-Tenant System
+  // ============================================================================
+
+  // Tenants
+  async getTenant(id: string): Promise<Tenant | undefined> {
+    return await db.query.tenants.findFirst({
+      where: eq(tenants.id, id),
+      with: {
+        branding: true,
+      },
+    });
+  }
+
+  async getTenantBySlug(slug: string): Promise<Tenant | undefined> {
+    return await db.query.tenants.findFirst({
+      where: eq(tenants.slug, slug),
+      with: {
+        branding: true,
+      },
+    });
+  }
+
+  async getTenantByDomain(domain: string): Promise<Tenant | undefined> {
+    return await db.query.tenants.findFirst({
+      where: eq(tenants.domain, domain),
+      with: {
+        branding: true,
+      },
+    });
+  }
+
+  async getTenants(filters?: { type?: string; status?: string; parentTenantId?: string }): Promise<Tenant[]> {
+    let query = db.select().from(tenants);
+    
+    const conditions = [];
+    if (filters?.type) {
+      conditions.push(eq(tenants.type, filters.type));
+    }
+    if (filters?.status) {
+      conditions.push(eq(tenants.status, filters.status));
+    }
+    if (filters?.parentTenantId) {
+      conditions.push(eq(tenants.parentTenantId, filters.parentTenantId));
+    }
+    
+    if (conditions.length > 0) {
+      query = query.where(and(...conditions)) as any;
+    }
+    
+    return await query.orderBy(tenants.name);
+  }
+
+  async createTenant(tenant: InsertTenant): Promise<Tenant> {
+    const [created] = await db.insert(tenants).values(tenant).returning();
+    return created;
+  }
+
+  async updateTenant(id: string, updates: Partial<Tenant>): Promise<Tenant> {
+    const [updated] = await db
+      .update(tenants)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(tenants.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteTenant(id: string): Promise<void> {
+    await db.delete(tenants).where(eq(tenants.id, id));
+  }
+
+  // Tenant Branding
+  async getTenantBranding(tenantId: string): Promise<TenantBranding | undefined> {
+    return await db.query.tenantBranding.findFirst({
+      where: eq(tenantBranding.tenantId, tenantId),
+    });
+  }
+
+  async createTenantBranding(branding: InsertTenantBranding): Promise<TenantBranding> {
+    const [created] = await db.insert(tenantBranding).values(branding).returning();
+    return created;
+  }
+
+  async updateTenantBranding(tenantId: string, updates: Partial<TenantBranding>): Promise<TenantBranding> {
+    const [updated] = await db
+      .update(tenantBranding)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(tenantBranding.tenantId, tenantId))
+      .returning();
+    return updated;
+  }
+
+  async deleteTenantBranding(tenantId: string): Promise<void> {
+    await db.delete(tenantBranding).where(eq(tenantBranding.tenantId, tenantId));
   }
 
   // ============================================================================

@@ -274,8 +274,29 @@ class RequestLogger {
     return (req: Request, res: Response, next: NextFunction) => {
       const start = Date.now();
       
-      res.on("finish", () => {
+      res.on("finish", async () => {
         const duration = Date.now() - start;
+        
+        // Record response time metric (only for API endpoints)
+        if (req.path.startsWith('/api/')) {
+          try {
+            const { metricsService } = await import("../services/metricsService");
+            // Extract tenantId from tenant middleware context
+            const tenantId = req.tenant?.tenant?.id || null;
+            await metricsService.recordMetric(
+              'response_time',
+              duration,
+              {
+                endpoint: req.path,
+                method: req.method,
+                statusCode: res.statusCode,
+              },
+              tenantId
+            );
+          } catch (error) {
+            // Don't throw - metrics recording should never break the app
+          }
+        }
         
         // Log slow requests
         if (duration > slowRequestThreshold) {
