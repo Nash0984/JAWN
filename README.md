@@ -55,6 +55,13 @@ The system includes pre-configured demo accounts for testing all role-based feat
 
 ## 🌟 Key Features
 
+### Financial Opportunity Radar
+- **Real-Time Eligibility Tracking**: Persistent sidebar widget showing instant eligibility updates across all 6 Maryland programs (SNAP, Medicaid, TANF, EITC, CTC, SSI)
+- **Dynamic Change Detection**: Visual indicators (↑↓ arrows, green "New" badges) highlight benefit increases, decreases, and first-time eligibility
+- **Smart Alerts**: AI-powered cross-enrollment recommendations identifying unclaimed benefits and optimization opportunities
+- **Summary Dashboard**: Total monthly/annual benefits, program count, and effective benefit rate at a glance
+- **Instant Updates**: 300ms debounced calculations trigger on any household data change with request cancellation support
+
 ### PolicyEngine Integration
 - **Multi-Benefit Calculations**: Accurate federal and state-specific benefit estimates for SNAP, Medicaid, EITC, CTC, SSI, and TANF
 - **Household Modeling**: Calculate benefits based on family composition, income, and expenses

@@ -463,6 +463,175 @@ Content-Type: application/json
 GET /api/policyengine/test
 ```
 
+### Financial Opportunity Radar - Real-Time Eligibility Tracking
+
+#### Calculate Cross-Program Eligibility
+```http
+POST /api/eligibility/radar
+Content-Type: application/json
+
+{
+  "adults": 2,
+  "children": 1,
+  "annualIncome": 35000,
+  "monthlyRent": 1200,
+  "monthlyUtilities": 150,
+  "hasUtilitySeparately": true,
+  "childcareExpenses": 800,
+  "childSupportPaid": 0,
+  "medicalExpenses": 0,
+  "state": "MD",
+  "previousResults": {
+    "SNAP": { "eligible": true, "monthlyBenefit": 450 },
+    "Medicaid": { "eligible": true, "monthlyBenefit": 0 }
+  }
+}
+```
+
+**Request Parameters:**
+- `adults` (number): Number of adults in household
+- `children` (number): Number of children in household
+- `annualIncome` (number): Total annual household income
+- `monthlyRent` (number, optional): Monthly rent/mortgage payment
+- `monthlyUtilities` (number, optional): Monthly utility costs
+- `hasUtilitySeparately` (boolean, optional): Whether utilities are billed separately
+- `childcareExpenses` (number, optional): Monthly childcare costs
+- `childSupportPaid` (number, optional): Monthly child support paid
+- `medicalExpenses` (number, optional): Monthly medical expenses
+- `state` (string): State code (default: "MD")
+- `previousResults` (object, optional): Previous calculation results for change detection
+
+**Response:**
+```json
+{
+  "success": true,
+  "programs": [
+    {
+      "programCode": "SNAP",
+      "programName": "Food Supplement Program",
+      "eligible": true,
+      "monthlyBenefit": 450,
+      "annualBenefit": 5400,
+      "status": "eligible",
+      "changeIndicator": "new",
+      "changeAmount": 450,
+      "changePercent": 0,
+      "message": "You qualify for monthly food assistance"
+    },
+    {
+      "programCode": "Medicaid",
+      "programName": "Medical Assistance",
+      "eligible": true,
+      "monthlyBenefit": 0,
+      "annualBenefit": 0,
+      "status": "eligible",
+      "changeIndicator": null,
+      "changeAmount": 0,
+      "changePercent": 0,
+      "message": "Healthcare coverage available"
+    },
+    {
+      "programCode": "EITC",
+      "programName": "Earned Income Tax Credit",
+      "eligible": true,
+      "monthlyBenefit": 0,
+      "annualBenefit": 3200,
+      "status": "eligible",
+      "changeIndicator": "increased",
+      "changeAmount": 500,
+      "changePercent": 18.5,
+      "message": "Tax credit at year-end"
+    },
+    {
+      "programCode": "CTC",
+      "programName": "Child Tax Credit",
+      "eligible": true,
+      "monthlyBenefit": 0,
+      "annualBenefit": 2000,
+      "status": "eligible",
+      "changeIndicator": null,
+      "changeAmount": 0,
+      "changePercent": 0,
+      "message": "Child tax benefit available"
+    },
+    {
+      "programCode": "TANF",
+      "programName": "Temporary Cash Assistance",
+      "eligible": false,
+      "monthlyBenefit": 0,
+      "annualBenefit": 0,
+      "status": "ineligible",
+      "changeIndicator": null,
+      "changeAmount": 0,
+      "changePercent": 0,
+      "message": "Income exceeds limit"
+    },
+    {
+      "programCode": "SSI",
+      "programName": "Supplemental Security Income",
+      "eligible": false,
+      "monthlyBenefit": 0,
+      "annualBenefit": 0,
+      "status": "ineligible",
+      "changeIndicator": null,
+      "changeAmount": 0,
+      "changePercent": 0,
+      "message": "Does not meet disability criteria"
+    }
+  ],
+  "alerts": [
+    {
+      "type": "opportunity",
+      "title": "Apply for SNAP Benefits",
+      "message": "You're newly eligible for $450/month in food assistance. Apply today to start receiving benefits.",
+      "action": "Start SNAP Application",
+      "programCode": "SNAP"
+    },
+    {
+      "type": "success",
+      "title": "Tax Credits Increased",
+      "message": "Your EITC increased by $500 (18.5%) based on your current household information.",
+      "action": "Review Tax Benefits",
+      "programCode": "EITC"
+    }
+  ],
+  "summary": {
+    "totalMonthly": 450,
+    "totalAnnual": 10600,
+    "eligibleProgramsCount": 4,
+    "effectiveBenefitRate": 30.3
+  }
+}
+```
+
+**Change Indicators:**
+- `"new"`: First-time eligibility (transition from 0 or undefined to eligible)
+- `"increased"`: Benefit amount increased
+- `"decreased"`: Benefit amount decreased
+- `null`: No change or not applicable
+
+**Alert Types:**
+- `"opportunity"`: New benefit available or unclaimed benefits
+- `"success"`: Positive change or achievement
+- `"warning"`: Action needed or potential issue
+
+**Features:**
+- **Real-Time Updates**: Calculations triggered instantly on household data changes (300ms debounce)
+- **Change Detection**: Compares current vs. previous results to highlight new eligibility and benefit changes
+- **Cross-Enrollment Intelligence**: AI-powered recommendations for unclaimed benefits
+- **Request Cancellation**: Supports AbortController for canceling outdated requests
+- **CSRF Protection**: Requires x-csrf-token header for security
+
+**Error Responses:**
+```json
+{
+  "error": "Invalid household data",
+  "details": "annualIncome must be a positive number"
+}
+```
+
+**Rate Limiting:** 20 requests per minute per user
+
 ---
 
 ## Navigator Workspace
