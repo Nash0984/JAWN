@@ -43,6 +43,45 @@ Supports 24 Maryland counties with county-specific branding, data isolation, and
 ### Gamification System
 Tracks navigator performance and awards achievements based on operational KPIs, featuring leaderboards.
 
+### QC Analytics & Work Verification System
+**PTIG-Compliant Quality Control Dashboards** aligned with Maryland SNAP Payment Timeliness & Integrity Grant specifications.
+
+**Caseworker Cockpit** (/caseworker/cockpit):
+- Personal flagged cases panel with AI-powered risk scores
+- Error trend analytics tracking performance over 4 quarters
+- AI-recommended training interventions based on error patterns
+- Quick job aids library (7 comprehensive guides)
+- Context-aware tips dialog for proactive quality improvement
+
+**Supervisor Cockpit** (/supervisor/cockpit):
+- Team error trend alerts with spike detection (e.g., 500% increases)
+- Diagnostic drill-downs by error category with subtype analysis
+- Proactive case flagging system for high-risk applications
+- Training impact analytics showing before/after error rate improvements
+- Real-time team performance metrics and Payment Error Rate (PER) tracking
+
+**PTIG Compliance (Updated October 2025)**:
+System implements the 6 mandated Maryland SNAP error categories:
+1. shelter_utility - Shelter & Utility Errors
+2. income_verification - Income Verification Errors
+3. asset_verification - Asset Verification Errors
+4. categorical_eligibility - Categorical Eligibility Errors
+5. earned_income - Earned Income Errors
+6. unearned_income - Unearned Income Errors
+
+**Synthetic Data System**:
+- 4 dedicated tables: qc_error_patterns, flagged_cases, job_aids, training_interventions
+- Generates realistic Maryland SNAP error patterns with proper tenant isolation
+- All data uses synthetic format (Case #XXXXX) with no real PII
+- Seeded automatically during system initialization
+
+**Key Features**:
+- Predictive analytics for proactive quality assurance
+- Multi-quarter trend analysis and visualization
+- Error pattern recognition across all 6 PTIG categories
+- Training effectiveness tracking with measurable outcomes
+- Job aids covering all regulatory compliance areas
+
 ## System Design Choices
 -   **Data Management**: PostgreSQL for core data, Google Cloud Storage for files.
 -   **Authentication & Authorization**: Basic user authentication with roles, object-level security, and robust CSRF protection.
