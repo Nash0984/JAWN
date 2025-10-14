@@ -106,7 +106,7 @@ export default function CaseworkerCockpit() {
   };
 
   // Process error trends data for chart
-  const errorTrendsData = errorPatterns?.reduce((acc: any[], pattern) => {
+  const errorTrendsData = errorPatterns ? errorPatterns.reduce((acc: any[], pattern) => {
     const existingQuarter = acc.find(item => item.quarter === pattern.quarterOccurred);
     if (existingQuarter) {
       existingQuarter.errorRate += pattern.errorRate;
@@ -122,13 +122,13 @@ export default function CaseworkerCockpit() {
   }, []).map(item => ({
     ...item,
     errorRate: (item.errorRate / item.count).toFixed(2),
-  })).sort((a, b) => a.quarter.localeCompare(b.quarter)) || [];
+  })).sort((a, b) => a.quarter.localeCompare(b.quarter)) : [];
 
   // Get most common error categories
-  const errorCategoryCount = errorPatterns?.reduce((acc: Record<string, number>, pattern) => {
+  const errorCategoryCount = errorPatterns ? errorPatterns.reduce((acc: Record<string, number>, pattern) => {
     acc[pattern.errorCategory] = (acc[pattern.errorCategory] || 0) + 1;
     return acc;
-  }, {}) || {};
+  }, {}) : {};
 
   const topErrorCategories = Object.entries(errorCategoryCount)
     .sort(([, a], [, b]) => b - a)
