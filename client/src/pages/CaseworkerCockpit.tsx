@@ -62,7 +62,8 @@ const ERROR_CATEGORY_LABELS: Record<string, string> = {
   income_verification: "Income Verification",
   asset_verification: "Asset Verification",
   categorical_eligibility: "Categorical Eligibility",
-  household_composition: "Household Composition",
+  earned_income: "Earned Income Errors",
+  unearned_income: "Unearned Income Errors",
 };
 
 export default function CaseworkerCockpit() {

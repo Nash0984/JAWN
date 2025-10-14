@@ -41,11 +41,18 @@ const ERROR_CATEGORIES = {
       { code: "ssi_verification_error", description: "SSI verification error" },
     ],
   },
-  household_composition: {
+  earned_income: {
     subtypes: [
-      { code: "household_members_error", description: "Household composition incorrectly determined" },
-      { code: "student_status_error", description: "Student status not properly verified" },
-      { code: "elderly_disabled_error", description: "Elderly/disabled status verification error" },
+      { code: "wages_not_counted", description: "Wages not properly counted in benefit calculation" },
+      { code: "tips_unreported", description: "Tip income not reported or verified" },
+      { code: "self_employment_calculation_error", description: "Self-employment income calculation error" },
+    ],
+  },
+  unearned_income: {
+    subtypes: [
+      { code: "ssi_verification_missing", description: "SSI verification missing or incomplete" },
+      { code: "unemployment_not_reported", description: "Unemployment benefits not reported" },
+      { code: "pension_excluded_error", description: "Pension income incorrectly excluded" },
     ],
   },
 };
@@ -224,11 +231,11 @@ export function generateQCErrorPatterns(): InsertQcErrorPattern[] {
     severity: "high",
   });
 
-  // Household Composition errors
+  // Earned Income errors
   patterns.push({
-    errorCategory: "household_composition",
-    errorSubtype: "household_members_error",
-    errorDescription: "Household composition incorrectly determined",
+    errorCategory: "earned_income",
+    errorSubtype: "wages_not_counted",
+    errorDescription: "Wages not properly counted in benefit calculation",
     quarterOccurred: "2024-Q1",
     errorCount: 32,
     totalCases: 1100,
@@ -238,15 +245,40 @@ export function generateQCErrorPatterns(): InsertQcErrorPattern[] {
   });
 
   patterns.push({
-    errorCategory: "household_composition",
-    errorSubtype: "household_members_error",
-    errorDescription: "Household composition incorrectly determined",
+    errorCategory: "earned_income",
+    errorSubtype: "tips_unreported",
+    errorDescription: "Tip income not reported or verified",
     quarterOccurred: "2024-Q4",
     errorCount: 28,
     totalCases: 1100,
     errorRate: (28 / 1100) * 100,
     trendDirection: "decreasing",
     severity: "medium",
+  });
+
+  // Unearned Income errors
+  patterns.push({
+    errorCategory: "unearned_income",
+    errorSubtype: "ssi_verification_missing",
+    errorDescription: "SSI verification missing or incomplete",
+    quarterOccurred: "2024-Q2",
+    errorCount: 18,
+    totalCases: 900,
+    errorRate: (18 / 900) * 100,
+    trendDirection: "stable",
+    severity: "high",
+  });
+
+  patterns.push({
+    errorCategory: "unearned_income",
+    errorSubtype: "unemployment_not_reported",
+    errorDescription: "Unemployment benefits not reported",
+    quarterOccurred: "2024-Q3",
+    errorCount: 22,
+    totalCases: 900,
+    errorRate: (22 / 900) * 100,
+    trendDirection: "increasing",
+    severity: "high",
   });
 
   // Self-employment income errors increasing
@@ -324,11 +356,11 @@ export function generateFlaggedCases(caseworkerId: string, count: number = 10): 
     ["shelter_utility", "income_verification"],
     ["asset_verification", "categorical_eligibility"],
     ["shelter_utility"],
-    ["income_verification", "household_composition"],
+    ["income_verification", "earned_income"],
     ["shelter_utility", "asset_verification"],
     ["categorical_eligibility"],
-    ["income_verification"],
-    ["shelter_utility", "household_composition"],
+    ["unearned_income"],
+    ["earned_income", "unearned_income"],
   ];
 
   for (let i = 0; i < count; i++) {
@@ -604,93 +636,97 @@ Households receiving or eligible for:
       policyReference: "7 CFR 273.2(j)(2)",
     },
     {
-      title: "Household Composition Determination",
-      category: "household_composition",
-      content: `# Household Composition Decision Tree
+      title: "Earned Income Verification and Calculation",
+      category: "earned_income",
+      content: `# Earned Income Verification Guide
 
-## Core Principle
-SNAP household ≠ Living together
+## What is Earned Income?
 
-SNAP household = People who:
-1. Live together AND
-2. Purchase and prepare meals together
+Earned income includes wages and salaries from employment:
+- Regular wages/salaries
+- Tips and gratuities
+- Self-employment income
+- On-the-job training wages
+- Commissions and bonuses
 
-## Step-by-Step Determination
+## Verification Requirements
 
-### Step 1: Identify Everyone in the Living Unit
-List all people residing at the address, including:
-- Family members
-- Roommates
-- Live-in aides
-- Unrelated individuals
-- Foster children
+### Regular Wages/Salaries
+**Required Documentation:**
+- [ ] Most recent 4 consecutive pay stubs, OR
+- [ ] Employer statement on letterhead, OR
+- [ ] Collateral contact with employer
 
-### Step 2: Apply Mandatory Grouping Rules
+**What to Verify:**
+- Gross pay amount
+- Pay frequency (weekly, bi-weekly, monthly)
+- Hours worked (if hourly)
+- Pay rate
+- Deductions (if any)
 
-**Must be included together if:**
-- Spouse living with spouse
-- Parent living with child under 22
-- Child under 18 living with parent
+### Tips and Gratuities
+**Required Documentation:**
+- [ ] Pay stubs showing reported tips
+- [ ] IRS Form 4070 (Employee's Report of Tips)
+- [ ] Employer statement including tip income
+- [ ] Self-declaration with supporting evidence
 
-Even if they don't purchase/prepare together!
+**Common Error:**
+❌ Not counting cash tips that exceed $20/month
+✅ Always verify and count all tip income
 
-### Step 3: Evaluate Purchase/Prepare Together
+### Wages Not Counted Error Prevention
 
-Ask each person:
-- "Do you share grocery money?"
-- "Do you cook together or separately?"
-- "Do you eat together?"
+**Step 1: Identify All Income Sources**
+Ask: "Do you have any income from:"
+- Regular job?
+- Second job or side work?
+- Tips or commissions?
+- Seasonal work?
+- On-call or substitute work?
 
-### Step 4: Consider Separate Households
+**Step 2: Calculate Monthly Earned Income**
 
-Separate households are allowed when:
-- Not related AND
-- Don't purchase/prepare together AND
-- Can prove separate food arrangements
+**Weekly Pay:**
+Weekly amount × 4.3 = Monthly income
 
-**Required Verification:**
-- Separate food receipts
-- Separate food storage
-- Statement explaining arrangement
+**Bi-Weekly Pay:**
+Bi-weekly amount × 2.15 = Monthly income
 
-## Special Situations
+**Twice Monthly:**
+Semi-monthly amount × 2 = Monthly income
 
-### Elderly/Disabled Separate Household
-Age 60+ or disabled person CAN be separate household even if:
-- Living with others
-- Related to others
-- If income of others < 165% FPL
+**Step 3: Document in Case File**
+- List each income source
+- Show calculation method
+- Attach verification documents
 
-### Student Separate Household
-Students CAN be separate when:
-- Age 22 or older
-- Not living with parents
-- Don't purchase/prepare with parents
+## Common Errors to Avoid
 
-### Foster Children
-- Can be in foster parent's household (counted)
-- Can be separate household (not counted)
-- Foster parent chooses
+❌ **Error:** Not counting second job wages
+✅ **Correct:** Count ALL earned income sources
 
-## Common Errors
+❌ **Error:** Using net pay instead of gross
+✅ **Correct:** Always use gross earned income
 
-❌ Including everyone at same address
-❌ Excluding spouses or children under 22
-❌ Accepting "we buy food separately" without verification
-❌ Incorrectly applying elderly/disabled separate rule
+❌ **Error:** Forgetting to count irregular tips
+✅ **Correct:** Include all tip income over $20/month
 
-## Verification Checklist
-- [ ] Listed all people at address
-- [ ] Applied mandatory grouping rules
-- [ ] Documented purchase/prepare together status
-- [ ] Obtained verification for separate households
-- [ ] Considered special situations (elderly, student, foster)
+❌ **Error:** Incorrect conversion of weekly to monthly
+✅ **Correct:** Use 4.3 multiplier for weekly income
+
+## Red Flags Requiring Review
+
+- Pay stub shows deductions but no gross amount
+- Income reported verbally doesn't match pay stubs
+- Unexplained gaps in employment
+- Tips reported as $0 for tipped occupation
 
 ## Policy References
-- 7 CFR 273.1 - Household Concept
-- Maryland SNAP Manual Section 204 - Household Composition
-- PIQ 23-02 - Separate Household Guidance`,
-      policyReference: "7 CFR 273.1",
+- 7 CFR 273.9(b) - Earned Income
+- Maryland SNAP Manual Section 310 - Earned Income
+- MPP-SNAP-2024-03 - Wage Verification Requirements`,
+      policyReference: "7 CFR 273.9(b)",
     },
     {
       title: "Shelter Deduction Calculation Worksheet",
@@ -782,91 +818,141 @@ Excess Shelter:       $_______
       policyReference: "7 CFR 273.9(d)(6)",
     },
     {
-      title: "Student Eligibility Determination",
-      category: "household_composition",
-      content: `# Student Eligibility Quick Guide
+      title: "Unearned Income Verification and Reporting",
+      category: "unearned_income",
+      content: `# Unearned Income Verification Guide
 
-## Who is a "Student" for SNAP?
+## What is Unearned Income?
 
-Age **18-49** AND enrolled at least **half-time** in:
-- College or university
-- Trade or technical school
-- Any institution offering program leading to degree/certificate
+Unearned income includes income received without performing work:
+- Social Security benefits (SSI, SSDI, retirement)
+- Unemployment compensation
+- Workers' compensation
+- Pensions and retirement benefits
+- Child support payments
+- Spousal support/alimony
+- Veterans benefits
+- Disability payments
 
-## Student Exemptions (Eligible for SNAP)
+## Verification Requirements by Type
 
-A student IS eligible if they meet ANY of these:
+### SSI/SSDI Verification
+**Required Documentation:**
+- [ ] SSA award letter (most recent)
+- [ ] SSA benefit verification letter
+- [ ] Bank statement showing direct deposit
+- [ ] System data match (if available)
 
-1. **Work 20+ hours/week** (average)
-   - Verification: Pay stubs, employer statement
-   
-2. **Work-Study participation**
-   - Verification: Award letter, school statement
+**What to Verify:**
+- Benefit amount
+- Payment frequency
+- Recipient name
+- Effective date
 
-3. **Responsible for dependent child under 6**
-   - Verification: Birth certificate, household composition
+**Common Error:**
+❌ Missing SSI verification or using outdated award letter
+✅ Always obtain current year award letter or system verification
 
-4. **Responsible for dependent child age 6-11** AND
-   - Lack adequate child care to attend school and work
-   - Verification: Child care statement, school schedule
+### Unemployment Benefits
+**Required Documentation:**
+- [ ] Unemployment award letter
+- [ ] Recent benefit statement
+- [ ] Bank statement showing deposits
+- [ ] State unemployment portal printout
 
-5. **Single parent enrolled full-time** AND
-   - Caring for child under 12
-   - Verification: Custody documents, birth certificate
+**What to Verify:**
+- Weekly benefit amount
+- Weeks remaining
+- Any waiting weeks
+- Deductions (taxes, child support)
 
-6. **Receiving TANF**
-   - Verification: System match
+**Common Error:**
+❌ Not reporting unemployment benefits
+✅ Unemployment is countable unearned income - must be verified and counted
 
-7. **Assigned to work/training through:**
-   - SNAP E&T
-   - TANF work program
-   - Workforce development program
-   - Verification: Assignment letter
+### Pension and Retirement Income
+**Required Documentation:**
+- [ ] Pension award letter
+- [ ] 1099-R form (previous year)
+- [ ] Bank statement showing deposits
+- [ ] Pension administrator statement
 
-8. **Physically or mentally unfit** for employment
-   - Verification: Medical documentation
+**What to Verify:**
+- Gross monthly amount
+- Payment frequency
+- Any cost-of-living adjustments (COLA)
+- Lump sum vs. ongoing payments
 
-9. **Not enrolled in most recent regular term**
-   - On break between terms
-   - Verification: School enrollment dates
+**Common Error:**
+❌ Incorrectly excluding pension income
+✅ All pension income is countable unless specifically exempt
 
-## Verification Requirements
+## Verification Process
 
-### Enrollment Status
-- Class schedule
-- School registration
-- Enrollment verification letter
+### Step 1: Identify All Unearned Income Sources
+Ask: "Do you or anyone in your household receive:"
+- Social Security or SSI?
+- Unemployment benefits?
+- Pension or retirement income?
+- Disability payments?
+- Child support or alimony?
+- Veterans benefits?
 
-### Work Hours (if claiming exemption)
-- Last 30 days of pay stubs
-- Employer statement on letterhead
-- Self-employment records
+### Step 2: Obtain Required Verification
+For each unearned income source:
+- Request appropriate documentation
+- Verify amount and frequency
+- Document source and verification type
 
-### Student Status Changes
-- Re-verify each semester
-- Document enrollment changes
-- Update exemption status
+### Step 3: Calculate Monthly Unearned Income
 
-## Common Errors
+**One-time payments:**
+Count only if received in certification period
 
-❌ Approving student without exemption verification
-❌ Not re-verifying student status at recertification
-❌ Incorrectly applying age limits (must be 18-49)
-❌ Counting work hours that don't meet 20/week average
+**Ongoing payments:**
+- Weekly: Amount × 4.3
+- Bi-weekly: Amount × 2.15
+- Monthly: Use stated amount
+- Quarterly: Amount ÷ 3
+- Annual: Amount ÷ 12
 
-## Processing Checklist
+### Step 4: Document in Case File
+- List each unearned income source
+- Attach verification documents
+- Show calculation if conversion needed
+- Note any anticipated changes
 
-- [ ] Age 18-49? (If no, student rule doesn't apply)
-- [ ] Enrolled at least half-time?
-- [ ] Identify applicable exemption
-- [ ] Obtain required verification
-- [ ] Document in case notes
-- [ ] Set reminder to re-verify at recertification
+## Red Flags Requiring Supervisor Review
+
+- Income amount changes significantly from recertification
+- Multiple unearned income sources reported
+- Lump sum payment received
+- Benefit amount doesn't match system data
+- Client reports income stopped but no termination notice
+
+## Special Considerations
+
+### SSI and SNAP
+- SSI recipients are categorically eligible
+- Must still verify SSI amount for benefit calculation
+- SSI COLA increases must be budgeted timely
+
+### Retroactive Payments
+- Lump sum retroactive benefits counted in month received
+- May cause temporary ineligibility
+- Advise client to reapply after resource spent down
+
+### Child Support
+- Court-ordered amount vs. actual received
+- Count only amounts actually received
+- Irregular payments: average last 3 months
 
 ## Policy References
-- 7 CFR 273.5(b) - Students
-- Maryland SNAP Manual Section 220.2 - Student Eligibility`,
-      policyReference: "7 CFR 273.5(b)",
+- 7 CFR 273.9(c) - Unearned Income
+- Maryland SNAP Manual Section 311 - Unearned Income
+- MPP-SNAP-2024-05 - SSI Verification Requirements
+- SNAP-PL-2023-007 - Unemployment Benefit Counting`,
+      policyReference: "7 CFR 273.9(c)",
     },
   ];
 }
@@ -922,13 +1008,22 @@ export function generateTrainingInterventions(userIds: string[]): InsertTraining
       impactScore: 15.4, // 15.4% improvement
     },
     {
-      trainingTitle: "Household Composition Decision Making",
-      targetErrorCategory: "household_composition",
+      trainingTitle: "Earned Income Verification Best Practices",
+      targetErrorCategory: "earned_income",
       completedBy: userIds.slice(0, 3),
       completedDate: new Date("2024-06-15"),
       preTrainingErrorRate: 2.9,
-      postTrainingErrorRate: 2.5,
-      impactScore: 13.8, // 13.8% improvement
+      postTrainingErrorRate: 2.1,
+      impactScore: 27.6, // 27.6% improvement
+    },
+    {
+      trainingTitle: "Unearned Income Documentation Requirements",
+      targetErrorCategory: "unearned_income",
+      completedBy: userIds.slice(0, 4),
+      completedDate: new Date("2024-09-20"),
+      preTrainingErrorRate: 2.2,
+      postTrainingErrorRate: 1.8,
+      impactScore: 18.2, // 18.2% improvement
     },
     {
       trainingTitle: "Critical: Summer Cooling SUA Emergency Training",

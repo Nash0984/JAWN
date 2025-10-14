@@ -90,7 +90,8 @@ const ERROR_CATEGORY_LABELS: Record<string, string> = {
   income_verification: "Income Verification",
   asset_verification: "Asset Verification",
   categorical_eligibility: "Categorical Eligibility",
-  household_composition: "Household Composition",
+  earned_income: "Earned Income Errors",
+  unearned_income: "Unearned Income Errors",
 };
 
 const COLORS = ['#ef4444', '#f59e0b', '#3b82f6', '#10b981', '#8b5cf6'];
