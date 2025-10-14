@@ -5441,12 +5441,30 @@ If the question cannot be answered with the available information, say so clearl
 
   // Create VITA intake session
   app.post("/api/vita-intake", requireStaff, asyncHandler(async (req, res) => {
+    console.log('[VITA Auto-Save Debug] POST /api/vita-intake called');
+    console.log('[VITA Auto-Save Debug] Request user:', req.user?.id, req.user?.username);
+    console.log('[VITA Auto-Save Debug] Request body keys:', Object.keys(req.body));
+    console.log('[VITA Auto-Save Debug] Request body sample:', {
+      primaryFirstName: req.body.primaryFirstName,
+      primaryLastName: req.body.primaryLastName,
+      currentStep: req.body.currentStep,
+      status: req.body.status
+    });
+    
     const validated = insertVitaIntakeSessionSchema.parse({
       ...req.body,
       userId: req.user!.id
     });
-
+    
+    console.log('[VITA Auto-Save Debug] Validated data, calling storage.createVitaIntakeSession');
     const session = await storage.createVitaIntakeSession(validated);
+    console.log('[VITA Auto-Save Debug] Session created successfully:', {
+      id: session.id,
+      userId: session.userId,
+      currentStep: session.currentStep,
+      status: session.status
+    });
+    
     res.json(session);
   }));
 

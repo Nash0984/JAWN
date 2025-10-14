@@ -34,6 +34,7 @@ import DocumentChecklist from "@/pages/public/DocumentChecklist";
 import NoticeExplainer from "@/pages/public/NoticeExplainer";
 import SimplifiedSearch from "@/pages/public/SimplifiedSearch";
 import BenefitScreener from "@/pages/public/BenefitScreener";
+import QuickScreener from "@/pages/public/QuickScreener";
 import { CommandPalette } from "@/components/CommandPalette";
 import { PolicyChanges } from "@/pages/PolicyChanges";
 import { ComplianceAdmin } from "@/pages/ComplianceAdmin";
@@ -88,6 +89,7 @@ function Router() {
           <Route path="/public/notices" component={NoticeExplainer} />
           <Route path="/public/search" component={SimplifiedSearch} />
           <Route path="/screener" component={BenefitScreener} />
+          <Route path="/public/quick-screener" component={QuickScreener} />
           
           {/* Role-specific dashboards */}
           <Route path="/dashboard/client">
