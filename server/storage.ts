@@ -19,6 +19,10 @@ import {
   povertyLevels,
   manualSections,
   sectionCrossReferences,
+  qcErrorPatterns,
+  flaggedCases,
+  jobAids,
+  trainingInterventions,
   type User,
   type InsertUser,
   type Document,
@@ -54,6 +58,14 @@ import {
   type InsertClientCase,
   type PovertyLevel,
   type InsertPovertyLevel,
+  type QcErrorPattern,
+  type InsertQcErrorPattern,
+  type FlaggedCase,
+  type InsertFlaggedCase,
+  type JobAid,
+  type InsertJobAid,
+  type TrainingIntervention,
+  type InsertTrainingIntervention,
   clientInteractionSessions,
   type ClientInteractionSession,
   type InsertClientInteractionSession,
@@ -633,6 +645,32 @@ export interface IStorage {
     limit?: number;
   }): Promise<SecurityEvent[]>;
   updateSecurityEvent(id: string, updates: Partial<SecurityEvent>): Promise<SecurityEvent>;
+
+  // ============================================================================
+  // QC Analytics - Maryland SNAP Predictive Analytics
+  // ============================================================================
+
+  // QC Error Patterns
+  createQcErrorPattern(pattern: InsertQcErrorPattern): Promise<QcErrorPattern>;
+  getQcErrorPatterns(filters?: { errorCategory?: string; quarterOccurred?: string; severity?: string }): Promise<QcErrorPattern[]>;
+  
+  // Flagged Cases
+  createFlaggedCase(flaggedCase: InsertFlaggedCase): Promise<FlaggedCase>;
+  getFlaggedCase(id: string): Promise<FlaggedCase | undefined>;
+  getFlaggedCasesByCaseworker(caseworkerId: string): Promise<FlaggedCase[]>;
+  getFlaggedCasesForSupervisor(supervisorId: string): Promise<FlaggedCase[]>;
+  updateFlaggedCaseStatus(caseId: string, status: string, reviewedBy?: string, reviewNotes?: string): Promise<FlaggedCase>;
+  
+  // Job Aids
+  createJobAid(jobAid: InsertJobAid): Promise<JobAid>;
+  getJobAid(id: string): Promise<JobAid | undefined>;
+  getJobAids(filters?: { category?: string }): Promise<JobAid[]>;
+  getJobAidsByCategory(category: string): Promise<JobAid[]>;
+  
+  // Training Interventions
+  createTrainingIntervention(intervention: InsertTrainingIntervention): Promise<TrainingIntervention>;
+  getTrainingIntervention(id: string): Promise<TrainingIntervention | undefined>;
+  getTrainingInterventions(filters?: { targetErrorCategory?: string }): Promise<TrainingIntervention[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -3241,6 +3279,158 @@ export class DatabaseStorage implements IStorage {
       .where(eq(securityEvents.id, id))
       .returning();
     return updated;
+  }
+
+  // ============================================================================
+  // QC Analytics - Maryland SNAP Predictive Analytics
+  // ============================================================================
+
+  // QC Error Patterns
+  async createQcErrorPattern(pattern: InsertQcErrorPattern): Promise<QcErrorPattern> {
+    const [created] = await db.insert(qcErrorPatterns).values(pattern).returning();
+    return created;
+  }
+
+  async getQcErrorPatterns(filters?: { errorCategory?: string; quarterOccurred?: string; severity?: string }): Promise<QcErrorPattern[]> {
+    const conditions = [];
+
+    if (filters?.errorCategory) {
+      conditions.push(eq(qcErrorPatterns.errorCategory, filters.errorCategory));
+    }
+    if (filters?.quarterOccurred) {
+      conditions.push(eq(qcErrorPatterns.quarterOccurred, filters.quarterOccurred));
+    }
+    if (filters?.severity) {
+      conditions.push(eq(qcErrorPatterns.severity, filters.severity));
+    }
+
+    let query = db
+      .select()
+      .from(qcErrorPatterns)
+      .orderBy(qcErrorPatterns.quarterOccurred, desc(qcErrorPatterns.errorRate));
+
+    if (conditions.length > 0) {
+      query = query.where(and(...conditions));
+    }
+
+    return await query;
+  }
+
+  // Flagged Cases
+  async createFlaggedCase(flaggedCase: InsertFlaggedCase): Promise<FlaggedCase> {
+    const [created] = await db.insert(flaggedCases).values(flaggedCase).returning();
+    return created;
+  }
+
+  async getFlaggedCase(id: string): Promise<FlaggedCase | undefined> {
+    return await db.query.flaggedCases.findFirst({
+      where: eq(flaggedCases.id, id),
+      with: {
+        caseworker: true,
+        reviewer: true,
+      },
+    });
+  }
+
+  async getFlaggedCasesByCaseworker(caseworkerId: string): Promise<FlaggedCase[]> {
+    return await db.query.flaggedCases.findMany({
+      where: eq(flaggedCases.assignedCaseworkerId, caseworkerId),
+      with: {
+        caseworker: true,
+        reviewer: true,
+      },
+      orderBy: [desc(flaggedCases.riskScore), desc(flaggedCases.flaggedDate)],
+    });
+  }
+
+  async getFlaggedCasesForSupervisor(supervisorId: string): Promise<FlaggedCase[]> {
+    // Get all flagged cases that are pending review or were reviewed by this supervisor
+    return await db.query.flaggedCases.findMany({
+      where: or(
+        eq(flaggedCases.reviewStatus, 'pending'),
+        eq(flaggedCases.reviewedBy, supervisorId)
+      ),
+      with: {
+        caseworker: true,
+        reviewer: true,
+      },
+      orderBy: [desc(flaggedCases.riskScore), desc(flaggedCases.flaggedDate)],
+    });
+  }
+
+  async updateFlaggedCaseStatus(caseId: string, status: string, reviewedBy?: string, reviewNotes?: string): Promise<FlaggedCase> {
+    const [updated] = await db
+      .update(flaggedCases)
+      .set({
+        reviewStatus: status,
+        reviewedBy: reviewedBy || null,
+        reviewNotes: reviewNotes || null,
+      })
+      .where(eq(flaggedCases.id, caseId))
+      .returning();
+    return updated;
+  }
+
+  // Job Aids
+  async createJobAid(jobAid: InsertJobAid): Promise<JobAid> {
+    const [created] = await db.insert(jobAids).values(jobAid).returning();
+    return created;
+  }
+
+  async getJobAid(id: string): Promise<JobAid | undefined> {
+    return await db.query.jobAids.findFirst({
+      where: eq(jobAids.id, id),
+    });
+  }
+
+  async getJobAids(filters?: { category?: string }): Promise<JobAid[]> {
+    if (filters?.category) {
+      return await db
+        .select()
+        .from(jobAids)
+        .where(eq(jobAids.category, filters.category))
+        .orderBy(jobAids.title);
+    }
+
+    return await db
+      .select()
+      .from(jobAids)
+      .orderBy(jobAids.category, jobAids.title);
+  }
+
+  async getJobAidsByCategory(category: string): Promise<JobAid[]> {
+    return await db
+      .select()
+      .from(jobAids)
+      .where(eq(jobAids.category, category))
+      .orderBy(jobAids.title);
+  }
+
+  // Training Interventions
+  async createTrainingIntervention(intervention: InsertTrainingIntervention): Promise<TrainingIntervention> {
+    const [created] = await db.insert(trainingInterventions).values(intervention).returning();
+    return created;
+  }
+
+  async getTrainingIntervention(id: string): Promise<TrainingIntervention | undefined> {
+    return await db.query.trainingInterventions.findFirst({
+      where: eq(trainingInterventions.id, id),
+    });
+  }
+
+  async getTrainingInterventions(filters?: { targetErrorCategory?: string }): Promise<TrainingIntervention[]> {
+    if (filters?.targetErrorCategory) {
+      return await db
+        .select()
+        .from(trainingInterventions)
+        .where(eq(trainingInterventions.targetErrorCategory, filters.targetErrorCategory))
+        .orderBy(desc(trainingInterventions.completedDate));
+    }
+
+    return await db
+      .select()
+      .from(trainingInterventions)
+      .orderBy(desc(trainingInterventions.completedDate));
   }
 }
 

@@ -4330,3 +4330,118 @@ export type InsertMonitoringMetric = z.infer<typeof insertMonitoringMetricSchema
 export type MonitoringMetric = typeof monitoringMetrics.$inferSelect;
 export type InsertAlertHistory = z.infer<typeof insertAlertHistorySchema>;
 export type AlertHistory = typeof alertHistory.$inferSelect;
+
+// ============================================================================
+// QC (QUALITY CONTROL) ANALYTICS - Maryland SNAP Predictive Analytics
+// ============================================================================
+
+// QC Error Patterns - Track error trends over time for predictive analytics
+export const qcErrorPatterns = pgTable("qc_error_patterns", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  errorCategory: text("error_category").notNull(), // shelter_utility, income_verification, asset_verification, categorical_eligibility, etc.
+  errorSubtype: text("error_subtype").notNull(), // incorrect_sua_calculation, missing_income_doc, etc.
+  errorDescription: text("error_description").notNull(),
+  quarterOccurred: text("quarter_occurred").notNull(), // 2024-Q1, 2024-Q2, etc.
+  errorCount: integer("error_count").notNull(),
+  totalCases: integer("total_cases").notNull(),
+  errorRate: real("error_rate").notNull(), // Calculated percentage
+  trendDirection: text("trend_direction").notNull(), // increasing, decreasing, stable
+  severity: text("severity").notNull(), // critical, high, medium, low
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+  categoryIdx: index("qc_error_patterns_category_idx").on(table.errorCategory),
+  quarterIdx: index("qc_error_patterns_quarter_idx").on(table.quarterOccurred),
+  severityIdx: index("qc_error_patterns_severity_idx").on(table.severity),
+}));
+
+// Flagged Cases - High-risk cases for supervisor review
+export const flaggedCases = pgTable("flagged_cases", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  caseId: text("case_id").notNull(), // Synthetic case identifier
+  clientName: text("client_name").notNull(), // Fake name like "Case #12345"
+  assignedCaseworkerId: varchar("assigned_caseworker_id").references(() => users.id),
+  riskScore: real("risk_score").notNull(), // 0.0 to 1.0
+  riskLevel: text("risk_level").notNull(), // high, medium, low
+  flaggedErrorTypes: text("flagged_error_types").array().notNull(), // Array of potential error categories
+  flaggedDate: timestamp("flagged_date").defaultNow().notNull(),
+  reviewStatus: text("review_status").notNull().default("pending"), // pending, reviewed, cleared
+  reviewedBy: varchar("reviewed_by").references(() => users.id),
+  reviewNotes: text("review_notes"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+  caseworkerIdx: index("flagged_cases_caseworker_idx").on(table.assignedCaseworkerId),
+  statusIdx: index("flagged_cases_status_idx").on(table.reviewStatus),
+  riskLevelIdx: index("flagged_cases_risk_level_idx").on(table.riskLevel),
+}));
+
+// Job Aids - Training materials and guidance documents
+export const jobAids = pgTable("job_aids", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  title: text("title").notNull(),
+  category: text("category").notNull(), // Links to error categories
+  content: text("content").notNull(), // Markdown or HTML guidance
+  policyReference: text("policy_reference"), // "7 CFR 273.9(d)(6)"
+  lastUpdated: timestamp("last_updated").defaultNow().notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+  categoryIdx: index("job_aids_category_idx").on(table.category),
+}));
+
+// Training Interventions - Track training effectiveness
+export const trainingInterventions = pgTable("training_interventions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  trainingTitle: text("training_title").notNull(),
+  targetErrorCategory: text("target_error_category").notNull(),
+  completedBy: varchar("completed_by").array().notNull(), // User IDs who completed
+  completedDate: timestamp("completed_date").notNull(),
+  preTrainingErrorRate: real("pre_training_error_rate").notNull(),
+  postTrainingErrorRate: real("post_training_error_rate"),
+  impactScore: real("impact_score"), // Calculated improvement
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+  categoryIdx: index("training_interventions_category_idx").on(table.targetErrorCategory),
+}));
+
+// Relations
+export const flaggedCasesRelations = relations(flaggedCases, ({ one }) => ({
+  caseworker: one(users, {
+    fields: [flaggedCases.assignedCaseworkerId],
+    references: [users.id],
+  }),
+  reviewer: one(users, {
+    fields: [flaggedCases.reviewedBy],
+    references: [users.id],
+  }),
+}));
+
+// Insert/select schemas
+export const insertQcErrorPatternSchema = createInsertSchema(qcErrorPatterns).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertFlaggedCaseSchema = createInsertSchema(flaggedCases).omit({
+  id: true,
+  createdAt: true,
+  flaggedDate: true,
+});
+
+export const insertJobAidSchema = createInsertSchema(jobAids).omit({
+  id: true,
+  createdAt: true,
+  lastUpdated: true,
+});
+
+export const insertTrainingInterventionSchema = createInsertSchema(trainingInterventions).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertQcErrorPattern = z.infer<typeof insertQcErrorPatternSchema>;
+export type QcErrorPattern = typeof qcErrorPatterns.$inferSelect;
+export type InsertFlaggedCase = z.infer<typeof insertFlaggedCaseSchema>;
+export type FlaggedCase = typeof flaggedCases.$inferSelect;
+export type InsertJobAid = z.infer<typeof insertJobAidSchema>;
+export type JobAid = typeof jobAids.$inferSelect;
+export type InsertTrainingIntervention = z.infer<typeof insertTrainingInterventionSchema>;
+export type TrainingIntervention = typeof trainingInterventions.$inferSelect;
