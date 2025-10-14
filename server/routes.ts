@@ -156,7 +156,21 @@ const requireVitaCertification = (minimumLevel: 'basic' | 'advanced' | 'military
 
 export async function registerRoutes(app: Express, sessionMiddleware?: any): Promise<Server> {
   
-  // Comprehensive health check endpoint
+  // ============================================================================
+  // HEALTH CHECK ENDPOINTS - For load balancers and monitoring
+  // ============================================================================
+  const { healthCheck, readinessCheck, startupCheck } = await import("./middleware/healthCheck");
+  
+  // Liveness probe (is service running?)
+  app.get("/health", healthCheck);
+  
+  // Readiness probe (is service ready to accept traffic?)
+  app.get("/ready", readinessCheck);
+  
+  // Startup probe (has service completed startup?)
+  app.get("/startup", startupCheck);
+  
+  // Legacy comprehensive health check endpoint (kept for backwards compatibility)
   app.get("/api/health", asyncHandler(async (req, res) => {
     const healthStatus: any = {
       status: "healthy",
