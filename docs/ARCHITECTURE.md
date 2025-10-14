@@ -183,6 +183,157 @@ server/
 
 ---
 
+## Complete Feature Architecture Map
+
+### 46-Feature System Overview
+
+This platform implements 46 distinct features across 6 major categories. Below is the complete architectural mapping:
+
+#### **Public Access Layer** (No Authentication - 5 Features)
+| Feature | Component | API Endpoint | Purpose |
+|---------|-----------|--------------|---------|
+| Quick Screener | `/pages/public/QuickScreener.tsx` | `POST /api/public/quick-screen` | 2-minute eligibility check |
+| Benefit Screener | `/pages/public/BenefitScreener.tsx` | `POST /api/screener/check` | Anonymous multi-program screening |
+| Document Checklist | `/pages/public/DocumentChecklist.tsx` | `POST /api/public/generate-checklist` | AI checklist generator |
+| Notice Explainer | `/pages/public/NoticeExplainer.tsx` | `POST /api/public/explain-notice` | Plain-language notice interpretation |
+| Simplified Search | `/pages/public/SimplifiedSearch.tsx` | `POST /api/search` | Public policy search |
+
+#### **Core Eligibility & Calculation Layer** (5 Features)
+| Feature | Component | Service | Integration |
+|---------|-----------|---------|-------------|
+| Financial Opportunity Radar | `/components/FinancialOpportunityRadar.tsx` | `hooks/useEligibilityRadar.ts` | PolicyEngine + Real-time calculations |
+| Household Profiler | `/pages/HouseholdProfiler.tsx` | Direct state management | Form → Radar integration |
+| PolicyEngine Integration | N/A | `services/policyEngineHttpClient.ts` | Python REST API |
+| Scenario Workspace | `/pages/ScenarioWorkspace.tsx` | Database: `scenario_households` | What-if modeling |
+| Eligibility Checker | `/pages/EligibilityChecker.tsx` | PolicyEngine service | Detailed determination |
+
+#### **Application & Tax Layer** (3 Features)
+| Feature | Component | Service | AI Model |
+|---------|-----------|---------|----------|
+| Adaptive Intake Copilot | `/pages/IntakeCopilot.tsx` | `services/intakeCopilot.service.ts` | Gemini 1.5-pro |
+| VITA Tax Intake | `/pages/VitaIntake.tsx` | `services/taxDocumentExtraction.service.ts` | Gemini Vision |
+| Tax Preparation | `/pages/TaxPreparation.tsx` | PolicyEngine Tax + PDF generators | Form 1040 + MD 502 |
+
+#### **Document Management Layer** (3 Features)
+| Feature | Component | Storage | Verification |
+|---------|-----------|---------|--------------|
+| Document Verification | `/pages/DocumentVerificationPage.tsx` | Google Cloud Storage | Gemini Vision API |
+| Document Review Queue | `/pages/DocumentReviewQueue.tsx` | `navigator_documents` table | Staff workflow |
+| Document Upload | `/pages/Upload.tsx` | Uppy + GCS signed URLs | Direct upload |
+
+#### **Navigator & Staff Layer** (8 Features)
+| Feature | Page | Database Tables | Purpose |
+|---------|------|-----------------|---------|
+| Navigator Workspace | `/pages/NavigatorWorkspace.tsx` | `navigator_cases`, `navigator_sessions` | Case management |
+| Navigator Dashboard | `/pages/NavigatorDashboard.tsx` | Dashboard queries | Personal metrics |
+| Navigator Performance | `/pages/NavigatorPerformance.tsx` | Analytics aggregations | Performance tracking |
+| Client Dashboard | `/pages/ClientDashboard.tsx` | User-specific queries | Applicant portal |
+| Caseworker Dashboard | `/pages/CaseworkerDashboard.tsx` | QC integration | Case assignment |
+| Consent Management | `/pages/ConsentManagement.tsx` | `consent_forms`, `client_consents` | Digital signatures |
+| Training Module | `/pages/Training.tsx` | `training_modules`, `training_progress` | Staff certification |
+| Leaderboard | `/pages/Leaderboard.tsx` | `achievements` | Gamification |
+
+#### **Quality Control Layer** (5 Features)
+| Feature | Page | Database | Analytics |
+|---------|------|----------|-----------|
+| Caseworker Cockpit | `/pages/CaseworkerCockpit.tsx` | `qc_error_patterns`, `flagged_cases` | Personal QA dashboard |
+| Supervisor Cockpit | `/pages/SupervisorCockpit.tsx` | `training_interventions` | Team oversight |
+| ABAWD Verification | `/pages/AbawdVerificationAdmin.tsx` | `abawd_exemptions` | Work requirement tracking |
+| Compliance Suite | `/pages/ComplianceAdmin.tsx` | `compliance_rules`, `compliance_violations` | Automated validation |
+| Evaluation Framework | `/pages/EvaluationFramework.tsx` | `evaluation_test_cases` | Accuracy testing |
+
+#### **Administration Layer** (12 Features)
+| Feature | Page | Purpose | Access Level |
+|---------|------|---------|--------------|
+| Admin Dashboard | `/pages/Admin.tsx` | Central admin | Admin+ |
+| Policy Manual | `/pages/PolicyManual.tsx` | Manual editing | Admin+ |
+| Policy Sources | `/pages/PolicySources.tsx` | Source management | Admin+ |
+| Policy Changes | `/pages/PolicyChanges.tsx` | Change tracking | Admin+ |
+| Rules Extraction | `/pages/RulesExtraction.tsx` | AI rule extraction | Admin+ |
+| Security Monitoring | `/pages/SecurityMonitoring.tsx` | Threat detection | Super Admin |
+| AI Monitoring | `/pages/AIMonitoring.tsx` | Model performance | Admin+ |
+| Feedback Management | `/pages/FeedbackManagement.tsx` | User feedback | Admin+ |
+| Audit Logs | `/pages/AuditLogs.tsx` | Audit trail | Admin+ |
+| County Management | `/pages/CountyManagement.tsx` | Multi-tenant config | Super Admin |
+| County Analytics | `/pages/CountyAnalytics.tsx` | County metrics | Admin+ |
+| Cross-Enrollment Admin | `/pages/CrossEnrollmentAdmin.tsx` | Pipeline management | Admin+ |
+
+#### **Developer & Integration Layer** (2 Features)
+| Feature | Page | API Endpoints | Purpose |
+|---------|------|---------------|---------|
+| Developer Portal | `/pages/DeveloperPortal.tsx` | `/api/developer/*` | API key management |
+| API Documentation | `/pages/ApiDocs.tsx` | Swagger UI | Interactive docs |
+
+#### **Infrastructure Layer** (6 Features)
+| Feature | Component | Technology | Implementation |
+|---------|-----------|------------|----------------|
+| Notification System | `/pages/NotificationCenter.tsx` | WebSocket | Real-time alerts |
+| Notification Settings | `/pages/NotificationSettings.tsx` | Preferences DB | Channel config |
+| PWA Support | `/components/InstallPrompt.tsx` | Service Workers | Offline capability |
+| Mobile Bottom Nav | `/components/MobileBottomNav.tsx` | Responsive design | Touch navigation |
+| Command Palette | `/components/CommandPalette.tsx` | cmdk library | Cmd+K shortcuts |
+| VITA Knowledge Base | `/pages/VitaKnowledgeBase.tsx` | RAG search | Tax resources |
+
+### Feature Integration Patterns
+
+**1. Financial Opportunity Radar Integration**
+```
+Household Profiler (form changes) 
+  → useEligibilityRadar (300ms debounce)
+  → POST /api/eligibility/radar
+  → PolicyEngine calculations
+  → Real-time UI updates in sidebar
+```
+
+**2. Cross-Enrollment Flow**
+```
+Tax Preparation (completed return)
+  → Cross-Enrollment Intelligence Engine
+  → AI analysis of income/household data
+  → Recommendations in Radar widget
+  → One-click enrollment initiation
+```
+
+**3. Quality Control Pipeline**
+```
+Caseworker submits case
+  → Flagged Cases system (AI risk scoring)
+  → Caseworker Cockpit (personal view)
+  → Supervisor Cockpit (team view)
+  → Training interventions (automated)
+  → Error rate reduction tracking
+```
+
+**4. Document Processing Pipeline**
+```
+Upload (Uppy) → GCS Storage
+  → Gemini Vision analysis
+  → Document Verification Interface
+  → Navigator Review Queue
+  → Approval/Rejection workflow
+  → Applicant notification
+```
+
+**5. Multi-County Architecture**
+```
+User login → County detection
+  → County-specific branding applied
+  → Data isolation (tenant_id filtering)
+  → Localized content served
+  → County-level analytics tracked
+```
+
+### Microservices Candidates (Future)
+
+If scaling beyond monolith:
+1. **RAG Service** - Policy search & embeddings (most CPU-intensive)
+2. **PolicyEngine Service** - Benefit calculations (Python bridge)
+3. **Document Service** - OCR & Vision processing (I/O heavy)
+4. **Notification Service** - WebSocket + email delivery
+5. **Analytics Service** - Reporting & data warehousing
+
+---
+
 ## Data Flow
 
 ### 1. Conversational Search Flow
