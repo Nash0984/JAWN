@@ -1,6 +1,6 @@
-# Maryland SNAP Policy Manual System
+# Maryland Universal Benefits-Tax Navigator
 
-An AI-powered platform for Maryland's Food Supplement Program (SNAP) that helps users verify documents and navigate benefit policies through intelligent search and document processing.
+An AI-powered service delivery platform integrating **6 Maryland benefit programs** (SNAP, Medicaid, TANF, OHEP, Tax Credits, SSI) with **federal/state tax preparation (VITA)** through a unified household profile. Features real-time eligibility tracking, cross-enrollment intelligence, quality control analytics, multi-county deployment, and conversational AI assistance—delivering comprehensive financial optimization through a single interface.
 
 ## 🚀 Quick Start
 

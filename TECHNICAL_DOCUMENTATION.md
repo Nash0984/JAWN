@@ -1,24 +1,31 @@
-# Maryland SNAP Policy Manual System - Complete Technical Documentation
+# Maryland Universal Benefits-Tax Navigator - Complete Technical Documentation
 
 ## System Overview
 
-The Maryland SNAP Policy Manual System is a comprehensive AI-powered platform designed specifically for Maryland's Food Supplement Program (SNAP). It serves as an intelligent document verification and policy navigation system that helps users find and understand government benefit policies through advanced Retrieval-Augmented Generation (RAG) technology.
+The Maryland Universal Benefits-Tax Navigator is a comprehensive AI-powered service delivery platform integrating **6 Maryland benefit programs** (SNAP, Medicaid, TANF, OHEP, Tax Credits, SSI) with **federal/state tax preparation (VITA)**. This production-ready platform serves navigators, caseworkers, applicants, and administrators across 24 Maryland counties with 46 core features including real-time eligibility tracking, cross-enrollment intelligence, quality control analytics, document verification, and conversational AI assistance—all through a unified household profile.
 
 ### Core Architecture
 
 **Technology Stack:**
 - **Frontend:** React 18 with TypeScript, Vite build system, shadcn/ui components, Tailwind CSS
-- **Backend:** Express.js with TypeScript, PostgreSQL database via Drizzle ORM
-- **AI Integration:** Google Gemini API (100% migrated from OpenAI)
+- **Backend:** Express.js with TypeScript, PostgreSQL database via Drizzle ORM on Neon
+- **AI Integration:** Google Gemini API for RAG, document analysis, tax extraction, compliance validation
+- **Benefit Calculations:** PolicyEngine US (Python REST API) for accurate multi-program eligibility
 - **Storage:** Google Cloud Storage for document files, PostgreSQL for structured data
-- **Language Access:** Multi-language support with reading level validation (Grade 6-8)
+- **Real-time:** WebSocket notifications, 300ms debounced calculations
+- **Multi-tenant:** County-level data isolation and branding
 
-### Key Features
-1. **Document Verification:** Upload and analyze documents against SNAP requirements
-2. **Conversational Search:** Natural language queries about SNAP policies
-3. **Language Access:** 10-language support with plain English responses
-4. **Mobile-First Design:** Responsive interface optimized for touch devices
-5. **Maryland Branding:** Full compliance with Maryland Digital Style Guide
+### Key Features (46 Total)
+1. **Real-Time Eligibility Tracking:** Financial Opportunity Radar widget with instant updates across all 6 programs
+2. **Tax Integration:** VITA intake, Form 1040/MD 502 generation, cross-enrollment intelligence
+3. **Document Verification:** AI-powered analysis with Gemini Vision, navigator review queue
+4. **Quality Control:** Caseworker/Supervisor Cockpits with predictive analytics and error prevention
+5. **Public Portal:** Anonymous screeners, document checklist generator, notice explainer (no login required)
+6. **Navigator Tools:** Case management, performance tracking, training modules, gamification
+7. **Multi-County Deployment:** 24 Maryland counties with isolated data and localized experiences
+8. **Admin Suite:** Policy management, AI monitoring, security dashboard, compliance validation
+9. **Mobile-First:** PWA support, bottom navigation, offline capabilities, responsive design
+10. **Developer Portal:** API key management, webhook configuration, Swagger documentation
 
 ---
 
