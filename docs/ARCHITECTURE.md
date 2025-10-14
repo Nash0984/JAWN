@@ -139,6 +139,7 @@ client/src/
 │   ├── ui/                  # shadcn/ui primitives
 │   ├── PolicyChatWidget     # Conversational search
 │   ├── DocumentViewer       # Document view/verify
+│   ├── FinancialOpportunityRadar  # Real-time eligibility widget
 │   ├── NotificationCenter   # Real-time notifications
 │   ├── CommandPalette       # Cmd+K navigation
 │   └── MDAlert              # Maryland-styled alerts
@@ -146,6 +147,7 @@ client/src/
 ├── hooks/                   # Custom React hooks
 │   ├── use-toast            # Toast notifications
 │   ├── use-auth             # Authentication state
+│   ├── use-eligibility-radar  # Real-time benefit calculations
 │   └── use-websocket        # WebSocket connection
 │
 └── lib/
@@ -277,6 +279,81 @@ Household Input → ScenarioWorkspace → POST /api/policyengine/calculate
                                                ▼
                                     Visualization (Recharts)
 ```
+
+### 3.1. Financial Opportunity Radar - Real-Time Eligibility Flow
+
+```
+Form Field Change → useWatch Hook → useEligibilityRadar
+                                              │
+                                              ▼
+                                    300ms Debounce Timer
+                                    (Cancel previous requests)
+                                              │
+                                              ▼
+                                    AbortController Created
+                                              │
+                                              ▼
+                                    Fetch CSRF Token
+                                    GET /api/csrf-token
+                                              │
+                                              ▼
+                              POST /api/eligibility/radar
+                              (with abort signal + CSRF token)
+                                              │
+                                              ▼
+                              ┌───────────────┴───────────────┐
+                              │                               │
+                              ▼                               ▼
+                    Current Household Data          Previous Results Ref
+                              │                               │
+                              └───────────────┬───────────────┘
+                                              │
+                                              ▼
+                              Parallel PolicyEngine Calculations
+                              (SNAP, Medicaid, TANF, EITC, CTC, SSI)
+                                              │
+                                              ▼
+                              Change Detection Algorithm
+                              (Compare prev vs current)
+                                              │
+                    ┌─────────────────────────┴─────────────────────────┐
+                    │                         │                         │
+                    ▼                         ▼                         ▼
+              0 → Positive              Amount Δ > $5           No Change
+              (New Badge)            (↑↓ Arrow + Amount)          (null)
+                    │                         │                         │
+                    └─────────────────────────┴─────────────────────────┘
+                                              │
+                                              ▼
+                              Smart Alerts Generation
+                              (Cross-enrollment opportunities)
+                                              │
+                                              ▼
+                              JSON Response with:
+                              - programs[] (eligibility + changes)
+                              - alerts[] (recommendations)
+                              - summary (totals + metrics)
+                                              │
+                                              ▼
+                              Update React State
+                              (programs, alerts, summary)
+                                              │
+                                              ▼
+                              Framer Motion Animations
+                              (Highlight changes visually)
+                                              │
+                                              ▼
+                              Render Radar Widget
+                              (Cards + Badges + Arrows + Summary)
+```
+
+**Key Features:**
+- **Request Cancellation**: AbortController cancels outdated requests on rapid field changes
+- **Change Detection**: Server compares `prev !== undefined` for 0→positive transitions
+- **Security**: CSRF token fetched and included in x-csrf-token header
+- **Performance**: 300ms debounce prevents excessive API calls
+- **Real-Time**: useWatch tracks 16+ form fields, triggers on any change
+- **Visual Feedback**: Green "New" badges, ↑↓ arrows with amounts/percentages
 
 ### 4. Policy Change Detection Flow
 
