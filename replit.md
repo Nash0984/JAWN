@@ -20,7 +20,7 @@ The backend uses Express.js with TypeScript and PostgreSQL via Drizzle ORM on Ne
 -   **Financial Opportunity Radar**: Real-time cross-program eligibility tracking widget with dynamic benefit calculations, change detection, and smart alerts. Displays instant eligibility updates across all 6 Maryland programs (SNAP, Medicaid, TANF, EITC, CTC, SSI) as household data changes, featuring visual change indicators (↑↓ arrows, "New" badges), summary dashboard (total monthly/annual benefits, program count), and AI-powered cross-enrollment recommendations. Integrated into Household Profiler with 300ms debounced calculations, abort controller for request cancellation, and CSRF-protected API calls.
 -   **Feedback Collection System**: Gathers user feedback on AI responses.
 -   **Admin Enhancement Tools**: Audit logging, security monitoring, API documentation, feedback management.
--   **Notification System**: In-app alerts and updates.
+-   **Notification System**: In-app alerts and updates with WebSocket support, notification bell, preferences management, and email backup.
 -   **Policy Change Diff Monitor**: Tracks policy document versions.
 -   **Compliance Assurance Suite**: Gemini-powered policy validation.
 -   **Adaptive Intake Copilot**: Conversational AI assistant for application guidance.
@@ -28,6 +28,35 @@ The backend uses Express.js with TypeScript and PostgreSQL via Drizzle ORM on Ne
 -   **Anonymous Benefit Screener**: Public eligibility check tool.
 -   **Household Scenario Workspace**: Modeling tool for navigators.
 -   **Maryland Evaluation Framework**: Comprehensive accuracy testing system.
+
+### Public Access Portal (No Login Required)
+-   **Quick Screener**: Ultra-minimal 5-question eligibility check (2-minute completion, 70% approval optimization).
+-   **Document Checklist Generator**: AI-powered personalized document requirement lists with PDF export.
+-   **Notice Explainer**: Plain-language DHS notice interpretation with action items and deadline extraction.
+-   **Simplified Policy Search**: Public access to Maryland SNAP policy manual with natural language queries.
+-   **Benefit Screener**: Multi-program anonymous pre-screening tool with save-to-account option.
+
+### Staff Dashboards & Workspaces
+-   **Navigator Dashboard**: Personal metrics, active cases, document tasks, achievements, and quick actions.
+-   **Navigator Performance**: Individual analytics with completion rates, satisfaction scores, and goal tracking.
+-   **Client Dashboard**: Applicant self-service portal with application status, document upload, and appointment scheduling.
+-   **Caseworker Dashboard**: Case management tools with quality control integration.
+
+### Quality Assurance & Work Verification
+-   **ABAWD Verification Admin**: Work requirement exemption management and compliance tracking.
+-   **Cross-Enrollment Admin**: Cross-program enrollment pipeline management with success metrics and barrier identification.
+
+### Developer & Integration Tools
+-   **Developer Portal**: API key generation, webhook configuration, SDK downloads, and testing sandbox.
+-   **API Documentation (Swagger)**: Interactive API explorer with try-it-out functionality and OpenAPI spec export.
+-   **AI Monitoring Dashboard**: Model performance tracking, cost analysis, and version management.
+
+### Infrastructure & Mobile Features
+-   **PWA Installation**: Progressive Web App with offline functionality, service workers, and background sync.
+-   **Mobile Bottom Navigation**: Touch-optimized bottom tab navigation for mobile users.
+-   **Command Palette**: Global keyboard shortcut (Cmd/Ctrl+K) for quick navigation with fuzzy search.
+-   **Training Module**: Staff training materials, certification tracking, and knowledge assessments.
+-   **Consent Management**: Digital consent form system with signature capture, versioning, and audit trail.
 
 ### Tax Preparation System
 Integrates federal/state tax preparation with public benefits eligibility.

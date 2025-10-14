@@ -154,20 +154,37 @@ This application is **fully mobile-responsive** and works seamlessly across all 
 ## 📱 Usage Guide
 
 ### For Benefit Recipients
-1. **Check Eligibility**: Use the anonymous screener at `/screener` - no login needed
-2. **Ask Questions**: Use the main search interface to ask about SNAP benefits
-3. **Apply Online**: Guided intake copilot walks you through the application at `/intake`
-4. **Verify Documents**: Upload photos of paystubs, bank statements, or other documents
-5. **Get Plain English Answers**: Receive clear, easy-to-understand responses
-6. **Multi-Language Support**: Switch to your preferred language
+1. **Quick Eligibility Check**: Use the 2-minute screener at `/quick-screener` - 5 questions only, no login
+2. **Anonymous Benefit Screener**: Check eligibility at `/screener` for all Maryland programs
+3. **Document Checklist**: Get personalized document lists at `/public/documents`
+4. **Notice Explainer**: Understand DHS notices in plain English at `/public/notices`
+5. **Apply Online**: Guided intake copilot walks you through the application at `/intake`
+6. **Tax Preparation**: File federal and Maryland taxes with AI assistance at `/tax-prep`
+7. **Track Application**: Monitor status and upload documents via Client Dashboard
+8. **Multi-Language Support**: Access in 10 languages including Spanish, French, Chinese
 
 ### For Navigators
-1. **Client Screening**: Quick benefit calculations using PolicyEngine
-2. **Scenario Modeling**: Create what-if scenarios to optimize client benefits at `/scenarios`
-3. **Policy Search**: Find specific SNAP policy information quickly
-4. **Document Guidance**: Help clients understand document requirements  
-5. **Export Reports**: Generate PDF counseling reports for client meetings
-6. **Training Resources**: Access system training and help materials
+1. **Navigator Workspace**: Manage client cases and interactions at `/navigator`
+2. **Financial Opportunity Radar**: See real-time eligibility across 6 programs as household data changes
+3. **Scenario Modeling**: Create what-if scenarios to optimize client benefits at `/scenarios`
+4. **Performance Dashboard**: Track your metrics and achievements at `/navigator/dashboard`
+5. **Document Review**: Process client documents efficiently
+6. **Export Reports**: Generate PDF counseling reports and E&E exports
+7. **Training Resources**: Access certification materials and job aids
+
+### For Caseworkers & Supervisors  
+1. **QA Cockpits**: Personal error tracking (caseworker) and team oversight (supervisor)
+2. **Predictive Analytics**: AI-powered risk scores and training recommendations
+3. **Document Review Queue**: Bulk document processing with SLA tracking
+4. **Compliance Monitoring**: ABAWD verification and enrollment management
+
+### For Administrators
+1. **AI Monitoring**: Track model performance, costs, and accuracy
+2. **Security Dashboard**: Monitor threats, failed logins, and suspicious activity
+3. **County Management**: Configure 24 Maryland counties with local branding
+4. **Policy Management**: Update rules, track changes, extract structured rules
+5. **Developer Portal**: Manage API keys, webhooks, and third-party integrations
+6. **Audit & Compliance**: Full audit trail and compliance validation
 
 ## 🛠️ Development Guide
 
