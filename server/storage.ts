@@ -1228,6 +1228,10 @@ export class DatabaseStorage implements IStorage {
   }
 
   async markSessionsAsExported(sessionIds: string[], exportBatchId: string): Promise<void> {
+    if (sessionIds.length === 0) {
+      return;
+    }
+    
     await db
       .update(clientInteractionSessions)
       .set({ 
@@ -1235,7 +1239,7 @@ export class DatabaseStorage implements IStorage {
         exportedAt: sql`NOW()`,
         exportBatchId 
       })
-      .where(sql`${clientInteractionSessions.id} = ANY(${sessionIds})`);
+      .where(inArray(clientInteractionSessions.id, sessionIds));
   }
 
   async getSessionsByExportBatch(exportBatchId: string): Promise<ClientInteractionSession[]> {
