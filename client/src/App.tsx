@@ -22,6 +22,7 @@ import ClientDashboard from "@/pages/ClientDashboard";
 import NavigatorDashboard from "@/pages/NavigatorDashboard";
 import CaseworkerDashboard from "@/pages/CaseworkerDashboard";
 import CaseworkerCockpit from "@/pages/CaseworkerCockpit";
+import SupervisorCockpit from "@/pages/SupervisorCockpit";
 import AdminDashboard from "@/pages/AdminDashboard";
 import PolicySources from "@/pages/PolicySources";
 import AIMonitoring from "@/pages/AIMonitoring";
@@ -141,6 +142,13 @@ function Router() {
             {() => (
               <ProtectedRoute requireStaff>
                 <CaseworkerCockpit />
+              </ProtectedRoute>
+            )}
+          </Route>
+          <Route path="/supervisor/cockpit">
+            {() => (
+              <ProtectedRoute requireStaff>
+                <SupervisorCockpit />
               </ProtectedRoute>
             )}
           </Route>

@@ -660,6 +660,7 @@ export interface IStorage {
   getFlaggedCasesByCaseworker(caseworkerId: string): Promise<FlaggedCase[]>;
   getFlaggedCasesForSupervisor(supervisorId: string): Promise<FlaggedCase[]>;
   updateFlaggedCaseStatus(caseId: string, status: string, reviewedBy?: string, reviewNotes?: string): Promise<FlaggedCase>;
+  assignFlaggedCase(caseId: string, assignedCaseworkerId: string, reviewedBy: string, reviewNotes?: string): Promise<FlaggedCase>;
   
   // Job Aids
   createJobAid(jobAid: InsertJobAid): Promise<JobAid>;
@@ -3365,6 +3366,20 @@ export class DatabaseStorage implements IStorage {
         reviewStatus: status,
         reviewedBy: reviewedBy || null,
         reviewNotes: reviewNotes || null,
+      })
+      .where(eq(flaggedCases.id, caseId))
+      .returning();
+    return updated;
+  }
+
+  async assignFlaggedCase(caseId: string, assignedCaseworkerId: string, reviewedBy: string, reviewNotes?: string): Promise<FlaggedCase> {
+    const [updated] = await db
+      .update(flaggedCases)
+      .set({
+        assignedCaseworkerId,
+        reviewedBy,
+        reviewNotes: reviewNotes || null,
+        reviewStatus: 'assigned',
       })
       .where(eq(flaggedCases.id, caseId))
       .returning();

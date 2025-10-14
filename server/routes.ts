@@ -6813,6 +6813,60 @@ If the question cannot be answered with the available information, say so clearl
   }));
 
   // ===========================
+  // SUPERVISOR QC ROUTES - Supervisor Cockpit
+  // ===========================
+
+  // Get all error patterns (supervisor view)
+  app.get("/api/qc/error-patterns", requireStaff, asyncHandler(async (req, res) => {
+    const { errorCategory, quarterOccurred, severity } = req.query;
+    
+    const filters: any = {};
+    if (errorCategory) filters.errorCategory = errorCategory as string;
+    if (quarterOccurred) filters.quarterOccurred = quarterOccurred as string;
+    if (severity) filters.severity = severity as string;
+    
+    const patterns = await storage.getQcErrorPatterns(filters);
+    res.json(patterns);
+  }));
+
+  // Get all flagged cases for supervisor's team
+  app.get("/api/qc/flagged-cases/team", requireStaff, asyncHandler(async (req, res) => {
+    if (!req.user) {
+      throw authorizationError("Authentication required");
+    }
+
+    const flaggedCases = await storage.getFlaggedCasesForSupervisor(req.user.id);
+    res.json(flaggedCases);
+  }));
+
+  // Assign flagged case to caseworker with coaching notes
+  app.post("/api/qc/flagged-cases/:id/assign", requireStaff, asyncHandler(async (req, res) => {
+    if (!req.user) {
+      throw authorizationError("Authentication required");
+    }
+
+    const { assignedCaseworkerId, reviewNotes } = req.body;
+
+    if (!assignedCaseworkerId) {
+      throw validationError("Caseworker ID is required");
+    }
+
+    const flaggedCase = await storage.getFlaggedCase(req.params.id);
+    if (!flaggedCase) {
+      throw notFoundError("Flagged case not found");
+    }
+
+    const updated = await storage.assignFlaggedCase(
+      req.params.id,
+      assignedCaseworkerId,
+      req.user.id,
+      reviewNotes
+    );
+
+    res.json(updated);
+  }));
+
+  // ===========================
   // EVALUATION FRAMEWORK ROUTES
   // ===========================
 
