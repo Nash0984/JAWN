@@ -8,10 +8,10 @@
  * These 6 categories are mandated for Maryland SNAP Quality Control
  */
 export const ERROR_CATEGORY_LABELS: Record<string, string> = {
-  shelter_utility: "Shelter & Utility Errors",
-  income_verification: "Income Verification Errors",
-  asset_verification: "Asset Verification Errors",
-  categorical_eligibility: "Categorical Eligibility Errors",
+  shelter_utility: "Shelter & Utility",
+  income_verification: "Income Verification",
+  asset_verification: "Asset Verification",
+  categorical_eligibility: "Categorical Eligibility",
   earned_income: "Earned Income Errors",
   unearned_income: "Unearned Income Errors",
 };
