@@ -4562,6 +4562,203 @@ If the question cannot be answered with the available information, say so clearl
     });
   }));
 
+  // Cross-Eligibility Radar - Real-time multi-program eligibility tracking
+  app.post("/api/eligibility/radar", asyncHandler(async (req, res) => {
+    const { policyEngineService } = await import("./services/policyEngine.service");
+    const { policyEngineTaxCalculationService } = await import("./services/policyEngineTaxCalculation");
+    
+    const inputSchema = z.object({
+      // Household composition
+      adults: z.number().min(1).max(20).optional().default(1),
+      children: z.number().min(0).max(20).optional().default(0),
+      elderlyOrDisabled: z.boolean().optional().default(false),
+      
+      // Income (can be partial)
+      employmentIncome: z.number().min(0).optional().default(0),
+      unearnedIncome: z.number().min(0).optional().default(0),
+      selfEmploymentIncome: z.number().min(0).optional().default(0),
+      
+      // Benefits-specific data
+      householdAssets: z.number().min(0).optional(),
+      rentOrMortgage: z.number().min(0).optional(),
+      utilityCosts: z.number().min(0).optional(),
+      medicalExpenses: z.number().min(0).optional(),
+      childcareExpenses: z.number().min(0).optional(),
+      
+      // Tax-specific data (optional)
+      filingStatus: z.enum(['single', 'married_joint', 'married_separate', 'head_of_household', 'qualifying_widow']).optional(),
+      wageWithholding: z.number().min(0).optional(),
+      
+      // Previous calculation (for change detection)
+      previousResults: z.object({
+        snap: z.number().optional(),
+        medicaid: z.boolean().optional(),
+        tanf: z.number().optional(),
+        eitc: z.number().optional(),
+        ctc: z.number().optional(),
+        ssi: z.number().optional()
+      }).optional(),
+      
+      stateCode: z.string().length(2).optional().default("MD"),
+      year: z.number().optional()
+    });
+    
+    const validated = inputSchema.parse(req.body);
+    
+    // Calculate benefits eligibility
+    const benefitResult = await policyEngineService.calculateBenefits({
+      adults: validated.adults,
+      children: validated.children,
+      employmentIncome: validated.employmentIncome,
+      unearnedIncome: validated.unearnedIncome,
+      stateCode: validated.stateCode,
+      year: validated.year,
+      householdAssets: validated.householdAssets,
+      rentOrMortgage: validated.rentOrMortgage,
+      utilityCosts: validated.utilityCosts,
+      medicalExpenses: validated.medicalExpenses,
+      childcareExpenses: validated.childcareExpenses,
+      elderlyOrDisabled: validated.elderlyOrDisabled
+    });
+    
+    if (!benefitResult.success || !benefitResult.benefits) {
+      return res.status(500).json({ 
+        error: "Failed to calculate eligibility",
+        details: benefitResult.error 
+      });
+    }
+    
+    const benefits = benefitResult.benefits;
+    const prev = validated.previousResults || {};
+    
+    // Build program eligibility cards with status and change indicators
+    const programs = [
+      {
+        id: 'MD_SNAP',
+        name: 'SNAP (Food Assistance)',
+        status: benefits.snap > 0 ? 'eligible' : 'ineligible',
+        monthlyAmount: Math.round(benefits.snap),
+        annualAmount: Math.round(benefits.snap * 12),
+        change: prev.snap !== undefined ? Math.round(benefits.snap - prev.snap) : (benefits.snap > 0 ? 'new' : 0),
+        changePercent: prev.snap && prev.snap > 0 ? Math.round(((benefits.snap - prev.snap) / prev.snap) * 100) : 0
+      },
+      {
+        id: 'MD_MEDICAID',
+        name: 'Medicaid (Health Coverage)',
+        status: benefits.medicaid ? 'eligible' : 'ineligible',
+        eligible: benefits.medicaid,
+        change: prev.medicaid !== undefined ? (benefits.medicaid !== prev.medicaid ? 'changed' : 'unchanged') : 'new'
+      },
+      {
+        id: 'MD_TANF',
+        name: 'TCA (Cash Assistance)',
+        status: benefits.tanf > 0 ? 'eligible' : 'ineligible',
+        monthlyAmount: Math.round(benefits.tanf),
+        annualAmount: Math.round(benefits.tanf * 12),
+        change: prev.tanf !== undefined ? Math.round(benefits.tanf - prev.tanf) : (benefits.tanf > 0 ? 'new' : 0),
+        changePercent: prev.tanf && prev.tanf > 0 ? Math.round(((benefits.tanf - prev.tanf) / prev.tanf) * 100) : 0
+      },
+      {
+        id: 'EITC',
+        name: 'Earned Income Tax Credit',
+        status: benefits.eitc > 0 ? 'eligible' : 'ineligible',
+        annualAmount: Math.round(benefits.eitc),
+        change: prev.eitc !== undefined ? Math.round(benefits.eitc - prev.eitc) : (benefits.eitc > 0 ? 'new' : 0),
+        changePercent: prev.eitc && prev.eitc > 0 ? Math.round(((benefits.eitc - prev.eitc) / prev.eitc) * 100) : 0
+      },
+      {
+        id: 'CTC',
+        name: 'Child Tax Credit',
+        status: benefits.childTaxCredit > 0 ? 'eligible' : 'ineligible',
+        annualAmount: Math.round(benefits.childTaxCredit),
+        change: prev.ctc !== undefined ? Math.round(benefits.childTaxCredit - prev.ctc) : (benefits.childTaxCredit > 0 ? 'new' : 0),
+        changePercent: prev.ctc && prev.ctc > 0 ? Math.round(((benefits.childTaxCredit - prev.ctc) / prev.ctc) * 100) : 0
+      },
+      {
+        id: 'SSI',
+        name: 'Supplemental Security Income',
+        status: benefits.ssi > 0 ? 'eligible' : 'ineligible',
+        monthlyAmount: Math.round(benefits.ssi),
+        annualAmount: Math.round(benefits.ssi * 12),
+        change: prev.ssi !== undefined ? Math.round(benefits.ssi - prev.ssi) : (benefits.ssi > 0 ? 'new' : 0),
+        changePercent: prev.ssi && prev.ssi > 0 ? Math.round(((benefits.ssi - prev.ssi) / prev.ssi) * 100) : 0
+      }
+    ];
+    
+    // Generate smart alerts based on eligibility patterns
+    const alerts = [];
+    
+    // Alert: Near SNAP threshold
+    const totalIncome = validated.employmentIncome + (validated.unearnedIncome || 0);
+    const householdSize = validated.adults + validated.children;
+    const snapIncomeLimit = 31980 + (householdSize - 1) * 11520; // Approx 130% FPL
+    const incomeToLimit = snapIncomeLimit - totalIncome;
+    
+    if (incomeToLimit > 0 && incomeToLimit < 500 * 12) {
+      alerts.push({
+        type: 'warning',
+        program: 'MD_SNAP',
+        message: `Income is $${Math.round(incomeToLimit)} below SNAP limit - verify carefully`,
+        action: 'Ensure all income sources are documented'
+      });
+    }
+    
+    // Alert: Childcare deduction opportunity
+    if (validated.children > 0 && (!validated.childcareExpenses || validated.childcareExpenses === 0)) {
+      alerts.push({
+        type: 'opportunity',
+        program: 'MD_SNAP',
+        message: 'Adding childcare expenses could increase SNAP benefits',
+        action: 'Ask client about childcare costs',
+        estimatedIncrease: 100 // Rough estimate
+      });
+    }
+    
+    // Alert: Medical expense deduction (elderly/disabled)
+    if (validated.elderlyOrDisabled && (!validated.medicalExpenses || validated.medicalExpenses === 0)) {
+      alerts.push({
+        type: 'opportunity',
+        program: 'MD_SNAP',
+        message: 'Medical expenses can increase benefits for elderly/disabled households',
+        action: 'Ask about medical costs exceeding $35/month',
+        estimatedIncrease: 50
+      });
+    }
+    
+    // Alert: Tax credits available
+    if (benefits.eitc > 0 || benefits.childTaxCredit > 0) {
+      const totalCredits = benefits.eitc + benefits.childTaxCredit;
+      alerts.push({
+        type: 'success',
+        program: 'VITA',
+        message: `Eligible for $${Math.round(totalCredits).toLocaleString()} in tax credits`,
+        action: 'Complete VITA intake to claim credits'
+      });
+    }
+    
+    // Calculate total annual benefit value
+    const totalAnnualBenefits = 
+      benefits.snap * 12 + 
+      benefits.tanf * 12 + 
+      benefits.eitc + 
+      benefits.childTaxCredit + 
+      benefits.ssi * 12;
+    
+    res.json({
+      success: true,
+      programs,
+      alerts,
+      summary: {
+        totalMonthlyBenefits: Math.round((benefits.snap + benefits.tanf + benefits.ssi)),
+        totalAnnualBenefits: Math.round(totalAnnualBenefits),
+        eligibleProgramCount: programs.filter(p => p.status === 'eligible').length,
+        householdNetIncome: Math.round(benefits.householdNetIncome),
+        effectiveBenefitRate: totalIncome > 0 ? Math.round((totalAnnualBenefits / totalIncome) * 100) : 0
+      },
+      calculatedAt: new Date().toISOString()
+    });
+  }));
+
   // ============================================================================
   // Tax Preparation Routes
   // ============================================================================
