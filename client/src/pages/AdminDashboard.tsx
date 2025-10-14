@@ -42,6 +42,14 @@ export default function AdminDashboard() {
       primary: true,
     },
     {
+      title: "Security Monitoring",
+      description: "Real-time security metrics and threat detection",
+      icon: Shield,
+      href: "/admin/security-monitoring",
+      testId: "action-security-monitoring",
+      primary: true,
+    },
+    {
       title: "Audit Logs",
       description: "View system activity and rule changes",
       icon: Shield,
