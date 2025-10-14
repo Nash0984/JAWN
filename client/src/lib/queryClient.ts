@@ -1,8 +1,29 @@
 import { QueryClient, QueryFunction } from "@tanstack/react-query";
 
+// Session expiry event emitter
+type SessionExpiryListener = () => void;
+let sessionExpiryListeners: SessionExpiryListener[] = [];
+
+export function onSessionExpiry(listener: SessionExpiryListener) {
+  sessionExpiryListeners.push(listener);
+  return () => {
+    sessionExpiryListeners = sessionExpiryListeners.filter(l => l !== listener);
+  };
+}
+
+function emitSessionExpiry() {
+  sessionExpiryListeners.forEach(listener => listener());
+}
+
 async function throwIfResNotOk(res: Response) {
   if (!res.ok) {
     const text = (await res.text()) || res.statusText;
+    
+    // Emit session expiry event on 401 (except for /api/auth/me which handles 401s differently)
+    if (res.status === 401 && !res.url.includes('/api/auth/me')) {
+      emitSessionExpiry();
+    }
+    
     throw new Error(`${res.status}: ${text}`);
   }
 }

@@ -64,8 +64,12 @@ const demoAccounts = [
 ];
 
 export default function Login() {
-  const [, setLocation] = useLocation();
+  const [location, setLocation] = useLocation();
   const { toast } = useToast();
+  
+  // Get returnUrl from query string
+  const params = new URLSearchParams(window.location.search);
+  const returnUrl = params.get('returnUrl');
   
   const form = useForm<LoginFormData>({
     resolver: zodResolver(loginSchema),
@@ -83,25 +87,36 @@ export default function Login() {
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
       
-      // Determine dashboard URL based on user role
-      const role = data.user.role;
-      let dashboardUrl = "/";
+      // If there's a returnUrl, navigate there; otherwise, determine dashboard URL based on role
+      let destinationUrl = returnUrl || "/";
       
-      if (role === "admin" || role === "super_admin") {
-        dashboardUrl = "/dashboard/admin";
-      } else if (role === "navigator") {
-        dashboardUrl = "/dashboard/navigator";
-      } else if (role === "caseworker") {
-        dashboardUrl = "/dashboard/caseworker";
-      } else if (role === "client") {
-        dashboardUrl = "/dashboard/client";
+      if (!returnUrl) {
+        const role = data.user.role;
+        if (role === "admin" || role === "super_admin") {
+          destinationUrl = "/dashboard/admin";
+        } else if (role === "navigator") {
+          destinationUrl = "/dashboard/navigator";
+        } else if (role === "caseworker") {
+          destinationUrl = "/dashboard/caseworker";
+        } else if (role === "client") {
+          destinationUrl = "/dashboard/client";
+        }
       }
       
-      toast({
-        title: "Welcome back!",
-        description: `Logged in as ${data.user.username}`,
-      });
-      setLocation(dashboardUrl);
+      // Show appropriate toast message
+      if (returnUrl) {
+        toast({
+          title: "Welcome back!",
+          description: "Your work has been restored.",
+        });
+      } else {
+        toast({
+          title: "Welcome back!",
+          description: `Logged in as ${data.user.username}`,
+        });
+      }
+      
+      setLocation(destinationUrl);
     },
     onError: (error: Error) => {
       toast({
