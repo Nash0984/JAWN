@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -55,7 +55,8 @@ import {
   FileHeart,
   Receipt,
   Shield,
-  Import
+  Import,
+  Loader2
 } from "lucide-react";
 import type { VitaIntakeSession, InsertVitaIntakeSession } from "@shared/schema";
 import { TaxDocumentUploader } from "@/components/TaxDocumentUploader";
@@ -411,6 +412,22 @@ export default function VitaIntake() {
   const [reviewMode, setReviewMode] = useState(false);
   const [reviewNotes, setReviewNotes] = useState("");
   const [reviewStatusSelection, setReviewStatusSelection] = useState<"approved" | "needs_correction" | "">("");
+  
+  // Auto-save state management
+  const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  const [showRestoreDialog, setShowRestoreDialog] = useState(false);
+  const [draftToRestore, setDraftToRestore] = useState<any>(null);
+  const autoSaveTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const statusHideTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const lastSavedDataRef = useRef<string>("");
+  
+  // LocalStorage key for drafts
+  const getDraftKey = (sessionId: string | null) => {
+    if (sessionId) {
+      return `vita-draft-${sessionId}`;
+    }
+    return `vita-draft-new-${user?.id || 'anonymous'}`;
+  };
 
   // Fetch all sessions for the current user
   const { data: sessions = [], isLoading: sessionsLoading } = useQuery<VitaIntakeSession[]>({
@@ -588,7 +605,7 @@ export default function VitaIntake() {
         primaryDateOfBirth: selectedSession.primaryDateOfBirth || "",
         primaryJobTitle: selectedSession.primaryJobTitle || "",
         primaryTelephone: selectedSession.primaryTelephone || "",
-        primarySSN: selectedSession.primarySSN || "",
+        primarySSN: (selectedSession.primarySSN as string) || "",
         hasSpouse,
         spouseFirstName: selectedSession.spouseFirstName || "",
         spouseMiddleInitial: selectedSession.spouseMiddleInitial || "",
@@ -596,7 +613,7 @@ export default function VitaIntake() {
         spouseDateOfBirth: selectedSession.spouseDateOfBirth || "",
         spouseJobTitle: selectedSession.spouseJobTitle || "",
         spouseTelephone: selectedSession.spouseTelephone || "",
-        spouseSSN: selectedSession.spouseSSN || "",
+        spouseSSN: (selectedSession.spouseSSN as string) || "",
         mailingAddress: selectedSession.mailingAddress || "",
         aptNumber: selectedSession.aptNumber || "",
         city: selectedSession.city || "",
@@ -620,8 +637,8 @@ export default function VitaIntake() {
         spouseIssuedIPPIN: selectedSession.spouseIssuedIPPIN || false,
         spouseOwnerDigitalAssets: selectedSession.spouseOwnerDigitalAssets || false,
         refundMethod: selectedSession.refundMethod as any || undefined,
-        bankAccountNumber: selectedSession.bankAccountNumber || "",
-        bankRoutingNumber: selectedSession.bankRoutingNumber || "",
+        bankAccountNumber: (selectedSession.bankAccountNumber as string) || "",
+        bankRoutingNumber: (selectedSession.bankRoutingNumber as string) || "",
         preferredIRSLanguage: selectedSession.preferredIRSLanguage || "",
         primaryPresidentialCampaignFund: selectedSession.primaryPresidentialCampaignFund || false,
         spousePresidentialCampaignFund: selectedSession.spousePresidentialCampaignFund || false,
@@ -709,6 +726,10 @@ export default function VitaIntake() {
         description: "Your VITA intake session has been started.",
       });
       setSelectedSessionId(data.id);
+      
+      // Clear any temporary new session drafts
+      const draftKey = `vita-draft-new-${user?.id || 'anonymous'}`;
+      localStorage.removeItem(draftKey);
     },
   });
 
@@ -717,8 +738,34 @@ export default function VitaIntake() {
     mutationFn: async ({ id, data }: { id: string; data: Partial<InsertVitaIntakeSession> }) => {
       return await apiRequest(`/api/vita-intake/${id}`, "PATCH", data) as unknown as VitaIntakeSession;
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["/api/vita-intake"] });
+      
+      // Clear localStorage draft on successful save
+      const draftKey = getDraftKey(data.id);
+      localStorage.removeItem(draftKey);
+      
+      // Show saved status
+      setSaveStatus("saved");
+      
+      // Hide status after 3 seconds
+      if (statusHideTimerRef.current) {
+        clearTimeout(statusHideTimerRef.current);
+      }
+      statusHideTimerRef.current = setTimeout(() => {
+        setSaveStatus("idle");
+      }, 3000);
+    },
+    onError: () => {
+      setSaveStatus("error");
+      
+      // Hide error status after 5 seconds
+      if (statusHideTimerRef.current) {
+        clearTimeout(statusHideTimerRef.current);
+      }
+      statusHideTimerRef.current = setTimeout(() => {
+        setSaveStatus("idle");
+      }, 5000);
     },
   });
 
@@ -774,6 +821,125 @@ export default function VitaIntake() {
       setReviewStatusSelection("");
     },
   });
+
+  // LocalStorage functions
+  const saveDraftToLocalStorage = useCallback((data: VitaIntakeFormData) => {
+    const draftKey = getDraftKey(selectedSessionId);
+    const draftData = {
+      ...data,
+      savedAt: new Date().toISOString(),
+      sessionId: selectedSessionId,
+    };
+    localStorage.setItem(draftKey, JSON.stringify(draftData));
+  }, [selectedSessionId, user?.id]);
+
+  const loadDraftFromLocalStorage = useCallback(() => {
+    const draftKey = getDraftKey(selectedSessionId);
+    const savedDraft = localStorage.getItem(draftKey);
+    if (savedDraft) {
+      try {
+        return JSON.parse(savedDraft);
+      } catch (error) {
+        console.error('Failed to parse draft:', error);
+        return null;
+      }
+    }
+    return null;
+  }, [selectedSessionId, user?.id]);
+
+  const clearDraftFromLocalStorage = useCallback(() => {
+    const draftKey = getDraftKey(selectedSessionId);
+    localStorage.removeItem(draftKey);
+  }, [selectedSessionId, user?.id]);
+
+  // Auto-save function with debounce
+  const performAutoSave = useCallback((data: VitaIntakeFormData) => {
+    // Save to localStorage immediately as fallback
+    saveDraftToLocalStorage(data);
+    
+    // Only save to server if we have a session ID
+    if (selectedSessionId) {
+      const dataString = JSON.stringify(data);
+      
+      // Skip if data hasn't changed
+      if (dataString === lastSavedDataRef.current) {
+        return;
+      }
+      
+      lastSavedDataRef.current = dataString;
+      setSaveStatus("saving");
+      
+      updateMutation.mutate({
+        id: selectedSessionId,
+        data: {
+          ...data,
+          currentStep,
+        },
+      });
+    }
+  }, [selectedSessionId, currentStep, updateMutation, saveDraftToLocalStorage]);
+
+  // Field-level blur handler for immediate save
+  const handleFieldBlur = useCallback(() => {
+    if (selectedSessionId && saveStatus !== "saving") {
+      const currentFormData = form.getValues();
+      performAutoSave(currentFormData);
+    }
+  }, [selectedSessionId, saveStatus, form, performAutoSave]);
+
+  // Watch form changes for auto-save
+  const formData = form.watch();
+
+  useEffect(() => {
+    // Clear any existing timer
+    if (autoSaveTimerRef.current) {
+      clearTimeout(autoSaveTimerRef.current);
+    }
+
+    // Set new debounced auto-save timer (30 seconds)
+    autoSaveTimerRef.current = setTimeout(() => {
+      if (selectedSessionId && saveStatus !== "saving") {
+        performAutoSave(formData);
+      }
+    }, 30000); // 30 seconds
+
+    // Cleanup timer on unmount or when dependencies change
+    return () => {
+      if (autoSaveTimerRef.current) {
+        clearTimeout(autoSaveTimerRef.current);
+      }
+    };
+  }, [formData, selectedSessionId, performAutoSave, saveStatus]);
+
+  // Check for draft on mount
+  useEffect(() => {
+    const draft = loadDraftFromLocalStorage();
+    if (draft && !selectedSessionId) {
+      const savedAt = new Date(draft.savedAt);
+      const hoursSinceLastSave = (Date.now() - savedAt.getTime()) / (1000 * 60 * 60);
+      
+      // Only offer to restore if saved within last 24 hours
+      if (hoursSinceLastSave < 24) {
+        setDraftToRestore(draft);
+        setShowRestoreDialog(true);
+      } else {
+        // Clear old draft
+        clearDraftFromLocalStorage();
+      }
+    }
+  }, []);
+
+  // Cleanup timers on unmount
+  useEffect(() => {
+    return () => {
+      if (autoSaveTimerRef.current) {
+        clearTimeout(autoSaveTimerRef.current);
+      }
+      if (statusHideTimerRef.current) {
+        clearTimeout(statusHideTimerRef.current);
+      }
+    };
+  }, []);
 
   // Helper function: Detect required certification level
   const detectCertificationLevel = (formData: VitaIntakeFormData): { 
@@ -955,6 +1121,27 @@ export default function VitaIntake() {
     }
   };
 
+  // Restore draft from localStorage
+  const handleRestoreDraft = () => {
+    if (draftToRestore) {
+      const { savedAt, sessionId, ...formData } = draftToRestore;
+      form.reset(formData);
+      setCurrentStep(formData.currentStep || 1);
+      setShowRestoreDialog(false);
+      toast({
+        title: "Draft Restored",
+        description: "Your unsaved work has been restored.",
+      });
+    }
+  };
+
+  // Decline draft restore
+  const handleDeclineDraft = () => {
+    clearDraftFromLocalStorage();
+    setDraftToRestore(null);
+    setShowRestoreDialog(false);
+  };
+
   // Submit current step (create session if new)
   const onSubmit = (data: VitaIntakeFormData) => {
     // Prepare submission data
@@ -975,6 +1162,9 @@ export default function VitaIntake() {
       if (data.spouseTaxpayerSignature) {
         submissionData.spouseTaxpayerSignedAt = new Date().toISOString();
       }
+      
+      // Clear localStorage draft on successful final submission
+      clearDraftFromLocalStorage();
     }
     
     if (!selectedSessionId) {
@@ -1057,6 +1247,28 @@ export default function VitaIntake() {
             Digital IRS Form 13614-C - Intake/Interview & Quality Review Sheet
           </p>
         </div>
+
+        {/* Restore Draft Dialog */}
+        <AlertDialog open={showRestoreDialog} onOpenChange={setShowRestoreDialog}>
+          <AlertDialogContent data-testid="dialog-restore-draft">
+            <AlertDialogHeader>
+              <AlertDialogTitle>Restore Unsaved Work?</AlertDialogTitle>
+              <AlertDialogDescription>
+                You have unsaved work from{' '}
+                {draftToRestore?.savedAt && new Date(draftToRestore.savedAt).toLocaleString()}.
+                Would you like to restore it?
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel onClick={handleDeclineDraft} data-testid="button-decline-draft">
+                Discard Draft
+              </AlertDialogCancel>
+              <AlertDialogAction onClick={handleRestoreDraft} data-testid="button-restore-draft">
+                Restore Draft
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
 
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
           {/* Session List Sidebar */}
@@ -1218,6 +1430,29 @@ export default function VitaIntake() {
                   <div className="text-xs text-muted-foreground mt-1">
                     {progressPercentage.toFixed(0)}% Complete
                   </div>
+                  {/* Auto-save status indicator */}
+                  {selectedSessionId && (
+                    <div className="mt-2">
+                      {saveStatus === "saving" && (
+                        <Badge variant="outline" className="gap-1" data-testid="status-saving">
+                          <Loader2 className="h-3 w-3 animate-spin" />
+                          Saving...
+                        </Badge>
+                      )}
+                      {saveStatus === "saved" && (
+                        <Badge variant="outline" className="gap-1 bg-green-50 text-green-700 border-green-200" data-testid="status-saved">
+                          <CheckCircle2 className="h-3 w-3" />
+                          Saved ✓
+                        </Badge>
+                      )}
+                      {saveStatus === "error" && (
+                        <Badge variant="outline" className="gap-1 bg-red-50 text-red-700 border-red-200" data-testid="status-error">
+                          <AlertCircle className="h-3 w-3" />
+                          Save Failed
+                        </Badge>
+                      )}
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -1275,7 +1510,11 @@ export default function VitaIntake() {
 
             <CardContent className="pt-6">
               <Form {...form}>
-                <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+                <form 
+                  onSubmit={form.handleSubmit(onSubmit)} 
+                  onBlur={handleFieldBlur}
+                  className="space-y-6"
+                >
                   {/* Step Content - Disabled when in review mode */}
                   <fieldset disabled={reviewMode} className="space-y-6">
                   <ScrollArea className="h-[600px] pr-4">

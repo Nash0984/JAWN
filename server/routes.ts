@@ -66,6 +66,7 @@ import {
   getFileHash
 } from "./middleware/fileUploadSecurity";
 import { passwordSecurityService } from "./services/passwordSecurity.service";
+import { decryptVitaIntake } from "./utils/encryptedFields";
 
 // Configure secure file uploaders for different use cases
 const documentUpload = createSecureUploader('documents', {
@@ -5464,7 +5465,9 @@ If the question cannot be answered with the available information, say so clearl
     }
 
     const sessions = await storage.getVitaIntakeSessions(req.user!.id, filters);
-    res.json(sessions);
+    // Decrypt sensitive fields before sending to frontend
+    const decryptedSessions = sessions.map(session => decryptVitaIntake(session));
+    res.json(decryptedSessions);
   }));
 
   // Get single VITA intake session (with ownership verification)
@@ -5479,7 +5482,9 @@ If the question cannot be answered with the available information, say so clearl
       throw authorizationError();
     }
     
-    res.json(session);
+    // Decrypt sensitive fields before sending to frontend
+    const decryptedSession = decryptVitaIntake(session);
+    res.json(decryptedSession);
   }));
 
   // Update VITA intake session (with ownership verification)
