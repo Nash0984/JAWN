@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { useForm } from "react-hook-form";
+import { useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -17,6 +17,7 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Plus, Trash2, Save, FileText, Calculator, Users } from "lucide-react";
+import { FinancialOpportunityRadar } from "@/components/FinancialOpportunityRadar";
 
 // Profile mode type
 type ProfileMode = "combined" | "benefits_only" | "tax_only";
@@ -232,9 +233,31 @@ export default function HouseholdProfiler() {
   const showBenefitsSection = profileMode === "benefits_only" || profileMode === "combined";
   const showTaxSection = profileMode === "tax_only" || profileMode === "combined";
 
+  // Watch form values for real-time radar updates
+  const watchedValues = useWatch({ control: form.control });
+  
+  // Build household data for radar widget
+  const householdData = {
+    adults: 1, // Default to 1 adult (taxpayer)
+    children: dependentList.filter(d => d.relationship === 'child' || d.relationship === 'son' || d.relationship === 'daughter').length,
+    elderlyOrDisabled: watchedValues.elderlyOrDisabled || false,
+    employmentIncome: Number(watchedValues.employmentIncome) || 0,
+    unearnedIncome: Number(watchedValues.unearnedIncome) || 0,
+    selfEmploymentIncome: Number(watchedValues.selfEmploymentIncome) || 0,
+    householdAssets: Number(watchedValues.householdAssets) || 0,
+    rentOrMortgage: Number(watchedValues.rentOrMortgage) || 0,
+    utilityCosts: Number(watchedValues.utilityCosts) || 0,
+    medicalExpenses: Number(watchedValues.medicalExpenses) || 0,
+    childcareExpenses: Number(watchedValues.childcareExpenses) || 0,
+    filingStatus: watchedValues.filingStatus as any,
+    wageWithholding: Number(watchedValues.wageWithholding) || 0,
+    stateCode: "MD",
+    year: new Date().getFullYear()
+  };
+
   return (
     <div className="min-h-screen bg-background p-4 md:p-8">
-      <div className="max-w-7xl mx-auto">
+      <div className="max-w-[1800px] mx-auto">
         <div className="mb-6">
           <h1 className="text-3xl font-bold" data-testid="page-title">Household Profiler</h1>
           <p className="text-muted-foreground mt-2">
@@ -242,9 +265,9 @@ export default function HouseholdProfiler() {
           </p>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+        <div className="grid grid-cols-1 xl:grid-cols-12 gap-6">
           {/* Profile List Sidebar */}
-          <Card className="lg:col-span-1">
+          <Card className="xl:col-span-2">
             <CardHeader>
               <CardTitle className="text-lg">Saved Profiles</CardTitle>
               <CardDescription>Select or create a new profile</CardDescription>
@@ -295,7 +318,7 @@ export default function HouseholdProfiler() {
           </Card>
 
           {/* Main Form */}
-          <Card className="lg:col-span-3">
+          <Card className="xl:col-span-7">
             <CardHeader>
               <CardTitle>
                 {selectedProfileId ? "Edit Profile" : "New Profile"}
@@ -1034,6 +1057,16 @@ export default function HouseholdProfiler() {
               </Form>
             </CardContent>
           </Card>
+
+          {/* Financial Opportunity Radar - Real-time eligibility tracking */}
+          <div className="xl:col-span-3">
+            <div className="sticky top-4">
+              <FinancialOpportunityRadar 
+                householdData={householdData}
+                data-testid="opportunity-radar"
+              />
+            </div>
+          </div>
         </div>
       </div>
     </div>
