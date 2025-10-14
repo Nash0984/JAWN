@@ -715,29 +715,65 @@ export default function VitaIntake() {
   // Create mutation
   const createMutation = useMutation({
     mutationFn: async (data: Partial<InsertVitaIntakeSession>) => {
-      return await apiRequest("/api/vita-intake", "POST", {
+      console.log('[VITA Auto-Save Debug] createMutation.mutationFn called');
+      console.log('[VITA Auto-Save Debug] Data being sent:', {
+        primaryFirstName: data.primaryFirstName,
+        primaryLastName: data.primaryLastName,
+        currentStep: data.currentStep,
+        status: data.status,
+        userId: user?.id
+      });
+      const res = await apiRequest("/api/vita-intake", "POST", {
         ...data,
         userId: user?.id,
-      }) as unknown as VitaIntakeSession;
+      });
+      console.log('[VITA Auto-Save Debug] API request completed, parsing JSON');
+      const jsonData = await res.json() as VitaIntakeSession;
+      console.log('[VITA Auto-Save Debug] JSON parsed:', jsonData);
+      return jsonData;
     },
     onSuccess: (data) => {
+      console.log('[VITA Auto-Save Debug] createMutation.onSuccess called');
+      console.log('[VITA Auto-Save Debug] Response data:', data);
+      console.log('[VITA Auto-Save Debug] data.id exists?', !!data?.id);
+      console.log('[VITA Auto-Save Debug] Full data object:', JSON.stringify(data, null, 2));
+      
       queryClient.invalidateQueries({ queryKey: ["/api/vita-intake"] });
-      toast({
-        title: "Session Created",
-        description: "Your VITA intake session has been started.",
-      });
       setSelectedSessionId(data.id);
       
-      // Clear any temporary new session drafts
-      const draftKey = `vita-draft-new-${user?.id || 'anonymous'}`;
+      // Clear localStorage draft on successful save
+      const draftKey = getDraftKey(data.id);
       localStorage.removeItem(draftKey);
+      
+      // Show saved status (no toast for auto-save)
+      setSaveStatus("saved");
+      
+      // Hide status after 3 seconds
+      if (statusHideTimerRef.current) {
+        clearTimeout(statusHideTimerRef.current);
+      }
+      statusHideTimerRef.current = setTimeout(() => {
+        setSaveStatus("idle");
+      }, 3000);
+    },
+    onError: () => {
+      setSaveStatus("error");
+      
+      // Hide error status after 5 seconds
+      if (statusHideTimerRef.current) {
+        clearTimeout(statusHideTimerRef.current);
+      }
+      statusHideTimerRef.current = setTimeout(() => {
+        setSaveStatus("idle");
+      }, 5000);
     },
   });
 
   // Update mutation with auto-save
   const updateMutation = useMutation({
     mutationFn: async ({ id, data }: { id: string; data: Partial<InsertVitaIntakeSession> }) => {
-      return await apiRequest(`/api/vita-intake/${id}`, "PATCH", data) as unknown as VitaIntakeSession;
+      const res = await apiRequest(`/api/vita-intake/${id}`, "PATCH", data);
+      return await res.json() as VitaIntakeSession;
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["/api/vita-intake"] });
@@ -773,7 +809,8 @@ export default function VitaIntake() {
   // Delete mutation
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
-      return await apiRequest(`/api/vita-intake/${id}`, "DELETE") as unknown as void;
+      const res = await apiRequest(`/api/vita-intake/${id}`, "DELETE");
+      return await res.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/vita-intake"] });
@@ -795,11 +832,12 @@ export default function VitaIntake() {
       reviewNotes: string;
       certificationLevel: string;
     }) => {
-      return await apiRequest(`/api/vita-intake/${id}`, "PATCH", {
+      const res = await apiRequest(`/api/vita-intake/${id}`, "PATCH", {
         reviewStatus,
         reviewNotes,
         certificationLevel,
-      }) as unknown as VitaIntakeSession;
+      });
+      return await res.json() as VitaIntakeSession;
     },
     onSuccess: (data, variables) => {
       queryClient.invalidateQueries({ queryKey: ["/api/vita-intake"] });
@@ -855,21 +893,34 @@ export default function VitaIntake() {
 
   // Auto-save function with debounce
   const performAutoSave = useCallback((data: VitaIntakeFormData) => {
+    console.log('[VITA Auto-Save Debug] performAutoSave called');
+    console.log('[VITA Auto-Save Debug] selectedSessionId:', selectedSessionId);
+    console.log('[VITA Auto-Save Debug] currentStep:', currentStep);
+    
     // Save to localStorage immediately as fallback
     saveDraftToLocalStorage(data);
     
-    // Only save to server if we have a session ID
-    if (selectedSessionId) {
-      const dataString = JSON.stringify(data);
-      
-      // Skip if data hasn't changed
-      if (dataString === lastSavedDataRef.current) {
-        return;
-      }
-      
-      lastSavedDataRef.current = dataString;
-      setSaveStatus("saving");
-      
+    const dataString = JSON.stringify(data);
+    
+    // Skip if data hasn't changed
+    if (dataString === lastSavedDataRef.current) {
+      console.log('[VITA Auto-Save Debug] Data unchanged, skipping save');
+      return;
+    }
+    
+    lastSavedDataRef.current = dataString;
+    setSaveStatus("saving");
+    
+    // If no session exists, create one first
+    if (!selectedSessionId) {
+      console.log('[VITA Auto-Save Debug] No session ID, creating new session');
+      createMutation.mutate({
+        ...data,
+        currentStep,
+      });
+    } else {
+      console.log('[VITA Auto-Save Debug] Session exists, updating session:', selectedSessionId);
+      // Update existing session
       updateMutation.mutate({
         id: selectedSessionId,
         data: {
@@ -878,15 +929,15 @@ export default function VitaIntake() {
         },
       });
     }
-  }, [selectedSessionId, currentStep, updateMutation, saveDraftToLocalStorage]);
+  }, [selectedSessionId, currentStep, createMutation, updateMutation, saveDraftToLocalStorage]);
 
   // Field-level blur handler for immediate save
   const handleFieldBlur = useCallback(() => {
-    if (selectedSessionId && saveStatus !== "saving") {
+    if (saveStatus !== "saving") {
       const currentFormData = form.getValues();
       performAutoSave(currentFormData);
     }
-  }, [selectedSessionId, saveStatus, form, performAutoSave]);
+  }, [saveStatus, form, performAutoSave]);
 
   // Watch form changes for auto-save
   const formData = form.watch();
@@ -899,7 +950,7 @@ export default function VitaIntake() {
 
     // Set new debounced auto-save timer (30 seconds)
     autoSaveTimerRef.current = setTimeout(() => {
-      if (selectedSessionId && saveStatus !== "saving") {
+      if (saveStatus !== "saving") {
         performAutoSave(formData);
       }
     }, 30000); // 30 seconds
@@ -910,7 +961,7 @@ export default function VitaIntake() {
         clearTimeout(autoSaveTimerRef.current);
       }
     };
-  }, [formData, selectedSessionId, performAutoSave, saveStatus]);
+  }, [formData, performAutoSave, saveStatus]);
 
   // Check for draft on mount
   useEffect(() => {
