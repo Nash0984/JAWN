@@ -6716,6 +6716,103 @@ If the question cannot be answered with the available information, say so clearl
   }));
 
   // ===========================
+  // QC (QUALITY CONTROL) ROUTES - Caseworker Cockpit
+  // ===========================
+
+  // Get flagged cases for current caseworker
+  app.get("/api/qc/flagged-cases/me", requireAuth, asyncHandler(async (req, res) => {
+    if (!req.user) {
+      throw authorizationError("Authentication required");
+    }
+
+    const flaggedCases = await storage.getFlaggedCasesByCaseworker(req.user.id);
+    res.json(flaggedCases);
+  }));
+
+  // Get error patterns for current caseworker
+  app.get("/api/qc/error-patterns/me", requireAuth, asyncHandler(async (req, res) => {
+    if (!req.user) {
+      throw authorizationError("Authentication required");
+    }
+
+    // Get all error patterns
+    const allPatterns = await storage.getQcErrorPatterns();
+
+    // Get the caseworker's flagged cases to determine their error types
+    const flaggedCases = await storage.getFlaggedCasesByCaseworker(req.user.id);
+    
+    // Extract error types from flagged cases
+    const caseworkerErrorTypes = new Set<string>();
+    flaggedCases.forEach(flaggedCase => {
+      if (flaggedCase.flaggedErrorTypes) {
+        flaggedCase.flaggedErrorTypes.forEach((errorType: string) => {
+          caseworkerErrorTypes.add(errorType);
+        });
+      }
+    });
+
+    // Filter patterns to those relevant to caseworker's error types
+    const relevantPatterns = allPatterns.filter(pattern => 
+      caseworkerErrorTypes.has(pattern.errorCategory)
+    );
+
+    // If no specific errors, return recent patterns for awareness
+    if (relevantPatterns.length === 0) {
+      res.json(allPatterns.slice(0, 10));
+    } else {
+      res.json(relevantPatterns);
+    }
+  }));
+
+  // Get all job aids with optional category filter
+  app.get("/api/qc/job-aids", requireAuth, asyncHandler(async (req, res) => {
+    const { category } = req.query;
+    
+    const filters = category ? { category: category as string } : undefined;
+    const jobAids = await storage.getJobAids(filters);
+    
+    res.json(jobAids);
+  }));
+
+  // Get recommended training interventions
+  app.get("/api/qc/training-interventions", requireAuth, asyncHandler(async (req, res) => {
+    if (!req.user) {
+      throw authorizationError("Authentication required");
+    }
+
+    const { targetErrorCategory } = req.query;
+    
+    // Get flagged cases to determine what training is needed
+    const flaggedCases = await storage.getFlaggedCasesByCaseworker(req.user.id);
+    
+    // Extract error categories from flagged cases
+    const errorCategories = new Set<string>();
+    flaggedCases.forEach(flaggedCase => {
+      if (flaggedCase.flaggedErrorTypes) {
+        flaggedCase.flaggedErrorTypes.forEach((errorType: string) => {
+          errorCategories.add(errorType);
+        });
+      }
+    });
+
+    // Get training interventions
+    const filters = targetErrorCategory 
+      ? { targetErrorCategory: targetErrorCategory as string }
+      : undefined;
+    
+    let interventions = await storage.getTrainingInterventions(filters);
+
+    // Filter to relevant training based on caseworker's error patterns
+    if (!targetErrorCategory && errorCategories.size > 0) {
+      interventions = interventions.filter(intervention => 
+        errorCategories.has(intervention.targetErrorCategory)
+      );
+    }
+
+    res.json(interventions);
+  }));
+
+  // ===========================
   // EVALUATION FRAMEWORK ROUTES
   // ===========================
 
