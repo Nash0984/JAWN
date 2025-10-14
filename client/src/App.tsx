@@ -54,6 +54,7 @@ import VitaIntake from "@/pages/VitaIntake";
 import MobileBottomNav from "@/components/MobileBottomNav";
 import { BrandingProvider } from "@/contexts/BrandingContext";
 import { CountyHeader } from "@/components/CountyHeader";
+import { SessionExpiryProvider } from "@/contexts/SessionExpiryContext";
 
 function Router() {
   const [location] = useLocation();
@@ -370,10 +371,12 @@ function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <BrandingProvider>
-        <TooltipProvider>
-          <Toaster />
-          <Router />
-        </TooltipProvider>
+        <SessionExpiryProvider>
+          <TooltipProvider>
+            <Toaster />
+            <Router />
+          </TooltipProvider>
+        </SessionExpiryProvider>
       </BrandingProvider>
     </QueryClientProvider>
   );
