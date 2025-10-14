@@ -1,6 +1,7 @@
 import { storage } from "./storage";
 import bcrypt from "bcryptjs";
 import { seedMarylandTestCases } from "./seedMarylandTestCases";
+import { seedQCData } from "./seedQcData";
 import { db } from "./db";
 import { eq } from "drizzle-orm";
 import { benefitPrograms } from "@shared/schema";
@@ -536,6 +537,7 @@ export async function initializeSystemData() {
     await policySourceScraper.seedPolicySources();
     await seedMarylandDemoScenarios();
     await seedMarylandTestCases();
+    await seedQCData();
     
     console.log('✓ System data initialization complete');
   } catch (error) {
