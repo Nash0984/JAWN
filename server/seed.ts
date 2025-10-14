@@ -1,7 +1,13 @@
 import { db } from "./db";
-import { tenants, tenantBranding, apiKeys } from "@shared/schema";
+import { tenants, tenantBranding, apiKeys, users, qcErrorPatterns, flaggedCases, jobAids, trainingInterventions } from "@shared/schema";
 import { nanoid } from "nanoid";
 import bcrypt from "bcryptjs";
+import { 
+  generateQCErrorPatterns, 
+  generateFlaggedCases, 
+  generateJobAids, 
+  generateTrainingInterventions 
+} from "./services/qcSyntheticData";
 
 /**
  * Seed initial tenants and their branding
@@ -170,7 +176,110 @@ async function seedTenants() {
     console.log(`   Rate Limit: 1000 requests/hour`);
     console.log(`   ⚠️  Save this key - it won't be shown again!`);
 
-    console.log("🎉 Tenant and API key seeding completed successfully!");
+    // ========================================================================
+    // QC ANALYTICS - Synthetic Data for Maryland SNAP Predictive Analytics
+    // ========================================================================
+    
+    console.log("📊 Seeding QC Analytics data...");
+
+    // Create demo users for caseworkers and supervisors
+    const demoCaseworker1 = nanoid();
+    await db.insert(users).values({
+      id: demoCaseworker1,
+      username: "demo.caseworker",
+      password: await bcrypt.hash("demo123", 10),
+      email: "caseworker@demo.maryland.gov",
+      fullName: "Demo Caseworker",
+      role: "caseworker",
+      tenantId: marylandId,
+      dhsEmployeeId: "CW-12345",
+      officeLocation: "Baltimore City DSS",
+      isActive: true,
+    }).onConflictDoNothing();
+
+    const demoCaseworker2 = nanoid();
+    await db.insert(users).values({
+      id: demoCaseworker2,
+      username: "demo.caseworker2",
+      password: await bcrypt.hash("demo123", 10),
+      email: "caseworker2@demo.maryland.gov",
+      fullName: "Sarah Johnson",
+      role: "caseworker",
+      tenantId: marylandId,
+      dhsEmployeeId: "CW-23456",
+      officeLocation: "Baltimore County DSS",
+      isActive: true,
+    }).onConflictDoNothing();
+
+    const demoSupervisor = nanoid();
+    await db.insert(users).values({
+      id: demoSupervisor,
+      username: "demo.supervisor",
+      password: await bcrypt.hash("demo123", 10),
+      email: "supervisor@demo.maryland.gov",
+      fullName: "Michael Chen",
+      role: "admin",
+      tenantId: marylandId,
+      dhsEmployeeId: "SV-34567",
+      officeLocation: "Baltimore City DSS",
+      isActive: true,
+    }).onConflictDoNothing();
+
+    const demoNavigator = nanoid();
+    await db.insert(users).values({
+      id: demoNavigator,
+      username: "demo.navigator",
+      password: await bcrypt.hash("demo123", 10),
+      email: "navigator@demo.maryland.gov",
+      fullName: "Emily Rodriguez",
+      role: "navigator",
+      tenantId: marylandId,
+      dhsEmployeeId: "NV-45678",
+      officeLocation: "Baltimore City Community Center",
+      isActive: true,
+    }).onConflictDoNothing();
+
+    console.log("✅ Demo users created");
+
+    // Generate and insert QC Error Patterns
+    const errorPatterns = generateQCErrorPatterns();
+    for (const pattern of errorPatterns) {
+      await db.insert(qcErrorPatterns).values(pattern).onConflictDoNothing();
+    }
+    console.log(`✅ Created ${errorPatterns.length} QC error patterns`);
+
+    // Generate and insert Flagged Cases
+    const flaggedCases1 = generateFlaggedCases(demoCaseworker1, 12);
+    const flaggedCases2 = generateFlaggedCases(demoCaseworker2, 8);
+    const flaggedCasesNavigator = generateFlaggedCases(demoNavigator, 6);
+
+    for (const flaggedCase of [...flaggedCases1, ...flaggedCases2, ...flaggedCasesNavigator]) {
+      await db.insert(flaggedCases).values(flaggedCase).onConflictDoNothing();
+    }
+    console.log(`✅ Created ${flaggedCases1.length + flaggedCases2.length + flaggedCasesNavigator.length} flagged cases`);
+
+    // Generate and insert Job Aids
+    const jobAidsList = generateJobAids();
+    for (const jobAid of jobAidsList) {
+      await db.insert(jobAids).values(jobAid).onConflictDoNothing();
+    }
+    console.log(`✅ Created ${jobAidsList.length} job aids`);
+
+    // Generate and insert Training Interventions
+    const allUserIds = [demoCaseworker1, demoCaseworker2, demoNavigator, demoSupervisor];
+    const interventions = generateTrainingInterventions(allUserIds);
+    for (const intervention of interventions) {
+      await db.insert(trainingInterventions).values(intervention).onConflictDoNothing();
+    }
+    console.log(`✅ Created ${interventions.length} training interventions`);
+
+    console.log("\n📈 QC Analytics Summary:");
+    console.log("   • Error Patterns: Showing 500% spike in Shelter & Utility errors (Q4 2024)");
+    console.log("   • Flagged Cases: High-risk cases ready for supervisor review");
+    console.log("   • Job Aids: Comprehensive training materials for caseworkers");
+    console.log("   • Training Impact: Demonstrating measurable error rate improvements");
+    
+    console.log("\n🎉 Tenant, API key, and QC Analytics seeding completed successfully!");
   } catch (error) {
     console.error("❌ Error seeding tenants:", error);
     throw error;
