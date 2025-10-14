@@ -22,6 +22,7 @@ import { motion } from "framer-motion";
 import { fadeVariants, containerVariants } from "@/lib/animations";
 import { useToast } from "@/hooks/use-toast";
 import QuickRating from "@/components/QuickRating";
+import { IntakeCopilotProgressIndicator } from "@/components/IntakeCopilotProgressIndicator";
 
 interface IntakeSession {
   id: string;
@@ -93,13 +94,11 @@ export function IntakeCopilot() {
 
   const createSessionMutation = useMutation({
     mutationFn: async () => {
-      return await apiRequest("/api/intake-sessions", {
-        method: "POST",
-        body: JSON.stringify({
-          sessionType: "snap_application",
-          benefitProgramId: null,
-        }),
+      const response = await apiRequest("POST", "/api/intake-sessions", {
+        sessionType: "snap_application",
+        benefitProgramId: null,
       });
+      return response.json();
     },
     onSuccess: (data: IntakeSession) => {
       queryClient.invalidateQueries({ queryKey: ["/api/intake-sessions"] });
@@ -120,10 +119,8 @@ export function IntakeCopilot() {
 
   const sendMessageMutation = useMutation({
     mutationFn: async (message: string) => {
-      return await apiRequest(`/api/intake-sessions/${activeSessionId}/messages`, {
-        method: "POST",
-        body: JSON.stringify({ message }),
-      });
+      const response = await apiRequest("POST", `/api/intake-sessions/${activeSessionId}/messages`, { message });
+      return response.json();
     },
     onSuccess: (response: DialogueResponse) => {
       queryClient.invalidateQueries({ queryKey: ["/api/intake-sessions", activeSessionId, "messages"] });
@@ -150,11 +147,7 @@ export function IntakeCopilot() {
   });
 
   const generateFormMutation = useMutation({
-    mutationFn: async () => {
-      return await apiRequest(`/api/intake-sessions/${activeSessionId}/generate-form`, {
-        method: "POST",
-      });
-    },
+    mutationFn: () => apiRequest("POST", `/api/intake-sessions/${activeSessionId}/generate-form`, {}),
     onSuccess: () => {
       toast({
         title: "Application created!",
@@ -283,28 +276,29 @@ export function IntakeCopilot() {
           </div>
 
           {/* Chat Interface */}
-          <div className="lg:col-span-2">
+          <div className="lg:col-span-2 space-y-4">
             {activeSessionId ? (
-              <Card className="h-[600px] flex flex-col">
-                <CardHeader>
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <CardTitle className="flex items-center gap-2">
-                        <MessageSquare className="h-5 w-5" />
-                        Application Conversation
-                      </CardTitle>
-                      {activeSession && (
-                        <CardDescription>
-                          Step: {activeSession.currentStep?.replace("_", " ") || "Getting started"} • 
-                          {Math.round((activeSession.dataCompleteness || 0) * 100)}% complete
-                        </CardDescription>
-                      )}
-                    </div>
-                    {activeSession && (
-                      <Progress value={(activeSession.dataCompleteness || 0) * 100} className="w-32" />
-                    )}
-                  </div>
-                </CardHeader>
+              <>
+                {/* Progress Indicator */}
+                {activeSession && (
+                  <IntakeCopilotProgressIndicator
+                    extractedData={activeSession.extractedData || {}}
+                    currentStep={activeSession.currentStep || ""}
+                    dataCompleteness={activeSession.dataCompleteness || 0}
+                    missingFields={activeSession.missingFields || []}
+                  />
+                )}
+
+                <Card className="h-[600px] flex flex-col">
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <MessageSquare className="h-5 w-5" />
+                      Application Conversation
+                    </CardTitle>
+                    <CardDescription>
+                      Ask questions naturally and we'll help you complete your application
+                    </CardDescription>
+                  </CardHeader>
 
                 <CardContent className="flex-1 flex flex-col overflow-hidden">
                   <ScrollArea className="flex-1 pr-4">
@@ -438,6 +432,7 @@ export function IntakeCopilot() {
                   </div>
                 </CardContent>
               </Card>
+              </>
             ) : (
               <Card className="h-[600px] flex items-center justify-center">
                 <div className="text-center text-muted-foreground">

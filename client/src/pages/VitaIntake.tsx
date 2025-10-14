@@ -60,6 +60,7 @@ import {
 } from "lucide-react";
 import type { VitaIntakeSession, InsertVitaIntakeSession } from "@shared/schema";
 import { TaxDocumentUploader } from "@/components/TaxDocumentUploader";
+import { VitaProgressIndicator } from "@/components/VitaProgressIndicator";
 
 // Step configuration
 const STEPS = [
@@ -1405,34 +1406,30 @@ export default function VitaIntake() {
           </Card>
 
           {/* Main Wizard */}
-          <Card className="lg:col-span-3">
-            <CardHeader>
-              <div className="flex items-center justify-between mb-4">
-                <div className="flex-1">
-                  <CardTitle className="flex items-center gap-2">
-                    {currentStepInfo && <currentStepInfo.icon className="h-5 w-5" />}
-                    {currentStepInfo?.title}
-                  </CardTitle>
-                  <CardDescription className="mt-1 flex items-center gap-2">
-                    {currentStepInfo?.description}
+          <div className="lg:col-span-3 space-y-4">
+            {/* Progress Indicator - Sticky at top */}
+            <VitaProgressIndicator
+              steps={STEPS}
+              currentStep={currentStep}
+              sticky={true}
+              className="rounded-lg"
+            />
+
+            <Card>
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
                     {form.watch("householdProfileId") && (
-                      <Badge variant="outline" className="ml-2 gap-1" data-testid="badge-imported-profile">
+                      <Badge variant="outline" className="gap-1" data-testid="badge-imported-profile">
                         <FileText className="h-3 w-3" />
                         Imported from Profile
                       </Badge>
                     )}
-                  </CardDescription>
-                </div>
-                <div className="text-right">
-                  <div className="text-sm font-medium" data-testid="step-indicator">
-                    Step {currentStep} of 5
                   </div>
-                  <div className="text-xs text-muted-foreground mt-1">
-                    {progressPercentage.toFixed(0)}% Complete
-                  </div>
+                  
                   {/* Auto-save status indicator */}
                   {selectedSessionId && (
-                    <div className="mt-2">
+                    <div className="flex gap-2">
                       {saveStatus === "saving" && (
                         <Badge variant="outline" className="gap-1" data-testid="status-saving">
                           <Loader2 className="h-3 w-3 animate-spin" />
@@ -1440,13 +1437,13 @@ export default function VitaIntake() {
                         </Badge>
                       )}
                       {saveStatus === "saved" && (
-                        <Badge variant="outline" className="gap-1 bg-green-50 text-green-700 border-green-200" data-testid="status-saved">
+                        <Badge variant="outline" className="gap-1 bg-green-50 text-green-700 border-green-200 dark:bg-green-950 dark:text-green-400" data-testid="status-saved">
                           <CheckCircle2 className="h-3 w-3" />
                           Saved ✓
                         </Badge>
                       )}
                       {saveStatus === "error" && (
-                        <Badge variant="outline" className="gap-1 bg-red-50 text-red-700 border-red-200" data-testid="status-error">
+                        <Badge variant="outline" className="gap-1 bg-red-50 text-red-700 border-red-200 dark:bg-red-950 dark:text-red-400" data-testid="status-error">
                           <AlertCircle className="h-3 w-3" />
                           Save Failed
                         </Badge>
@@ -1454,57 +1451,32 @@ export default function VitaIntake() {
                     </div>
                   )}
                 </div>
-              </div>
 
-              {/* Progress Bar */}
-              <Progress value={progressPercentage} className="h-2" data-testid="progress-bar" />
-
-              {/* Step Pills */}
-              <div className="flex gap-2 mt-4 flex-wrap">
-                {STEPS.map((step) => (
-                  <button
-                    key={step.number}
-                    onClick={() => handleStepChange(step.number)}
-                    className={`flex items-center gap-1 px-3 py-1 rounded-full text-xs transition-colors ${
-                      currentStep === step.number
-                        ? "bg-primary text-primary-foreground"
-                        : currentStep > step.number
-                        ? "bg-primary/20 text-primary"
-                        : "bg-muted text-muted-foreground"
-                    }`}
-                    data-testid={`step-pill-${step.number}`}
-                  >
-                    <step.icon className="h-3 w-3" />
-                    {step.number}
-                  </button>
-                ))}
-              </div>
-
-              {/* Review Mode Toggle (only shown for review_needed status) */}
-              {selectedSession?.status === "review_needed" && (
-                <div className="mt-4">
-                  <Button
-                    type="button"
-                    variant={reviewMode ? "secondary" : "outline"}
-                    onClick={() => setReviewMode(!reviewMode)}
-                    className="w-full"
-                    data-testid="button-enter-review-mode"
-                  >
-                    {reviewMode ? (
-                      <>
-                        <EyeOff className="h-4 w-4 mr-2" />
-                        Exit Review Mode
-                      </>
-                    ) : (
-                      <>
-                        <Eye className="h-4 w-4 mr-2" />
-                        Enter Review Mode
-                      </>
-                    )}
-                  </Button>
-                </div>
-              )}
-            </CardHeader>
+                {/* Review Mode Toggle (only shown for review_needed status) */}
+                {selectedSession?.status === "review_needed" && (
+                  <div className="mt-4">
+                    <Button
+                      type="button"
+                      variant={reviewMode ? "secondary" : "outline"}
+                      onClick={() => setReviewMode(!reviewMode)}
+                      className="w-full min-h-[44px]"
+                      data-testid="button-enter-review-mode"
+                    >
+                      {reviewMode ? (
+                        <>
+                          <EyeOff className="h-4 w-4 mr-2" />
+                          Exit Review Mode
+                        </>
+                      ) : (
+                        <>
+                          <Eye className="h-4 w-4 mr-2" />
+                          Enter Review Mode
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                )}
+              </CardHeader>
 
             <Separator />
 
@@ -4952,6 +4924,7 @@ export default function VitaIntake() {
               </Form>
             </CardContent>
           </Card>
+          </div>
         </div>
       </div>
     </div>
