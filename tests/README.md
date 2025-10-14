@@ -1,6 +1,6 @@
 # Testing Infrastructure
 
-This directory contains the testing infrastructure for the Maryland SNAP Policy Manual System.
+This directory contains the testing infrastructure for the Maryland Universal Benefits-Tax Navigator platform.
 
 ## Structure
 

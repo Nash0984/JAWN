@@ -1050,4 +1050,4 @@ interface RadarState {
 
 ---
 
-This technical documentation provides a comprehensive overview of every component, service, and architectural decision in the Maryland SNAP Policy Manual System. The system is designed for scalability, accessibility, and maintainability while meeting the specific needs of Maryland SNAP benefit recipients and navigators.
+This technical documentation provides a comprehensive overview of every component, service, and architectural decision in the Maryland Universal Benefits-Tax Navigator. The system is designed for scalability, accessibility, and maintainability while serving navigators, caseworkers, applicants, and administrators across 24 Maryland counties with 46 integrated features covering 6 benefit programs, tax preparation, quality control, and AI-powered assistance.
