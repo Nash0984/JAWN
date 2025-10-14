@@ -231,7 +231,7 @@ export function verifyNotificationOwnership(options: OwnershipCheckOptions = {})
       
       // Check if user is admin or staff and allowed (usually not for notifications)
       if (allowAdmin || allowStaff) {
-        const user = await storage.getUserById(userId);
+        const user = await storage.getUser(userId);
         if (user) {
           if (allowAdmin && user.role === 'admin') {
             return next();

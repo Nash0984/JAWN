@@ -3256,8 +3256,8 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
     res.json({ count: Number(unreadCount) });
   }));
 
-  // Mark notification as read
-  app.patch("/api/notifications/:id/read", requireAuth, asyncHandler(async (req, res) => {
+  // Mark notification as read (with ownership verification)
+  app.patch("/api/notifications/:id/read", requireAuth, verifyNotificationOwnership(), asyncHandler(async (req, res) => {
     const userId = (req as any).userId;
     const { id } = req.params;
     
