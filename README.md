@@ -15,7 +15,7 @@ An AI-powered service delivery platform integrating **6 Maryland benefit program
 1. **Clone and Install Dependencies**
    ```bash
    git clone <repository-url>
-   cd maryland-snap-system
+   cd maryland-universal-navigator
    npm install
    ```
 
@@ -190,7 +190,7 @@ This application is **fully mobile-responsive** and works seamlessly across all 
 
 ### Project Structure
 ```
-maryland-snap-system/
+maryland-universal-navigator/
 ├── client/                 # Frontend React application
 │   ├── src/
 │   │   ├── components/     # Reusable UI components
@@ -338,4 +338,4 @@ This project is developed for Maryland Department of Human Services and follows 
 
 ---
 
-**Maryland SNAP Policy Manual System** - Empowering benefit access through intelligent technology.
+**Maryland Universal Benefits-Tax Navigator** - Comprehensive financial optimization through integrated benefit eligibility and tax preparation.

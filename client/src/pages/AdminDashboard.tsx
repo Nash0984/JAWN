@@ -225,7 +225,7 @@ export default function AdminDashboard() {
       <Card data-testid="system-info">
         <CardHeader>
           <CardTitle>System Overview</CardTitle>
-          <CardDescription>Maryland SNAP Policy Manual System</CardDescription>
+          <CardDescription>Maryland Universal Benefits-Tax Navigator</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div>

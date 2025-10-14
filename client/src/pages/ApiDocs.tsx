@@ -1041,7 +1041,7 @@ export default function ApiDocs() {
           API Documentation
         </h1>
         <p className="text-gray-600 dark:text-gray-400">
-          Complete API reference for Maryland SNAP Policy Manual System integration
+          Complete API reference for Maryland Universal Benefits-Tax Navigator integration
         </p>
       </div>
 

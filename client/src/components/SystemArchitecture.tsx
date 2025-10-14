@@ -13,7 +13,7 @@ export default function SystemArchitecture() {
     <Card className="shadow-lg border border-border">
       <CardHeader>
         <CardTitle className="text-2xl font-bold text-foreground">
-          Maryland SNAP Policy Manual System
+          Maryland Universal Benefits-Tax Navigator
         </CardTitle>
       </CardHeader>
       
