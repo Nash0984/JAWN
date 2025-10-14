@@ -44,7 +44,7 @@ Supports 24 Maryland counties with county-specific branding, data isolation, and
 Tracks navigator performance and awards achievements based on operational KPIs, featuring leaderboards.
 
 ### QC Analytics & Work Verification System
-**PTIG-Compliant Quality Control Dashboards** aligned with Maryland SNAP Payment Timeliness & Integrity Grant specifications.
+**Enterprise Quality Control Dashboards** for Maryland SNAP operations with predictive analytics and proactive error prevention.
 
 **Caseworker Cockpit** (/caseworker/cockpit):
 - Personal flagged cases panel with AI-powered risk scores
@@ -60,8 +60,8 @@ Tracks navigator performance and awards achievements based on operational KPIs, 
 - Training impact analytics showing before/after error rate improvements
 - Real-time team performance metrics and Payment Error Rate (PER) tracking
 
-**PTIG Compliance (Updated October 2025)**:
-System implements the 6 mandated Maryland SNAP error categories:
+**Quality Control Standards**:
+System implements the 6 Maryland SNAP error categories:
 1. shelter_utility - Shelter & Utility Errors
 2. income_verification - Income Verification Errors
 3. asset_verification - Asset Verification Errors
@@ -78,7 +78,7 @@ System implements the 6 mandated Maryland SNAP error categories:
 **Key Features**:
 - Predictive analytics for proactive quality assurance
 - Multi-quarter trend analysis and visualization
-- Error pattern recognition across all 6 PTIG categories
+- Error pattern recognition across all 6 quality control categories
 - Training effectiveness tracking with measurable outcomes
 - Job aids covering all regulatory compliance areas
 

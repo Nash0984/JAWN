@@ -4,8 +4,8 @@
  */
 
 /**
- * PTIG-compliant error category labels
- * These 6 categories are mandated for Maryland SNAP Quality Control
+ * Maryland SNAP QC error category labels
+ * These 6 categories are the standard error classifications for quality control
  */
 export const ERROR_CATEGORY_LABELS: Record<string, string> = {
   shelter_utility: "Shelter & Utility",
