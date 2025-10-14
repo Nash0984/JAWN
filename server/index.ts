@@ -1,3 +1,14 @@
+// ============================================================================
+// SENTRY INITIALIZATION - Must be first to capture all errors
+// ============================================================================
+import { 
+  getSentryRequestHandler, 
+  getSentryTracingHandler, 
+  getSentryErrorHandler,
+  isSentryEnabled,
+  getSentryStatus 
+} from "./services/sentryService";
+
 import express, { type Request, Response, NextFunction } from "express";
 import session from "express-session";
 import ConnectPgSimple from "connect-pg-simple";
@@ -55,6 +66,12 @@ const app = express();
 
 // Trust proxy - Required for rate limiting and sessions behind reverse proxies/load balancers
 app.set('trust proxy', 1);
+
+// ============================================================================
+// SENTRY REQUEST HANDLERS - Must be before all other middleware
+// ============================================================================
+app.use(getSentryRequestHandler()); // Request context and tracing
+app.use(getSentryTracingHandler()); // Performance monitoring
 
 // Security headers with Helmet - Environment-aware CSP
 const isDevelopment = process.env.NODE_ENV === 'development';
@@ -243,6 +260,11 @@ app.use("/api/", (req, res, next) => {
     serveStatic(app);
   }
 
+  // ============================================================================
+  // SENTRY ERROR HANDLER - Must be after all routes but before general error handler
+  // ============================================================================
+  app.use(getSentryErrorHandler());
+  
   // Use the centralized error handling middleware AFTER Vite setup
   // This ensures Vite's catch-all route can serve the frontend before 404s are thrown
   app.use(errorHandler.handle404()); // Handle 404 errors

@@ -27,6 +27,8 @@ import AIMonitoring from "@/pages/AIMonitoring";
 import SecurityMonitoring from "@/pages/SecurityMonitoring";
 import AuditLogs from "@/pages/AuditLogs";
 import ApiDocs from "@/pages/ApiDocs";
+import Monitoring from "@/pages/admin/Monitoring";
+import DeveloperPortal from "@/pages/DeveloperPortal";
 import FeedbackManagement from "@/pages/FeedbackManagement";
 import NotificationCenter from "@/pages/NotificationCenter";
 import NotificationSettings from "@/pages/NotificationSettings";
@@ -42,6 +44,7 @@ import { IntakeCopilot } from "@/pages/IntakeCopilot";
 import ScenarioWorkspace from "@/pages/ScenarioWorkspace";
 import AbawdVerificationAdmin from "@/pages/AbawdVerificationAdmin";
 import CrossEnrollmentAdmin from "@/pages/CrossEnrollmentAdmin";
+import SmsConfig from "@/pages/admin/SmsConfig";
 import DocumentReviewQueue from "@/pages/DocumentReviewQueue";
 import TaxPreparation from "@/pages/TaxPreparation";
 import CountyManagement from "@/pages/CountyManagement";
@@ -56,6 +59,9 @@ import MobileBottomNav from "@/components/MobileBottomNav";
 import { BrandingProvider } from "@/contexts/BrandingContext";
 import { CountyHeader } from "@/components/CountyHeader";
 import { SessionExpiryProvider } from "@/contexts/SessionExpiryContext";
+import { InstallPrompt } from "@/components/InstallPrompt";
+import { TenantProvider } from "@/contexts/TenantContext";
+import { TenantThemeProvider } from "@/components/TenantThemeProvider";
 
 function Router() {
   const [location] = useLocation();
@@ -63,6 +69,9 @@ function Router() {
 
   return (
     <div className="min-h-screen bg-background">
+      {/* PWA Install Prompt */}
+      <InstallPrompt />
+      
       {/* Command Palette - Global Cmd+K navigation */}
       <CommandPalette />
       
@@ -266,6 +275,13 @@ function Router() {
               </ProtectedRoute>
             )}
           </Route>
+          <Route path="/admin/monitoring">
+            {() => (
+              <ProtectedRoute requireAdmin>
+                <Monitoring />
+              </ProtectedRoute>
+            )}
+          </Route>
           <Route path="/admin/security-monitoring">
             {() => (
               <ProtectedRoute requireAdmin>
@@ -298,6 +314,13 @@ function Router() {
             {() => (
               <ProtectedRoute requireAdmin>
                 <ApiDocs />
+              </ProtectedRoute>
+            )}
+          </Route>
+          <Route path="/developer">
+            {() => (
+              <ProtectedRoute>
+                <DeveloperPortal />
               </ProtectedRoute>
             )}
           </Route>
@@ -357,6 +380,13 @@ function Router() {
               </ProtectedRoute>
             )}
           </Route>
+          <Route path="/admin/sms-config">
+            {() => (
+              <ProtectedRoute requireAdmin>
+                <SmsConfig />
+              </ProtectedRoute>
+            )}
+          </Route>
           
           {/* 404 fallback */}
           <Route component={NotFound} />
@@ -372,14 +402,18 @@ function Router() {
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
-      <BrandingProvider>
-        <SessionExpiryProvider>
-          <TooltipProvider>
-            <Toaster />
-            <Router />
-          </TooltipProvider>
-        </SessionExpiryProvider>
-      </BrandingProvider>
+      <TenantProvider>
+        <TenantThemeProvider>
+          <BrandingProvider>
+            <SessionExpiryProvider>
+              <TooltipProvider>
+                <Toaster />
+                <Router />
+              </TooltipProvider>
+            </SessionExpiryProvider>
+          </BrandingProvider>
+        </TenantThemeProvider>
+      </TenantProvider>
     </QueryClientProvider>
   );
 }

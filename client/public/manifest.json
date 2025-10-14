@@ -1,0 +1,42 @@
+{
+  "name": "Maryland Universal Financial Navigator",
+  "short_name": "MD Benefits Navigator",
+  "description": "AI-powered platform for Maryland public benefits eligibility and tax preparation",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#0D4F8B",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["finance", "government", "utilities"],
+  "shortcuts": [
+    {
+      "name": "Benefit Screener",
+      "short_name": "Screener",
+      "description": "Quick benefits eligibility check",
+      "url": "/screener",
+      "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Tax Preparation",
+      "short_name": "Tax",
+      "description": "VITA tax assistance",
+      "url": "/tax",
+      "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }]
+    }
+  ]
+}
