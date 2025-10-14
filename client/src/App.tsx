@@ -24,6 +24,7 @@ import CaseworkerDashboard from "@/pages/CaseworkerDashboard";
 import AdminDashboard from "@/pages/AdminDashboard";
 import PolicySources from "@/pages/PolicySources";
 import AIMonitoring from "@/pages/AIMonitoring";
+import SecurityMonitoring from "@/pages/SecurityMonitoring";
 import AuditLogs from "@/pages/AuditLogs";
 import ApiDocs from "@/pages/ApiDocs";
 import FeedbackManagement from "@/pages/FeedbackManagement";
@@ -259,6 +260,13 @@ function Router() {
             {() => (
               <ProtectedRoute>
                 <AIMonitoring />
+              </ProtectedRoute>
+            )}
+          </Route>
+          <Route path="/admin/security-monitoring">
+            {() => (
+              <ProtectedRoute requireAdmin>
+                <SecurityMonitoring />
               </ProtectedRoute>
             )}
           </Route>

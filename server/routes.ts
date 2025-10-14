@@ -2617,6 +2617,217 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
     });
   }));
 
+  // ===== SECURITY MONITORING ROUTES =====
+  
+  // Get security metrics and alerts
+  app.get("/api/security/metrics", requireAuth, requireAdmin, asyncHandler(async (req, res) => {
+    const days = parseInt(req.query.days as string) || 7;
+    const startDate = new Date();
+    startDate.setDate(startDate.getDate() - days);
+
+    // Failed authentication attempts
+    const failedAuthAttempts = await db
+      .select({
+        date: sql<string>`DATE(${auditLogs.createdAt})`,
+        count: sql<number>`COUNT(*)::int`,
+        uniqueIPs: sql<number>`COUNT(DISTINCT ${auditLogs.ipAddress})::int`
+      })
+      .from(auditLogs)
+      .where(and(
+        sql`${auditLogs.createdAt} >= ${startDate}`,
+        eq(auditLogs.action, 'LOGIN_FAILED')
+      ))
+      .groupBy(sql`DATE(${auditLogs.createdAt})`)
+      .orderBy(sql`DATE(${auditLogs.createdAt})`);
+
+    // XSS sanitization triggers (from audit logs)
+    const xssSanitizations = await db
+      .select({
+        date: sql<string>`DATE(${auditLogs.createdAt})`,
+        count: sql<number>`COUNT(*)::int`
+      })
+      .from(auditLogs)
+      .where(and(
+        sql`${auditLogs.createdAt} >= ${startDate}`,
+        eq(auditLogs.action, 'XSS_SANITIZED')
+      ))
+      .groupBy(sql`DATE(${auditLogs.createdAt})`)
+      .orderBy(sql`DATE(${auditLogs.createdAt})`);
+
+    // Authorization failures (ownership violations)
+    const authorizationFailures = await db
+      .select({
+        date: sql<string>`DATE(${auditLogs.createdAt})`,
+        count: sql<number>`COUNT(*)::int`,
+        entityTypes: sql<string>`string_agg(DISTINCT ${auditLogs.entityType}, ', ')`
+      })
+      .from(auditLogs)
+      .where(and(
+        sql`${auditLogs.createdAt} >= ${startDate}`,
+        or(
+          eq(auditLogs.action, 'AUTHORIZATION_FAILED'),
+          eq(auditLogs.action, 'OWNERSHIP_VIOLATION')
+        )
+      ))
+      .groupBy(sql`DATE(${auditLogs.createdAt})`)
+      .orderBy(sql`DATE(${auditLogs.createdAt})`);
+
+    // Rate limit violations
+    const rateLimitViolations = await db
+      .select({
+        date: sql<string>`DATE(${auditLogs.createdAt})`,
+        count: sql<number>`COUNT(*)::int`,
+        uniqueIPs: sql<number>`COUNT(DISTINCT ${auditLogs.ipAddress})::int`
+      })
+      .from(auditLogs)
+      .where(and(
+        sql`${auditLogs.createdAt} >= ${startDate}`,
+        eq(auditLogs.action, 'RATE_LIMIT_EXCEEDED')
+      ))
+      .groupBy(sql`DATE(${auditLogs.createdAt})`)
+      .orderBy(sql`DATE(${auditLogs.createdAt})`);
+
+    // CSRF validation failures
+    const csrfFailures = await db
+      .select({
+        date: sql<string>`DATE(${auditLogs.createdAt})`,
+        count: sql<number>`COUNT(*)::int`
+      })
+      .from(auditLogs)
+      .where(and(
+        sql`${auditLogs.createdAt} >= ${startDate}`,
+        eq(auditLogs.action, 'CSRF_VALIDATION_FAILED')
+      ))
+      .groupBy(sql`DATE(${auditLogs.createdAt})`)
+      .orderBy(sql`DATE(${auditLogs.createdAt})`);
+
+    // Session security events (hijacking attempts, expired sessions)
+    const sessionEvents = await db
+      .select({
+        date: sql<string>`DATE(${auditLogs.createdAt})`,
+        count: sql<number>`COUNT(*)::int`,
+        eventTypes: sql<string>`string_agg(DISTINCT ${auditLogs.action}, ', ')`
+      })
+      .from(auditLogs)
+      .where(and(
+        sql`${auditLogs.createdAt} >= ${startDate}`,
+        or(
+          eq(auditLogs.action, 'SESSION_EXPIRED'),
+          eq(auditLogs.action, 'SESSION_HIJACK_ATTEMPT'),
+          eq(auditLogs.action, 'INVALID_SESSION')
+        )
+      ))
+      .groupBy(sql`DATE(${auditLogs.createdAt})`)
+      .orderBy(sql`DATE(${auditLogs.createdAt})`);
+
+    // Top attacking IPs (by failed auth + authorization failures)
+    const topAttackingIPs = await db
+      .select({
+        ipAddress: auditLogs.ipAddress,
+        failedAttempts: sql<number>`COUNT(*)::int`,
+        firstSeen: sql<string>`MIN(${auditLogs.createdAt})::text`,
+        lastSeen: sql<string>`MAX(${auditLogs.createdAt})::text`
+      })
+      .from(auditLogs)
+      .where(and(
+        sql`${auditLogs.createdAt} >= ${startDate}`,
+        or(
+          eq(auditLogs.action, 'LOGIN_FAILED'),
+          eq(auditLogs.action, 'AUTHORIZATION_FAILED'),
+          eq(auditLogs.action, 'OWNERSHIP_VIOLATION')
+        ),
+        sql`${auditLogs.ipAddress} IS NOT NULL`
+      ))
+      .groupBy(auditLogs.ipAddress)
+      .orderBy(sql`COUNT(*) DESC`)
+      .limit(10);
+
+    // Calculate security score (100 - weighted severity of incidents)
+    const totalAuthFailures = failedAuthAttempts.reduce((sum, day) => sum + day.count, 0);
+    const totalXSS = xssSanitizations.reduce((sum, day) => sum + day.count, 0);
+    const totalAuthzFailures = authorizationFailures.reduce((sum, day) => sum + day.count, 0);
+    const totalRateLimitViolations = rateLimitViolations.reduce((sum, day) => sum + day.count, 0);
+    
+    const securityScore = Math.max(0, 100 - (
+      (totalAuthFailures * 2) +
+      (totalXSS * 5) +
+      (totalAuthzFailures * 3) +
+      (totalRateLimitViolations * 1)
+    ) / 10);
+
+    res.json({
+      securityScore: Math.round(securityScore * 10) / 10,
+      period: `Last ${days} days`,
+      metrics: {
+        failedAuthAttempts: {
+          total: totalAuthFailures,
+          trend: failedAuthAttempts
+        },
+        xssSanitizations: {
+          total: totalXSS,
+          trend: xssSanitizations
+        },
+        authorizationFailures: {
+          total: totalAuthzFailures,
+          trend: authorizationFailures
+        },
+        rateLimitViolations: {
+          total: totalRateLimitViolations,
+          trend: rateLimitViolations
+        },
+        csrfFailures: {
+          total: csrfFailures.reduce((sum, day) => sum + day.count, 0),
+          trend: csrfFailures
+        },
+        sessionEvents: {
+          total: sessionEvents.reduce((sum, day) => sum + day.count, 0),
+          trend: sessionEvents
+        }
+      },
+      threats: {
+        topAttackingIPs
+      }
+    });
+  }));
+
+  // Get security alerts (critical events in last 24h)
+  app.get("/api/security/alerts", requireAuth, requireAdmin, asyncHandler(async (req, res) => {
+    const last24h = new Date();
+    last24h.setHours(last24h.getHours() - 24);
+
+    const criticalEvents = await db
+      .select({
+        id: auditLogs.id,
+        action: auditLogs.action,
+        timestamp: auditLogs.createdAt,
+        ipAddress: auditLogs.ipAddress,
+        userAgent: auditLogs.userAgent,
+        userId: auditLogs.userId,
+        username: users.username,
+        metadata: auditLogs.metadata
+      })
+      .from(auditLogs)
+      .leftJoin(users, eq(auditLogs.userId, users.id))
+      .where(and(
+        sql`${auditLogs.createdAt} >= ${last24h}`,
+        or(
+          eq(auditLogs.action, 'XSS_SANITIZED'),
+          eq(auditLogs.action, 'SQL_INJECTION_ATTEMPT'),
+          eq(auditLogs.action, 'CSRF_VALIDATION_FAILED'),
+          eq(auditLogs.action, 'SESSION_HIJACK_ATTEMPT'),
+          eq(auditLogs.action, 'BRUTE_FORCE_DETECTED')
+        )
+      ))
+      .orderBy(desc(auditLogs.createdAt))
+      .limit(50);
+
+    res.json({
+      alerts: criticalEvents,
+      count: criticalEvents.length,
+      period: "Last 24 hours"
+    });
+  }));
+
   // Get response quality metrics
   app.get("/api/ai-monitoring/response-quality", asyncHandler(async (req, res) => {
     const days = parseInt(req.query.days as string) || 30;
