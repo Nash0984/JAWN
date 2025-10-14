@@ -1725,6 +1725,690 @@ Content-Type: application/json
 
 ---
 
+## Quality Control & Cockpits
+
+### Caseworker Cockpit - Get Flagged Cases
+```http
+GET /api/qc/caseworker/flagged-cases
+Authorization: Required (Caseworker+)
+```
+
+**Response:**
+```json
+{
+  "cases": [
+    {
+      "caseId": "Case #12345",
+      "riskScore": 85,
+      "flagReason": "income_verification",
+      "predictedErrors": ["Missing paystub verification", "Unverified self-employment"],
+      "recommendations": ["Review income documentation", "Request additional verification"]
+    }
+  ]
+}
+```
+
+### Caseworker Error Trends
+```http
+GET /api/qc/caseworker/error-trends?quarters=4
+Authorization: Required (Caseworker+)
+```
+
+### Get Job Aids
+```http
+GET /api/qc/job-aids
+Authorization: Required (Caseworker+)
+```
+
+**Response:**
+```json
+{
+  "jobAids": [
+    {
+      "id": 1,
+      "title": "Income Verification Best Practices",
+      "category": "income_verification",
+      "content": "...",
+      "lastUpdated": "2025-10-01"
+    }
+  ]
+}
+```
+
+### Supervisor Cockpit - Team Error Alerts
+```http
+GET /api/qc/supervisor/team-errors
+Authorization: Required (Supervisor+)
+```
+
+**Response:**
+```json
+{
+  "alerts": [
+    {
+      "errorCategory": "shelter_utility",
+      "currentRate": 12.5,
+      "previousRate": 2.1,
+      "percentageChange": 500,
+      "severity": "critical",
+      "affectedCaseworkers": 8
+    }
+  ]
+}
+```
+
+### Proactive Case Flagging
+```http
+POST /api/qc/flag-case
+Authorization: Required (Supervisor+)
+Content-Type: application/json
+
+{
+  "caseId": "Case #12345",
+  "flagReason": "high_risk_pattern",
+  "assignedCaseworker": "caseworker@maryland.gov",
+  "notes": "Multiple income sources require extra verification"
+}
+```
+
+### Training Impact Analytics
+```http
+GET /api/qc/supervisor/training-impact
+Authorization: Required (Supervisor+)
+```
+
+**Response:**
+```json
+{
+  "interventions": [
+    {
+      "trainingType": "income_verification_workshop",
+      "errorRateBefore": 8.5,
+      "errorRateAfter": 2.1,
+      "improvement": 75.3,
+      "completedBy": 12,
+      "completionDate": "2025-09-15"
+    }
+  ]
+}
+```
+
+---
+
+## County Management
+
+### List All Counties
+```http
+GET /api/counties
+Authorization: Required (Admin+)
+```
+
+**Response:**
+```json
+{
+  "counties": [
+    {
+      "id": 1,
+      "name": "Baltimore City",
+      "code": "BALTIMORE_CITY",
+      "contactEmail": "benefits@baltimorecity.gov",
+      "contactPhone": "(410) 555-1234",
+      "branding": {
+        "primaryColor": "#003087",
+        "logoUrl": "https://..."
+      },
+      "isPilot": true
+    }
+  ]
+}
+```
+
+### Get County Configuration
+```http
+GET /api/counties/:countyId
+Authorization: Required (Admin+)
+```
+
+### Update County Settings
+```http
+PATCH /api/counties/:countyId
+Authorization: Required (Super Admin)
+Content-Type: application/json
+
+{
+  "contactEmail": "newcontact@county.gov",
+  "branding": {
+    "primaryColor": "#003087",
+    "logoUrl": "https://storage.example.com/logo.png"
+  }
+}
+```
+
+### County Analytics
+```http
+GET /api/counties/:countyId/analytics?startDate=2025-01-01&endDate=2025-10-01
+Authorization: Required (Admin+)
+```
+
+**Response:**
+```json
+{
+  "applicationVolume": 1250,
+  "approvalRate": 78.5,
+  "averageProcessingTime": 12.3,
+  "programUtilization": {
+    "SNAP": 850,
+    "Medicaid": 650,
+    "TANF": 120
+  }
+}
+```
+
+### Assign Staff to County
+```http
+POST /api/counties/:countyId/staff
+Authorization: Required (Admin+)
+Content-Type: application/json
+
+{
+  "userId": 42,
+  "role": "navigator"
+}
+```
+
+---
+
+## AI Monitoring & Performance
+
+### Get AI Model Metrics
+```http
+GET /api/ai-monitoring/metrics?model=gemini-1.5-pro&days=30
+Authorization: Required (Admin+)
+```
+
+**Response:**
+```json
+{
+  "model": "gemini-1.5-pro",
+  "accuracy": {
+    "rag": 92.5,
+    "extraction": 88.3,
+    "classification": 94.1
+  },
+  "performance": {
+    "avgResponseTime": 850,
+    "p95ResponseTime": 1200,
+    "errorRate": 0.8
+  },
+  "costs": {
+    "totalCost": 485.23,
+    "requestCount": 12450,
+    "avgCostPerRequest": 0.039
+  }
+}
+```
+
+### List Model Versions
+```http
+GET /api/ai-monitoring/versions
+Authorization: Required (Admin+)
+```
+
+### A/B Test Results
+```http
+GET /api/ai-monitoring/ab-tests/:testId
+Authorization: Required (Admin+)
+```
+
+**Response:**
+```json
+{
+  "testId": "rag-temperature-test",
+  "variantA": {
+    "config": {"temperature": 0.7},
+    "accuracy": 91.2,
+    "userSatisfaction": 4.3
+  },
+  "variantB": {
+    "config": {"temperature": 0.3},
+    "accuracy": 94.1,
+    "userSatisfaction": 4.7
+  },
+  "winner": "variantB"
+}
+```
+
+### Track API Costs
+```http
+POST /api/ai-monitoring/log-usage
+Authorization: Required (System)
+Content-Type: application/json
+
+{
+  "model": "gemini-1.5-pro",
+  "operation": "rag_search",
+  "inputTokens": 1500,
+  "outputTokens": 800,
+  "cost": 0.042
+}
+```
+
+---
+
+## Developer Portal & API Keys
+
+### Generate API Key
+```http
+POST /api/developer/keys
+Authorization: Required (Developer+)
+Content-Type: application/json
+
+{
+  "name": "Production Integration",
+  "scopes": ["benefits:read", "documents:write"],
+  "expiresAt": "2026-01-01T00:00:00Z"
+}
+```
+
+**Response:**
+```json
+{
+  "apiKey": "md_live_1234567890abcdef",
+  "id": 42,
+  "name": "Production Integration",
+  "scopes": ["benefits:read", "documents:write"],
+  "createdAt": "2025-10-14T00:00:00Z",
+  "expiresAt": "2026-01-01T00:00:00Z"
+}
+```
+
+### List API Keys
+```http
+GET /api/developer/keys
+Authorization: Required (Developer+)
+```
+
+### Revoke API Key
+```http
+DELETE /api/developer/keys/:keyId
+Authorization: Required (Developer+)
+```
+
+### Configure Webhook
+```http
+POST /api/developer/webhooks
+Authorization: Required (Developer+)
+Content-Type: application/json
+
+{
+  "url": "https://your-app.com/webhooks/benefits",
+  "events": ["application.approved", "document.verified"],
+  "secret": "webhook_secret_123"
+}
+```
+
+### Test Webhook
+```http
+POST /api/developer/webhooks/:webhookId/test
+Authorization: Required (Developer+)
+```
+
+### Get Integration Examples
+```http
+GET /api/developer/examples?language=javascript
+```
+
+**Response:**
+```json
+{
+  "language": "javascript",
+  "examples": [
+    {
+      "title": "Check Eligibility",
+      "code": "const response = await fetch('/api/policyengine/calculate', {...})"
+    }
+  ]
+}
+```
+
+---
+
+## Training & Certification
+
+### List Training Modules
+```http
+GET /api/training/modules
+Authorization: Required (Staff+)
+```
+
+**Response:**
+```json
+{
+  "modules": [
+    {
+      "id": 1,
+      "title": "SNAP Eligibility Fundamentals",
+      "description": "Core concepts of SNAP eligibility determination",
+      "duration": 45,
+      "required": true,
+      "certification": "SNAP Specialist"
+    }
+  ]
+}
+```
+
+### Get User Training Progress
+```http
+GET /api/training/progress/:userId
+Authorization: Required (Staff+)
+```
+
+**Response:**
+```json
+{
+  "userId": 42,
+  "completedModules": [1, 3, 5],
+  "inProgressModules": [7],
+  "certifications": [
+    {
+      "name": "SNAP Specialist",
+      "earnedDate": "2025-08-15",
+      "expiresDate": "2026-08-15"
+    }
+  ]
+}
+```
+
+### Complete Training Module
+```http
+POST /api/training/modules/:moduleId/complete
+Authorization: Required (Staff+)
+Content-Type: application/json
+
+{
+  "quizScore": 95,
+  "timeSpent": 42
+}
+```
+
+### Generate Certificate
+```http
+POST /api/training/certificates
+Authorization: Required (Staff+)
+Content-Type: application/json
+
+{
+  "userId": 42,
+  "certificationType": "SNAP_SPECIALIST",
+  "completionDate": "2025-10-14"
+}
+```
+
+**Response:**
+```json
+{
+  "certificateId": 123,
+  "downloadUrl": "/api/training/certificates/123/download",
+  "expiresAt": "2026-10-14"
+}
+```
+
+---
+
+## Notifications & Alerts
+
+### Get User Notifications
+```http
+GET /api/notifications?limit=20&offset=0&unreadOnly=true
+Authorization: Required
+```
+
+**Response:**
+```json
+{
+  "notifications": [
+    {
+      "id": 1,
+      "type": "document_verified",
+      "title": "Document Verified",
+      "message": "Your paystub has been verified and approved",
+      "isRead": false,
+      "priority": "normal",
+      "createdAt": "2025-10-14T10:30:00Z",
+      "link": "/documents/123"
+    }
+  ],
+  "total": 15,
+  "unreadCount": 8
+}
+```
+
+### Mark Notification as Read
+```http
+PATCH /api/notifications/:id/read
+Authorization: Required
+```
+
+### Mark All as Read
+```http
+POST /api/notifications/mark-all-read
+Authorization: Required
+```
+
+### Get Notification Preferences
+```http
+GET /api/notifications/preferences
+Authorization: Required
+```
+
+**Response:**
+```json
+{
+  "channels": {
+    "inApp": true,
+    "email": true,
+    "sms": false
+  },
+  "types": {
+    "documentUpdates": true,
+    "applicationStatus": true,
+    "systemAlerts": false
+  },
+  "quietHours": {
+    "enabled": true,
+    "start": "22:00",
+    "end": "08:00"
+  }
+}
+```
+
+### Update Notification Preferences
+```http
+PATCH /api/notifications/preferences
+Authorization: Required
+Content-Type: application/json
+
+{
+  "channels": {
+    "email": false
+  },
+  "quietHours": {
+    "enabled": true,
+    "start": "23:00",
+    "end": "07:00"
+  }
+}
+```
+
+### WebSocket Connection for Real-Time Notifications
+```
+WSS /api/notifications/stream
+Authorization: Required (via session cookie)
+```
+
+**Message Format:**
+```json
+{
+  "type": "notification",
+  "data": {
+    "id": 42,
+    "type": "application_approved",
+    "title": "Application Approved!",
+    "message": "Your SNAP application has been approved",
+    "priority": "high"
+  }
+}
+```
+
+---
+
+## Cross-Enrollment Management
+
+### Get Cross-Enrollment Opportunities
+```http
+GET /api/cross-enrollment/opportunities/:userId
+Authorization: Required (Navigator+)
+```
+
+**Response:**
+```json
+{
+  "opportunities": [
+    {
+      "program": "Medicaid",
+      "estimatedBenefit": "Full coverage",
+      "eligibilityScore": 95,
+      "reasoning": "Income qualifies based on SNAP approval",
+      "requiredDocuments": ["Proof of income", "ID"],
+      "applicationLink": "/apply/medicaid"
+    }
+  ]
+}
+```
+
+### Track Enrollment Success
+```http
+POST /api/cross-enrollment/track
+Authorization: Required (Navigator+)
+Content-Type: application/json
+
+{
+  "userId": 42,
+  "sourceProgram": "SNAP",
+  "targetProgram": "Medicaid",
+  "outcome": "enrolled",
+  "enrollmentDate": "2025-10-14"
+}
+```
+
+### Get Enrollment Analytics
+```http
+GET /api/cross-enrollment/analytics?startDate=2025-01-01&endDate=2025-10-14
+Authorization: Required (Admin+)
+```
+
+**Response:**
+```json
+{
+  "successRate": 68.5,
+  "programPairs": [
+    {
+      "from": "SNAP",
+      "to": "Medicaid",
+      "successRate": 72.3,
+      "totalAttempts": 450,
+      "successfulEnrollments": 325
+    }
+  ],
+  "commonBarriers": [
+    {"barrier": "missing_documentation", "count": 85},
+    {"barrier": "eligibility_gap", "count": 42}
+  ],
+  "totalBenefitValue": 2850000
+}
+```
+
+### Configure Enrollment Pipeline
+```http
+POST /api/cross-enrollment/pipelines
+Authorization: Required (Admin+)
+Content-Type: application/json
+
+{
+  "sourceProgram": "SNAP",
+  "targetProgram": "Medicaid",
+  "autoRecommend": true,
+  "requiredDocuments": ["proof_of_income", "id"],
+  "eligibilityThreshold": 80
+}
+```
+
+---
+
+## Public Portal Additional Endpoints
+
+### Generate Document Checklist
+```http
+POST /api/public/generate-checklist
+Content-Type: application/json
+
+{
+  "programs": ["SNAP", "Medicaid"],
+  "householdSize": 3,
+  "hasChildren": true,
+  "hasElderly": false
+}
+```
+
+**Response:**
+```json
+{
+  "checklist": [
+    {
+      "category": "Identity Verification",
+      "documents": [
+        {"name": "Driver's License or State ID", "required": true, "alternatives": ["Passport", "Birth Certificate"]},
+        {"name": "Social Security Cards for all members", "required": true}
+      ]
+    },
+    {
+      "category": "Income Verification",
+      "documents": [
+        {"name": "Last 30 days of paystubs", "required": true},
+        {"name": "Self-employment records (if applicable)", "required": false}
+      ]
+    }
+  ],
+  "pdfDownloadUrl": "/api/public/checklist/download/abc123"
+}
+```
+
+### Quick Screener (No Auth)
+```http
+POST /api/public/quick-screen
+Content-Type: application/json
+
+{
+  "householdSize": 3,
+  "monthlyIncome": 2500,
+  "hasAssets": false,
+  "location": "Baltimore City",
+  "hasElderlyOrDisabled": false
+}
+```
+
+**Response:**
+```json
+{
+  "mayQualify": true,
+  "suggestedPrograms": ["SNAP", "Medicaid"],
+  "nextSteps": "Create an account to start your full application",
+  "createAccountUrl": "/signup"
+}
+```
+
+---
+
 ## Rate Limiting
 
 All endpoints are rate-limited to prevent abuse:
