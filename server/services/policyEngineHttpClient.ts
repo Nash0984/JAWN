@@ -83,8 +83,15 @@ export class PolicyEngineHttpClient {
     // Add children
     for (let i = 0; i < household.children; i++) {
       people[`child_${i}`] = {
-        age: { [year]: 5 + i * 3 }
+        age: { [year]: 5 + i * 3 },
+        ssi: { [year]: null }  // Request SSI at person level
       };
+    }
+    
+    // Request SSI for all adults (person-level variable)
+    for (let i = 0; i < household.adults; i++) {
+      const adultId = `adult_${i}`;
+      people[adultId].ssi = { [year]: null };
     }
     
     const allMembers = Object.keys(people);
@@ -113,13 +120,12 @@ export class PolicyEngineHttpClient {
           members: allMembers
         }
       },
-      // Add SPM unit for SNAP, SSI, TANF calculations
+      // Add SPM unit for SNAP and TANF calculations
       spm_units: {
         spm_unit: {
           members: allMembers,
-          // Request benefit calculations
+          // Request benefit calculations (SSI is person-level, not SPM-level)
           snap: { [year]: null },
-          ssi: { [year]: null },
           tanf: { [year]: null },
           spm_unit_net_income: { [year]: null },
           spm_unit_benefits: { [year]: null }
@@ -182,12 +188,24 @@ export class PolicyEngineHttpClient {
       
       // Extract benefit values from response
       // PolicyEngine returns calculated values within the returned household structure
+      
+      // Calculate total SSI by summing from all household members (person-level variable)
+      let totalSSI = 0;
+      if (data.people) {
+        for (const personId of Object.keys(data.people)) {
+          const ssiAmount = this.extractEntityValue(data, 'people', personId, 'ssi', year);
+          if (ssiAmount && typeof ssiAmount === 'number') {
+            totalSSI += ssiAmount;
+          }
+        }
+      }
+      
       const benefits: BenefitCalculationResult = {
         snap: this.extractEntityValue(data, 'spm_units', 'spm_unit', 'snap', year) || 0,
         medicaid: this.extractEntityValue(data, 'people', 'adult_0', 'medicaid', year) || false,
         eitc: this.extractEntityValue(data, 'tax_units', 'tax_unit', 'eitc', year) || 0,
         childTaxCredit: this.extractEntityValue(data, 'tax_units', 'tax_unit', 'ctc', year) || 0,
-        ssi: this.extractEntityValue(data, 'spm_units', 'spm_unit', 'ssi', year) || 0,
+        ssi: totalSSI,  // Sum of SSI from all household members
         tanf: this.extractEntityValue(data, 'spm_units', 'spm_unit', 'tanf', year) || 0,
         householdNetIncome: this.extractEntityValue(data, 'spm_units', 'spm_unit', 'spm_unit_net_income', year) || 0,
         householdTax: this.extractEntityValue(data, 'tax_units', 'tax_unit', 'income_tax', year) || 0,

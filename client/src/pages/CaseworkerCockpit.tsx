@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, Fragment } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -211,8 +211,8 @@ export default function CaseworkerCockpit() {
                     </TableHeader>
                     <TableBody>
                       {flaggedCases.map((flaggedCase) => (
-                        <>
-                          <TableRow key={flaggedCase.id} data-testid={`case-row-${flaggedCase.id}`}>
+                        <Fragment key={flaggedCase.id}>
+                          <TableRow data-testid={`case-row-${flaggedCase.id}`}>
                             <TableCell className="font-mono font-medium" data-testid={`case-id-${flaggedCase.id}`}>
                               {flaggedCase.caseId}
                             </TableCell>
@@ -248,7 +248,7 @@ export default function CaseworkerCockpit() {
                             </TableCell>
                           </TableRow>
                           {expandedCaseId === flaggedCase.id && (
-                            <TableRow>
+                            <TableRow key={`${flaggedCase.id}-expanded`}>
                               <TableCell colSpan={6}>
                                 <div className="bg-blue-50 dark:bg-blue-950 p-4 rounded-lg" data-testid={`ai-guidance-${flaggedCase.id}`}>
                                   <h4 className="font-semibold mb-2 flex items-center gap-2">
@@ -260,7 +260,7 @@ export default function CaseworkerCockpit() {
                               </TableCell>
                             </TableRow>
                           )}
-                        </>
+                        </Fragment>
                       ))}
                     </TableBody>
                   </Table>
