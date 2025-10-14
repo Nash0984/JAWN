@@ -19,6 +19,7 @@ import { detectCountyContext } from "./middleware/countyContext";
 import { db } from "./db";
 import { sql } from "drizzle-orm";
 import { EnvValidator } from "./utils/envValidation";
+import { ProductionValidator } from "./utils/productionValidation";
 import "./utils/piiMasking"; // Import early to override console methods with PII redaction
 
 // ============================================================================
@@ -37,6 +38,18 @@ if (envValidation.warnings.length > 0) {
 }
 
 console.log("✅ Environment validation passed");
+
+// ============================================================================
+// PRODUCTION READINESS VALIDATION
+// ============================================================================
+if (process.env.NODE_ENV === 'production') {
+  try {
+    ProductionValidator.validateOrThrow();
+  } catch (error) {
+    console.error("❌ FATAL: Production validation failed");
+    process.exit(1);
+  }
+}
 
 const app = express();
 
@@ -70,41 +83,29 @@ app.use(cookieParser());
 import { xssSanitization } from "./middleware/xssSanitization";
 app.use(xssSanitization()); // Sanitize all request data (body, query, params)
 
-// Rate limiting configuration
-// General API rate limiter - 100 requests per 15 minutes
-const generalLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100,
-  message: "Too many requests from this IP, please try again later.",
-  standardHeaders: true,
-  legacyHeaders: false,
-});
+// ============================================================================
+// REQUEST SIZE LIMITS & DoS PROTECTION
+// ============================================================================
+import { dosProtection } from "./middleware/requestLimits";
+app.use(dosProtection({
+  maxBodySize: parseInt(process.env.MAX_REQUEST_SIZE_MB || '10'),
+  maxJsonSize: parseInt(process.env.MAX_JSON_SIZE_MB || '5'),
+  maxUrlLength: 2048,
+  requestTimeout: 30000
+}));
 
-// Strict rate limiter for authentication endpoints - 5 attempts per 15 minutes
-const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 5,
-  message: "Too many authentication attempts, please try again later.",
-  standardHeaders: true,
-  legacyHeaders: false,
-  skipSuccessfulRequests: true, // Don't count successful logins against the limit
-});
+// ============================================================================
+// ENHANCED RATE LIMITING - Role-based tiers with endpoint-specific limits
+// ============================================================================
+import { rateLimiters } from "./middleware/enhancedRateLimiting";
 
-// AI endpoint rate limiter - 20 requests per minute
-const aiLimiter = rateLimit({
-  windowMs: 60 * 1000, // 1 minute
-  max: 20,
-  message: "AI service rate limit exceeded. Please wait before making more requests.",
-  standardHeaders: true,
-  legacyHeaders: false,
-});
-
-// Apply rate limiters
-app.use("/api/", generalLimiter); // General limit for all API routes
-app.use("/api/auth/login", authLimiter); // Strict limit for login
-app.use("/api/auth/signup", authLimiter); // Strict limit for signup
-app.use("/api/chat/ask", aiLimiter); // AI chat endpoint
-app.use("/api/search", aiLimiter); // AI search endpoint
+// Apply role-based rate limiters
+app.use("/api/", rateLimiters.standard); // General limit based on user role
+app.use("/api/auth/login", rateLimiters.auth); // Strict limit for login
+app.use("/api/auth/signup", rateLimiters.auth); // Strict limit for signup
+app.use("/api/chat/ask", rateLimiters.ai); // AI chat endpoint
+app.use("/api/search", rateLimiters.ai); // AI search endpoint
+app.use("/api/documents/upload", rateLimiters.upload); // Document upload endpoints
 
 // Add timing headers and performance monitoring
 app.use(timingHeadersMiddleware());
