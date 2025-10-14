@@ -4,9 +4,12 @@ import ConnectPgSimple from "connect-pg-simple";
 import rateLimit from "express-rate-limit";
 import { doubleCsrf } from "csrf-csrf";
 import helmet from "helmet";
+import cors from "cors";
 import cookieParser from "cookie-parser";
 import passport from "./auth";
 import { registerRoutes } from "./routes";
+import { corsOptions, logCorsConfig } from "./middleware/corsConfig";
+import { helmetConfig, additionalSecurityHeaders, logSecurityHeadersConfig } from "./middleware/securityHeaders";
 import { initializeSystemData } from "./seedData";
 import { seedCountiesAndGamification } from "./seedCountiesAndGamification";
 import { setupVite, serveStatic, log } from "./vite";
@@ -43,34 +46,16 @@ app.set('trust proxy', 1);
 // Security headers with Helmet - Environment-aware CSP
 const isDevelopment = process.env.NODE_ENV === 'development';
 
-app.use(helmet({
-  contentSecurityPolicy: {
-    directives: {
-      defaultSrc: ["'self'"],
-      // Only allow unsafe-inline and unsafe-eval in development for Vite HMR
-      scriptSrc: isDevelopment 
-        ? ["'self'", "'unsafe-inline'", "'unsafe-eval'"]
-        : ["'self'"],
-      styleSrc: isDevelopment
-        ? ["'self'", "'unsafe-inline'"]
-        : ["'self'"],
-      imgSrc: ["'self'", "data:", "https:", "blob:"],
-      connectSrc: isDevelopment
-        ? ["'self'", "https:", "ws:", "wss:"] // WebSocket for Vite HMR + real-time notifications
-        : ["'self'", "https:", "wss:"], // WebSocket for real-time notifications
-      fontSrc: ["'self'", "data:"],
-      objectSrc: ["'none'"],
-      mediaSrc: ["'self'"],
-      frameSrc: ["'none'"],
-    },
-  },
-  crossOriginEmbedderPolicy: false,
-  hsts: {
-    maxAge: 31536000, // 1 year
-    includeSubDomains: true,
-    preload: true,
-  },
-}));
+// ============================================================================
+// CORS CONFIGURATION - Strict environment-based whitelist
+// ============================================================================
+app.use(cors(corsOptions));
+
+// ============================================================================
+// SECURITY HEADERS - Comprehensive HTTP security with Helmet.js
+// ============================================================================
+app.use(helmetConfig);
+app.use(additionalSecurityHeaders);
 
 // Parse JSON and URL-encoded bodies with size limits for security
 app.use(express.json({ limit: '10mb' })); // Limit JSON payload to 10MB
@@ -267,6 +252,8 @@ app.use("/api/", (req, res, next) => {
     reusePort: true,
   }, () => {
     log(`serving on port ${port}`);
+    logCorsConfig();
+    logSecurityHeadersConfig();
   });
 
   // ============================================================================

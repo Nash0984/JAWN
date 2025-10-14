@@ -52,6 +52,14 @@ const ENV_CONFIGS: EnvConfig[] = [
     errorMessage: 'ENCRYPTION_KEY must be a 64-character hexadecimal string (32 bytes)',
   },
   
+  // CORS Configuration (required for all non-dev/test environments)
+  {
+    name: 'ALLOWED_ORIGINS',
+    required: process.env.NODE_ENV !== 'development' && process.env.NODE_ENV !== 'test',
+    validator: (val) => val.split(',').every(origin => origin.trim().startsWith('http://') || origin.trim().startsWith('https://')),
+    errorMessage: 'ALLOWED_ORIGINS must be a comma-separated list of valid HTTP/HTTPS URLs (required for production/staging environments)',
+  },
+  
   // Google Cloud Storage
   {
     name: 'GOOGLE_APPLICATION_CREDENTIALS',
