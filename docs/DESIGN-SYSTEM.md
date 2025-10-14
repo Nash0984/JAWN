@@ -383,6 +383,88 @@ const form = useForm();
 </Form>
 ```
 
+#### Real-Time Widgets
+
+**Financial Opportunity Radar**
+```tsx
+import { FinancialOpportunityRadar } from "@/components/FinancialOpportunityRadar";
+import { useEligibilityRadar } from "@/hooks/useEligibilityRadar";
+
+// In parent component (e.g., HouseholdProfiler)
+const householdData = useWatch({ control: form.control });
+const { programs, alerts, summary, isCalculating, error } = useEligibilityRadar(householdData);
+
+<FinancialOpportunityRadar
+  programs={programs}
+  alerts={alerts}
+  summary={summary}
+  isCalculating={isCalculating}
+  error={error}
+/>
+```
+
+**Component Features:**
+- **Real-Time Eligibility**: Displays instant updates across 6 Maryland programs (SNAP, Medicaid, TANF, EITC, CTC, SSI)
+- **Change Indicators**: Green "New" badges for first-time eligibility, ↑↓ arrows for benefit increases/decreases
+- **Summary Dashboard**: Total monthly/annual benefits, program count, effective benefit rate
+- **Smart Alerts**: AI-powered cross-enrollment recommendations
+- **Animations**: Framer Motion transitions for change highlights
+- **Loading States**: Skeleton placeholders during calculations
+- **Error Handling**: User-friendly error messages with retry capability
+
+**Visual Elements:**
+```tsx
+// Status Icons
+✅ Eligible (text-green-600)
+⚠️ Needs Info (text-yellow-600)
+❌ Ineligible (text-red-600)
+
+// Change Badges
+<Badge className="bg-green-500">New</Badge>
+<Badge className="bg-blue-500">Changed</Badge>
+
+// Change Arrows
+↑ +$450 (+18.5%)  // Increase (text-green-600)
+↓ -$120 (-8.2%)   // Decrease (text-red-600)
+```
+
+**Layout Pattern:**
+- **Desktop**: Persistent sidebar in 3-column grid
+- **Tablet**: Stacked 2-column layout
+- **Mobile**: Collapsible drawer with summary visible
+
+**Color Scheme:**
+- Eligible programs: Green accent (`hsl(122, 39%, 49%)`)
+- New eligibility badges: Success green background
+- Benefit increases: Green arrows and text
+- Benefit decreases: Red arrows and text
+- Alert cards: Gradient from blue to purple
+- Summary panel: Maryland DHS Blue header
+
+**Technical Integration:**
+```tsx
+// Hook watches form fields with 300ms debounce
+const householdData = useWatch({
+  control: form.control,
+  name: ['adults', 'children', 'annualIncome', 'monthlyRent', ...]
+});
+
+// Automatic calculations on field changes
+useEffect(() => {
+  if (householdData) {
+    calculate(householdData);
+  }
+}, [adults, children, income, ...16 fields]);
+```
+
+**Accessibility:**
+- ARIA live regions for dynamic updates
+- Semantic HTML with proper heading hierarchy
+- Keyboard navigation support
+- Screen reader announcements for benefit changes
+- High contrast mode compatible
+- Focus indicators on interactive elements
+
 #### Navigation Components
 
 **Tabs**
