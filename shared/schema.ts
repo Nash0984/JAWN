@@ -110,16 +110,19 @@ export const policySources = pgTable("policy_sources", {
   description: text("description"),
   url: text("url"),
   benefitProgramId: varchar("benefit_program_id").references(() => benefitPrograms.id),
-  syncType: text("sync_type").notNull(), // manual, api, web_scraping
-  syncSchedule: text("sync_schedule"), // off, daily, weekly, monthly
-  maxAllowedFrequency: text("max_allowed_frequency"), // Maximum frequency admin can set (daily, weekly, monthly)
-  syncConfig: jsonb("sync_config"), // configuration for automated sync
+  syncType: text("sync_type").notNull(), // manual, api, web_scraping, bulk_download, direct_download
+  syncSchedule: text("sync_schedule"), // off, weekly, bi-weekly, monthly, custom
+  maxAllowedFrequency: text("max_allowed_frequency"), // Maximum frequency admin can set (weekly, bi-weekly, monthly)
+  syncConfig: jsonb("sync_config"), // configuration for automated sync (cron expression for custom)
   lastSyncAt: timestamp("last_sync_at"),
   lastSuccessfulSyncAt: timestamp("last_successful_sync_at"),
   syncStatus: text("sync_status").default("idle"), // idle, syncing, success, error
   syncError: text("sync_error"),
   documentCount: integer("document_count").default(0),
   priority: integer("priority").default(0), // Higher priority sources synced first
+  hasNewData: boolean("has_new_data").default(false), // True if new data detected in last sync
+  racStatus: text("rac_status"), // production_ready, in_progress, planned, auto_update, null
+  racCodeLocation: text("rac_code_location"), // Link to implementing code file
   isActive: boolean("is_active").default(true).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),

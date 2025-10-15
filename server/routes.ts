@@ -1,4 +1,4 @@
-import type { Express } from "express";
+import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { initializeWebSocketService } from "./services/websocket.service";
 import { storage } from "./storage";
@@ -131,7 +131,7 @@ async function generateTextWithGemini(prompt: string): Promise<string> {
 // VITA CERTIFICATION VALIDATION MIDDLEWARE
 // ============================================================================
 const requireVitaCertification = (minimumLevel: 'basic' | 'advanced' | 'military' = 'basic') => {
-  return asyncHandler(async (req, res, next) => {
+  return asyncHandler(async (req: Request, res: Response, next: NextFunction) => {
     // Get tax return data from request body or session
     const taxReturnData = req.body.taxReturnData || req.body;
     
@@ -139,7 +139,7 @@ const requireVitaCertification = (minimumLevel: 'basic' | 'advanced' | 'military
     const requirement = vitaCertificationValidationService.determineCertificationRequirement(taxReturnData);
     
     // Validate user's certification
-    const validation = await vitaCertificationValidationService.validateCertification(req.user!.id, requirement);
+    const validation = await vitaCertificationValidationService.updateCertification(req.user!.id, requirement);
     
     if (!validation.isValid) {
       return res.status(403).json({
@@ -173,7 +173,7 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
   app.get("/startup", startupCheck);
   
   // Legacy comprehensive health check endpoint (kept for backwards compatibility)
-  app.get("/api/health", asyncHandler(async (req, res) => {
+  app.get("/api/health", asyncHandler(async (req: Request, res: Response) => {
     const healthStatus: any = {
       status: "healthy",
       timestamp: new Date().toISOString(),
@@ -289,7 +289,7 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
   app.use(detectTenantContext);
 
   // Hybrid search endpoint - intelligently routes to Rules Engine or RAG
-  app.post("/api/search", requireAuth, asyncHandler(async (req, res, next) => {
+  app.post("/api/search", requireAuth, asyncHandler(async (req: Request, res: Response, next: NextFunction) => {
     const { query, benefitProgramId, userId } = req.body;
     
     // Validate request parameters
@@ -330,7 +330,7 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
   }));
 
   // Conversational chat endpoint for policy questions
-  app.post("/api/chat/ask", requireAuth, asyncHandler(async (req, res) => {
+  app.post("/api/chat/ask", requireAuth, asyncHandler(async (req: Request, res: Response) => {
     const { query, context, benefitProgramId } = req.body;
     const userId = (req as any).userId;
 
@@ -380,7 +380,7 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
   // Authentication Routes
   
   // Signup
-  app.post("/api/auth/signup", asyncHandler(async (req, res, next) => {
+  app.post("/api/auth/signup", asyncHandler(async (req: Request, res: Response, next: NextFunction) => {
     const validatedData = insertUserSchema.parse(req.body);
     
     // Check if username already exists
@@ -402,7 +402,7 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
     });
 
     // Log the user in automatically after signup
-    req.login(user, (err) => {
+    req.login(user, (err: any) => {
       if (err) {
         console.error("Failed to log in after signup:", err);
         return next(new Error("Failed to log in after signup"));
@@ -415,7 +415,7 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
   }));
 
   // Login
-  app.post("/api/auth/login", (req, res, next) => {
+  app.post("/api/auth/login", (req: Request, res: Response, next: NextFunction) => {
     passport.authenticate("local", (err: any, user: any, info: any) => {
       if (err) {
         console.error("Login authentication error:", err);
@@ -441,7 +441,7 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
   });
 
   // Logout
-  app.post("/api/auth/logout", (req, res) => {
+  app.post("/api/auth/logout", (req: Request, res: Response) => {
     req.logout((err) => {
       if (err) {
         console.error("Logout error:", err);
@@ -452,7 +452,7 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
   });
   
   // Get password requirements
-  app.get("/api/auth/password-requirements", (req, res) => {
+  app.get("/api/auth/password-requirements", (req: Request, res: Response) => {
     res.json({
       requirements: passwordSecurityService.getRequirements(),
       message: `Password must:
@@ -467,7 +467,7 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
   });
   
   // Change password (requires authentication)
-  app.post("/api/auth/change-password", requireAuth, asyncHandler(async (req, res) => {
+  app.post("/api/auth/change-password", requireAuth, asyncHandler(async (req: Request, res: Response) => {
     const { currentPassword, newPassword } = req.body;
     
     if (!currentPassword || !newPassword) {
@@ -475,7 +475,7 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
     }
     
     // Get user from database to verify current password
-    const user = await storage.getUserById(req.user!.id);
+    const [user] = await db.select().from(users).where(eq(users.id, req.user!.id));
     if (!user) {
       throw notFoundError("User not found");
     }
@@ -502,7 +502,7 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
   }));
 
   // Get current user
-  app.get("/api/auth/me", (req, res) => {
+  app.get("/api/auth/me", (req: Request, res: Response) => {
     if (!req.user) {
       return res.status(401).json({ error: "Not authenticated" });
     }
@@ -513,7 +513,7 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
   });
 
   // Get benefit programs
-  app.get("/api/benefit-programs", async (req, res) => {
+  app.get("/api/benefit-programs", async (req: Request, res: Response) => {
     try {
       const programs = await storage.getBenefitPrograms();
       res.json(programs);
@@ -524,7 +524,7 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
   });
 
   // Get document types
-  app.get("/api/document-types", async (req, res) => {
+  app.get("/api/document-types", async (req: Request, res: Response) => {
     try {
       const types = await storage.getDocumentTypes();
       res.json(types);
@@ -535,7 +535,7 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
   });
 
   // Document verification endpoint with Gemini Vision API
-  app.post("/api/verify-document", requireAuth, upload.single("document"), asyncHandler(async (req, res) => {
+  app.post("/api/verify-document", requireAuth, upload.single("document"), asyncHandler(async (req: Request, res: Response) => {
     if (!req.file) {
       throw validationError("No document uploaded");
     }
@@ -638,7 +638,7 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
   }));
 
   // Upload document endpoint
-  app.post("/api/documents/upload", requireAdmin, upload.single("file"), async (req, res) => {
+  app.post("/api/documents/upload", requireAdmin, upload.single("file"), async (req: Request, res: Response) => {
     try {
       if (!req.file) {
         return res.status(400).json({ error: "No file uploaded" });
@@ -693,7 +693,7 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
   });
 
   // Get document upload URL
-  app.post("/api/documents/upload-url", requireAdmin, async (req, res) => {
+  app.post("/api/documents/upload-url", requireAdmin, async (req: Request, res: Response) => {
     try {
       const objectStorageService = new ObjectStorageService();
       const uploadURL = await objectStorageService.getObjectEntityUploadURL();
@@ -705,7 +705,7 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
   });
 
   // Create document record after upload
-  app.post("/api/documents", requireAdmin, async (req, res) => {
+  app.post("/api/documents", requireAdmin, async (req: Request, res: Response) => {
     try {
       const documentData = insertDocumentSchema.parse(req.body);
       const document = await storage.createDocument(documentData);
@@ -724,7 +724,7 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
   });
 
   // Get documents
-  app.get("/api/documents", requireAdmin, async (req, res) => {
+  app.get("/api/documents", requireAdmin, async (req: Request, res: Response) => {
     try {
       const { benefitProgramId, status, limit } = req.query;
       const filters = {
@@ -742,7 +742,7 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
   });
 
   // Get document by ID
-  app.get("/api/documents/:id", requireAdmin, async (req, res) => {
+  app.get("/api/documents/:id", requireAdmin, async (req: Request, res: Response) => {
     try {
       const document = await storage.getDocument(req.params.id);
       if (!document) {
@@ -756,7 +756,7 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
   });
 
   // Update document processing status
-  app.patch("/api/documents/:id/status", requireAdmin, async (req, res) => {
+  app.patch("/api/documents/:id/status", requireAdmin, async (req: Request, res: Response) => {
     try {
       const { status, processingStatus, qualityScore, ocrAccuracy } = req.body;
       
@@ -775,7 +775,7 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
   });
 
   // Policy Sources Management
-  app.get("/api/policy-sources", requireAdmin, async (req, res) => {
+  app.get("/api/policy-sources", requireAdmin, async (req: Request, res: Response) => {
     try {
       const sources = await storage.getPolicySources();
       res.json(sources);
@@ -785,7 +785,7 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
     }
   });
 
-  app.post("/api/policy-sources", requireAdmin, async (req, res) => {
+  app.post("/api/policy-sources", requireAdmin, async (req: Request, res: Response) => {
     try {
       const sourceData = insertPolicySourceSchema.parse(req.body);
       const source = await storage.createPolicySource(sourceData);
@@ -799,13 +799,27 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
     }
   });
 
-  app.patch("/api/policy-sources/:id", requireAdmin, async (req, res) => {
+  app.patch("/api/policy-sources/:id", requireAdmin, async (req: Request, res: Response) => {
     try {
-      const { syncStatus, lastSyncAt } = req.body;
-      const source = await storage.updatePolicySource(req.params.id, {
-        syncStatus,
-        lastSyncAt,
-      });
+      const allowedUpdates = {
+        syncStatus: req.body.syncStatus,
+        lastSyncAt: req.body.lastSyncAt,
+        syncSchedule: req.body.syncSchedule,
+        maxAllowedFrequency: req.body.maxAllowedFrequency,
+        isActive: req.body.isActive,
+        hasNewData: req.body.hasNewData,
+        racStatus: req.body.racStatus,
+        racCodeLocation: req.body.racCodeLocation,
+        priority: req.body.priority,
+        syncConfig: req.body.syncConfig,
+      };
+      
+      // Remove undefined values
+      const updates = Object.fromEntries(
+        Object.entries(allowedUpdates).filter(([_, v]) => v !== undefined)
+      );
+      
+      const source = await storage.updatePolicySource(req.params.id, updates);
       res.json(source);
     } catch (error) {
       console.error("Error updating policy source:", error);
@@ -813,8 +827,66 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
     }
   });
 
+  // Trigger per-source manual sync
+  app.post("/api/policy-sources/:id/sync", requireAdmin, asyncHandler(async (req: Request, res: Response) => {
+    const { id } = req.params;
+    const source = await storage.getPolicySourceById(id);
+    
+    if (!source) {
+      return res.status(404).json({ error: "Policy source not found" });
+    }
+    
+    // Update sync status to 'syncing'
+    await storage.updatePolicySource(id, { 
+      syncStatus: "syncing",
+      lastSyncAt: new Date() as any
+    });
+    
+    try {
+      // Trigger appropriate sync method based on source type
+      let result;
+      
+      if (source.syncType === 'bulk_download' && source.url?.includes('ecfr')) {
+        const { ecfrBulkDownloader } = await import("./services/ecfrBulkDownloader");
+        result = await ecfrBulkDownloader.downloadSNAPRegulations();
+      } else if (source.name.includes('FNS State Options')) {
+        const { fnsStateOptionsParser } = await import("./services/fnsStateOptionsParser");
+        result = await fnsStateOptionsParser.downloadAndParse();
+      } else if (source.syncType === 'web_scraping' || source.syncType === 'direct_download') {
+        const { policySourceScraper } = await import('./services/policySourceScraper.js');
+        const documentCount = await policySourceScraper.scrapeSource(id);
+        result = { documentCount };
+      } else {
+        // Fallback to generic scraper
+        const { policySourceScraper } = await import('./services/policySourceScraper.js');
+        const documentCount = await policySourceScraper.scrapeSource(id);
+        result = { documentCount };
+      }
+      
+      // Update sync status to 'success'
+      await storage.updatePolicySource(id, { 
+        syncStatus: "success",
+        lastSuccessfulSyncAt: new Date() as any
+      });
+      
+      res.json({
+        success: true,
+        message: `Successfully synced policy source: ${source.name}`,
+        result
+      });
+    } catch (error: any) {
+      // Update sync status to 'error'
+      await storage.updatePolicySource(id, { 
+        syncStatus: "error",
+        syncError: error.message
+      });
+      
+      throw error;
+    }
+  }));
+
   // Trigger policy source scraping (Legacy)
-  app.post("/api/policy-sources/:id/scrape", requireAdmin, async (req, res) => {
+  app.post("/api/policy-sources/:id/scrape", requireAdmin, async (req: Request, res: Response) => {
     try {
       const { id } = req.params;
       const { policySourceScraper } = await import('./services/policySourceScraper.js');
@@ -837,7 +909,7 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
   });
 
   // Trigger eCFR Bulk Download (Official - replaces web scraping for 7 CFR Part 273)
-  app.post("/api/policy-sources/ecfr/bulk-download", requireAdmin, asyncHandler(async (req, res) => {
+  app.post("/api/policy-sources/ecfr/bulk-download", requireAdmin, asyncHandler(async (req: Request, res: Response) => {
     const { ecfrBulkDownloader } = await import("./services/ecfrBulkDownloader");
     
     console.log("Starting eCFR Bulk Download Service...");
@@ -848,13 +920,12 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
       success: true,
       message: "eCFR SNAP regulations downloaded successfully",
       documentsProcessed: result.documentIds.length,
-      sections: result.sections.length,
       documentIds: result.documentIds
     });
   }));
 
   // Trigger FNS State Options Report parsing (28 SNAP options/waivers)
-  app.post("/api/policy-sources/fns-state-options", requireAdmin, asyncHandler(async (req, res) => {
+  app.post("/api/policy-sources/fns-state-options", requireAdmin, asyncHandler(async (req: Request, res: Response) => {
     const { fnsStateOptionsParser } = await import("./services/fnsStateOptionsParser");
     
     console.log("Starting FNS State Options Report parsing...");
@@ -870,7 +941,7 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
   }));
 
   // Trigger GovInfo Bill Status Download (Federal legislation tracking)
-  app.post("/api/legislative/govinfo-bill-status", requireAdmin, asyncHandler(async (req, res) => {
+  app.post("/api/legislative/govinfo-bill-status", requireAdmin, asyncHandler(async (req: Request, res: Response) => {
     const { govInfoBillStatusDownloader } = await import("./services/govInfoBillStatusDownloader");
     
     const congress = req.body.congress || 119; // Default to 119th Congress
@@ -890,7 +961,7 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
   }));
 
   // Trigger GovInfo Public Laws Download (Enacted federal legislation)
-  app.post("/api/legislative/govinfo-public-laws", requireAdmin, asyncHandler(async (req, res) => {
+  app.post("/api/legislative/govinfo-public-laws", requireAdmin, asyncHandler(async (req: Request, res: Response) => {
     const { govInfoPublicLawsDownloader } = await import("./services/govInfoPublicLawsDownloader");
     
     const congress = req.body.congress || 119; // Default to 119th Congress
@@ -910,7 +981,7 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
   }));
 
   // GovInfo Version Checker - Check for updates without downloading
-  app.post("/api/govinfo/check-versions", requireAdmin, asyncHandler(async (req, res) => {
+  app.post("/api/govinfo/check-versions", requireAdmin, asyncHandler(async (req: Request, res: Response) => {
     const { govInfoVersionChecker } = await import("./services/govInfoVersionChecker");
     
     const { congress = 119 } = req.body;
@@ -929,7 +1000,7 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
   }));
 
   // Get current version status (latest check for each source)
-  app.get("/api/govinfo/version-status", requireAdmin, asyncHandler(async (req, res) => {
+  app.get("/api/govinfo/version-status", requireAdmin, asyncHandler(async (req: Request, res: Response) => {
     const { govInfoVersionChecker } = await import("./services/govInfoVersionChecker");
     
     const status = await govInfoVersionChecker.getCurrentVersionStatus();
@@ -942,7 +1013,7 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
   }));
 
   // Get version check history
-  app.get("/api/govinfo/version-history", requireAdmin, asyncHandler(async (req, res) => {
+  app.get("/api/govinfo/version-history", requireAdmin, asyncHandler(async (req: Request, res: Response) => {
     const { govInfoVersionChecker } = await import("./services/govInfoVersionChecker");
     
     const { checkType, limit = 20 } = req.query;
@@ -958,7 +1029,7 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
   }));
 
   // Smart Scheduler - Get current schedule status
-  app.get("/api/scheduler/status", requireAdmin, asyncHandler(async (req, res) => {
+  app.get("/api/scheduler/status", requireAdmin, asyncHandler(async (req: Request, res: Response) => {
     const { smartScheduler } = await import("./services/smartScheduler");
     
     const status = smartScheduler.getStatus();
@@ -970,7 +1041,7 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
   }));
 
   // Smart Scheduler - Manually trigger a specific source check
-  app.post("/api/scheduler/trigger/:source", requireAdmin, asyncHandler(async (req, res) => {
+  app.post("/api/scheduler/trigger/:source", requireAdmin, asyncHandler(async (req: Request, res: Response) => {
     const { smartScheduler } = await import("./services/smartScheduler");
     const { source } = req.params;
     
@@ -991,7 +1062,7 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
   }));
 
   // Cache Management - Get aggregated cache statistics
-  app.get("/api/admin/cache/stats", requireAdmin, asyncHandler(async (req, res) => {
+  app.get("/api/admin/cache/stats", requireAdmin, asyncHandler(async (req: Request, res: Response) => {
     const { cacheMetrics } = await import("./services/cacheMetrics");
     
     const metrics = cacheMetrics.getAggregatedMetrics();
@@ -1003,7 +1074,7 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
   }));
 
   // Cache Management - Get cost savings report
-  app.get("/api/admin/cache/cost-savings", requireAdmin, asyncHandler(async (req, res) => {
+  app.get("/api/admin/cache/cost-savings", requireAdmin, asyncHandler(async (req: Request, res: Response) => {
     const { cacheMetrics } = await import("./services/cacheMetrics");
     
     const report = cacheMetrics.getCostSavingsReport();
@@ -1015,7 +1086,7 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
   }));
 
   // Cache Management - Clear specific cache
-  app.post("/api/admin/cache/clear/:type", requireAdmin, asyncHandler(async (req, res) => {
+  app.post("/api/admin/cache/clear/:type", requireAdmin, asyncHandler(async (req: Request, res: Response) => {
     const { cacheMetrics } = await import("./services/cacheMetrics");
     const { type } = req.params;
     
@@ -1041,7 +1112,7 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
   // ============================================================================
   
   // Get monitoring metrics for dashboard
-  app.get("/api/admin/monitoring/metrics", requireAdmin, asyncHandler(async (req, res) => {
+  app.get("/api/admin/monitoring/metrics", requireAdmin, asyncHandler(async (req: Request, res: Response) => {
     const { metricsService } = await import("./services/metricsService");
     const { alertService } = await import("./services/alertService");
     const { getSentryStatus } = await import("./services/sentryService");
@@ -1108,7 +1179,7 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
   }));
   
   // Trigger a test error for Sentry verification
-  app.post("/api/admin/monitoring/test-error", requireAdmin, asyncHandler(async (req, res) => {
+  app.post("/api/admin/monitoring/test-error", requireAdmin, asyncHandler(async (req: Request, res: Response) => {
     const { captureException, captureMessage } = await import("./services/sentryService");
     
     // Extract tenantId for proper context
@@ -1152,7 +1223,7 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
   }));
   
   // Get alert history
-  app.get("/api/admin/monitoring/alerts", requireAdmin, asyncHandler(async (req, res) => {
+  app.get("/api/admin/monitoring/alerts", requireAdmin, asyncHandler(async (req: Request, res: Response) => {
     const { alertService } = await import("./services/alertService");
     const { severity, limit = 50 } = req.query;
     
@@ -1181,7 +1252,7 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
   }));
   
   // Resolve an alert
-  app.post("/api/admin/monitoring/alerts/:alertId/resolve", requireAdmin, asyncHandler(async (req, res) => {
+  app.post("/api/admin/monitoring/alerts/:alertId/resolve", requireAdmin, asyncHandler(async (req: Request, res: Response) => {
     const { alertService } = await import("./services/alertService");
     const { alertId } = req.params;
     
@@ -1195,7 +1266,7 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
 
   // Congress.gov API - Search bills by keywords (Real-time legislative keyword search)
   // Note: For authoritative bill status, use GovInfo Bill Status XML API
-  app.post("/api/legislative/congress-search", requireAdmin, asyncHandler(async (req, res) => {
+  app.post("/api/legislative/congress-search", requireAdmin, asyncHandler(async (req: Request, res: Response) => {
     const { congressBillTracker } = await import("./services/congressBillTracker");
     
     const { 
@@ -1220,7 +1291,7 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
   }));
 
   // Congress.gov API - Track specific bill by number (Real-time bill status)
-  app.post("/api/legislative/congress-track/:billNumber", requireAdmin, asyncHandler(async (req, res) => {
+  app.post("/api/legislative/congress-track/:billNumber", requireAdmin, asyncHandler(async (req: Request, res: Response) => {
     const { congressBillTracker } = await import("./services/congressBillTracker");
     
     const { billNumber } = req.params;
@@ -1260,7 +1331,7 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
   }));
 
   // Congress.gov API - Sync all tracked bills (Update all bills in database)
-  app.post("/api/legislative/congress-sync", requireAdmin, asyncHandler(async (req, res) => {
+  app.post("/api/legislative/congress-sync", requireAdmin, asyncHandler(async (req: Request, res: Response) => {
     const { congressBillTracker } = await import("./services/congressBillTracker");
     
     console.log("Starting sync of all tracked bills from Congress.gov...");
@@ -1277,7 +1348,7 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
   }));
 
   // Maryland Legislature Scraper - Scrape state bills from mgaleg.maryland.gov
-  app.post("/api/legislative/maryland-scrape", requireAdmin, asyncHandler(async (req, res) => {
+  app.post("/api/legislative/maryland-scrape", requireAdmin, asyncHandler(async (req: Request, res: Response) => {
     const { marylandLegislatureScraper } = await import("./services/marylandLegislatureScraper");
     
     const session = req.body.session || '2025RS'; // Default to 2025 Regular Session
@@ -1296,7 +1367,7 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
   }));
 
   // Model Management
-  app.get("/api/models", requireAdmin, async (req, res) => {
+  app.get("/api/models", requireAdmin, async (req: Request, res: Response) => {
     try {
       const models = await storage.getModelVersions();
       res.json(models);
@@ -1307,7 +1378,7 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
   });
 
   // Training Jobs
-  app.get("/api/training-jobs", requireAdmin, async (req, res) => {
+  app.get("/api/training-jobs", requireAdmin, async (req: Request, res: Response) => {
     try {
       const jobs = await storage.getTrainingJobs();
       res.json(jobs);
@@ -1317,7 +1388,7 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
     }
   });
 
-  app.post("/api/training-jobs", requireAdmin, async (req, res) => {
+  app.post("/api/training-jobs", requireAdmin, async (req: Request, res: Response) => {
     try {
       const jobData = insertTrainingJobSchema.parse(req.body);
       const job = await storage.createTrainingJob(jobData);
@@ -1331,7 +1402,7 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
     }
   });
 
-  app.patch("/api/training-jobs/:id", requireAdmin, async (req, res) => {
+  app.patch("/api/training-jobs/:id", requireAdmin, async (req: Request, res: Response) => {
     try {
       const { status, progress, metrics } = req.body;
       const job = await storage.updateTrainingJob(req.params.id, {
@@ -1347,7 +1418,7 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
   });
 
   // System metrics and status
-  app.get("/api/system/status", requireAdmin, async (req, res) => {
+  app.get("/api/system/status", requireAdmin, async (req: Request, res: Response) => {
     try {
       const [totalDocuments] = await storage.getDocuments({ limit: 1 });
       const recentProcessing = await storage.getDocuments({ status: "processing", limit: 10 });
@@ -1373,7 +1444,7 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
   });
 
   // Document Ingestion endpoints for Maryland SNAP manual
-  app.post("/api/ingest/maryland-snap", requireAdmin, async (req, res) => {
+  app.post("/api/ingest/maryland-snap", requireAdmin, async (req: Request, res: Response) => {
     try {
       console.log('Starting Maryland SNAP manual ingestion...');
       const documentIds = await documentIngestionService.ingestAllDocuments();
@@ -1395,7 +1466,7 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
   });
 
   // Get golden source documents with audit trail
-  app.get("/api/golden-source/documents", requireAdmin, async (req, res) => {
+  app.get("/api/golden-source/documents", requireAdmin, async (req: Request, res: Response) => {
     try {
       const documents = await documentIngestionService.listGoldenSourceDocuments();
       res.json({
@@ -1414,7 +1485,7 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
   });
 
   // Verify document integrity
-  app.post("/api/golden-source/verify/:documentId", requireAdmin, async (req, res) => {
+  app.post("/api/golden-source/verify/:documentId", requireAdmin, async (req: Request, res: Response) => {
     try {
       const { documentId } = req.params;
       const isValid = await documentIngestionService.verifyDocumentIntegrity(documentId);
@@ -1436,7 +1507,7 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
   });
 
   // Get audit trail for a specific document
-  app.get("/api/golden-source/audit-trail/:documentId", requireAdmin, async (req, res) => {
+  app.get("/api/golden-source/audit-trail/:documentId", requireAdmin, async (req: Request, res: Response) => {
     try {
       const { documentId } = req.params;
       const auditTrail = await documentIngestionService.getDocumentAuditTrail(documentId);
@@ -1464,7 +1535,7 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
   });
 
   // Automated Ingestion Management endpoints
-  app.get("/api/automated-ingestion/schedules", requireAdmin, async (req, res) => {
+  app.get("/api/automated-ingestion/schedules", requireAdmin, async (req: Request, res: Response) => {
     try {
       const schedules = automatedIngestionService.getSchedules();
       res.json({
@@ -1482,7 +1553,7 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
     }
   });
 
-  app.post("/api/automated-ingestion/trigger", requireAdmin, async (req, res) => {
+  app.post("/api/automated-ingestion/trigger", requireAdmin, async (req: Request, res: Response) => {
     try {
       const { reason } = req.body;
       await automatedIngestionService.triggerManualIngestion(reason || 'Manual API trigger');
@@ -1502,7 +1573,7 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
     }
   });
 
-  app.patch("/api/automated-ingestion/schedules/:id", requireAdmin, async (req, res) => {
+  app.patch("/api/automated-ingestion/schedules/:id", requireAdmin, async (req: Request, res: Response) => {
     try {
       const { id } = req.params;
       const updates = req.body;
@@ -1531,7 +1602,7 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
     }
   });
 
-  app.post("/api/automated-ingestion/schedules", requireAdmin, async (req, res) => {
+  app.post("/api/automated-ingestion/schedules", requireAdmin, async (req: Request, res: Response) => {
     try {
       const { id, frequency, isActive } = req.body;
       
@@ -1564,7 +1635,7 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
   // ============================================================================
 
   // Eligibility pre-screening endpoint
-  app.post("/api/eligibility/check", requireAuth, async (req, res) => {
+  app.post("/api/eligibility/check", requireAuth, async (req: Request, res: Response) => {
     try {
       const { householdSize, monthlyIncome, hasEarnedIncome, hasSSI, hasTANF, userId } = req.body;
 
@@ -1636,7 +1707,7 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
   });
 
   // Full benefit calculation endpoint
-  app.post("/api/eligibility/calculate", requireAuth, async (req, res) => {
+  app.post("/api/eligibility/calculate", requireAuth, async (req: Request, res: Response) => {
     try {
       const {
         householdSize,
@@ -1717,7 +1788,7 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
   });
 
   // Get active SNAP income limits
-  app.get("/api/rules/income-limits", requireAuth, async (req, res) => {
+  app.get("/api/rules/income-limits", requireAuth, async (req: Request, res: Response) => {
     try {
       const { benefitProgramId } = req.query;
       
@@ -1757,7 +1828,7 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
   });
 
   // Create new SNAP income limit
-  app.post("/api/rules/income-limits", requireAdmin, async (req, res) => {
+  app.post("/api/rules/income-limits", requireAdmin, async (req: Request, res: Response) => {
     try {
       const { benefitProgramId, householdSize, grossMonthlyIncomeLimit, netMonthlyIncomeLimit, manualSection, effectiveDate } = req.body;
 
@@ -1791,7 +1862,7 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
   });
 
   // Update SNAP income limit
-  app.patch("/api/rules/income-limits/:id", requireAdmin, async (req, res) => {
+  app.patch("/api/rules/income-limits/:id", requireAdmin, async (req: Request, res: Response) => {
     try {
       const { id } = req.params;
       const { householdSize, grossMonthlyIncomeLimit, netMonthlyIncomeLimit, manualSection, effectiveDate, isActive } = req.body;
@@ -1823,7 +1894,7 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
   });
 
   // Get active SNAP deductions
-  app.get("/api/rules/deductions", requireAuth, async (req, res) => {
+  app.get("/api/rules/deductions", requireAuth, async (req: Request, res: Response) => {
     try {
       const programs = await storage.getBenefitPrograms();
       const snapProgram = programs.find(p => p.code === "MD_SNAP");
@@ -1859,7 +1930,7 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
   });
 
   // Get active SNAP allotments
-  app.get("/api/rules/allotments", requireAuth, async (req, res) => {
+  app.get("/api/rules/allotments", requireAuth, async (req: Request, res: Response) => {
     try {
       const programs = await storage.getBenefitPrograms();
       const snapProgram = programs.find(p => p.code === "MD_SNAP");
@@ -1895,7 +1966,7 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
   });
 
   // Get categorical eligibility rules
-  app.get("/api/rules/categorical-eligibility", requireAuth, async (req, res) => {
+  app.get("/api/rules/categorical-eligibility", requireAuth, async (req: Request, res: Response) => {
     try {
       const programs = await storage.getBenefitPrograms();
       const snapProgram = programs.find(p => p.code === "MD_SNAP");
@@ -1919,7 +1990,7 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
   });
 
   // Get document requirements
-  app.get("/api/rules/document-requirements", requireAuth, async (req, res) => {
+  app.get("/api/rules/document-requirements", requireAuth, async (req: Request, res: Response) => {
     try {
       const programs = await storage.getBenefitPrograms();
       const snapProgram = programs.find(p => p.code === "MD_SNAP");
@@ -1943,7 +2014,7 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
   });
 
   // Get recent eligibility calculations
-  app.get("/api/eligibility/calculations", requireAuth, async (req, res) => {
+  app.get("/api/eligibility/calculations", requireAuth, async (req: Request, res: Response) => {
     try {
       const { userId, limit } = req.query;
       const calculations = await storage.getEligibilityCalculations(
@@ -1967,7 +2038,7 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
   // ============================================================================
 
   // Get all manual sections (table of contents)
-  app.get("/api/manual/sections", requireAuth, async (req, res) => {
+  app.get("/api/manual/sections", requireAuth, async (req: Request, res: Response) => {
     try {
       // Check cache first - use a static key for all sections
       const cacheKey = 'manual_sections:all';
@@ -1994,7 +2065,7 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
   });
 
   // Get specific manual section with details
-  app.get("/api/manual/sections/:id", requireAuth, async (req, res) => {
+  app.get("/api/manual/sections/:id", requireAuth, async (req: Request, res: Response) => {
     try {
       const { id } = req.params;
       
@@ -2036,7 +2107,7 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
   });
 
   // Get manual structure (metadata without DB access)
-  app.get("/api/manual/structure", requireAuth, async (req, res) => {
+  app.get("/api/manual/structure", requireAuth, async (req: Request, res: Response) => {
     try {
       const structure = manualIngestionService.getManualStructure();
       res.json({
@@ -2051,7 +2122,7 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
   });
 
   // Get manual ingestion status
-  app.get("/api/manual/status", requireAuth, async (req, res) => {
+  app.get("/api/manual/status", requireAuth, async (req: Request, res: Response) => {
     try {
       const status = await manualIngestionService.getIngestionStatus();
       const isComplete = await manualIngestionService.verifyCompleteness();
@@ -2068,7 +2139,7 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
   });
 
   // Trigger manual metadata ingestion
-  app.post("/api/manual/ingest-metadata", requireAdmin, async (req, res) => {
+  app.post("/api/manual/ingest-metadata", requireAdmin, async (req: Request, res: Response) => {
     try {
       const programs = await storage.getBenefitPrograms();
       const snapProgram = programs.find(p => p.code === "MD_SNAP");
@@ -2097,7 +2168,7 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
   });
 
   // Trigger FULL manual ingestion (download PDFs, extract text, generate embeddings)
-  app.post("/api/manual/ingest-full", requireAdmin, async (req, res) => {
+  app.post("/api/manual/ingest-full", requireAdmin, async (req: Request, res: Response) => {
     try {
       // Import the full ingestion service
       const { ingestCompleteManual } = await import("./services/manualIngestionService");
@@ -2133,7 +2204,7 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
   // ============================================================================
 
   // Trigger IRS Pub 4012 ingestion (Legacy - uses web scraping)
-  app.post("/api/vita/ingest-pub4012", requireAdmin, asyncHandler(async (req, res) => {
+  app.post("/api/vita/ingest-pub4012", requireAdmin, asyncHandler(async (req: Request, res: Response) => {
     const { VitaIngestionService } = await import("./services/vitaIngestion.service");
     const vitaService = new VitaIngestionService(storage);
     
@@ -2157,7 +2228,7 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
   }));
 
   // Trigger IRS Direct Download (Official - replaces web scraping)
-  app.post("/api/vita/download-irs-publications", requireAdmin, asyncHandler(async (req, res) => {
+  app.post("/api/vita/download-irs-publications", requireAdmin, asyncHandler(async (req: Request, res: Response) => {
     const { irsDirectDownloader } = await import("./services/irsDirectDownloader");
     
     console.log("Starting IRS Direct Download Service...");
@@ -2173,7 +2244,7 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
   }));
 
   // Get VITA documents status
-  app.get("/api/vita/documents", requireAuth, asyncHandler(async (req, res) => {
+  app.get("/api/vita/documents", requireAuth, asyncHandler(async (req: Request, res: Response) => {
     const programs = await storage.getBenefitPrograms();
     const vitaProgram = programs.find(p => p.code === "VITA");
     
@@ -2193,7 +2264,7 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
   }));
 
   // Search VITA knowledge base with semantic similarity
-  app.post("/api/vita/search", requireAuth, asyncHandler(async (req, res) => {
+  app.post("/api/vita/search", requireAuth, asyncHandler(async (req: Request, res: Response) => {
     const { VitaSearchService } = await import("./services/vitaSearch.service");
     const vitaSearch = new VitaSearchService(storage);
 
@@ -2233,7 +2304,7 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
   }));
 
   // Get available VITA topics from knowledge base
-  app.get("/api/vita/topics", requireAuth, asyncHandler(async (req, res) => {
+  app.get("/api/vita/topics", requireAuth, asyncHandler(async (req: Request, res: Response) => {
     const { VitaSearchService } = await import("./services/vitaSearch.service");
     const vitaSearch = new VitaSearchService(storage);
 
@@ -2251,7 +2322,7 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
   // ============================================================================
 
   // Generate text for a specific section from Rules as Code
-  app.post("/api/manual/generate-text/:sectionId", requireAuth, async (req, res) => {
+  app.post("/api/manual/generate-text/:sectionId", requireAuth, async (req: Request, res: Response) => {
     try {
       const { sectionId } = req.params;
       
@@ -2282,7 +2353,7 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
   });
 
   // Generate income limits text
-  app.post("/api/manual/generate/income-limits", requireAuth, async (req, res) => {
+  app.post("/api/manual/generate/income-limits", requireAuth, async (req: Request, res: Response) => {
     try {
       const programs = await storage.getBenefitPrograms();
       const snapProgram = programs.find(p => p.code === "MD_SNAP");
@@ -2300,7 +2371,7 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
   });
 
   // Generate deductions text
-  app.post("/api/manual/generate/deductions", requireAuth, async (req, res) => {
+  app.post("/api/manual/generate/deductions", requireAuth, async (req: Request, res: Response) => {
     try {
       const programs = await storage.getBenefitPrograms();
       const snapProgram = programs.find(p => p.code === "MD_SNAP");
@@ -2318,7 +2389,7 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
   });
 
   // Generate allotments text
-  app.post("/api/manual/generate/allotments", requireAuth, async (req, res) => {
+  app.post("/api/manual/generate/allotments", requireAuth, async (req: Request, res: Response) => {
     try {
       const programs = await storage.getBenefitPrograms();
       const snapProgram = programs.find(p => p.code === "MD_SNAP");
@@ -2359,13 +2430,13 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
   });
 
   // Get all client interaction sessions for the current navigator
-  app.get("/api/navigator/sessions", requireStaff, asyncHandler(async (req, res) => {
+  app.get("/api/navigator/sessions", requireStaff, asyncHandler(async (req: Request, res: Response) => {
     const sessions = await storage.getClientInteractionSessions();
     res.json(sessions);
   }));
 
   // Create a new client interaction session
-  app.post("/api/navigator/sessions", requireStaff, asyncHandler(async (req, res) => {
+  app.post("/api/navigator/sessions", requireStaff, asyncHandler(async (req: Request, res: Response) => {
     const validatedData = sessionCreateSchema.parse(req.body);
     
     const sessionData = {
@@ -2379,13 +2450,13 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
   }));
 
   // Get all E&E export batches
-  app.get("/api/navigator/exports", requireStaff, asyncHandler(async (req, res) => {
+  app.get("/api/navigator/exports", requireStaff, asyncHandler(async (req: Request, res: Response) => {
     const exports = await storage.getEEExportBatches();
     res.json(exports);
   }));
 
   // Create a new E&E export batch
-  app.post("/api/navigator/exports", requireStaff, asyncHandler(async (req, res) => {
+  app.post("/api/navigator/exports", requireStaff, asyncHandler(async (req: Request, res: Response) => {
     const validatedData = exportCreateSchema.parse(req.body);
 
     // Get unexported sessions
@@ -2410,7 +2481,7 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
   }));
 
   // Download an E&E export batch file
-  app.get("/api/navigator/exports/:id/download", requireStaff, asyncHandler(async (req, res) => {
+  app.get("/api/navigator/exports/:id/download", requireStaff, asyncHandler(async (req: Request, res: Response) => {
     const { id } = req.params;
     const { eeExportService } = await import("./services/eeExportService");
     const exportBatch = await storage.getEEExportBatch(id);
@@ -2452,7 +2523,7 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
   // ============================================================================
 
   // Upload and analyze verification document (rent receipt, utility bill, pay stub, etc.)
-  app.post("/api/navigator/sessions/:sessionId/documents", requireStaff, upload.single("document"), asyncHandler(async (req, res) => {
+  app.post("/api/navigator/sessions/:sessionId/documents", requireStaff, upload.single("document"), asyncHandler(async (req: Request, res: Response) => {
     const { sessionId } = req.params;
     const { documentType, clientCaseId } = req.body;
     
@@ -2474,6 +2545,7 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
     const analysisResult = await verifyDocument(base64Image, documentType);
     
     // Upload to object storage
+    const objectStorageService = new ObjectStorageService();
     const uploadUrl = await objectStorageService.getObjectEntityUploadURL();
     const uploadResponse = await fetch(uploadUrl, {
       method: 'PUT',
@@ -2511,14 +2583,14 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
   }));
 
   // Get all verification documents for a session
-  app.get("/api/navigator/sessions/:sessionId/documents", requireStaff, asyncHandler(async (req, res) => {
+  app.get("/api/navigator/sessions/:sessionId/documents", requireStaff, asyncHandler(async (req: Request, res: Response) => {
     const { sessionId } = req.params;
     const documents = await storage.getClientVerificationDocuments({ sessionId });
     res.json(documents);
   }));
 
   // Update verification document status (approve/reject/edit)
-  app.patch("/api/navigator/documents/:id", requireStaff, asyncHandler(async (req, res) => {
+  app.patch("/api/navigator/documents/:id", requireStaff, asyncHandler(async (req: Request, res: Response) => {
     const { id } = req.params;
     const { verificationStatus, reviewNotes, manuallyEditedData } = req.body;
     
@@ -2536,7 +2608,7 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
   }));
 
   // Delete verification document
-  app.delete("/api/navigator/documents/:id", requireStaff, asyncHandler(async (req, res) => {
+  app.delete("/api/navigator/documents/:id", requireStaff, asyncHandler(async (req: Request, res: Response) => {
     const { id } = req.params;
     await storage.deleteClientVerificationDocument(id);
     res.json({ success: true });
@@ -2567,13 +2639,13 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
   });
 
   // Get all consent forms
-  app.get("/api/consent/forms", requireStaff, asyncHandler(async (req, res) => {
+  app.get("/api/consent/forms", requireStaff, asyncHandler(async (req: Request, res: Response) => {
     const forms = await storage.getConsentForms();
     res.json(forms);
   }));
 
   // Create a new consent form
-  app.post("/api/consent/forms", requireStaff, asyncHandler(async (req, res) => {
+  app.post("/api/consent/forms", requireStaff, asyncHandler(async (req: Request, res: Response) => {
     const validatedData = consentFormSchema.parse(req.body);
     
     const formData = {
@@ -2587,14 +2659,14 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
   }));
 
   // Get all client consents
-  app.get("/api/consent/client-consents", requireAuth, asyncHandler(async (req, res) => {
+  app.get("/api/consent/client-consents", requireAuth, asyncHandler(async (req: Request, res: Response) => {
     const clientCaseId = req.query.clientCaseId as string | undefined;
     const consents = await storage.getClientConsents(clientCaseId);
     res.json(consents);
   }));
 
   // Create a new client consent
-  app.post("/api/consent/client-consents", requireAuth, asyncHandler(async (req, res) => {
+  app.post("/api/consent/client-consents", requireAuth, asyncHandler(async (req: Request, res: Response) => {
     const validatedData = clientConsentSchema.parse(req.body);
     
     // Verify that the form exists and is active
@@ -2640,7 +2712,7 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
   });
   
   // Extract rules from a single manual section
-  app.post("/api/extraction/extract-section", requireAdmin, asyncHandler(async (req, res) => {
+  app.post("/api/extraction/extract-section", requireAdmin, asyncHandler(async (req: Request, res: Response) => {
     const { extractRulesFromSection } = await import('./services/rulesExtractionService');
     
     const validatedData = extractSectionSchema.parse(req.body);
@@ -2662,7 +2734,7 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
   }));
 
   // Batch extract rules from multiple sections
-  app.post("/api/extraction/extract-batch", requireAdmin, asyncHandler(async (req, res) => {
+  app.post("/api/extraction/extract-batch", requireAdmin, asyncHandler(async (req: Request, res: Response) => {
     const { batchExtractRules } = await import('./services/rulesExtractionService');
     
     const validatedData = extractBatchSchema.parse(req.body);
@@ -2680,7 +2752,7 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
   }));
 
   // Get extraction job status
-  app.get("/api/extraction/jobs/:jobId", requireAdmin, asyncHandler(async (req, res) => {
+  app.get("/api/extraction/jobs/:jobId", requireAdmin, asyncHandler(async (req: Request, res: Response) => {
     const { getExtractionJob } = await import('./services/rulesExtractionService');
     
     const job = await getExtractionJob(req.params.jobId);
@@ -2694,7 +2766,7 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
   }));
 
   // Get all extraction jobs
-  app.get("/api/extraction/jobs", requireAdmin, asyncHandler(async (req, res) => {
+  app.get("/api/extraction/jobs", requireAdmin, asyncHandler(async (req: Request, res: Response) => {
     const { getAllExtractionJobs } = await import('./services/rulesExtractionService');
     
     const jobs = await getAllExtractionJobs();
@@ -2705,7 +2777,7 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
   // ===== AI HEALTH & BIAS MONITORING ROUTES =====
   
   // Get AI query analytics
-  app.get("/api/ai-monitoring/query-analytics", asyncHandler(async (req, res) => {
+  app.get("/api/ai-monitoring/query-analytics", asyncHandler(async (req: Request, res: Response) => {
     const days = parseInt(req.query.days as string) || 30;
     const startDate = new Date();
     startDate.setDate(startDate.getDate() - days);
@@ -2756,7 +2828,7 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
   }));
 
   // Get AI system health metrics
-  app.get("/api/ai-monitoring/system-health", asyncHandler(async (req, res) => {
+  app.get("/api/ai-monitoring/system-health", asyncHandler(async (req: Request, res: Response) => {
     const days = parseInt(req.query.days as string) || 7;
     const startDate = new Date();
     startDate.setDate(startDate.getDate() - days);
@@ -2764,30 +2836,30 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
     // Error rates from audit logs
     const errorMetrics = await db
       .select({
-        date: sql<string>`DATE(${auditLogs.timestamp})`,
+        date: sql<string>`DATE(${auditLogs.createdAt})`,
         totalEvents: sql<number>`COUNT(*)::int`,
         errors: sql<number>`COUNT(*) FILTER (WHERE ${auditLogs.action} = 'ERROR')::int`
       })
       .from(auditLogs)
-      .where(sql`${auditLogs.timestamp} >= ${startDate}`)
-      .groupBy(sql`DATE(${auditLogs.timestamp})`)
-      .orderBy(sql`DATE(${auditLogs.timestamp})`);
+      .where(sql`${auditLogs.createdAt} >= ${startDate}`)
+      .groupBy(sql`DATE(${auditLogs.createdAt})`)
+      .orderBy(sql`DATE(${auditLogs.createdAt})`);
 
     // External service health (Gemini API)
     const serviceHealth = await db
       .select({
-        service: sql<string>`${auditLogs.metadata}->>'service'`,
+        service: sql<string>`${auditLogs.details}->>'service'`,
         totalCalls: sql<number>`COUNT(*)::int`,
-        failures: sql<number>`COUNT(*) FILTER (WHERE ${auditLogs.metadata}->>'success' = 'false')::int`,
-        avgResponseTime: sql<number>`AVG((${auditLogs.metadata}->>'responseTime')::int)::int`
+        failures: sql<number>`COUNT(*) FILTER (WHERE ${auditLogs.details}->>'success' = 'false')::int`,
+        avgResponseTime: sql<number>`AVG((${auditLogs.details}->>'responseTime')::int)::int`
       })
       .from(auditLogs)
       .where(sql`
-        ${auditLogs.timestamp} >= ${startDate} AND 
+        ${auditLogs.createdAt} >= ${startDate} AND 
         ${auditLogs.action} = 'EXTERNAL_SERVICE' AND
-        ${auditLogs.metadata}->>'service' IS NOT NULL
+        ${auditLogs.details}->>'service' IS NOT NULL
       `)
-      .groupBy(sql`${auditLogs.metadata}->>'service'`);
+      .groupBy(sql`${auditLogs.details}->>'service'`);
 
     res.json({
       errorTrends: errorMetrics,
@@ -2799,7 +2871,7 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
   // ===== SECURITY MONITORING ROUTES =====
   
   // Get security metrics and alerts
-  app.get("/api/security/metrics", requireAuth, requireAdmin, asyncHandler(async (req, res) => {
+  app.get("/api/security/metrics", requireAuth, requireAdmin, asyncHandler(async (req: Request, res: Response) => {
     const days = parseInt(req.query.days as string) || 7;
     const startDate = new Date();
     startDate.setDate(startDate.getDate() - days);
@@ -2838,7 +2910,7 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
       .select({
         date: sql<string>`DATE(${auditLogs.createdAt})`,
         count: sql<number>`COUNT(*)::int`,
-        entityTypes: sql<string>`string_agg(DISTINCT ${auditLogs.entityType}, ', ')`
+        entityTypes: sql<string>`string_agg(DISTINCT ${auditLogs.resource}, ', ')`
       })
       .from(auditLogs)
       .where(and(
@@ -2970,7 +3042,7 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
   }));
 
   // Get security alerts (critical events in last 24h)
-  app.get("/api/security/alerts", requireAuth, requireAdmin, asyncHandler(async (req, res) => {
+  app.get("/api/security/alerts", requireAuth, requireAdmin, asyncHandler(async (req: Request, res: Response) => {
     const last24h = new Date();
     last24h.setHours(last24h.getHours() - 24);
 
@@ -2983,7 +3055,7 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
         userAgent: auditLogs.userAgent,
         userId: auditLogs.userId,
         username: users.username,
-        metadata: auditLogs.metadata
+        metadata: auditLogs.details
       })
       .from(auditLogs)
       .leftJoin(users, eq(auditLogs.userId, users.id))
@@ -3008,7 +3080,7 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
   }));
 
   // Get response quality metrics
-  app.get("/api/ai-monitoring/response-quality", asyncHandler(async (req, res) => {
+  app.get("/api/ai-monitoring/response-quality", asyncHandler(async (req: Request, res: Response) => {
     const days = parseInt(req.query.days as string) || 30;
     const startDate = new Date();
     startDate.setDate(startDate.getDate() - days);
@@ -3079,7 +3151,7 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
   }));
 
   // Flag response for bias review
-  app.post("/api/ai-monitoring/flag-response", requireAuth, asyncHandler(async (req, res) => {
+  app.post("/api/ai-monitoring/flag-response", requireAuth, asyncHandler(async (req: Request, res: Response) => {
     const { queryId, reason, notes } = req.body;
     
     if (!queryId || !reason) {
@@ -3107,7 +3179,7 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
   // ============================================================================
 
   // Get audit logs with filtering
-  app.get("/api/audit-logs", requireAuth, requireAdmin, asyncHandler(async (req, res) => {
+  app.get("/api/audit-logs", requireAuth, requireAdmin, asyncHandler(async (req: Request, res: Response) => {
     const { 
       action, 
       entityType, 
@@ -3127,35 +3199,35 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
       conditions.push(eq(auditLogs.action, action as string));
     }
     if (entityType) {
-      conditions.push(eq(auditLogs.entityType, entityType as string));
+      conditions.push(eq(auditLogs.resource, entityType as string));
     }
     if (userId) {
       conditions.push(eq(auditLogs.userId, userId as string));
     }
     if (startDate) {
-      conditions.push(gte(auditLogs.timestamp, new Date(startDate as string)));
+      conditions.push(gte(auditLogs.createdAt, new Date(startDate as string)));
     }
     if (endDate) {
-      conditions.push(lte(auditLogs.timestamp, new Date(endDate as string)));
+      conditions.push(lte(auditLogs.createdAt, new Date(endDate as string)));
     }
 
     const logs = await db
       .select({
         id: auditLogs.id,
         action: auditLogs.action,
-        entityType: auditLogs.entityType,
-        entityId: auditLogs.entityId,
+        entityType: auditLogs.resource,
+        entityId: auditLogs.resourceId,
         userId: auditLogs.userId,
-        metadata: auditLogs.metadata,
+        metadata: auditLogs.details,
         ipAddress: auditLogs.ipAddress,
         userAgent: auditLogs.userAgent,
-        timestamp: auditLogs.timestamp,
+        timestamp: auditLogs.createdAt,
         username: users.username
       })
       .from(auditLogs)
       .leftJoin(users, eq(auditLogs.userId, users.id))
       .where(conditions.length > 0 ? and(...conditions) : undefined)
-      .orderBy(desc(auditLogs.timestamp))
+      .orderBy(desc(auditLogs.createdAt))
       .limit(limitNum)
       .offset(offsetNum);
 
@@ -3174,7 +3246,7 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
   }));
 
   // Get rule change logs with filtering
-  app.get("/api/rule-change-logs", requireAuth, requireAdmin, asyncHandler(async (req, res) => {
+  app.get("/api/rule-change-logs", requireAuth, requireAdmin, asyncHandler(async (req: Request, res: Response) => {
     const { 
       ruleTable, 
       changeType, 
@@ -3247,7 +3319,7 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
   // Feedback Submission Endpoints
   
   // Submit feedback (authenticated users)
-  app.post("/api/feedback", requireAuth, asyncHandler(async (req, res) => {
+  app.post("/api/feedback", requireAuth, asyncHandler(async (req: Request, res: Response) => {
     const userId = (req as any).userId;
     
     // Validate the request body
@@ -3286,7 +3358,7 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
   }));
 
   // Get all feedback (admin only, with filtering and pagination)
-  app.get("/api/feedback", requireAuth, requireAdmin, asyncHandler(async (req, res) => {
+  app.get("/api/feedback", requireAuth, requireAdmin, asyncHandler(async (req: Request, res: Response) => {
     const {
       status,
       feedbackType,
@@ -3381,7 +3453,7 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
   }));
 
   // Get specific feedback (admin only)
-  app.get("/api/feedback/:id", requireAuth, requireAdmin, asyncHandler(async (req, res) => {
+  app.get("/api/feedback/:id", requireAuth, requireAdmin, asyncHandler(async (req: Request, res: Response) => {
     const { id } = req.params;
     
     const [feedback] = await db
@@ -3429,7 +3501,7 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
   }));
 
   // Update feedback status (admin only)
-  app.patch("/api/feedback/:id", requireAuth, requireAdmin, asyncHandler(async (req, res) => {
+  app.patch("/api/feedback/:id", requireAuth, requireAdmin, asyncHandler(async (req: Request, res: Response) => {
     const { id } = req.params;
     const userId = (req as any).userId;
     const { status, priority, assignedTo, adminNotes, resolution } = req.body;
@@ -3477,7 +3549,7 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
   // Quick Rating Endpoints - Simple thumbs up/down feedback
   
   // Submit quick rating (authenticated users)
-  app.post("/api/quick-ratings", requireAuth, asyncHandler(async (req, res) => {
+  app.post("/api/quick-ratings", requireAuth, asyncHandler(async (req: Request, res: Response) => {
     const userId = (req as any).userId;
     
     // Validate the request body
@@ -3514,7 +3586,7 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
   }));
 
   // Get quick rating statistics (admin only)
-  app.get("/api/quick-ratings/stats", requireAuth, requireAdmin, asyncHandler(async (req, res) => {
+  app.get("/api/quick-ratings/stats", requireAuth, requireAdmin, asyncHandler(async (req: Request, res: Response) => {
     const { ratingType, startDate, endDate, days = "30" } = req.query;
     
     const daysNum = parseInt(days as string);
@@ -3580,7 +3652,7 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
   // Notification API Routes
 
   // Get user notifications (with pagination, search, and filtering)
-  app.get("/api/notifications", requireAuth, asyncHandler(async (req, res) => {
+  app.get("/api/notifications", requireAuth, asyncHandler(async (req: Request, res: Response) => {
     const userId = (req as any).userId;
     const { limit = "20", offset = "0", unreadOnly = "false", search = "", type = "" } = req.query;
     
@@ -3632,7 +3704,7 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
   }));
 
   // Get unread notification count
-  app.get("/api/notifications/unread-count", requireAuth, asyncHandler(async (req, res) => {
+  app.get("/api/notifications/unread-count", requireAuth, asyncHandler(async (req: Request, res: Response) => {
     const userId = (req as any).userId;
     
     const [{ unreadCount }] = await db
@@ -3647,7 +3719,7 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
   }));
 
   // Mark notification as read (with ownership verification)
-  app.patch("/api/notifications/:id/read", requireAuth, verifyNotificationOwnership(), asyncHandler(async (req, res) => {
+  app.patch("/api/notifications/:id/read", requireAuth, verifyNotificationOwnership(), asyncHandler(async (req: Request, res: Response) => {
     const userId = (req as any).userId;
     const { id } = req.params;
     
@@ -3671,7 +3743,7 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
   }));
 
   // Mark all notifications as read
-  app.patch("/api/notifications/read-all", requireAuth, asyncHandler(async (req, res) => {
+  app.patch("/api/notifications/read-all", requireAuth, asyncHandler(async (req: Request, res: Response) => {
     const userId = (req as any).userId;
     
     await db
@@ -3689,14 +3761,14 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
   }));
 
   // Get user notification preferences
-  app.get("/api/notifications/preferences", requireAuth, asyncHandler(async (req, res) => {
+  app.get("/api/notifications/preferences", requireAuth, asyncHandler(async (req: Request, res: Response) => {
     const userId = (req as any).userId;
     const prefs = await notificationService.getUserPreferences(userId);
     res.json(prefs);
   }));
 
   // Update user notification preferences
-  app.patch("/api/notifications/preferences", requireAuth, asyncHandler(async (req, res) => {
+  app.patch("/api/notifications/preferences", requireAuth, asyncHandler(async (req: Request, res: Response) => {
     const userId = (req as any).userId;
     const {
       emailEnabled,
@@ -3725,7 +3797,7 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
   // Public Portal API Routes (no auth required)
   
   // Get document requirement templates
-  app.get("/api/public/document-templates", asyncHandler(async (req, res) => {
+  app.get("/api/public/document-templates", asyncHandler(async (req: Request, res: Response) => {
     const templates = await db
       .select()
       .from(documentRequirementTemplates)
@@ -3736,7 +3808,7 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
   }));
 
   // Get notice templates
-  app.get("/api/public/notice-templates", asyncHandler(async (req, res) => {
+  app.get("/api/public/notice-templates", asyncHandler(async (req: Request, res: Response) => {
     const templates = await db
       .select()
       .from(noticeTemplates)
@@ -3747,7 +3819,7 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
   }));
 
   // Get public FAQ
-  app.get("/api/public/faq", asyncHandler(async (req, res) => {
+  app.get("/api/public/faq", asyncHandler(async (req: Request, res: Response) => {
     const { category } = req.query;
     
     const conditions = [eq(publicFaq.isActive, true)];
@@ -3766,7 +3838,7 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
   }));
 
   // Analyze notice image with Gemini Vision
-  app.post("/api/public/analyze-notice", asyncHandler(async (req, res) => {
+  app.post("/api/public/analyze-notice", asyncHandler(async (req: Request, res: Response) => {
     const { imageData } = req.body;
     
     if (!imageData) {
@@ -3833,7 +3905,7 @@ If no document requirements are found, return an empty documents array.`;
   }));
 
   // Explain notice text with Gemini
-  app.post("/api/public/explain-notice", asyncHandler(async (req, res) => {
+  app.post("/api/public/explain-notice", asyncHandler(async (req: Request, res: Response) => {
     const { noticeText } = req.body;
     
     if (!noticeText) {
@@ -3877,7 +3949,7 @@ Return a JSON object with:
   }));
 
   // Search FAQ with AI
-  app.post("/api/public/search-faq", asyncHandler(async (req, res) => {
+  app.post("/api/public/search-faq", asyncHandler(async (req: Request, res: Response) => {
     const { query } = req.body;
     
     if (!query) {
@@ -3938,7 +4010,7 @@ If the question cannot be answered with the available information, say so clearl
   // ============================================================================
 
   // Get all policy changes with filters (requires auth)
-  app.get("/api/policy-changes", requireAuth, asyncHandler(async (req, res) => {
+  app.get("/api/policy-changes", requireAuth, asyncHandler(async (req: Request, res: Response) => {
     const { benefitProgramId, status, limit } = req.query;
     
     const changes = await storage.getPolicyChanges({
@@ -3951,7 +4023,7 @@ If the question cannot be answered with the available information, say so clearl
   }));
 
   // Get single policy change details (requires auth)
-  app.get("/api/policy-changes/:id", requireAuth, asyncHandler(async (req, res) => {
+  app.get("/api/policy-changes/:id", requireAuth, asyncHandler(async (req: Request, res: Response) => {
     const change = await storage.getPolicyChange(req.params.id);
     
     if (!change) {
@@ -3962,20 +4034,20 @@ If the question cannot be answered with the available information, say so clearl
   }));
 
   // Get impacts for a policy change (staff/admin only - contains sensitive data)
-  app.get("/api/policy-changes/:id/impacts", requireStaff, asyncHandler(async (req, res) => {
+  app.get("/api/policy-changes/:id/impacts", requireStaff, asyncHandler(async (req: Request, res: Response) => {
     const impacts = await storage.getPolicyChangeImpacts(req.params.id);
     res.json(impacts);
   }));
 
   // Get user's policy change impacts (requires auth)
-  app.get("/api/my-policy-impacts", requireAuth, asyncHandler(async (req, res) => {
+  app.get("/api/my-policy-impacts", requireAuth, asyncHandler(async (req: Request, res: Response) => {
     const unresolved = req.query.unresolved === 'true';
     const impacts = await storage.getUserPolicyChangeImpacts(req.user!.id, unresolved);
     res.json(impacts);
   }));
 
   // Create policy change (admin only)
-  app.post("/api/policy-changes", requireAdmin, asyncHandler(async (req, res) => {
+  app.post("/api/policy-changes", requireAdmin, asyncHandler(async (req: Request, res: Response) => {
     const change = await storage.createPolicyChange({
       ...req.body,
       createdBy: req.user!.id
@@ -4010,7 +4082,7 @@ If the question cannot be answered with the available information, say so clearl
   }));
 
   // Update policy change (admin only)
-  app.patch("/api/policy-changes/:id", requireAdmin, asyncHandler(async (req, res) => {
+  app.patch("/api/policy-changes/:id", requireAdmin, asyncHandler(async (req: Request, res: Response) => {
     const change = await storage.updatePolicyChange(req.params.id, req.body);
     
     // Invalidate cache
@@ -4021,7 +4093,7 @@ If the question cannot be answered with the available information, say so clearl
   }));
 
   // Create policy change impact
-  app.post("/api/policy-change-impacts", requireAdmin, asyncHandler(async (req, res) => {
+  app.post("/api/policy-change-impacts", requireAdmin, asyncHandler(async (req: Request, res: Response) => {
     const impact = await storage.createPolicyChangeImpact(req.body);
     
     // Notify the affected user about the impact (async - don't wait)
@@ -4050,7 +4122,7 @@ If the question cannot be answered with the available information, say so clearl
   }));
 
   // Acknowledge policy change impact (user action)
-  app.patch("/api/policy-change-impacts/:id/acknowledge", requireAuth, asyncHandler(async (req, res) => {
+  app.patch("/api/policy-change-impacts/:id/acknowledge", requireAuth, asyncHandler(async (req: Request, res: Response) => {
     // First, fetch the impact to verify ownership
     const impact = await storage.getPolicyChangeImpact(req.params.id);
     
@@ -4071,7 +4143,7 @@ If the question cannot be answered with the available information, say so clearl
   }));
 
   // Resolve policy change impact (admin action)
-  app.patch("/api/policy-change-impacts/:id/resolve", requireAdmin, asyncHandler(async (req, res) => {
+  app.patch("/api/policy-change-impacts/:id/resolve", requireAdmin, asyncHandler(async (req: Request, res: Response) => {
     const { resolutionNotes } = req.body;
     
     // Get the impact before updating to access affectedUserId
@@ -4112,7 +4184,7 @@ If the question cannot be answered with the available information, say so clearl
   // ============================================================================
 
   // Get all compliance rules with filters (admin only)
-  app.get("/api/compliance-rules", requireAdmin, asyncHandler(async (req, res) => {
+  app.get("/api/compliance-rules", requireAdmin, asyncHandler(async (req: Request, res: Response) => {
     const { ruleType, category, benefitProgramId, isActive } = req.query;
     
     const rules = await storage.getComplianceRules({
@@ -4126,7 +4198,7 @@ If the question cannot be answered with the available information, say so clearl
   }));
 
   // Get single compliance rule (admin only)
-  app.get("/api/compliance-rules/:id", requireAdmin, asyncHandler(async (req, res) => {
+  app.get("/api/compliance-rules/:id", requireAdmin, asyncHandler(async (req: Request, res: Response) => {
     const rule = await storage.getComplianceRule(req.params.id);
     
     if (!rule) {
@@ -4137,7 +4209,7 @@ If the question cannot be answered with the available information, say so clearl
   }));
 
   // Create compliance rule (admin only)
-  app.post("/api/compliance-rules", requireAdmin, asyncHandler(async (req, res) => {
+  app.post("/api/compliance-rules", requireAdmin, asyncHandler(async (req: Request, res: Response) => {
     // Validate request body with Zod
     const validatedData = insertComplianceRuleSchema.parse(req.body);
     
@@ -4152,7 +4224,7 @@ If the question cannot be answered with the available information, say so clearl
   }));
 
   // Update compliance rule (admin only)
-  app.patch("/api/compliance-rules/:id", requireAdmin, asyncHandler(async (req, res) => {
+  app.patch("/api/compliance-rules/:id", requireAdmin, asyncHandler(async (req: Request, res: Response) => {
     // Validate request body with Zod (partial update allowed)
     const validatedData = insertComplianceRuleSchema.partial().parse(req.body);
     
@@ -4168,7 +4240,7 @@ If the question cannot be answered with the available information, say so clearl
   }));
 
   // Delete compliance rule (admin only)
-  app.delete("/api/compliance-rules/:id", requireAdmin, asyncHandler(async (req, res) => {
+  app.delete("/api/compliance-rules/:id", requireAdmin, asyncHandler(async (req: Request, res: Response) => {
     await storage.deleteComplianceRule(req.params.id);
     
     cacheService.del('compliance_rules:all');
@@ -4177,7 +4249,7 @@ If the question cannot be answered with the available information, say so clearl
   }));
 
   // Get all compliance violations with filters (admin only)
-  app.get("/api/compliance-violations", requireAdmin, asyncHandler(async (req, res) => {
+  app.get("/api/compliance-violations", requireAdmin, asyncHandler(async (req: Request, res: Response) => {
     const { complianceRuleId, status, severity, entityType } = req.query;
     
     const violations = await storage.getComplianceViolations({
@@ -4191,7 +4263,7 @@ If the question cannot be answered with the available information, say so clearl
   }));
 
   // Get single compliance violation (admin only)
-  app.get("/api/compliance-violations/:id", requireAdmin, asyncHandler(async (req, res) => {
+  app.get("/api/compliance-violations/:id", requireAdmin, asyncHandler(async (req: Request, res: Response) => {
     const violation = await storage.getComplianceViolation(req.params.id);
     
     if (!violation) {
@@ -4202,7 +4274,7 @@ If the question cannot be answered with the available information, say so clearl
   }));
 
   // Acknowledge compliance violation (admin/staff only)
-  app.patch("/api/compliance-violations/:id/acknowledge", requireAdmin, asyncHandler(async (req, res) => {
+  app.patch("/api/compliance-violations/:id/acknowledge", requireAdmin, asyncHandler(async (req: Request, res: Response) => {
     const violation = await storage.updateComplianceViolation(req.params.id, {
       status: 'acknowledged',
       acknowledgedBy: req.user!.id,
@@ -4213,7 +4285,7 @@ If the question cannot be answered with the available information, say so clearl
   }));
 
   // Resolve compliance violation (admin only)
-  app.patch("/api/compliance-violations/:id/resolve", requireAdmin, asyncHandler(async (req, res) => {
+  app.patch("/api/compliance-violations/:id/resolve", requireAdmin, asyncHandler(async (req: Request, res: Response) => {
     const { resolution } = req.body;
     
     if (!resolution) {
@@ -4231,7 +4303,7 @@ If the question cannot be answered with the available information, say so clearl
   }));
 
   // Dismiss compliance violation (admin only)
-  app.patch("/api/compliance-violations/:id/dismiss", requireAdmin, asyncHandler(async (req, res) => {
+  app.patch("/api/compliance-violations/:id/dismiss", requireAdmin, asyncHandler(async (req: Request, res: Response) => {
     const { resolution } = req.body;
     
     const violation = await storage.updateComplianceViolation(req.params.id, {
@@ -4247,7 +4319,7 @@ If the question cannot be answered with the available information, say so clearl
   // ===== ADAPTIVE INTAKE COPILOT ROUTES =====
   
   // Create new intake session
-  app.post("/api/intake-sessions", requireAuth, asyncHandler(async (req, res) => {
+  app.post("/api/intake-sessions", requireAuth, asyncHandler(async (req: Request, res: Response) => {
     const validatedData = insertIntakeSessionSchema.parse(req.body);
     
     const session = await storage.createIntakeSession({
@@ -4259,7 +4331,7 @@ If the question cannot be answered with the available information, say so clearl
   }));
   
   // Get user's intake sessions
-  app.get("/api/intake-sessions", requireAuth, asyncHandler(async (req, res) => {
+  app.get("/api/intake-sessions", requireAuth, asyncHandler(async (req: Request, res: Response) => {
     const { status } = req.query;
     
     const sessions = await storage.getIntakeSessions({
@@ -4272,7 +4344,7 @@ If the question cannot be answered with the available information, say so clearl
   }));
   
   // Get single intake session
-  app.get("/api/intake-sessions/:id", requireAuth, asyncHandler(async (req, res) => {
+  app.get("/api/intake-sessions/:id", requireAuth, asyncHandler(async (req: Request, res: Response) => {
     const session = await storage.getIntakeSession(req.params.id);
     
     if (!session) {
@@ -4288,7 +4360,7 @@ If the question cannot be answered with the available information, say so clearl
   }));
   
   // Send message in intake session
-  app.post("/api/intake-sessions/:id/messages", requireAuth, asyncHandler(async (req, res) => {
+  app.post("/api/intake-sessions/:id/messages", requireAuth, asyncHandler(async (req: Request, res: Response) => {
     const session = await storage.getIntakeSession(req.params.id);
     
     if (!session) {
@@ -4313,7 +4385,7 @@ If the question cannot be answered with the available information, say so clearl
   }));
   
   // Get session messages
-  app.get("/api/intake-sessions/:id/messages", requireAuth, asyncHandler(async (req, res) => {
+  app.get("/api/intake-sessions/:id/messages", requireAuth, asyncHandler(async (req: Request, res: Response) => {
     const session = await storage.getIntakeSession(req.params.id);
     
     if (!session) {
@@ -4331,7 +4403,7 @@ If the question cannot be answered with the available information, say so clearl
   }));
   
   // Generate application form from session
-  app.post("/api/intake-sessions/:id/generate-form", requireAuth, asyncHandler(async (req, res) => {
+  app.post("/api/intake-sessions/:id/generate-form", requireAuth, asyncHandler(async (req: Request, res: Response) => {
     const session = await storage.getIntakeSession(req.params.id);
     
     if (!session) {
@@ -4350,7 +4422,7 @@ If the question cannot be answered with the available information, say so clearl
   }));
   
   // Get application form by session
-  app.get("/api/intake-sessions/:id/form", requireAuth, asyncHandler(async (req, res) => {
+  app.get("/api/intake-sessions/:id/form", requireAuth, asyncHandler(async (req: Request, res: Response) => {
     const session = await storage.getIntakeSession(req.params.id);
     
     if (!session) {
@@ -4372,7 +4444,7 @@ If the question cannot be answered with the available information, say so clearl
   }));
   
   // Get all application forms for user
-  app.get("/api/application-forms", requireAuth, asyncHandler(async (req, res) => {
+  app.get("/api/application-forms", requireAuth, asyncHandler(async (req: Request, res: Response) => {
     const { exportStatus } = req.query;
     
     const forms = await storage.getApplicationForms({
@@ -4389,7 +4461,7 @@ If the question cannot be answered with the available information, say so clearl
   // ============================================================================
 
   // Calculate multi-benefit eligibility using PolicyEngine
-  app.post("/api/policyengine/calculate", asyncHandler(async (req, res) => {
+  app.post("/api/policyengine/calculate", asyncHandler(async (req: Request, res: Response) => {
     const { policyEngineService } = await import("./services/policyEngine.service");
     
     const inputSchema = z.object({
@@ -4415,7 +4487,7 @@ If the question cannot be answered with the available information, say so clearl
   }));
 
   // Verify a calculation against PolicyEngine (admin/testing tool)
-  app.post("/api/policyengine/verify", requireAuth, asyncHandler(async (req, res) => {
+  app.post("/api/policyengine/verify", requireAuth, asyncHandler(async (req: Request, res: Response) => {
     const { PolicyEngineVerificationService } = await import("./services/policyEngineVerification.service");
     const verificationService = new PolicyEngineVerificationService(storage);
     
@@ -4490,7 +4562,7 @@ If the question cannot be answered with the available information, say so clearl
   }));
 
   // Get verification statistics for a program (admin only)
-  app.get("/api/policyengine/verify/stats/:programCode", requireAdmin, asyncHandler(async (req, res) => {
+  app.get("/api/policyengine/verify/stats/:programCode", requireAdmin, asyncHandler(async (req: Request, res: Response) => {
     const { PolicyEngineVerificationService } = await import("./services/policyEngineVerification.service");
     const verificationService = new PolicyEngineVerificationService(storage);
     
@@ -4509,7 +4581,7 @@ If the question cannot be answered with the available information, say so clearl
   }));
 
   // Get verification history for a program (admin only)
-  app.get("/api/policyengine/verify/history/:programCode", requireAdmin, asyncHandler(async (req, res) => {
+  app.get("/api/policyengine/verify/history/:programCode", requireAdmin, asyncHandler(async (req: Request, res: Response) => {
     const program = await storage.getBenefitProgramByCode(req.params.programCode);
     if (!program) {
       return res.status(404).json({ error: `Program ${req.params.programCode} not found` });
@@ -4525,7 +4597,7 @@ If the question cannot be answered with the available information, say so clearl
   }));
 
   // Get formatted multi-benefit summary
-  app.post("/api/policyengine/summary", asyncHandler(async (req, res) => {
+  app.post("/api/policyengine/summary", asyncHandler(async (req: Request, res: Response) => {
     const { policyEngineService } = await import("./services/policyEngine.service");
     
     const inputSchema = z.object({
@@ -4549,7 +4621,7 @@ If the question cannot be answered with the available information, say so clearl
   }));
 
   // Test PolicyEngine connection
-  app.get("/api/policyengine/test", asyncHandler(async (req, res) => {
+  app.get("/api/policyengine/test", asyncHandler(async (req: Request, res: Response) => {
     const { policyEngineService } = await import("./services/policyEngine.service");
     
     const available = await policyEngineService.testConnection();
@@ -4563,7 +4635,7 @@ If the question cannot be answered with the available information, say so clearl
   }));
 
   // Cross-Eligibility Radar - Real-time multi-program eligibility tracking
-  app.post("/api/eligibility/radar", asyncHandler(async (req, res) => {
+  app.post("/api/eligibility/radar", asyncHandler(async (req: Request, res: Response) => {
     const { policyEngineService } = await import("./services/policyEngine.service");
     const { policyEngineTaxCalculationService } = await import("./services/policyEngineTaxCalculation");
     
@@ -4764,7 +4836,7 @@ If the question cannot be answered with the available information, say so clearl
   // ============================================================================
 
   // Upload and extract tax document (W-2, 1099, 1095-A)
-  app.post("/api/tax/documents/extract", requireAuth, upload.single('taxDocument'), asyncHandler(async (req, res) => {
+  app.post("/api/tax/documents/extract", requireAuth, upload.single('taxDocument'), asyncHandler(async (req: Request, res: Response) => {
     const { taxDocumentExtractionService } = await import("./services/taxDocumentExtraction");
     
     if (!req.file) {
@@ -4824,7 +4896,7 @@ If the question cannot be answered with the available information, say so clearl
   }));
 
   // Run tax calculations using PolicyEngine
-  app.post("/api/tax/calculate", requireAuth, asyncHandler(async (req, res) => {
+  app.post("/api/tax/calculate", requireAuth, asyncHandler(async (req: Request, res: Response) => {
     const { policyEngineTaxCalculationService } = await import("./services/policyEngineTaxCalculation");
     
     const schema = z.object({
@@ -4887,7 +4959,7 @@ If the question cannot be answered with the available information, say so clearl
   }));
 
   // Generate Form 1040 PDF
-  app.post("/api/tax/form1040/generate", requireAuth, asyncHandler(async (req, res) => {
+  app.post("/api/tax/form1040/generate", requireAuth, asyncHandler(async (req: Request, res: Response) => {
     const { form1040GeneratorService } = await import("./services/form1040Generator");
     
     const schema = z.object({
@@ -4914,7 +4986,7 @@ If the question cannot be answered with the available information, say so clearl
   }));
 
   // Generate Maryland Form 502 PDF (from saved tax return)
-  app.post("/api/tax/form502/generate", requireAuth, asyncHandler(async (req, res) => {
+  app.post("/api/tax/form502/generate", requireAuth, asyncHandler(async (req: Request, res: Response) => {
     const { Form502Generator } = await import("./services/form502Generator");
     
     const schema = z.object({
@@ -5024,7 +5096,7 @@ If the question cannot be answered with the available information, say so clearl
   }));
 
   // Calculate Maryland tax from federal AGI
-  app.post("/api/tax/maryland/calculate", requireAuth, asyncHandler(async (req, res) => {
+  app.post("/api/tax/maryland/calculate", requireAuth, asyncHandler(async (req: Request, res: Response) => {
     const { Form502Generator } = await import("./services/form502Generator");
     
     const schema = z.object({
@@ -5076,7 +5148,7 @@ If the question cannot be answered with the available information, say so clearl
   }));
 
   // Get cross-enrollment opportunities from tax data
-  app.post("/api/tax/cross-enrollment/analyze", requireAuth, asyncHandler(async (req, res) => {
+  app.post("/api/tax/cross-enrollment/analyze", requireAuth, asyncHandler(async (req: Request, res: Response) => {
     const { crossEnrollmentIntelligenceService } = await import("./services/crossEnrollmentIntelligence");
     const { policyEngineTaxCalculationService } = await import("./services/policyEngineTaxCalculation");
     
@@ -5146,7 +5218,7 @@ If the question cannot be answered with the available information, say so clearl
   }));
 
   // Create federal tax return
-  app.post("/api/tax/federal", requireAuth, asyncHandler(async (req, res) => {
+  app.post("/api/tax/federal", requireAuth, asyncHandler(async (req: Request, res: Response) => {
     const schema = insertFederalTaxReturnSchema.extend({
       preparerId: z.string().optional()
     });
@@ -5162,7 +5234,7 @@ If the question cannot be answered with the available information, say so clearl
   }));
 
   // Get federal tax return
-  app.get("/api/tax/federal/:id", requireAuth, asyncHandler(async (req, res) => {
+  app.get("/api/tax/federal/:id", requireAuth, asyncHandler(async (req: Request, res: Response) => {
     const taxReturn = await storage.getFederalTaxReturn(req.params.id);
     
     if (!taxReturn) {
@@ -5173,7 +5245,7 @@ If the question cannot be answered with the available information, say so clearl
   }));
 
   // Get federal tax returns with filters
-  app.get("/api/tax/federal", requireAuth, asyncHandler(async (req, res) => {
+  app.get("/api/tax/federal", requireAuth, asyncHandler(async (req: Request, res: Response) => {
     const filters = {
       scenarioId: req.query.scenarioId as string | undefined,
       preparerId: req.query.preparerId as string | undefined,
@@ -5186,20 +5258,20 @@ If the question cannot be answered with the available information, say so clearl
   }));
 
   // Update federal tax return
-  app.patch("/api/tax/federal/:id", requireAuth, asyncHandler(async (req, res) => {
+  app.patch("/api/tax/federal/:id", requireAuth, asyncHandler(async (req: Request, res: Response) => {
     const updates = req.body;
     const taxReturn = await storage.updateFederalTaxReturn(req.params.id, updates);
     res.json(taxReturn);
   }));
 
   // Delete federal tax return
-  app.delete("/api/tax/federal/:id", requireAuth, asyncHandler(async (req, res) => {
+  app.delete("/api/tax/federal/:id", requireAuth, asyncHandler(async (req: Request, res: Response) => {
     await storage.deleteFederalTaxReturn(req.params.id);
     res.json({ success: true });
   }));
 
   // Create Maryland tax return
-  app.post("/api/tax/maryland", requireAuth, asyncHandler(async (req, res) => {
+  app.post("/api/tax/maryland", requireAuth, asyncHandler(async (req: Request, res: Response) => {
     const schema = insertMarylandTaxReturnSchema;
     const validated = schema.parse(req.body);
 
@@ -5208,7 +5280,7 @@ If the question cannot be answered with the available information, say so clearl
   }));
 
   // Get Maryland tax return
-  app.get("/api/tax/maryland/:id", requireAuth, asyncHandler(async (req, res) => {
+  app.get("/api/tax/maryland/:id", requireAuth, asyncHandler(async (req: Request, res: Response) => {
     const taxReturn = await storage.getMarylandTaxReturn(req.params.id);
     
     if (!taxReturn) {
@@ -5219,7 +5291,7 @@ If the question cannot be answered with the available information, say so clearl
   }));
 
   // Get Maryland tax return by federal ID
-  app.get("/api/tax/maryland/federal/:federalId", requireAuth, asyncHandler(async (req, res) => {
+  app.get("/api/tax/maryland/federal/:federalId", requireAuth, asyncHandler(async (req: Request, res: Response) => {
     const taxReturn = await storage.getMarylandTaxReturnByFederalId(req.params.federalId);
     
     if (!taxReturn) {
@@ -5230,14 +5302,14 @@ If the question cannot be answered with the available information, say so clearl
   }));
 
   // Update Maryland tax return
-  app.patch("/api/tax/maryland/:id", requireAuth, asyncHandler(async (req, res) => {
+  app.patch("/api/tax/maryland/:id", requireAuth, asyncHandler(async (req: Request, res: Response) => {
     const updates = req.body;
     const taxReturn = await storage.updateMarylandTaxReturn(req.params.id, updates);
     res.json(taxReturn);
   }));
 
   // Get tax documents
-  app.get("/api/tax/documents", requireAuth, asyncHandler(async (req, res) => {
+  app.get("/api/tax/documents", requireAuth, asyncHandler(async (req: Request, res: Response) => {
     const filters = {
       scenarioId: req.query.scenarioId as string | undefined,
       federalReturnId: req.query.federalReturnId as string | undefined,
@@ -5250,7 +5322,7 @@ If the question cannot be answered with the available information, say so clearl
   }));
 
   // Verify tax document
-  app.patch("/api/tax/documents/:id/verify", requireAuth, asyncHandler(async (req, res) => {
+  app.patch("/api/tax/documents/:id/verify", requireAuth, asyncHandler(async (req: Request, res: Response) => {
     const schema = z.object({
       verificationStatus: z.enum(['verified', 'flagged', 'rejected']),
       notes: z.string().optional()
@@ -5273,7 +5345,7 @@ If the question cannot be answered with the available information, say so clearl
   // ============================================================================
 
   // Save anonymous screening session (no auth required)
-  app.post("/api/screener/save", asyncHandler(async (req, res) => {
+  app.post("/api/screener/save", asyncHandler(async (req: Request, res: Response) => {
     const schema = z.object({
       sessionId: z.string(),
       householdData: z.object({
@@ -5367,7 +5439,7 @@ If the question cannot be answered with the available information, say so clearl
   }));
 
   // Get anonymous screening session (no auth required)
-  app.get("/api/screener/sessions/:sessionId", asyncHandler(async (req, res) => {
+  app.get("/api/screener/sessions/:sessionId", asyncHandler(async (req: Request, res: Response) => {
     const session = await storage.getAnonymousScreeningSession(req.params.sessionId);
     
     if (!session) {
@@ -5378,7 +5450,7 @@ If the question cannot be answered with the available information, say so clearl
   }));
 
   // Claim anonymous screening session (requires auth)
-  app.post("/api/screener/sessions/:sessionId/claim", requireAuth, asyncHandler(async (req, res) => {
+  app.post("/api/screener/sessions/:sessionId/claim", requireAuth, asyncHandler(async (req: Request, res: Response) => {
     const session = await storage.getAnonymousScreeningSession(req.params.sessionId);
     
     if (!session) {
@@ -5398,7 +5470,7 @@ If the question cannot be answered with the available information, say so clearl
   }));
 
   // Get user's claimed screening sessions
-  app.get("/api/screener/my-sessions", requireAuth, asyncHandler(async (req, res) => {
+  app.get("/api/screener/my-sessions", requireAuth, asyncHandler(async (req: Request, res: Response) => {
     const sessions = await storage.getAnonymousScreeningSessionsByUser(req.user!.id);
     res.json(sessions);
   }));
@@ -5408,7 +5480,7 @@ If the question cannot be answered with the available information, say so clearl
   // ============================================================================
 
   // Create household scenario
-  app.post("/api/scenarios", requireAuth, asyncHandler(async (req, res) => {
+  app.post("/api/scenarios", requireAuth, asyncHandler(async (req: Request, res: Response) => {
     const schema = z.object({
       name: z.string().min(1),
       description: z.string().optional(),
@@ -5441,13 +5513,13 @@ If the question cannot be answered with the available information, say so clearl
   }));
 
   // Get all scenarios for user
-  app.get("/api/scenarios", requireAuth, asyncHandler(async (req, res) => {
+  app.get("/api/scenarios", requireAuth, asyncHandler(async (req: Request, res: Response) => {
     const scenarios = await storage.getHouseholdScenariosByUser(req.user!.id);
     res.json(scenarios);
   }));
 
   // Get single scenario
-  app.get("/api/scenarios/:id", requireAuth, asyncHandler(async (req, res) => {
+  app.get("/api/scenarios/:id", requireAuth, asyncHandler(async (req: Request, res: Response) => {
     const scenario = await storage.getHouseholdScenario(req.params.id);
     
     if (!scenario) {
@@ -5462,7 +5534,7 @@ If the question cannot be answered with the available information, say so clearl
   }));
 
   // Update scenario
-  app.patch("/api/scenarios/:id", requireAuth, asyncHandler(async (req, res) => {
+  app.patch("/api/scenarios/:id", requireAuth, asyncHandler(async (req: Request, res: Response) => {
     const scenario = await storage.getHouseholdScenario(req.params.id);
     
     if (!scenario) {
@@ -5500,7 +5572,7 @@ If the question cannot be answered with the available information, say so clearl
   }));
 
   // Delete scenario
-  app.delete("/api/scenarios/:id", requireAuth, asyncHandler(async (req, res) => {
+  app.delete("/api/scenarios/:id", requireAuth, asyncHandler(async (req: Request, res: Response) => {
     const scenario = await storage.getHouseholdScenario(req.params.id);
     
     if (!scenario) {
@@ -5516,7 +5588,7 @@ If the question cannot be answered with the available information, say so clearl
   }));
 
   // Calculate scenario using PolicyEngine
-  app.post("/api/scenarios/:id/calculate", requireAuth, asyncHandler(async (req, res) => {
+  app.post("/api/scenarios/:id/calculate", requireAuth, asyncHandler(async (req: Request, res: Response) => {
     const scenario = await storage.getHouseholdScenario(req.params.id);
     
     if (!scenario) {
@@ -5581,7 +5653,7 @@ If the question cannot be answered with the available information, say so clearl
   }));
 
   // Get calculations for a scenario
-  app.get("/api/scenarios/:id/calculations", requireAuth, asyncHandler(async (req, res) => {
+  app.get("/api/scenarios/:id/calculations", requireAuth, asyncHandler(async (req: Request, res: Response) => {
     const scenario = await storage.getHouseholdScenario(req.params.id);
     
     if (!scenario) {
@@ -5597,7 +5669,7 @@ If the question cannot be answered with the available information, say so clearl
   }));
 
   // Get latest calculation for a scenario
-  app.get("/api/scenarios/:id/calculations/latest", requireAuth, asyncHandler(async (req, res) => {
+  app.get("/api/scenarios/:id/calculations/latest", requireAuth, asyncHandler(async (req: Request, res: Response) => {
     const scenario = await storage.getHouseholdScenario(req.params.id);
     
     if (!scenario) {
@@ -5613,7 +5685,7 @@ If the question cannot be answered with the available information, say so clearl
   }));
 
   // Create scenario comparison
-  app.post("/api/comparisons", requireAuth, asyncHandler(async (req, res) => {
+  app.post("/api/comparisons", requireAuth, asyncHandler(async (req: Request, res: Response) => {
     const schema = z.object({
       name: z.string().min(1),
       description: z.string().optional(),
@@ -5640,13 +5712,13 @@ If the question cannot be answered with the available information, say so clearl
   }));
 
   // Get all comparisons for user
-  app.get("/api/comparisons", requireAuth, asyncHandler(async (req, res) => {
+  app.get("/api/comparisons", requireAuth, asyncHandler(async (req: Request, res: Response) => {
     const comparisons = await storage.getScenarioComparisonsByUser(req.user!.id);
     res.json(comparisons);
   }));
 
   // Get single comparison
-  app.get("/api/comparisons/:id", requireAuth, asyncHandler(async (req, res) => {
+  app.get("/api/comparisons/:id", requireAuth, asyncHandler(async (req: Request, res: Response) => {
     const comparison = await storage.getScenarioComparison(req.params.id);
     
     if (!comparison) {
@@ -5661,7 +5733,7 @@ If the question cannot be answered with the available information, say so clearl
   }));
 
   // Update comparison
-  app.patch("/api/comparisons/:id", requireAuth, asyncHandler(async (req, res) => {
+  app.patch("/api/comparisons/:id", requireAuth, asyncHandler(async (req: Request, res: Response) => {
     const comparison = await storage.getScenarioComparison(req.params.id);
     
     if (!comparison) {
@@ -5696,7 +5768,7 @@ If the question cannot be answered with the available information, say so clearl
   }));
 
   // Delete comparison
-  app.delete("/api/comparisons/:id", requireAuth, asyncHandler(async (req, res) => {
+  app.delete("/api/comparisons/:id", requireAuth, asyncHandler(async (req: Request, res: Response) => {
     const comparison = await storage.getScenarioComparison(req.params.id);
     
     if (!comparison) {
@@ -5716,7 +5788,7 @@ If the question cannot be answered with the available information, say so clearl
   // ==========================================
 
   // Create household profile
-  app.post("/api/household-profiles", requireStaff, asyncHandler(async (req, res) => {
+  app.post("/api/household-profiles", requireStaff, asyncHandler(async (req: Request, res: Response) => {
     const validated = insertHouseholdProfileSchema.parse({
       ...req.body,
       userId: req.user!.id
@@ -5727,7 +5799,7 @@ If the question cannot be answered with the available information, say so clearl
   }));
 
   // Get all household profiles for user with optional filters
-  app.get("/api/household-profiles", requireStaff, asyncHandler(async (req, res) => {
+  app.get("/api/household-profiles", requireStaff, asyncHandler(async (req: Request, res: Response) => {
     const filters: { profileMode?: string; clientCaseId?: string; isActive?: boolean } = {};
 
     if (req.query.profileMode) {
@@ -5745,7 +5817,7 @@ If the question cannot be answered with the available information, say so clearl
   }));
 
   // Get single household profile (with ownership verification)
-  app.get("/api/household-profiles/:id", requireStaff, verifyHouseholdProfileOwnership(), asyncHandler(async (req, res) => {
+  app.get("/api/household-profiles/:id", requireStaff, verifyHouseholdProfileOwnership(), asyncHandler(async (req: Request, res: Response) => {
     const profile = await storage.getHouseholdProfile(req.params.id);
     
     if (!profile) {
@@ -5760,7 +5832,7 @@ If the question cannot be answered with the available information, say so clearl
   }));
 
   // Update household profile (with ownership verification)
-  app.patch("/api/household-profiles/:id", requireStaff, verifyHouseholdProfileOwnership(), asyncHandler(async (req, res) => {
+  app.patch("/api/household-profiles/:id", requireStaff, verifyHouseholdProfileOwnership(), asyncHandler(async (req: Request, res: Response) => {
     const profile = await storage.getHouseholdProfile(req.params.id);
     
     if (!profile) {
@@ -5781,7 +5853,7 @@ If the question cannot be answered with the available information, say so clearl
   }));
 
   // Delete household profile (with ownership verification)
-  app.delete("/api/household-profiles/:id", requireStaff, verifyHouseholdProfileOwnership(), asyncHandler(async (req, res) => {
+  app.delete("/api/household-profiles/:id", requireStaff, verifyHouseholdProfileOwnership(), asyncHandler(async (req: Request, res: Response) => {
     const profile = await storage.getHouseholdProfile(req.params.id);
     
     if (!profile) {
@@ -5801,7 +5873,7 @@ If the question cannot be answered with the available information, say so clearl
   // ==========================================
 
   // Create VITA intake session
-  app.post("/api/vita-intake", requireStaff, asyncHandler(async (req, res) => {
+  app.post("/api/vita-intake", requireStaff, asyncHandler(async (req: Request, res: Response) => {
     console.log('[VITA Auto-Save Debug] POST /api/vita-intake called');
     console.log('[VITA Auto-Save Debug] Request user:', req.user?.id, req.user?.username);
     console.log('[VITA Auto-Save Debug] Request body keys:', Object.keys(req.body));
@@ -5830,7 +5902,7 @@ If the question cannot be answered with the available information, say so clearl
   }));
 
   // Get all VITA intake sessions for user with optional filters
-  app.get("/api/vita-intake", requireStaff, asyncHandler(async (req, res) => {
+  app.get("/api/vita-intake", requireStaff, asyncHandler(async (req: Request, res: Response) => {
     const filters: { status?: string; clientCaseId?: string; reviewStatus?: string } = {};
 
     if (req.query.status) {
@@ -5850,7 +5922,7 @@ If the question cannot be answered with the available information, say so clearl
   }));
 
   // Get single VITA intake session (with ownership verification)
-  app.get("/api/vita-intake/:id", requireStaff, verifyVitaSessionOwnership(), asyncHandler(async (req, res) => {
+  app.get("/api/vita-intake/:id", requireStaff, verifyVitaSessionOwnership(), asyncHandler(async (req: Request, res: Response) => {
     const session = await storage.getVitaIntakeSession(req.params.id);
     
     if (!session) {
@@ -5867,7 +5939,7 @@ If the question cannot be answered with the available information, say so clearl
   }));
 
   // Update VITA intake session (with ownership verification)
-  app.patch("/api/vita-intake/:id", requireStaff, verifyVitaSessionOwnership(), asyncHandler(async (req, res) => {
+  app.patch("/api/vita-intake/:id", requireStaff, verifyVitaSessionOwnership(), asyncHandler(async (req: Request, res: Response) => {
     const session = await storage.getVitaIntakeSession(req.params.id);
     
     if (!session) {
@@ -5901,7 +5973,7 @@ If the question cannot be answered with the available information, say so clearl
   }));
 
   // Delete VITA intake session (with ownership verification)
-  app.delete("/api/vita-intake/:id", requireStaff, verifyVitaSessionOwnership(), asyncHandler(async (req, res) => {
+  app.delete("/api/vita-intake/:id", requireStaff, verifyVitaSessionOwnership(), asyncHandler(async (req: Request, res: Response) => {
     const session = await storage.getVitaIntakeSession(req.params.id);
     
     if (!session) {
@@ -5921,7 +5993,7 @@ If the question cannot be answered with the available information, say so clearl
   // ==========================================
 
   // Get presigned URL for tax document upload
-  app.post("/api/vita-intake/:sessionId/tax-documents/upload-url", requireStaff, asyncHandler(async (req, res) => {
+  app.post("/api/vita-intake/:sessionId/tax-documents/upload-url", requireStaff, asyncHandler(async (req: Request, res: Response) => {
     const session = await storage.getVitaIntakeSession(req.params.sessionId);
     
     if (!session) {
@@ -5939,7 +6011,7 @@ If the question cannot be answered with the available information, say so clearl
   }));
 
   // Create tax document record and trigger extraction
-  app.post("/api/vita-intake/:sessionId/tax-documents", requireStaff, asyncHandler(async (req, res) => {
+  app.post("/api/vita-intake/:sessionId/tax-documents", requireStaff, asyncHandler(async (req: Request, res: Response) => {
     const session = await storage.getVitaIntakeSession(req.params.sessionId);
     
     if (!session) {
@@ -5982,7 +6054,7 @@ If the question cannot be answered with the available information, say so clearl
   }));
 
   // List all tax documents for a VITA session
-  app.get("/api/vita-intake/:sessionId/tax-documents", requireStaff, asyncHandler(async (req, res) => {
+  app.get("/api/vita-intake/:sessionId/tax-documents", requireStaff, asyncHandler(async (req: Request, res: Response) => {
     const session = await storage.getVitaIntakeSession(req.params.sessionId);
     
     if (!session) {
@@ -6001,7 +6073,7 @@ If the question cannot be answered with the available information, say so clearl
   }));
 
   // Delete a tax document (with ownership verification via session)
-  app.delete("/api/vita-intake/:sessionId/tax-documents/:id", requireStaff, verifyVitaSessionOwnership(), asyncHandler(async (req, res) => {
+  app.delete("/api/vita-intake/:sessionId/tax-documents/:id", requireStaff, verifyVitaSessionOwnership(), asyncHandler(async (req: Request, res: Response) => {
     const session = await storage.getVitaIntakeSession(req.params.sessionId);
     
     if (!session) {
@@ -6031,7 +6103,7 @@ If the question cannot be answered with the available information, say so clearl
   // ==========================================
 
   // Create ABAWD exemption verification
-  app.post("/api/abawd-verifications", requireStaff, asyncHandler(async (req, res) => {
+  app.post("/api/abawd-verifications", requireStaff, asyncHandler(async (req: Request, res: Response) => {
     const schema = z.object({
       clientCaseId: z.string(),
       exemptionType: z.enum(['homeless', 'disabled', 'student', 'caregiver', 'employed_20hrs', 'training_program', 'medically_certified', 'other']),
@@ -6055,7 +6127,7 @@ If the question cannot be answered with the available information, say so clearl
   }));
 
   // Get all ABAWD verifications with filters
-  app.get("/api/abawd-verifications", requireStaff, asyncHandler(async (req, res) => {
+  app.get("/api/abawd-verifications", requireStaff, asyncHandler(async (req: Request, res: Response) => {
     const filters: any = {};
     
     if (req.query.clientCaseId) filters.clientCaseId = req.query.clientCaseId as string;
@@ -6068,7 +6140,7 @@ If the question cannot be answered with the available information, say so clearl
   }));
 
   // Get single ABAWD verification
-  app.get("/api/abawd-verifications/:id", requireStaff, asyncHandler(async (req, res) => {
+  app.get("/api/abawd-verifications/:id", requireStaff, asyncHandler(async (req: Request, res: Response) => {
     const verification = await storage.getAbawdExemptionVerification(req.params.id);
     
     if (!verification) {
@@ -6079,7 +6151,7 @@ If the question cannot be answered with the available information, say so clearl
   }));
 
   // Update ABAWD verification
-  app.put("/api/abawd-verifications/:id", requireStaff, asyncHandler(async (req, res) => {
+  app.put("/api/abawd-verifications/:id", requireStaff, asyncHandler(async (req: Request, res: Response) => {
     const verification = await storage.getAbawdExemptionVerification(req.params.id);
     
     if (!verification) {
@@ -6102,7 +6174,7 @@ If the question cannot be answered with the available information, say so clearl
   }));
 
   // Delete ABAWD verification
-  app.delete("/api/abawd-verifications/:id", requireAdmin, asyncHandler(async (req, res) => {
+  app.delete("/api/abawd-verifications/:id", requireAdmin, asyncHandler(async (req: Request, res: Response) => {
     const verification = await storage.getAbawdExemptionVerification(req.params.id);
     
     if (!verification) {
@@ -6118,7 +6190,7 @@ If the question cannot be answered with the available information, say so clearl
   // ==========================================
 
   // Create program enrollment
-  app.post("/api/program-enrollments", requireStaff, asyncHandler(async (req, res) => {
+  app.post("/api/program-enrollments", requireStaff, asyncHandler(async (req: Request, res: Response) => {
     const schema = z.object({
       clientIdentifier: z.string(),
       benefitProgramId: z.string(),
@@ -6138,7 +6210,7 @@ If the question cannot be answered with the available information, say so clearl
   }));
 
   // Get all program enrollments with filters
-  app.get("/api/program-enrollments", requireStaff, asyncHandler(async (req, res) => {
+  app.get("/api/program-enrollments", requireStaff, asyncHandler(async (req: Request, res: Response) => {
     const filters: any = {};
     
     if (req.query.clientIdentifier) filters.clientIdentifier = req.query.clientIdentifier as string;
@@ -6153,13 +6225,13 @@ If the question cannot be answered with the available information, say so clearl
   }));
 
   // Get enrollments by client
-  app.get("/api/program-enrollments/client/:clientIdentifier", requireStaff, asyncHandler(async (req, res) => {
+  app.get("/api/program-enrollments/client/:clientIdentifier", requireStaff, asyncHandler(async (req: Request, res: Response) => {
     const enrollments = await storage.getProgramEnrollmentsByClient(req.params.clientIdentifier);
     res.json(enrollments);
   }));
 
   // Get single program enrollment
-  app.get("/api/program-enrollments/:id", requireStaff, asyncHandler(async (req, res) => {
+  app.get("/api/program-enrollments/:id", requireStaff, asyncHandler(async (req: Request, res: Response) => {
     const enrollment = await storage.getProgramEnrollment(req.params.id);
     
     if (!enrollment) {
@@ -6170,7 +6242,7 @@ If the question cannot be answered with the available information, say so clearl
   }));
 
   // Update program enrollment
-  app.put("/api/program-enrollments/:id", requireStaff, asyncHandler(async (req, res) => {
+  app.put("/api/program-enrollments/:id", requireStaff, asyncHandler(async (req: Request, res: Response) => {
     const enrollment = await storage.getProgramEnrollment(req.params.id);
     
     if (!enrollment) {
@@ -6194,7 +6266,7 @@ If the question cannot be answered with the available information, say so clearl
   }));
 
   // Analyze cross-enrollment opportunities
-  app.get("/api/cross-enrollment/analyze/:clientIdentifier", requireStaff, asyncHandler(async (req, res) => {
+  app.get("/api/cross-enrollment/analyze/:clientIdentifier", requireStaff, asyncHandler(async (req: Request, res: Response) => {
     const analysis = await storage.analyzeCrossEnrollmentOpportunities(req.params.clientIdentifier);
     res.json(analysis);
   }));
@@ -6204,7 +6276,7 @@ If the question cannot be answered with the available information, say so clearl
   // ==========================================
 
   // Get client verification documents for review
-  app.get("/api/document-review/queue", requireStaff, asyncHandler(async (req, res) => {
+  app.get("/api/document-review/queue", requireStaff, asyncHandler(async (req: Request, res: Response) => {
     const filters: any = {};
     
     if (req.query.verificationStatus) {
@@ -6222,7 +6294,7 @@ If the question cannot be answered with the available information, say so clearl
   }));
 
   // Get single document for review
-  app.get("/api/document-review/:id", requireStaff, asyncHandler(async (req, res) => {
+  app.get("/api/document-review/:id", requireStaff, asyncHandler(async (req: Request, res: Response) => {
     const document = await storage.getClientVerificationDocument(req.params.id);
     
     if (!document) {
@@ -6233,7 +6305,7 @@ If the question cannot be answered with the available information, say so clearl
   }));
 
   // Approve or reject a document
-  app.put("/api/document-review/:id/status", requireStaff, asyncHandler(async (req, res) => {
+  app.put("/api/document-review/:id/status", requireStaff, asyncHandler(async (req: Request, res: Response) => {
     const document = await storage.getClientVerificationDocument(req.params.id);
     
     if (!document) {
@@ -6287,7 +6359,7 @@ If the question cannot be answered with the available information, say so clearl
   }));
 
   // Bulk update multiple documents
-  app.put("/api/document-review/bulk-update", requireStaff, asyncHandler(async (req, res) => {
+  app.put("/api/document-review/bulk-update", requireStaff, asyncHandler(async (req: Request, res: Response) => {
     const schema = z.object({
       documentIds: z.array(z.string()).min(1, "At least one document ID is required"),
       verificationStatus: z.enum(['approved', 'rejected']), // Only allow approved/rejected for bulk
@@ -6360,7 +6432,7 @@ If the question cannot be answered with the available information, say so clearl
   // ===========================
 
   // Get all counties with filters
-  app.get("/api/counties", asyncHandler(async (req, res) => {
+  app.get("/api/counties", asyncHandler(async (req: Request, res: Response) => {
     const { isActive, isPilot, region } = req.query;
     
     const filters: any = {};
@@ -6373,14 +6445,14 @@ If the question cannot be answered with the available information, say so clearl
   }));
 
   // Create county (admin only)
-  app.post("/api/counties", requireAdmin, asyncHandler(async (req, res) => {
+  app.post("/api/counties", requireAdmin, asyncHandler(async (req: Request, res: Response) => {
     const validated = insertCountySchema.parse(req.body);
     const county = await storage.createCounty(validated);
     res.status(201).json(county);
   }));
 
   // Get county by ID
-  app.get("/api/counties/:id", asyncHandler(async (req, res) => {
+  app.get("/api/counties/:id", asyncHandler(async (req: Request, res: Response) => {
     const county = await storage.getCounty(req.params.id);
     if (!county) {
       throw notFoundError("County not found");
@@ -6389,7 +6461,7 @@ If the question cannot be answered with the available information, say so clearl
   }));
 
   // Update county (admin only)
-  app.patch("/api/counties/:id", requireAdmin, asyncHandler(async (req, res) => {
+  app.patch("/api/counties/:id", requireAdmin, asyncHandler(async (req: Request, res: Response) => {
     const validated = insertCountySchema.partial().parse(req.body);
     const county = await storage.updateCounty(req.params.id, validated);
     if (!county) {
@@ -6399,13 +6471,13 @@ If the question cannot be answered with the available information, say so clearl
   }));
 
   // Delete county (admin only)
-  app.delete("/api/counties/:id", requireAdmin, asyncHandler(async (req, res) => {
+  app.delete("/api/counties/:id", requireAdmin, asyncHandler(async (req: Request, res: Response) => {
     await storage.deleteCounty(req.params.id);
     res.json({ message: "County deleted successfully" });
   }));
 
   // Assign user to county (admin only)
-  app.post("/api/counties/:id/users", requireAdmin, asyncHandler(async (req, res) => {
+  app.post("/api/counties/:id/users", requireAdmin, asyncHandler(async (req: Request, res: Response) => {
     const { userId, role } = req.body;
     
     if (!userId) {
@@ -6423,25 +6495,25 @@ If the question cannot be answered with the available information, say so clearl
   }));
 
   // Get county users
-  app.get("/api/counties/:id/users", asyncHandler(async (req, res) => {
+  app.get("/api/counties/:id/users", asyncHandler(async (req: Request, res: Response) => {
     const users = await storage.getCountyUsers(req.params.id);
     res.json(users);
   }));
 
   // Get user's counties
-  app.get("/api/users/:userId/counties", asyncHandler(async (req, res) => {
+  app.get("/api/users/:userId/counties", asyncHandler(async (req: Request, res: Response) => {
     const counties = await storage.getUserCounties(req.params.userId);
     res.json(counties);
   }));
 
   // Remove user from county (admin only)
-  app.delete("/api/county-users/:id", requireAdmin, asyncHandler(async (req, res) => {
+  app.delete("/api/county-users/:id", requireAdmin, asyncHandler(async (req: Request, res: Response) => {
     await storage.removeUserFromCounty(req.params.id);
     res.json({ message: "User removed from county successfully" });
   }));
 
   // Get current user's county branding
-  app.get("/api/branding/current", requireAuth, asyncHandler(async (req, res) => {
+  app.get("/api/branding/current", requireAuth, asyncHandler(async (req: Request, res: Response) => {
     if (!req.user) {
       return res.json(null);
     }
@@ -6467,7 +6539,7 @@ If the question cannot be answered with the available information, say so clearl
   // ===========================
 
   // Get county metrics for a specific county
-  app.get("/api/counties/:id/metrics", requireAuth, asyncHandler(async (req, res) => {
+  app.get("/api/counties/:id/metrics", requireAuth, asyncHandler(async (req: Request, res: Response) => {
     const { periodType, limit } = req.query;
     
     const metrics = await storage.getCountyMetrics(
@@ -6480,7 +6552,7 @@ If the question cannot be answered with the available information, say so clearl
   }));
 
   // Get latest county metric for comparison
-  app.get("/api/counties/:id/metrics/latest", requireAuth, asyncHandler(async (req, res) => {
+  app.get("/api/counties/:id/metrics/latest", requireAuth, asyncHandler(async (req: Request, res: Response) => {
     const { periodType } = req.query;
     
     if (!periodType) {
@@ -6496,7 +6568,7 @@ If the question cannot be answered with the available information, say so clearl
   }));
 
   // Get all counties metrics for comparison (Admin only)
-  app.get("/api/county-analytics/comparison", requireAdmin, asyncHandler(async (req, res) => {
+  app.get("/api/county-analytics/comparison", requireAdmin, asyncHandler(async (req: Request, res: Response) => {
     const { periodType } = req.query;
     
     if (!periodType) {
@@ -6530,7 +6602,7 @@ If the question cannot be answered with the available information, say so clearl
   // ===========================
 
   // Get current tenant info and branding (public route)
-  app.get("/api/tenant/current", asyncHandler(async (req, res) => {
+  app.get("/api/tenant/current", asyncHandler(async (req: Request, res: Response) => {
     if (!req.tenant) {
       return res.status(404).json({
         error: "No tenant found for this domain",
@@ -6551,7 +6623,7 @@ If the question cannot be answered with the available information, say so clearl
   }));
 
   // List all tenants (super admin only)
-  app.get("/api/admin/tenants", requireAdmin, asyncHandler(async (req, res) => {
+  app.get("/api/admin/tenants", requireAdmin, asyncHandler(async (req: Request, res: Response) => {
     const { type, status, parentTenantId } = req.query;
     
     const filters: any = {};
@@ -6564,7 +6636,7 @@ If the question cannot be answered with the available information, say so clearl
   }));
 
   // Get specific tenant (super admin only)
-  app.get("/api/admin/tenants/:id", requireAdmin, asyncHandler(async (req, res) => {
+  app.get("/api/admin/tenants/:id", requireAdmin, asyncHandler(async (req: Request, res: Response) => {
     const tenant = await storage.getTenant(req.params.id);
     if (!tenant) {
       throw notFoundError("Tenant not found");
@@ -6579,7 +6651,7 @@ If the question cannot be answered with the available information, say so clearl
   }));
 
   // Create new tenant (super admin only)
-  app.post("/api/admin/tenants", requireAdmin, asyncHandler(async (req, res) => {
+  app.post("/api/admin/tenants", requireAdmin, asyncHandler(async (req: Request, res: Response) => {
     const { slug, name, type, parentTenantId, status, domain, config } = req.body;
     
     if (!slug || !name || !type) {
@@ -6600,7 +6672,7 @@ If the question cannot be answered with the available information, say so clearl
   }));
 
   // Update tenant (super admin only)
-  app.patch("/api/admin/tenants/:id", requireAdmin, asyncHandler(async (req, res) => {
+  app.patch("/api/admin/tenants/:id", requireAdmin, asyncHandler(async (req: Request, res: Response) => {
     const { slug, name, type, parentTenantId, status, domain, config } = req.body;
     
     const updates: any = {};
@@ -6617,13 +6689,13 @@ If the question cannot be answered with the available information, say so clearl
   }));
 
   // Delete tenant (super admin only)
-  app.delete("/api/admin/tenants/:id", requireAdmin, asyncHandler(async (req, res) => {
+  app.delete("/api/admin/tenants/:id", requireAdmin, asyncHandler(async (req: Request, res: Response) => {
     await storage.deleteTenant(req.params.id);
     res.status(204).send();
   }));
 
   // Update tenant branding (super admin only)
-  app.patch("/api/admin/tenants/:id/branding", requireAdmin, asyncHandler(async (req, res) => {
+  app.patch("/api/admin/tenants/:id/branding", requireAdmin, asyncHandler(async (req: Request, res: Response) => {
     const { primaryColor, secondaryColor, logoUrl, faviconUrl, customCss, headerHtml, footerHtml } = req.body;
     
     const existingBranding = await storage.getTenantBranding(req.params.id);
@@ -6662,7 +6734,7 @@ If the question cannot be answered with the available information, say so clearl
   // ===========================
 
   // Get navigator KPIs (filtered by periodType)
-  app.get("/api/navigators/:id/kpis", asyncHandler(async (req, res) => {
+  app.get("/api/navigators/:id/kpis", asyncHandler(async (req: Request, res: Response) => {
     const { periodType } = req.query;
     
     if (!periodType) {
@@ -6677,7 +6749,7 @@ If the question cannot be answered with the available information, say so clearl
   }));
 
   // Get latest performance summary
-  app.get("/api/navigators/:id/performance", asyncHandler(async (req, res) => {
+  app.get("/api/navigators/:id/performance", asyncHandler(async (req: Request, res: Response) => {
     const kpi = await storage.getLatestNavigatorKpi(req.params.id, 'daily');
     
     if (!kpi) {
@@ -6709,7 +6781,7 @@ If the question cannot be answered with the available information, say so clearl
   }));
 
   // Track case closure event
-  app.post("/api/kpis/track-case-closed", requireAuth, asyncHandler(async (req, res) => {
+  app.post("/api/kpis/track-case-closed", requireAuth, asyncHandler(async (req: Request, res: Response) => {
     const { navigatorId, caseId, countyId, benefitAmount, isApproved, responseTimeHours, completionTimeDays } = req.body;
     
     if (!navigatorId || !caseId) {
@@ -6730,7 +6802,7 @@ If the question cannot be answered with the available information, say so clearl
   }));
 
   // Track document verification
-  app.post("/api/kpis/track-document-verified", requireAuth, asyncHandler(async (req, res) => {
+  app.post("/api/kpis/track-document-verified", requireAuth, asyncHandler(async (req: Request, res: Response) => {
     const { navigatorId, caseId, countyId, documentQuality } = req.body;
     
     if (!navigatorId || !caseId || documentQuality === undefined) {
@@ -6748,7 +6820,7 @@ If the question cannot be answered with the available information, say so clearl
   }));
 
   // Track cross-enrollment identification
-  app.post("/api/kpis/track-cross-enrollment", requireAuth, asyncHandler(async (req, res) => {
+  app.post("/api/kpis/track-cross-enrollment", requireAuth, asyncHandler(async (req: Request, res: Response) => {
     const { navigatorId, caseId, countyId, potentialBenefitAmount } = req.body;
     
     if (!navigatorId || !caseId || !potentialBenefitAmount) {
@@ -6770,7 +6842,7 @@ If the question cannot be answered with the available information, say so clearl
   // ===========================
 
   // Get all achievements (filtered)
-  app.get("/api/achievements", asyncHandler(async (req, res) => {
+  app.get("/api/achievements", asyncHandler(async (req: Request, res: Response) => {
     const { category, tier, isActive } = req.query;
     
     const filters: any = {};
@@ -6783,14 +6855,14 @@ If the question cannot be answered with the available information, say so clearl
   }));
 
   // Create achievement (admin only)
-  app.post("/api/achievements", requireAdmin, asyncHandler(async (req, res) => {
+  app.post("/api/achievements", requireAdmin, asyncHandler(async (req: Request, res: Response) => {
     const achievementData = req.body;
     const achievement = await storage.createAchievement(achievementData);
     res.status(201).json(achievement);
   }));
 
   // Get achievement by ID
-  app.get("/api/achievements/:id", asyncHandler(async (req, res) => {
+  app.get("/api/achievements/:id", asyncHandler(async (req: Request, res: Response) => {
     const achievement = await storage.getAchievement(req.params.id);
     if (!achievement) {
       throw notFoundError("Achievement not found");
@@ -6799,7 +6871,7 @@ If the question cannot be answered with the available information, say so clearl
   }));
 
   // Update achievement (admin only)
-  app.patch("/api/achievements/:id", requireAdmin, asyncHandler(async (req, res) => {
+  app.patch("/api/achievements/:id", requireAdmin, asyncHandler(async (req: Request, res: Response) => {
     const achievementData = req.body;
     const achievement = await storage.updateAchievement(req.params.id, achievementData);
     if (!achievement) {
@@ -6809,26 +6881,26 @@ If the question cannot be answered with the available information, say so clearl
   }));
 
   // Delete achievement (admin only)
-  app.delete("/api/achievements/:id", requireAdmin, asyncHandler(async (req, res) => {
+  app.delete("/api/achievements/:id", requireAdmin, asyncHandler(async (req: Request, res: Response) => {
     await storage.deleteAchievement(req.params.id);
     res.json({ message: "Achievement deleted successfully" });
   }));
 
   // Get navigator's achievements
-  app.get("/api/navigators/:id/achievements", asyncHandler(async (req, res) => {
+  app.get("/api/navigators/:id/achievements", asyncHandler(async (req: Request, res: Response) => {
     const achievements = await storage.getNavigatorAchievements(req.params.id);
     res.json(achievements);
   }));
 
   // Get unnotified achievements
-  app.get("/api/navigators/:id/achievements/unnotified", asyncHandler(async (req, res) => {
+  app.get("/api/navigators/:id/achievements/unnotified", asyncHandler(async (req: Request, res: Response) => {
     const achievements = await storage.getNavigatorAchievements(req.params.id);
     const unnotified = achievements.filter(a => !a.notified);
     res.json(unnotified);
   }));
 
   // Mark achievements as notified
-  app.post("/api/navigator-achievements/mark-notified", asyncHandler(async (req, res) => {
+  app.post("/api/navigator-achievements/mark-notified", asyncHandler(async (req: Request, res: Response) => {
     const { achievementIds } = req.body;
     
     if (!Array.isArray(achievementIds) || achievementIds.length === 0) {
@@ -6847,7 +6919,7 @@ If the question cannot be answered with the available information, say so clearl
   // ===========================
 
   // Get leaderboard
-  app.get("/api/leaderboards", asyncHandler(async (req, res) => {
+  app.get("/api/leaderboards", asyncHandler(async (req: Request, res: Response) => {
     const { type, scope, period, countyId } = req.query;
     
     if (!type || !scope || !period) {
@@ -6876,13 +6948,13 @@ If the question cannot be answered with the available information, say so clearl
   }));
 
   // Refresh all leaderboards (admin only)
-  app.get("/api/leaderboards/refresh", requireAdmin, asyncHandler(async (req, res) => {
+  app.get("/api/leaderboards/refresh", requireAdmin, asyncHandler(async (req: Request, res: Response) => {
     await leaderboardService.refreshAllLeaderboards();
     res.json({ message: "All leaderboards refreshed successfully" });
   }));
 
   // Get navigator's rank
-  app.get("/api/navigators/:id/rank", asyncHandler(async (req, res) => {
+  app.get("/api/navigators/:id/rank", asyncHandler(async (req: Request, res: Response) => {
     const { type, scope, period, countyId } = req.query;
     
     if (!type || !scope || !period) {
@@ -6917,7 +6989,7 @@ If the question cannot be answered with the available information, say so clearl
   // ===========================
 
   // Get flagged cases for current caseworker
-  app.get("/api/qc/flagged-cases/me", requireAuth, asyncHandler(async (req, res) => {
+  app.get("/api/qc/flagged-cases/me", requireAuth, asyncHandler(async (req: Request, res: Response) => {
     if (!req.user) {
       throw authorizationError("Authentication required");
     }
@@ -6927,7 +6999,7 @@ If the question cannot be answered with the available information, say so clearl
   }));
 
   // Get error patterns for current caseworker
-  app.get("/api/qc/error-patterns/me", requireAuth, asyncHandler(async (req, res) => {
+  app.get("/api/qc/error-patterns/me", requireAuth, asyncHandler(async (req: Request, res: Response) => {
     if (!req.user) {
       throw authorizationError("Authentication required");
     }
@@ -6962,7 +7034,7 @@ If the question cannot be answered with the available information, say so clearl
   }));
 
   // Get all job aids with optional category filter
-  app.get("/api/qc/job-aids", requireAuth, asyncHandler(async (req, res) => {
+  app.get("/api/qc/job-aids", requireAuth, asyncHandler(async (req: Request, res: Response) => {
     const { category } = req.query;
     
     const filters = category ? { category: category as string } : undefined;
@@ -6972,7 +7044,7 @@ If the question cannot be answered with the available information, say so clearl
   }));
 
   // Get recommended training interventions
-  app.get("/api/qc/training-interventions", requireAuth, asyncHandler(async (req, res) => {
+  app.get("/api/qc/training-interventions", requireAuth, asyncHandler(async (req: Request, res: Response) => {
     if (!req.user) {
       throw authorizationError("Authentication required");
     }
@@ -7014,7 +7086,7 @@ If the question cannot be answered with the available information, say so clearl
   // ===========================
 
   // Get all error patterns (supervisor view)
-  app.get("/api/qc/error-patterns", requireStaff, asyncHandler(async (req, res) => {
+  app.get("/api/qc/error-patterns", requireStaff, asyncHandler(async (req: Request, res: Response) => {
     const { errorCategory, quarterOccurred, severity } = req.query;
     
     const filters: any = {};
@@ -7027,7 +7099,7 @@ If the question cannot be answered with the available information, say so clearl
   }));
 
   // Get all flagged cases for supervisor's team
-  app.get("/api/qc/flagged-cases/team", requireStaff, asyncHandler(async (req, res) => {
+  app.get("/api/qc/flagged-cases/team", requireStaff, asyncHandler(async (req: Request, res: Response) => {
     if (!req.user) {
       throw authorizationError("Authentication required");
     }
@@ -7037,7 +7109,7 @@ If the question cannot be answered with the available information, say so clearl
   }));
 
   // Assign flagged case to caseworker with coaching notes
-  app.post("/api/qc/flagged-cases/:id/assign", requireStaff, asyncHandler(async (req, res) => {
+  app.post("/api/qc/flagged-cases/:id/assign", requireStaff, asyncHandler(async (req: Request, res: Response) => {
     if (!req.user) {
       throw authorizationError("Authentication required");
     }
@@ -7068,7 +7140,7 @@ If the question cannot be answered with the available information, say so clearl
   // ===========================
 
   // Get all test cases with optional filters
-  app.get("/api/evaluation/test-cases", requireAuth, asyncHandler(async (req, res) => {
+  app.get("/api/evaluation/test-cases", requireAuth, asyncHandler(async (req: Request, res: Response) => {
     const { program, category, isActive } = req.query;
     
     const filters: any = {};
@@ -7081,7 +7153,7 @@ If the question cannot be answered with the available information, say so clearl
   }));
 
   // Get single test case
-  app.get("/api/evaluation/test-cases/:id", requireAuth, asyncHandler(async (req, res) => {
+  app.get("/api/evaluation/test-cases/:id", requireAuth, asyncHandler(async (req: Request, res: Response) => {
     const testCase = await storage.getEvaluationTestCase(req.params.id);
     if (!testCase) {
       throw notFoundError("Test case not found");
@@ -7090,7 +7162,7 @@ If the question cannot be answered with the available information, say so clearl
   }));
 
   // Create test case
-  app.post("/api/evaluation/test-cases", requireAuth, asyncHandler(async (req, res) => {
+  app.post("/api/evaluation/test-cases", requireAuth, asyncHandler(async (req: Request, res: Response) => {
     const { insertEvaluationTestCaseSchema } = await import("@shared/schema");
     const validated = insertEvaluationTestCaseSchema.parse(req.body);
     
@@ -7103,19 +7175,19 @@ If the question cannot be answered with the available information, say so clearl
   }));
 
   // Update test case
-  app.patch("/api/evaluation/test-cases/:id", requireAuth, asyncHandler(async (req, res) => {
+  app.patch("/api/evaluation/test-cases/:id", requireAuth, asyncHandler(async (req: Request, res: Response) => {
     const testCase = await storage.updateEvaluationTestCase(req.params.id, req.body);
     res.json(testCase);
   }));
 
   // Delete test case
-  app.delete("/api/evaluation/test-cases/:id", requireAuth, asyncHandler(async (req, res) => {
+  app.delete("/api/evaluation/test-cases/:id", requireAuth, asyncHandler(async (req: Request, res: Response) => {
     await storage.deleteEvaluationTestCase(req.params.id);
     res.status(204).send();
   }));
 
   // Get all evaluation runs with optional filters
-  app.get("/api/evaluation/runs", requireAuth, asyncHandler(async (req, res) => {
+  app.get("/api/evaluation/runs", requireAuth, asyncHandler(async (req: Request, res: Response) => {
     const { program, status, limit } = req.query;
     
     const filters: any = {};
@@ -7128,7 +7200,7 @@ If the question cannot be answered with the available information, say so clearl
   }));
 
   // Get single evaluation run
-  app.get("/api/evaluation/runs/:id", requireAuth, asyncHandler(async (req, res) => {
+  app.get("/api/evaluation/runs/:id", requireAuth, asyncHandler(async (req: Request, res: Response) => {
     const run = await storage.getEvaluationRun(req.params.id);
     if (!run) {
       throw notFoundError("Evaluation run not found");
@@ -7137,7 +7209,7 @@ If the question cannot be answered with the available information, say so clearl
   }));
 
   // Create evaluation run
-  app.post("/api/evaluation/runs", requireAuth, asyncHandler(async (req, res) => {
+  app.post("/api/evaluation/runs", requireAuth, asyncHandler(async (req: Request, res: Response) => {
     const { insertEvaluationRunSchema } = await import("@shared/schema");
     const validated = insertEvaluationRunSchema.parse(req.body);
     
@@ -7150,19 +7222,19 @@ If the question cannot be answered with the available information, say so clearl
   }));
 
   // Update evaluation run
-  app.patch("/api/evaluation/runs/:id", requireAuth, asyncHandler(async (req, res) => {
+  app.patch("/api/evaluation/runs/:id", requireAuth, asyncHandler(async (req: Request, res: Response) => {
     const run = await storage.updateEvaluationRun(req.params.id, req.body);
     res.json(run);
   }));
 
   // Get results for a specific run
-  app.get("/api/evaluation/runs/:runId/results", requireAuth, asyncHandler(async (req, res) => {
+  app.get("/api/evaluation/runs/:runId/results", requireAuth, asyncHandler(async (req: Request, res: Response) => {
     const results = await storage.getEvaluationResultsByRun(req.params.runId);
     res.json(results);
   }));
 
   // Create evaluation result
-  app.post("/api/evaluation/results", requireAuth, asyncHandler(async (req, res) => {
+  app.post("/api/evaluation/results", requireAuth, asyncHandler(async (req: Request, res: Response) => {
     const { insertEvaluationResultSchema } = await import("@shared/schema");
     const validated = insertEvaluationResultSchema.parse(req.body);
     
@@ -7171,7 +7243,7 @@ If the question cannot be answered with the available information, say so clearl
   }));
 
   // Get results for a specific test case
-  app.get("/api/evaluation/test-cases/:testCaseId/results", requireAuth, asyncHandler(async (req, res) => {
+  app.get("/api/evaluation/test-cases/:testCaseId/results", requireAuth, asyncHandler(async (req: Request, res: Response) => {
     const results = await storage.getEvaluationResultsByTestCase(req.params.testCaseId);
     res.json(results);
   }));
@@ -7193,7 +7265,7 @@ If the question cannot be answered with the available information, say so clearl
   const { smsConversations } = await import("@shared/schema");
   
   // Get Twilio configuration status
-  app.get("/api/sms/status", requireAuth, requireAdmin, asyncHandler(async (req, res) => {
+  app.get("/api/sms/status", requireAuth, requireAdmin, asyncHandler(async (req: Request, res: Response) => {
     const config = getTwilioConfig();
     
     if (config.isConfigured) {
@@ -7210,7 +7282,7 @@ If the question cannot be answered with the available information, say so clearl
   }));
   
   // Get conversation statistics
-  app.get("/api/sms/stats", requireAuth, requireAdmin, asyncHandler(async (req, res) => {
+  app.get("/api/sms/stats", requireAuth, requireAdmin, asyncHandler(async (req: Request, res: Response) => {
     const tenantId = req.query.tenantId as string || req.user?.tenantId;
     if (!tenantId) {
       return res.status(400).json({ error: "Tenant ID required" });
@@ -7221,7 +7293,7 @@ If the question cannot be answered with the available information, say so clearl
   }));
   
   // Get recent conversations
-  app.get("/api/sms/conversations", requireAuth, requireAdmin, asyncHandler(async (req, res) => {
+  app.get("/api/sms/conversations", requireAuth, requireAdmin, asyncHandler(async (req: Request, res: Response) => {
     const limit = parseInt(req.query.limit as string) || 50;
     
     const conversations = await db.query.smsConversations.findMany({
@@ -7303,7 +7375,7 @@ If the question cannot be answered with the available information, say so clearl
   const { apiKeyService } = await import("./services/apiKeyService");
   
   // Generate new API key (admin only)
-  app.post("/api/admin/api-keys", requireAuth, requireAdmin, asyncHandler(async (req, res) => {
+  app.post("/api/admin/api-keys", requireAuth, requireAdmin, asyncHandler(async (req: Request, res: Response) => {
     const { name, organizationId, tenantId, scopes, rateLimit, expiresAt } = req.body;
     
     if (!name || !tenantId || !scopes || !Array.isArray(scopes)) {
@@ -7337,7 +7409,7 @@ If the question cannot be answered with the available information, say so clearl
   }));
   
   // List API keys for tenant (admin only)
-  app.get("/api/admin/api-keys", requireAuth, requireAdmin, asyncHandler(async (req, res) => {
+  app.get("/api/admin/api-keys", requireAuth, requireAdmin, asyncHandler(async (req: Request, res: Response) => {
     const { tenantId } = req.query;
     
     if (!tenantId) {
@@ -7367,7 +7439,7 @@ If the question cannot be answered with the available information, say so clearl
   }));
   
   // Get API key usage stats (admin only)
-  app.get("/api/admin/api-keys/:keyId/stats", requireAuth, requireAdmin, asyncHandler(async (req, res) => {
+  app.get("/api/admin/api-keys/:keyId/stats", requireAuth, requireAdmin, asyncHandler(async (req: Request, res: Response) => {
     const { keyId } = req.params;
     const { days } = req.query;
     
@@ -7380,7 +7452,7 @@ If the question cannot be answered with the available information, say so clearl
   }));
   
   // Revoke API key (admin only)
-  app.post("/api/admin/api-keys/:keyId/revoke", requireAuth, requireAdmin, asyncHandler(async (req, res) => {
+  app.post("/api/admin/api-keys/:keyId/revoke", requireAuth, requireAdmin, asyncHandler(async (req: Request, res: Response) => {
     const { keyId } = req.params;
     
     await apiKeyService.revokeApiKey(keyId, req.user!.id);
@@ -7389,7 +7461,7 @@ If the question cannot be answered with the available information, say so clearl
   }));
   
   // Suspend API key (admin only)
-  app.post("/api/admin/api-keys/:keyId/suspend", requireAuth, requireAdmin, asyncHandler(async (req, res) => {
+  app.post("/api/admin/api-keys/:keyId/suspend", requireAuth, requireAdmin, asyncHandler(async (req: Request, res: Response) => {
     const { keyId } = req.params;
     
     await apiKeyService.suspendApiKey(keyId);
@@ -7398,7 +7470,7 @@ If the question cannot be answered with the available information, say so clearl
   }));
   
   // Reactivate API key (admin only)
-  app.post("/api/admin/api-keys/:keyId/reactivate", requireAuth, requireAdmin, asyncHandler(async (req, res) => {
+  app.post("/api/admin/api-keys/:keyId/reactivate", requireAuth, requireAdmin, asyncHandler(async (req: Request, res: Response) => {
     const { keyId } = req.params;
     
     await apiKeyService.reactivateApiKey(keyId);
