@@ -1,5 +1,8 @@
 import { jsPDF } from 'jspdf';
 import type { TaxCalculationResult, TaxHouseholdInput } from './policyEngineTaxCalculation';
+import { db } from '../db';
+import { countyTaxRates } from '@shared/schema';
+import { eq, and } from 'drizzle-orm';
 
 /**
  * Maryland Form 502 PDF Generator
@@ -174,12 +177,13 @@ export class Form502Generator {
   /**
    * Calculate Maryland tax from federal tax results
    */
-  calculateMarylandTax(
+  async calculateMarylandTax(
     federalTaxResult: TaxCalculationResult,
     taxInput: TaxHouseholdInput,
     marylandInput: MarylandSpecificInput,
-    county: string
-  ): MarylandTaxResult {
+    county: string,
+    taxYear: number = 2025
+  ): Promise<MarylandTaxResult> {
     const federalAGI = federalTaxResult.adjustedGrossIncome;
     
     // Maryland additions to federal AGI
@@ -205,8 +209,8 @@ export class Form502Generator {
     // Calculate Maryland state tax using progressive brackets
     const marylandStateTax = this.calculateProgressiveTax(marylandTaxableIncome, MARYLAND_TAX_BRACKETS);
     
-    // Calculate county tax
-    const countyRate = this.getCountyTaxRate(county, marylandTaxableIncome);
+    // Calculate county tax (fetch from database with fallback to hard-coded rates)
+    const countyRate = await this.getCountyTaxRate(county, marylandTaxableIncome, taxYear);
     const countyTax = marylandTaxableIncome * countyRate;
     
     const totalMarylandTax = marylandStateTax + countyTax;
@@ -289,11 +293,47 @@ export class Form502Generator {
   }
   
   /**
-   * Get county tax rate (progressive based on income)
+   * Fetch county tax rates from database
    */
-  private getCountyTaxRate(county: string, income: number): number {
+  private async fetchCountyRatesFromDB(county: string, taxYear: number): Promise<{ min: number; max: number } | null> {
+    try {
+      const countyUpper = county.toUpperCase().trim();
+      const results = await db
+        .select()
+        .from(countyTaxRates)
+        .where(
+          and(
+            eq(countyTaxRates.countyName, countyUpper),
+            eq(countyTaxRates.taxYear, taxYear)
+          )
+        )
+        .limit(1);
+      
+      if (results.length > 0) {
+        return {
+          min: results[0].minRate,
+          max: results[0].maxRate,
+        };
+      }
+      return null;
+    } catch (error) {
+      console.error('Error fetching county tax rates from database:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Get county tax rate (progressive based on income)
+   * Fetches from database first, falls back to hard-coded rates
+   */
+  private async getCountyTaxRate(county: string, income: number, taxYear: number = 2025): Promise<number> {
     const countyUpper = county.toUpperCase().trim();
-    const rates = COUNTY_TAX_RATES[countyUpper] || { min: 0.0225, max: 0.032 };
+    
+    // Try to fetch from database first
+    const dbRates = await this.fetchCountyRatesFromDB(countyUpper, taxYear);
+    
+    // Fall back to hard-coded rates if database fetch fails
+    const rates = dbRates || COUNTY_TAX_RATES[countyUpper] || { min: 0.0225, max: 0.032 };
     
     // Progressive county tax: use max rate for income over $50,000
     if (income > 50000) {
@@ -357,12 +397,13 @@ export class Form502Generator {
     marylandInput: MarylandSpecificInput,
     options: Form502Options
   ): Promise<{ pdf: Buffer; marylandTaxResult: MarylandTaxResult }> {
-    // Calculate Maryland tax
-    const marylandTaxResult = this.calculateMarylandTax(
+    // Calculate Maryland tax (with database lookup for county rates)
+    const marylandTaxResult = await this.calculateMarylandTax(
       federalTaxResult,
       taxInput,
       marylandInput,
-      personalInfo.county
+      personalInfo.county,
+      options.taxYear
     );
     
     // Generate PDF

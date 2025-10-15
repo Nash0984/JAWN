@@ -8,6 +8,7 @@ import { documentIngestionService } from "./services/documentIngestion";
 import { automatedIngestionService } from "./services/automatedIngestion";
 import { ObjectStorageService } from "./objectStorage";
 import { rulesEngine } from "./services/rulesEngine";
+import { rulesAsCodeService } from "./services/rulesAsCodeService";
 import { hybridService } from "./services/hybridService";
 import { manualIngestionService } from "./services/manualIngestion";
 import { auditService } from "./services/auditService";
@@ -58,7 +59,10 @@ import {
   publicFaq,
   notifications,
   stateOptionsWaivers,
-  marylandStateOptionStatus
+  marylandStateOptionStatus,
+  federalBills,
+  marylandBills,
+  publicLaws
 } from "@shared/schema";
 import { z } from "zod";
 import bcrypt from "bcryptjs";
@@ -1326,6 +1330,150 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
     });
   }));
 
+  // ============================================================================
+  // COUNTY TAX RATES - Maryland County Tax Rate Management
+  // ============================================================================
+  
+  // GET County Tax Rates - Fetch all county rates for a tax year
+  app.get("/api/admin/county-tax-rates", requireAdmin, asyncHandler(async (req: Request, res: Response) => {
+    const { countyTaxRates } = await import("@shared/schema");
+    const { year = '2025' } = req.query;
+    const taxYear = parseInt(year as string);
+    
+    const rates = await db
+      .select()
+      .from(countyTaxRates)
+      .where(eq(countyTaxRates.taxYear, taxYear))
+      .orderBy(countyTaxRates.countyName);
+    
+    res.json({
+      success: true,
+      taxYear,
+      rates,
+    });
+  }));
+  
+  // POST County Tax Rates - Bulk update rates for counties
+  app.post("/api/admin/county-tax-rates", requireAdmin, asyncHandler(async (req: Request, res: Response) => {
+    const { countyTaxRates, insertCountyTaxRateSchema } = await import("@shared/schema");
+    
+    // Validate request body is an array
+    if (!Array.isArray(req.body.rates)) {
+      return res.status(400).json({
+        success: false,
+        error: "Request body must contain 'rates' array",
+      });
+    }
+    
+    const updates = req.body.rates;
+    const taxYear = req.body.taxYear || 2025;
+    const effectiveDate = new Date();
+    
+    // Validate each rate entry
+    const validated = updates.map((rate: any) => 
+      insertCountyTaxRateSchema.parse({
+        countyName: rate.countyName,
+        taxYear,
+        minRate: rate.minRate,
+        maxRate: rate.maxRate,
+        effectiveDate,
+      })
+    );
+    
+    // Upsert all rates (delete existing for year, then insert new)
+    await db.transaction(async (tx) => {
+      // Delete existing rates for this year
+      await tx
+        .delete(countyTaxRates)
+        .where(eq(countyTaxRates.taxYear, taxYear));
+      
+      // Insert new rates
+      await tx.insert(countyTaxRates).values(validated);
+    });
+    
+    // Fetch and return updated rates
+    const updatedRates = await db
+      .select()
+      .from(countyTaxRates)
+      .where(eq(countyTaxRates.taxYear, taxYear))
+      .orderBy(countyTaxRates.countyName);
+    
+    res.json({
+      success: true,
+      message: `Successfully updated ${validated.length} county tax rates for ${taxYear}`,
+      taxYear,
+      rates: updatedRates,
+    });
+  }));
+
+  // GET Federal Bills - Fetch tracked federal bills with optional filters
+  app.get("/api/legislative/federal-bills", requireAdmin, asyncHandler(async (req: Request, res: Response) => {
+    const { status, congress, program, limit = '100' } = req.query;
+    
+    let query = db.select().from(federalBills);
+    const conditions: any[] = [];
+    
+    if (status) conditions.push(eq(federalBills.status, status as string));
+    if (congress) conditions.push(eq(federalBills.congress, parseInt(congress as string)));
+    
+    if (conditions.length > 0) {
+      query = query.where(and(...conditions)) as any;
+    }
+    
+    const bills = await query
+      .orderBy(desc(federalBills.latestActionDate))
+      .limit(parseInt(limit as string));
+    
+    res.json({
+      success: true,
+      total: bills.length,
+      bills
+    });
+  }));
+
+  // GET Maryland Bills - Fetch tracked Maryland bills with optional filters
+  app.get("/api/legislative/maryland-bills", requireAdmin, asyncHandler(async (req: Request, res: Response) => {
+    const { status, session, billType, limit = '100' } = req.query;
+    
+    let query = db.select().from(marylandBills);
+    const conditions: any[] = [];
+    
+    if (status) conditions.push(eq(marylandBills.status, status as string));
+    if (session) conditions.push(eq(marylandBills.session, session as string));
+    if (billType) conditions.push(eq(marylandBills.billType, billType as string));
+    
+    if (conditions.length > 0) {
+      query = query.where(and(...conditions)) as any;
+    }
+    
+    const bills = await query
+      .orderBy(desc(marylandBills.introducedDate))
+      .limit(parseInt(limit as string));
+    
+    res.json({
+      success: true,
+      total: bills.length,
+      bills
+    });
+  }));
+
+  // GET Public Laws - Fetch enacted federal laws
+  app.get("/api/legislative/public-laws", requireAdmin, asyncHandler(async (req: Request, res: Response) => {
+    const { congress, limit = '50' } = req.query;
+    
+    let query = db.select().from(publicLaws);
+    
+    if (congress) {
+      query = query.where(eq(publicLaws.congress, parseInt(congress as string))) as any;
+    }
+    
+    const laws = await query
+      .orderBy(desc(publicLaws.enactmentDate))
+      .limit(parseInt(limit as string));
+    
+    res.json(laws);
+  }));
+
   // Congress.gov API - Search bills by keywords (Real-time legislative keyword search)
   // Note: For authoritative bill status, use GovInfo Bill Status XML API
   app.post("/api/legislative/congress-search", requireAdmin, asyncHandler(async (req: Request, res: Response) => {
@@ -2072,6 +2220,157 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
     } catch (error) {
       console.error("Error fetching document requirements:", error);
       res.status(500).json({ error: "Failed to fetch document requirements" });
+    }
+  });
+
+  // ============================================================================
+  // RULES SNAPSHOT VERSIONING ENDPOINTS
+  // ============================================================================
+
+  // Get snapshots for a rule type
+  app.get("/api/rules/snapshots", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const { ruleType, ruleId, limit } = req.query;
+
+      if (!ruleType) {
+        return res.status(400).json({ error: "ruleType is required" });
+      }
+
+      const validRuleTypes = ['income_limit', 'deduction', 'allotment', 'categorical'];
+      if (!validRuleTypes.includes(ruleType as string)) {
+        return res.status(400).json({ error: "Invalid ruleType" });
+      }
+
+      const history = await rulesAsCodeService.getRuleHistory(
+        ruleType as any,
+        ruleId as string | undefined,
+        limit ? parseInt(limit as string) : 50
+      );
+
+      res.json({
+        success: true,
+        data: history.changes,
+        ruleType: history.ruleType,
+        ruleId: history.ruleId,
+        totalChanges: history.totalChanges,
+      });
+    } catch (error) {
+      console.error("Error fetching rule snapshots:", error);
+      res.status(500).json({ error: "Failed to fetch rule snapshots" });
+    }
+  });
+
+  // Get specific snapshot by ID
+  app.get("/api/rules/snapshots/:id", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+
+      const snapshot = await rulesAsCodeService.getRuleSnapshot(id);
+
+      if (!snapshot) {
+        return res.status(404).json({ error: "Snapshot not found" });
+      }
+
+      res.json({
+        success: true,
+        data: snapshot,
+      });
+    } catch (error) {
+      console.error("Error fetching snapshot:", error);
+      res.status(500).json({ error: "Failed to fetch snapshot" });
+    }
+  });
+
+  // Create new rule snapshot
+  app.post("/api/rules/snapshots", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const { ruleType, ruleData, changeReason } = req.body;
+      const user = req.user as any;
+
+      if (!ruleType || !ruleData) {
+        return res.status(400).json({ error: "ruleType and ruleData are required" });
+      }
+
+      const validRuleTypes = ['income_limit', 'deduction', 'allotment', 'categorical'];
+      if (!validRuleTypes.includes(ruleType)) {
+        return res.status(400).json({ error: "Invalid ruleType" });
+      }
+
+      const snapshot = await rulesAsCodeService.createRuleSnapshot(
+        ruleType,
+        ruleData,
+        user.id,
+        changeReason
+      );
+
+      res.json({
+        success: true,
+        data: snapshot,
+        message: "Rule snapshot created successfully",
+      });
+    } catch (error) {
+      console.error("Error creating rule snapshot:", error);
+      res.status(500).json({ error: "Failed to create rule snapshot" });
+    }
+  });
+
+  // Compare two rule versions
+  app.get("/api/rules/snapshots/compare", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const { id1, id2 } = req.query;
+
+      if (!id1 || !id2) {
+        return res.status(400).json({ error: "Both id1 and id2 are required" });
+      }
+
+      const comparison = await rulesAsCodeService.compareRuleVersions(
+        id1 as string,
+        id2 as string
+      );
+
+      if (!comparison) {
+        return res.status(404).json({ error: "One or both snapshots not found" });
+      }
+
+      res.json({
+        success: true,
+        data: comparison,
+      });
+    } catch (error: any) {
+      console.error("Error comparing rule versions:", error);
+      res.status(500).json({ error: error.message || "Failed to compare rule versions" });
+    }
+  });
+
+  // Get effective rules for a specific date
+  app.get("/api/rules/effective", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const { date, benefitProgramId } = req.query;
+
+      let programId = benefitProgramId as string;
+      if (!programId) {
+        const programs = await storage.getBenefitPrograms();
+        const snapProgram = programs.find(p => p.code === "MD_SNAP");
+        if (!snapProgram) {
+          return res.status(500).json({ error: "Maryland SNAP program not found" });
+        }
+        programId = snapProgram.id;
+      }
+
+      const effectiveDate = date ? new Date(date as string) : new Date();
+      
+      const effectiveRules = await rulesAsCodeService.getEffectiveRulesForDate(
+        programId,
+        effectiveDate
+      );
+
+      res.json({
+        success: true,
+        data: effectiveRules,
+      });
+    } catch (error) {
+      console.error("Error fetching effective rules:", error);
+      res.status(500).json({ error: "Failed to fetch effective rules" });
     }
   });
 
@@ -7538,6 +7837,110 @@ If the question cannot be answered with the available information, say so clearl
     await apiKeyService.reactivateApiKey(keyId);
     
     res.json({ message: 'API key reactivated successfully' });
+  }));
+
+  // ============================================================================
+  // WEBHOOK MANAGEMENT ENDPOINTS (Admin)
+  // ============================================================================
+
+  // GET all webhooks
+  app.get("/api/admin/webhooks", requireAuth, requireAdmin, asyncHandler(async (req: Request, res: Response) => {
+    const { tenantId, status } = req.query;
+    
+    const webhooks = await storage.getWebhooks({
+      tenantId: tenantId as string,
+      status: status as string,
+    });
+    
+    res.json(webhooks);
+  }));
+
+  // POST create new webhook
+  app.post("/api/admin/webhooks", requireAuth, requireAdmin, asyncHandler(async (req: Request, res: Response) => {
+    const { insertWebhookSchema } = await import("@shared/schema");
+    
+    const validatedData = insertWebhookSchema.parse(req.body);
+    
+    // Generate secret if not provided
+    if (!validatedData.secret) {
+      validatedData.secret = crypto.randomBytes(32).toString('hex');
+    }
+    
+    const webhook = await storage.createWebhook(validatedData);
+    
+    res.status(201).json(webhook);
+  }));
+
+  // PUT update webhook
+  app.put("/api/admin/webhooks/:id", requireAuth, requireAdmin, asyncHandler(async (req: Request, res: Response) => {
+    const { id } = req.params;
+    const { url, events, secret, status, maxRetries } = req.body;
+    
+    const webhook = await storage.getWebhook(id);
+    if (!webhook) {
+      return res.status(404).json({ error: 'Webhook not found' });
+    }
+    
+    const updates: Partial<any> = {};
+    if (url !== undefined) updates.url = url;
+    if (events !== undefined) updates.events = events;
+    if (secret !== undefined) updates.secret = secret;
+    if (status !== undefined) updates.status = status;
+    if (maxRetries !== undefined) updates.maxRetries = maxRetries;
+    
+    const updated = await storage.updateWebhook(id, updates);
+    
+    res.json(updated);
+  }));
+
+  // DELETE webhook
+  app.delete("/api/admin/webhooks/:id", requireAuth, requireAdmin, asyncHandler(async (req: Request, res: Response) => {
+    const { id } = req.params;
+    
+    const webhook = await storage.getWebhook(id);
+    if (!webhook) {
+      return res.status(404).json({ error: 'Webhook not found' });
+    }
+    
+    await storage.deleteWebhook(id);
+    
+    res.json({ message: 'Webhook deleted successfully' });
+  }));
+
+  // POST test webhook delivery
+  app.post("/api/admin/webhooks/:id/test", requireAuth, requireAdmin, asyncHandler(async (req: Request, res: Response) => {
+    const { testWebhook } = await import("./services/webhookService");
+    const { id } = req.params;
+    
+    const webhook = await storage.getWebhook(id);
+    if (!webhook) {
+      return res.status(404).json({ error: 'Webhook not found' });
+    }
+    
+    const result = await testWebhook(id);
+    
+    res.json({
+      success: result.success,
+      httpStatus: result.httpStatus,
+      responseBody: result.responseBody,
+      responseTime: result.responseTime,
+      errorMessage: result.errorMessage,
+    });
+  }));
+
+  // GET webhook delivery logs
+  app.get("/api/admin/webhooks/:id/logs", requireAuth, requireAdmin, asyncHandler(async (req: Request, res: Response) => {
+    const { id } = req.params;
+    const { limit = 50 } = req.query;
+    
+    const webhook = await storage.getWebhook(id);
+    if (!webhook) {
+      return res.status(404).json({ error: 'Webhook not found' });
+    }
+    
+    const logs = await storage.getWebhookDeliveryLogs(id, Number(limit));
+    
+    res.json(logs);
   }));
 
   const httpServer = createServer(app);
