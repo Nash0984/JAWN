@@ -889,16 +889,82 @@ import { SiGoogle } from "react-icons/si";
 
 ### Layout Containers
 
-**Max Width Containers:**
-```tsx
-<div className="container max-w-7xl mx-auto px-4">
-  {/* Content constrained to 1280px */}
-</div>
+The platform uses four distinct container width patterns, each serving specific functional purposes. These widths are **intentional design choices** optimized for their content types and user workflows.
 
-<div className="container max-w-4xl mx-auto px-4">
-  {/* Content constrained to 896px (prose) */}
+#### Container Width Standards
+
+**1. Dashboards - `max-w-6xl` (1152px)**
+```tsx
+<div className="container mx-auto px-4 py-8 max-w-6xl">
+  {/* Dashboard quick actions and cards */}
 </div>
 ```
+- **Used in:** NavigatorDashboard, AdminDashboard, ClientDashboard, CaseworkerDashboard
+- **Rationale:** Balanced width for dashboard cards in 2-3 column grids, optimized for scanning quick actions
+- **Grid Pattern:** 2-column on tablet, 3-column on desktop
+- **Example:** Client dashboard with 4 quick action cards
+
+**2. Content Pages - `max-w-7xl` (1280px)**
+```tsx
+<div className="container mx-auto px-4 py-8 max-w-7xl">
+  {/* Content-rich pages */}
+</div>
+```
+- **Used in:** Home page, Search results, IntakeCopilot, Policy Manual
+- **Rationale:** Standard content width for text-heavy pages, search results, and conversational interfaces
+- **Optimal Line Length:** Maintains readability for long-form content
+- **Example:** Policy search results with preview cards
+
+**3. Wide Workspaces - `max-w-[1800px]` (1800px)**
+```tsx
+<div className="container mx-auto px-4 py-8 max-w-[1800px]">
+  {/* Complex multi-column workspaces */}
+</div>
+```
+- **Used in:** HouseholdProfiler only
+- **Rationale:** Accommodates 3-column layout (form fields + Financial Opportunity Radar sidebar + spacing)
+- **Layout:** Left sidebar (navigation) + Center (form) + Right sidebar (real-time calculations)
+- **Example:** Household profiler with persistent benefit calculation sidebar
+
+**4. Full Width - No max-width**
+```tsx
+<div className="container mx-auto px-4 py-8">
+  {/* Data-intensive tables and QC dashboards */}
+</div>
+```
+- **Used in:** SupervisorCockpit, CaseworkerCockpit (QC dashboards only)
+- **Rationale:** Data tables require maximum horizontal space for columns and filters
+- **Content Type:** Wide data tables with 8+ columns, analytics dashboards
+- **Example:** Quality control dashboard with error patterns and case flags
+
+#### Width Selection Guidelines
+
+**When to use each width:**
+
+| Container Width | Use Case | Content Type | Example Pages |
+|----------------|----------|--------------|---------------|
+| `max-w-6xl` | Role dashboards | Quick actions, card grids | ClientDashboard, NavigatorDashboard |
+| `max-w-7xl` | Content pages | Text, search results, forms | Home, Search, Policy Manual |
+| `max-w-[1800px]` | Multi-column workspaces | Complex forms with sidebars | HouseholdProfiler |
+| No max-width | Data dashboards | Wide data tables | SupervisorCockpit, CaseworkerCockpit |
+
+**Visual Transition Strategy:**
+While transitioning between pages with different widths is intentional, consider adding subtle animations to minimize jarring layout shifts:
+
+```tsx
+<div className="transition-all duration-200 ease-in-out">
+  {/* Container content */}
+</div>
+```
+
+**Prose Content (Narrow):**
+```tsx
+<div className="container max-w-4xl mx-auto px-4">
+  {/* Optimal for article-style content: 896px max width, ~75 characters per line */}
+</div>
+```
+- **Used in:** Long-form documentation, policy text, article pages
+- **Rationale:** Maintains optimal reading line length (50-75 characters)
 
 ### Grid Layouts
 
