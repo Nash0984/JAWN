@@ -90,7 +90,13 @@ Tracks navigator performance and awards achievements based on operational KPIs.
 # External Dependencies
 
 -   **AI Services**: Google Gemini API (`@google/genai`).
--   **Benefit Calculations**: PolicyEngine (`policyengine-us`) Python package.
+-   **Benefit Calculations**: PolicyEngine Household API with OAuth 2.0 authentication.
+    -   **OAuth Flow**: Client credentials grant with Auth0 (`https://policyengine.uk.auth0.com/oauth/token`)
+    -   **API Endpoint**: `https://household.api.policyengine.org/us/calculate`
+    -   **Token Management**: 30-day access tokens cached in-memory (node-cache) with auto-refresh
+    -   **Rate Limits**: Testing applications limited to 100 token requests/month (tokens reused until expiration)
+    -   **Services**: `policyEngineOAuth.ts` (token manager), `policyEngineHttpClient.ts` (API client)
+    -   **Required Secrets**: `POLICYENGINE_CLIENT_ID`, `POLICYENGINE_CLIENT_SECRET`
 -   **Database**: PostgreSQL via Drizzle ORM (`drizzle-orm`) with Neon Database.
 -   **Object Storage**: Google Cloud Storage.
 -   **Document Processing**: Tesseract OCR engine, Google Gemini Vision API, pdf-parse.
