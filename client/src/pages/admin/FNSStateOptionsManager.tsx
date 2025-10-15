@@ -71,7 +71,7 @@ export default function FNSStateOptionsManager() {
   // Sync mutation
   const syncMutation = useMutation({
     mutationFn: async () => {
-      return await apiRequest('/api/policy-sources/fns-state-options', 'POST');
+      return await apiRequest('POST', '/api/policy-sources/fns-state-options');
     },
     onSuccess: () => {
       toast({
@@ -89,7 +89,7 @@ export default function FNSStateOptionsManager() {
     },
   });
 
-  const categories = ["all", "eligibility", "reporting", "deductions", "waivers"];
+  const categories = ["all", "Eligibility", "Benefits", "Work Requirements", "Administrative"];
 
   return (
     <div className="container mx-auto max-w-7xl py-8 space-y-6" data-testid="page-fns-state-options">
