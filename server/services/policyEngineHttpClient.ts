@@ -1,12 +1,16 @@
 import axios from 'axios';
+import { policyEngineOAuth } from './policyEngineOAuth';
 
 /**
  * PolicyEngine HTTP API Client
- * Calls PolicyEngine REST API instead of Python package
+ * Calls PolicyEngine REST API with OAuth 2.0 authentication
  * Documentation: https://policyengine.org/us/api
+ * 
+ * AUTHENTICATED ENDPOINT (US): https://household.api.policyengine.org/us/calculate
+ * Note: The /us path prefix is required for US PolicyEngine calculations
  */
 
-const POLICY_ENGINE_API_URL = 'https://api.policyengine.org/us/calculate';
+const POLICY_ENGINE_API_URL = 'https://household.api.policyengine.org/us/calculate';
 
 export interface PolicyEngineHouseholdInput {
   adults: number;
@@ -28,6 +32,7 @@ export interface PolicyEngineApiPayload {
   households: Record<string, any>;
   tax_units: Record<string, any>;
   families: Record<string, any>;
+  marital_units: Record<string, any>;
   spm_units?: Record<string, any>;
   axes?: any[][];
 }
@@ -95,6 +100,7 @@ export class PolicyEngineHttpClient {
     }
     
     const allMembers = Object.keys(people);
+    const adultMembers = Object.keys(people).filter(id => id.startsWith('adult_'));
     
     // Build household structure
     const payload: PolicyEngineApiPayload = {
@@ -118,6 +124,12 @@ export class PolicyEngineHttpClient {
       families: {
         family: {
           members: allMembers
+        }
+      },
+      // Add marital_units entity group (required for authenticated API)
+      marital_units: {
+        parent_marital_unit: {
+          members: adultMembers // Only adults in marital unit
         }
       },
       // Add SPM unit for SNAP and TANF calculations
@@ -162,34 +174,50 @@ export class PolicyEngineHttpClient {
   }
   
   /**
-   * Calculate benefits using PolicyEngine HTTP API
+   * Calculate benefits using PolicyEngine HTTP API (OAuth 2.0 authenticated)
+   * Automatically retries once with token refresh if auth failure (401/403) occurs
    */
   async calculateBenefits(household: PolicyEngineHouseholdInput): Promise<BenefitCalculationResult> {
+    try {
+      return await this._performCalculation(household);
+    } catch (error) {
+      if (axios.isAxiosError(error) && (error.response?.status === 401 || error.response?.status === 403)) {
+        console.warn('PolicyEngine auth failure detected, refreshing token and retrying...');
+        
+        await policyEngineOAuth.refreshToken();
+        console.log('PolicyEngine token refreshed successfully');
+        
+        return await this._performCalculation(household);
+      }
+      
+      throw error;
+    }
+  }
+
+  /**
+   * Perform benefit calculation (extracted for retry logic)
+   */
+  private async _performCalculation(household: PolicyEngineHouseholdInput): Promise<BenefitCalculationResult> {
     const year = household.year || new Date().getFullYear();
     const householdPayload = this.buildApiPayload(household);
     
-    // Wrap in household key as per API spec
     const payload = {
       household: householdPayload
     };
     
     try {
-      // Call PolicyEngine API
+      const accessToken = await policyEngineOAuth.getAccessToken();
+      
       const response = await axios.post(POLICY_ENGINE_API_URL, payload, {
         headers: {
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${accessToken}`
         },
-        timeout: 30000 // 30 second timeout
+        timeout: 30000
       });
       
-      // API returns { message, result: {...entities...}, status }
-      // The calculated values are in result.entities
       const data = response.data.result || response.data;
       
-      // Extract benefit values from response
-      // PolicyEngine returns calculated values within the returned household structure
-      
-      // Calculate total SSI by summing from all household members (person-level variable)
       let totalSSI = 0;
       if (data.people) {
         for (const personId of Object.keys(data.people)) {
@@ -205,12 +233,12 @@ export class PolicyEngineHttpClient {
         medicaid: this.extractEntityValue(data, 'people', 'adult_0', 'medicaid', year) || false,
         eitc: this.extractEntityValue(data, 'tax_units', 'tax_unit', 'eitc', year) || 0,
         childTaxCredit: this.extractEntityValue(data, 'tax_units', 'tax_unit', 'ctc', year) || 0,
-        ssi: totalSSI,  // Sum of SSI from all household members
+        ssi: totalSSI,
         tanf: this.extractEntityValue(data, 'spm_units', 'spm_unit', 'tanf', year) || 0,
         householdNetIncome: this.extractEntityValue(data, 'spm_units', 'spm_unit', 'spm_unit_net_income', year) || 0,
         householdTax: this.extractEntityValue(data, 'tax_units', 'tax_unit', 'income_tax', year) || 0,
         householdBenefits: this.extractEntityValue(data, 'spm_units', 'spm_unit', 'spm_unit_benefits', year) || 0,
-        marginalTaxRate: 0 // Not easily accessible in basic response
+        marginalTaxRate: 0
       };
       
       return benefits;
@@ -225,10 +253,9 @@ export class PolicyEngineHttpClient {
           message: error.message
         });
         
-        throw new Error(
-          `PolicyEngine API request failed: ${error.message}` +
-          (errorData ? ` - ${JSON.stringify(errorData)}` : '')
-        );
+        // Rethrow the original axios error to preserve status metadata
+        // This allows the outer retry logic to detect 401/403 and refresh tokens
+        throw error;
       }
       
       throw error;
@@ -265,73 +292,32 @@ export class PolicyEngineHttpClient {
   }
   
   /**
-   * Test PolicyEngine API availability
+   * Test PolicyEngine API availability (OAuth 2.0 authenticated)
+   * Automatically retries once with token refresh if auth failure (401/403) occurs
    */
   async testConnection(): Promise<{ available: boolean; message: string }> {
     try {
-      // Simple test calculation - single adult in Maryland with $30k income
-      const testPayload = {
-        household: {
-          people: {
-            person: {
-              age: { 2024: 30 },
-              employment_income: { 2024: 30000 }
-            }
-          },
-          tax_units: {
-            tax_unit: {
-              members: ['person'],
-              filing_status: { 2024: 'SINGLE' },
-              eitc: { 2024: null }
-            }
-          },
-          spm_units: {
-            spm_unit: {
-              members: ['person'],
-              snap: { 2024: null }
-            }
-          },
-          households: {
-            household: {
-              members: ['person'],
-              state_name: { 2024: 'MD' }
-            }
-          },
-          families: {
-            family: {
-              members: ['person']
-            }
-          }
-        }
-      };
-      
-      const response = await axios.post(POLICY_ENGINE_API_URL, testPayload, {
-        headers: { 'Content-Type': 'application/json' },
-        timeout: 10000
-      });
-      
-      // Response is { message, result: {...entities...}, status }
-      const result = response.data.result;
-      
-      // Check if we got a valid response with calculated values
-      if (result && result.spm_units && result.spm_units.spm_unit) {
-        const snapValue = result.spm_units.spm_unit.snap;
-        const hasCalculation = snapValue && typeof snapValue === 'object' && snapValue[2024] !== undefined;
+      return await this._performTestConnection();
+    } catch (error) {
+      if (axios.isAxiosError(error) && (error.response?.status === 401 || error.response?.status === 403)) {
+        console.warn('PolicyEngine auth failure during test, refreshing token and retrying...');
         
-        return {
-          available: hasCalculation,
-          message: hasCalculation 
-            ? `PolicyEngine REST API is operational (SNAP: $${snapValue[2024]})` 
-            : 'PolicyEngine API returned response but no calculations'
-        };
+        await policyEngineOAuth.refreshToken();
+        console.log('PolicyEngine token refreshed successfully');
+        
+        return await this._performTestConnection();
       }
       
-      return {
-        available: false,
-        message: 'PolicyEngine API returned unexpected response format'
-      };
-    } catch (error) {
       if (axios.isAxiosError(error)) {
+        const status = error.response?.status;
+        
+        if (status === 401 || status === 403) {
+          return {
+            available: false,
+            message: `PolicyEngine authentication failed (${status}): Token refresh failed`
+          };
+        }
+        
         return {
           available: false,
           message: `PolicyEngine API unavailable: ${error.message}`
@@ -343,6 +329,80 @@ export class PolicyEngineHttpClient {
         message: `Connection test failed: ${error instanceof Error ? error.message : 'Unknown error'}`
       };
     }
+  }
+
+  /**
+   * Perform test connection (extracted for retry logic)
+   */
+  private async _performTestConnection(): Promise<{ available: boolean; message: string }> {
+    const accessToken = await policyEngineOAuth.getAccessToken();
+    
+    const testPayload = {
+      household: {
+        people: {
+          person: {
+            age: { 2024: 30 },
+            employment_income: { 2024: 30000 }
+          }
+        },
+        tax_units: {
+          tax_unit: {
+            members: ['person'],
+            filing_status: { 2024: 'SINGLE' },
+            eitc: { 2024: null }
+          }
+        },
+        marital_units: {
+          marital_unit: {
+            members: ['person']
+          }
+        },
+        spm_units: {
+          spm_unit: {
+            members: ['person'],
+            snap: { 2024: null }
+          }
+        },
+        households: {
+          household: {
+            members: ['person'],
+            state_name: { 2024: 'MD' }
+          }
+        },
+        families: {
+          family: {
+            members: ['person']
+          }
+        }
+      }
+    };
+    
+    const response = await axios.post(POLICY_ENGINE_API_URL, testPayload, {
+      headers: { 
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${accessToken}`
+      },
+      timeout: 10000
+    });
+    
+    const result = response.data.result;
+    
+    if (result && result.spm_units && result.spm_units.spm_unit) {
+      const snapValue = result.spm_units.spm_unit.snap;
+      const hasCalculation = snapValue && typeof snapValue === 'object' && snapValue[2024] !== undefined;
+      
+      return {
+        available: hasCalculation,
+        message: hasCalculation 
+          ? `PolicyEngine REST API is operational (SNAP: $${snapValue[2024]})` 
+          : 'PolicyEngine API returned response but no calculations'
+      };
+    }
+    
+    return {
+      available: false,
+      message: 'PolicyEngine API returned unexpected response format'
+    };
   }
 }
 
