@@ -28,6 +28,17 @@ export type {
   VerificationDocumentType,
 } from './documents/verificationDocs';
 
+// All verification document type fixtures (for comprehensive testing)
+export { 
+  bankStatements,
+  utilityBills,
+  driversLicenses,
+  leaseAgreements,
+  ssiAwardLetters,
+  birthCertificates,
+  employmentVerifications
+} from './documents/index';
+
 // Re-export types from services for convenience
 export type { HouseholdInput } from '../../server/services/rulesEngine';
 export type { TaxHouseholdInput } from '../../server/services/policyEngineTaxCalculation';
