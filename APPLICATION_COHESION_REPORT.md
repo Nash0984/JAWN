@@ -1069,7 +1069,7 @@ toast({
 
 ### High Priority (Significant Improvement)
 
-1. **Document Layout Width Standards** ⏱️ 2 hours
+1. ✅ **Document Layout Width Standards** ⏱️ 2 hours - **COMPLETED**
    - **Issue:** Intentional container width variations not documented, leading to perceived inconsistency
    - **Action:** 
      - Dashboards: `max-w-6xl` (NavigatorDashboard, AdminDashboard, ClientDashboard, CaseworkerDashboard)
@@ -1077,6 +1077,7 @@ toast({
      - Wide layouts: `max-w-[1800px]` (HouseholdProfiler only)
      - Full width: QC Cockpits only (data tables justify it)
    - **Impact:** Creates cohesive visual experience across platform
+   - **Documentation:** [Container Width Standards in Design System](docs/DESIGN-SYSTEM.md#container-width-standards)
 
 2. **Update FEATURES.md Routing Paths** ⏱️ 30 minutes
    - **Issue:** 4 routing mismatches between documentation and implementation
@@ -1109,10 +1110,11 @@ toast({
    - **Files to Update:** SupervisorCockpit, CaseworkerCockpit, IntakeCopilot, HouseholdProfiler
    - **Impact:** Consistent, polished empty states
 
-5. **Add Primary Action Highlighting to ClientDashboard** ⏱️ 30 minutes
+5. ✅ **Add Primary Action Highlighting to ClientDashboard** ⏱️ 30 minutes - **COMPLETED**
    - **Issue:** ClientDashboard lacks visual hierarchy unlike staff dashboards
    - **Action:** Apply `border-primary/50` and icon background to "Check Your Eligibility" card
    - **Impact:** Makes key action more discoverable for clients
+   - **Implementation:** Applied `border-2 border-primary/50` and `bg-primary/20` icon background to eligibility card (testId-based, order-independent)
 
 6. **Standardize Page Title Sizing** ⏱️ 1 hour
    - **Issue:** Mix of `text-3xl` and `text-4xl` across pages
