@@ -17,7 +17,8 @@ export const OFFICIAL_SOURCES: Omit<InsertPolicySource, 'benefitProgramId'>[] = 
     description: 'Code of Federal Regulations - Supplemental Nutrition Assistance Program (GovInfo XML download)',
     url: 'https://www.ecfr.gov/current/title-7/subtitle-B/chapter-II/subchapter-C/part-273',
     syncType: 'bulk_download',
-    syncSchedule: 'weekly',
+    syncSchedule: 'off',
+    maxAllowedFrequency: 'monthly',
     priority: 100,
     isActive: true,
     syncConfig: {
@@ -34,7 +35,8 @@ export const OFFICIAL_SOURCES: Omit<InsertPolicySource, 'benefitProgramId'>[] = 
     description: 'Food and Nutrition Service Policy Memoranda',
     url: 'https://www.fns.usda.gov/resources',
     syncType: 'web_scraping',
-    syncSchedule: 'weekly',
+    syncSchedule: 'off',
+    maxAllowedFrequency: 'monthly',
     priority: 90,
     isActive: true,
     syncConfig: {
@@ -50,7 +52,8 @@ export const OFFICIAL_SOURCES: Omit<InsertPolicySource, 'benefitProgramId'>[] = 
     description: 'SNAP Quality Control Review Handbook',
     url: 'https://www.fns.usda.gov/snap/qc/handbook310',
     syncType: 'web_scraping',
-    syncSchedule: 'monthly',
+    syncSchedule: 'off',
+    maxAllowedFrequency: 'monthly',
     priority: 80,
     isActive: true,
     syncConfig: {
@@ -66,7 +69,8 @@ export const OFFICIAL_SOURCES: Omit<InsertPolicySource, 'benefitProgramId'>[] = 
     description: 'Employment & Training Operations Handbook',
     url: 'https://www.fns.usda.gov/snap-et/policy-guidance',
     syncType: 'web_scraping',
-    syncSchedule: 'monthly',
+    syncSchedule: 'off',
+    maxAllowedFrequency: 'monthly',
     priority: 70,
     isActive: true,
     syncConfig: {
@@ -82,7 +86,8 @@ export const OFFICIAL_SOURCES: Omit<InsertPolicySource, 'benefitProgramId'>[] = 
     description: 'Federal implementation guidance and directives',
     url: 'https://www.fns.usda.gov/snap',
     syncType: 'web_scraping',
-    syncSchedule: 'weekly',
+    syncSchedule: 'off',
+    maxAllowedFrequency: 'monthly',
     priority: 85,
     isActive: true,
     syncConfig: {
@@ -99,7 +104,8 @@ export const OFFICIAL_SOURCES: Omit<InsertPolicySource, 'benefitProgramId'>[] = 
     description: 'Code of Maryland Regulations - Food Supplement Program',
     url: 'https://dsd.maryland.gov/pages/cod.aspx',
     syncType: 'web_scraping',
-    syncSchedule: 'weekly',
+    syncSchedule: 'off',
+    maxAllowedFrequency: 'monthly',
     priority: 95,
     isActive: true,
     syncConfig: {
@@ -117,7 +123,8 @@ export const OFFICIAL_SOURCES: Omit<InsertPolicySource, 'benefitProgramId'>[] = 
     description: 'Maryland Department of Human Services SNAP Policy Manual',
     url: 'https://dhs.maryland.gov/supplemental-nutrition-assistance-program/food-supplement-program-manual/',
     syncType: 'web_scraping',
-    syncSchedule: 'weekly',
+    syncSchedule: 'off',
+    maxAllowedFrequency: 'monthly',
     priority: 100,
     isActive: true,
     syncConfig: {
@@ -133,7 +140,8 @@ export const OFFICIAL_SOURCES: Omit<InsertPolicySource, 'benefitProgramId'>[] = 
     description: 'Official Maryland policy change transmittals',
     url: 'https://dhs.maryland.gov/business-center/documents/transmittals/',
     syncType: 'web_scraping',
-    syncSchedule: 'daily',
+    syncSchedule: 'off',
+    maxAllowedFrequency: 'monthly',
     priority: 98,
     isActive: true,
     syncConfig: {
@@ -150,7 +158,8 @@ export const OFFICIAL_SOURCES: Omit<InsertPolicySource, 'benefitProgramId'>[] = 
     description: 'Maryland operational guidance memos',
     url: 'https://dhs.maryland.gov/business-center/documents/transmittals/',
     syncType: 'web_scraping',
-    syncSchedule: 'daily',
+    syncSchedule: 'off',
+    maxAllowedFrequency: 'monthly',
     priority: 90,
     isActive: true,
     syncConfig: {
@@ -168,7 +177,8 @@ export const OFFICIAL_SOURCES: Omit<InsertPolicySource, 'benefitProgramId'>[] = 
     description: 'Maryland Office of Home Energy Programs Operations Manual',
     url: 'https://dhs.maryland.gov/documents/OHEP/OHEP-Operations-Manual.pdf',
     syncType: 'web_scraping',
-    syncSchedule: 'weekly',
+    syncSchedule: 'off',
+    maxAllowedFrequency: 'monthly',
     priority: 100,
     isActive: true,
     syncConfig: {
@@ -184,7 +194,8 @@ export const OFFICIAL_SOURCES: Omit<InsertPolicySource, 'benefitProgramId'>[] = 
     description: 'OHEP program forms, guidance materials, and supplementary documentation',
     url: 'https://dhs.maryland.gov/office-of-home-energy-programs/',
     syncType: 'web_scraping',
-    syncSchedule: 'weekly',
+    syncSchedule: 'off',
+    maxAllowedFrequency: 'monthly',
     priority: 95,
     isActive: true,
     syncConfig: {
@@ -202,7 +213,8 @@ export const OFFICIAL_SOURCES: Omit<InsertPolicySource, 'benefitProgramId'>[] = 
     description: 'Maryland Medicaid Eligibility Manual - All Sections',
     url: 'https://health.maryland.gov/mmcp/pages/medicaidmanual.aspx',
     syncType: 'web_scraping',
-    syncSchedule: 'weekly',
+    syncSchedule: 'off',
+    maxAllowedFrequency: 'monthly',
     priority: 100,
     isActive: true,
     syncConfig: {
@@ -221,7 +233,8 @@ export const OFFICIAL_SOURCES: Omit<InsertPolicySource, 'benefitProgramId'>[] = 
     description: 'Code of Maryland Regulations - Medicaid Eligibility',
     url: 'https://bit.ly/3QYOR2L',
     syncType: 'web_scraping',
-    syncSchedule: 'weekly',
+    syncSchedule: 'off',
+    maxAllowedFrequency: 'monthly',
     priority: 95,
     isActive: true,
     syncConfig: {
@@ -238,7 +251,8 @@ export const OFFICIAL_SOURCES: Omit<InsertPolicySource, 'benefitProgramId'>[] = 
     description: 'TCA/TANF program information, forms, fact sheets, and guidance materials',
     url: 'https://dhs.maryland.gov/weathering-tough-times/temporary-cash-assistance/',
     syncType: 'web_scraping',
-    syncSchedule: 'weekly',
+    syncSchedule: 'off',
+    maxAllowedFrequency: 'monthly',
     priority: 100,
     isActive: true,
     syncConfig: {
@@ -257,7 +271,8 @@ export const OFFICIAL_SOURCES: Omit<InsertPolicySource, 'benefitProgramId'>[] = 
     description: 'Temporary Cash Assistance Policy Manual - Complete sections and guidance',
     url: 'https://dhs.maryland.gov/documents/?dir=FIA/Manuals/Temporary-Cash-Assistance-Manual',
     syncType: 'web_scraping',
-    syncSchedule: 'weekly',
+    syncSchedule: 'off',
+    maxAllowedFrequency: 'monthly',
     priority: 100,
     isActive: true,
     syncConfig: {
@@ -275,7 +290,8 @@ export const OFFICIAL_SOURCES: Omit<InsertPolicySource, 'benefitProgramId'>[] = 
     description: 'Maryland Department of Assessments and Taxation - Property tax credit programs overview',
     url: 'https://dat.maryland.gov/pages/tax-credit-programs.aspx',
     syncType: 'web_scraping',
-    syncSchedule: 'weekly',
+    syncSchedule: 'off',
+    maxAllowedFrequency: 'monthly',
     priority: 100,
     isActive: true,
     syncConfig: {
@@ -292,7 +308,8 @@ export const OFFICIAL_SOURCES: Omit<InsertPolicySource, 'benefitProgramId'>[] = 
     description: 'Maryland Renters\' Tax Credit - Eligibility rules, income limits, application process',
     url: 'https://dat.maryland.gov/realproperty/pages/renters\'-tax-credits.aspx',
     syncType: 'web_scraping',
-    syncSchedule: 'weekly',
+    syncSchedule: 'off',
+    maxAllowedFrequency: 'monthly',
     priority: 100,
     isActive: true,
     syncConfig: {
@@ -310,7 +327,8 @@ export const OFFICIAL_SOURCES: Omit<InsertPolicySource, 'benefitProgramId'>[] = 
     description: 'Maryland Homeowners\' Property Tax Credit (Circuit Breaker) - Rules and calculators',
     url: 'https://dat.maryland.gov/realproperty/pages/homeowners\'-property-tax-credit-program.aspx',
     syncType: 'web_scraping',
-    syncSchedule: 'weekly',
+    syncSchedule: 'off',
+    maxAllowedFrequency: 'monthly',
     priority: 100,
     isActive: true,
     syncConfig: {
@@ -328,7 +346,8 @@ export const OFFICIAL_SOURCES: Omit<InsertPolicySource, 'benefitProgramId'>[] = 
     description: 'Maryland Comptroller - Income tax credits, deductions, and subtractions',
     url: 'https://www.marylandtaxes.gov/tax-credits.php',
     syncType: 'web_scraping',
-    syncSchedule: 'weekly',
+    syncSchedule: 'off',
+    maxAllowedFrequency: 'monthly',
     priority: 100,
     isActive: true,
     syncConfig: {
@@ -346,7 +365,8 @@ export const OFFICIAL_SOURCES: Omit<InsertPolicySource, 'benefitProgramId'>[] = 
     description: 'Maryland OneStop - All SDAT tax credit application forms (RTC, HTC, HST)',
     url: 'https://onestop.md.gov/tags/5d28c76eb7039400faf44adb',
     syncType: 'web_scraping',
-    syncSchedule: 'weekly',
+    syncSchedule: 'off',
+    maxAllowedFrequency: 'monthly',
     priority: 100,
     isActive: true,
     syncConfig: {
@@ -365,7 +385,8 @@ export const OFFICIAL_SOURCES: Omit<InsertPolicySource, 'benefitProgramId'>[] = 
     description: 'Primary VITA reference guide for volunteer tax preparation (2025 tax year) - Direct IRS download',
     url: 'https://www.irs.gov/pub/irs-pdf/p4012.pdf',
     syncType: 'direct_download',
-    syncSchedule: 'weekly',
+    syncSchedule: 'off',
+    maxAllowedFrequency: 'monthly',
     priority: 100,
     isActive: true,
     syncConfig: {
@@ -384,7 +405,8 @@ export const OFFICIAL_SOURCES: Omit<InsertPolicySource, 'benefitProgramId'>[] = 
     description: 'Core VITA training guide with lessons for all certification levels (2025 tax year) - Direct IRS download',
     url: 'https://www.irs.gov/pub/irs-pdf/p4491.pdf',
     syncType: 'direct_download',
-    syncSchedule: 'weekly',
+    syncSchedule: 'off',
+    maxAllowedFrequency: 'monthly',
     priority: 95,
     isActive: true,
     syncConfig: {
@@ -403,7 +425,8 @@ export const OFFICIAL_SOURCES: Omit<InsertPolicySource, 'benefitProgramId'>[] = 
     description: 'Updates to VITA training materials after initial printing (Rev. 1-2025) - Direct IRS download',
     url: 'https://www.irs.gov/pub/irs-pdf/p4491x.pdf',
     syncType: 'direct_download',
-    syncSchedule: 'weekly',
+    syncSchedule: 'off',
+    maxAllowedFrequency: 'monthly',
     priority: 98,
     isActive: true,
     syncConfig: {
@@ -423,7 +446,8 @@ export const OFFICIAL_SOURCES: Omit<InsertPolicySource, 'benefitProgramId'>[] = 
     description: 'Required ethics training for all VITA volunteers (Rev. 5-2025) - Direct IRS download',
     url: 'https://www.irs.gov/pub/irs-pdf/p4961.pdf',
     syncType: 'direct_download',
-    syncSchedule: 'weekly',
+    syncSchedule: 'off',
+    maxAllowedFrequency: 'monthly',
     priority: 100,
     isActive: true,
     syncConfig: {
@@ -443,7 +467,8 @@ export const OFFICIAL_SOURCES: Omit<InsertPolicySource, 'benefitProgramId'>[] = 
     description: 'Practice scenarios and certification test questions (2025 tax returns) - Direct IRS download',
     url: 'https://www.irs.gov/pub/irs-pdf/f6744.pdf',
     syncType: 'direct_download',
-    syncSchedule: 'weekly',
+    syncSchedule: 'off',
+    maxAllowedFrequency: 'monthly',
     priority: 90,
     isActive: true,
     syncConfig: {
@@ -553,9 +578,11 @@ export class PolicySourceScraper {
           });
           console.log(`✓ Created policy source: ${sourceConfig.name} → ${programName}`);
         } else {
-          // Update existing source to ensure correct program association
+          // Update existing source to ensure correct program association and sync settings
           await storage.updatePolicySource(existing.id, {
-            benefitProgramId: programId
+            benefitProgramId: programId,
+            syncSchedule: sourceConfig.syncSchedule,
+            maxAllowedFrequency: sourceConfig.maxAllowedFrequency
           });
           console.log(`✓ Updated policy source: ${sourceConfig.name} → ${programName}`);
         }
@@ -1756,7 +1783,7 @@ export class PolicySourceScraper {
         
         // Match regulation numbers like 07.03.17.01, 07.03.17.02, etc.
         const regMatch = href?.match(/07\.03\.17\.\d+\.aspx/);
-        if (regMatch) {
+        if (regMatch && href) {
           const fullUrl = href.startsWith('http') ? href : `https://dsd.maryland.gov${href}`;
           const sectionNumber = regMatch[0].replace('.aspx', '');
           
@@ -1822,7 +1849,7 @@ export class PolicySourceScraper {
         const text = $link.text().trim();
         
         const regMatch = href?.match(/10\.09\.24\.\d+\.aspx/);
-        if (regMatch) {
+        if (regMatch && href) {
           const fullUrl = href.startsWith('http') ? href : `https://dsd.maryland.gov${href}`;
           const sectionNumber = regMatch[0].replace('.aspx', '');
           

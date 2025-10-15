@@ -111,7 +111,8 @@ export const policySources = pgTable("policy_sources", {
   url: text("url"),
   benefitProgramId: varchar("benefit_program_id").references(() => benefitPrograms.id),
   syncType: text("sync_type").notNull(), // manual, api, web_scraping
-  syncSchedule: text("sync_schedule"), // daily, weekly, monthly
+  syncSchedule: text("sync_schedule"), // off, daily, weekly, monthly
+  maxAllowedFrequency: text("max_allowed_frequency"), // Maximum frequency admin can set (daily, weekly, monthly)
   syncConfig: jsonb("sync_config"), // configuration for automated sync
   lastSyncAt: timestamp("last_sync_at"),
   lastSuccessfulSyncAt: timestamp("last_successful_sync_at"),
