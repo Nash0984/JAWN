@@ -11,6 +11,8 @@ export { taxHouseholds2024 } from './households/taxHouseholds';
 
 // Document fixtures
 export { w2Samples } from './documents/w2Samples';
+export { form1099Samples } from './documents/1099Forms';
+export { payStubSamples } from './documents/payStubs';
 export { verificationDocuments } from './documents/verificationDocs';
 export type {
   BankStatementData,
@@ -29,4 +31,8 @@ export type {
 // Re-export types from services for convenience
 export type { HouseholdInput } from '../../server/services/rulesEngine';
 export type { TaxHouseholdInput } from '../../server/services/policyEngineTaxCalculation';
-export type { W2Data } from '../../server/services/taxDocumentExtraction';
+export type { 
+  W2Data, 
+  Form1099MISCData, 
+  Form1099NECData 
+} from '../../server/services/taxDocumentExtraction';
