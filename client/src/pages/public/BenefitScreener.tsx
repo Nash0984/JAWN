@@ -175,7 +175,7 @@ export default function BenefitScreener() {
       <div className="container mx-auto px-4 py-8 max-w-6xl">
         {/* Header */}
         <div className="text-center mb-8">
-          <h1 className="text-4xl font-bold text-gray-900 dark:text-white mb-3">
+          <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-3">
             Multi-Benefit Eligibility Screener
           </h1>
           <p className="text-lg text-gray-600 dark:text-gray-300">

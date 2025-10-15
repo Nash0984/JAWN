@@ -13,7 +13,7 @@ export default function Home() {
       {/* Hero Section - Conversational Search Priority */}
       <section className="mb-8 sm:mb-12" aria-labelledby="main-heading">
         <div className="text-center mb-6 sm:mb-8">
-          <h1 id="main-heading" className="text-2xl sm:text-4xl font-bold text-foreground mb-3 sm:mb-4">
+          <h1 id="main-heading" className="text-3xl font-bold text-foreground mb-3 sm:mb-4">
             {t("home.title")}
           </h1>
           <p className="text-base sm:text-xl text-muted-foreground max-w-3xl mx-auto leading-relaxed">

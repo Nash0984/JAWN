@@ -9,7 +9,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { AlertTriangle, TrendingUp, TrendingDown, BookOpen, FileText, HelpCircle, Search, ChevronDown, ChevronUp } from "lucide-react";
+import { EmptyState } from "@/components/ui/empty-state";
+import { AlertTriangle, TrendingUp, TrendingDown, BookOpen, FileText, HelpCircle, Search, ChevronDown, ChevronUp, CheckCircle2 } from "lucide-react";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, Legend, ResponsiveContainer } from "recharts";
 import { format } from "date-fns";
 import { ERROR_CATEGORY_LABELS } from "@shared/qcConstants";
@@ -155,7 +156,7 @@ export default function CaseworkerCockpit() {
       <div className="container mx-auto p-6 space-y-6">
         {/* Header */}
         <div className="space-y-2">
-          <h1 className="text-4xl font-bold tracking-tight" data-testid="page-title">
+          <h1 className="text-3xl font-bold tracking-tight" data-testid="page-title">
             My Quality Assurance Cockpit
           </h1>
           <p className="text-muted-foreground text-lg" data-testid="page-subtitle">
@@ -189,13 +190,13 @@ export default function CaseworkerCockpit() {
                   <p>Failed to load flagged cases</p>
                 </div>
               ) : !flaggedCases || flaggedCases.length === 0 ? (
-                <div className="text-center py-12" data-testid="empty-state-flagged-cases">
-                  <div className="mx-auto w-16 h-16 bg-green-100 dark:bg-green-950 rounded-full flex items-center justify-center mb-4">
-                    <span className="text-3xl">✓</span>
-                  </div>
-                  <p className="text-xl font-semibold mb-2">No flagged cases - great work!</p>
-                  <p className="text-muted-foreground">Keep up the excellent quality standards.</p>
-                </div>
+                <EmptyState
+                  icon={CheckCircle2}
+                  iconColor="green"
+                  title="No flagged cases - great work!"
+                  description="Keep up the excellent quality standards."
+                  data-testid="empty-state-flagged-cases"
+                />
               ) : (
                 <div className="overflow-x-auto">
                   <Table>
@@ -357,10 +358,12 @@ export default function CaseworkerCockpit() {
                   <Skeleton className="h-24 w-full" />
                 </div>
               ) : !trainingInterventions || trainingInterventions.length === 0 ? (
-                <div className="text-center py-8 text-muted-foreground">
-                  <BookOpen className="h-12 w-12 mx-auto mb-2 opacity-50" />
-                  <p>No training recommendations at this time</p>
-                </div>
+                <EmptyState
+                  icon={BookOpen}
+                  iconColor="gray"
+                  title="No training recommendations at this time"
+                  data-testid="empty-state-training"
+                />
               ) : (
                 <div className="space-y-3">
                   {trainingInterventions.map((training) => (
@@ -435,10 +438,12 @@ export default function CaseworkerCockpit() {
                     <Skeleton className="h-16 w-full" />
                   </div>
                 ) : filteredJobAids.length === 0 ? (
-                  <div className="text-center py-8 text-muted-foreground">
-                    <FileText className="h-12 w-12 mx-auto mb-2 opacity-50" />
-                    <p>No job aids found</p>
-                  </div>
+                  <EmptyState
+                    icon={FileText}
+                    iconColor="gray"
+                    title="No job aids found"
+                    data-testid="empty-state-job-aids"
+                  />
                 ) : (
                   <div className="grid gap-2 max-h-96 overflow-y-auto">
                     {filteredJobAids.map((aid) => (

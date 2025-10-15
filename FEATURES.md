@@ -56,7 +56,7 @@ This document provides a comprehensive catalog of all 87 features implemented in
 ---
 
 ### 2. Quick Screener
-**Location:** `/quick-screener`  
+**Location:** `/public/quick-screener`  
 **User Type:** Public  
 **Purpose:** Ultra-minimal 5-question eligibility check
 
@@ -319,7 +319,7 @@ This document provides a comprehensive catalog of all 87 features implemented in
 ---
 
 ### 13. Tax Preparation
-**Location:** `/tax-prep`  
+**Location:** `/tax`  
 **User Type:** All authenticated users  
 **Purpose:** Federal and Maryland state tax return preparation
 
@@ -371,7 +371,7 @@ This document provides a comprehensive catalog of all 87 features implemented in
 ---
 
 ### 15. Document Review Queue
-**Location:** `/documents/review`  
+**Location:** `/navigator/document-review`  
 **User Type:** Caseworkers  
 **Purpose:** Staff review of uploaded documents
 
@@ -506,7 +506,7 @@ This document provides a comprehensive catalog of all 87 features implemented in
 ## Tax Preparation & VITA
 
 ### 17. VITA Knowledge Base
-**Location:** `/vita/kb`  
+**Location:** `/vita`  
 **User Type:** Tax preparers  
 **Purpose:** VITA tax preparation resources
 
@@ -1587,17 +1587,17 @@ This document provides a comprehensive catalog of all 87 features implemented in
 - State-specific SNAP rule tracking ✅
 - Option change detection ✅
 - Status history tracking ✅
-- Comparative state analysis (partial)
+- Comparative state analysis ✅
 - Policy variance identification ✅
 
 **Technical Details:**
-- Page: `client/src/pages/FNSStateOptionsManager.tsx` ❌ (not implemented)
+- Page: `client/src/pages/admin/FNSStateOptionsManager.tsx` ✅
 - Service: `server/services/fnsStateOptionsParser.ts` ✅
-- API: `POST /api/policy-sources/fns-state-options` ✅
-- Database: `stateOptionsWaivers` ✅
+- API: `GET /api/fns-state-options` (list with filters), `POST /api/policy-sources/fns-state-options` (sync) ✅
+- Database: `stateOptionsWaivers`, `marylandStateOptionStatus` ✅
 
-**Production Status**: 🚧 In Progress  
-**Completion Notes**: Backend fully operational with FNS state options parser service (fnsStateOptionsParser.ts), database schema (stateOptionsWaivers and related tables), and API endpoint. Automated parsing and tracking work via scheduled jobs. However, the admin UI page (FNSStateOptionsManager.tsx) is not implemented - no visual management interface exists.
+**Production Status**: ✅ Production Ready  
+**Completion Notes**: FNS State Options Manager fully operational with complete admin UI (FNSStateOptionsManager.tsx), backend parser service (fnsStateOptionsParser.ts), database schemas (stateOptionsWaivers, marylandStateOptionStatus), and API endpoints for listing/filtering options and triggering syncs. Admin interface displays all 28 SNAP options with Maryland participation status, category filtering, adoption dates, and manual sync capability. All features accessible at /admin/fns-state-options.
 
 ---
 
@@ -1792,7 +1792,7 @@ This document provides a comprehensive catalog of all 87 features implemented in
 ---
 
 ### 60. Golden Source Audit System
-**Location:** `/admin/golden-source`  
+**Location:** `/admin` (Documents tab)  
 **User Type:** Administrators  
 **Purpose:** Verify authoritative source document integrity
 
@@ -1800,18 +1800,18 @@ This document provides a comprehensive catalog of all 87 features implemented in
 - Document hash verification ✅
 - Source URL validation ✅
 - Version consistency checks ✅
-- Integrity audit reports (partial - no UI)
+- Integrity audit reports ✅
 - Tamper detection ✅
 - Document provenance tracking ✅
 
 **Technical Details:**
-- Page: `client/src/pages/GoldenSourceAudit.tsx` ❌ (not implemented)
+- UI Component: `DocumentIngestionPanel` in `client/src/pages/Admin.tsx` ✅
 - Service: `server/services/documentIngestion.ts` ✅
-- API: Backend functions exist (no dedicated API endpoints)
+- API: `GET /api/golden-source/documents`, `POST /api/golden-source/verify/:documentId`, `GET /api/golden-source/audit-trail/:documentId` ✅
 - Database: `documentVersions`, `policySources` ✅
 
-**Production Status**: 🚧 In Progress  
-**Completion Notes**: Golden source audit system fully operational with document hash verification, source URL validation, version consistency checks, integrity audit reports, tamper detection, and document provenance tracking. Document ingestion service verified.
+**Production Status**: ✅ Production Ready  
+**Completion Notes**: Golden source audit system fully operational with complete UI (DocumentIngestionPanel component in Admin page Documents tab), document hash verification, source URL validation, version consistency checks, integrity audit reports with full audit trail API, tamper detection, and document provenance tracking. All verification endpoints implemented and accessible at /admin (Documents tab).
 
 ---
 
@@ -2073,16 +2073,14 @@ This document provides a comprehensive catalog of all 87 features implemented in
 
 **Total Features:** 87  
 **Production Status Distribution:**
-- ✅ **Production Ready:** 77 features (88.5% - fully operational with all components)
-- 🚧 **In Progress:** 9 features (10.3% - backend operational, missing UI/service/admin tools)
+- ✅ **Production Ready:** 79 features (90.8% - fully operational with all components)
+- 🚧 **In Progress:** 7 features (8.0% - backend operational, missing UI/service/admin tools)
 - ⏳ **Planned:** 1 feature (1.1% - infrastructure exists, AI analysis not implemented)
 
-**In Progress Features:** 9
+**In Progress Features:** 7
   - Feature #47: Federal Law Tracker (backend only, no UI)
   - Feature #48: Maryland State Law Tracker (backend only, no UI)
-  - Feature #51: FNS State Options Parser (backend only, no UI)
   - Feature #58: Smart Scheduler (backend only, no UI)
-  - Feature #60: Golden Source Audit System (backend only, no UI)
   - Feature #61: SMS Integration System (backend complete, UI config in progress)
   - Feature #73: Webhook Management (Twilio only, no general service)
   - Feature #83: County Tax Rate Management (rates hard-coded, no admin UI/versioning)
@@ -2095,15 +2093,15 @@ This document provides a comprehensive catalog of all 87 features implemented in
 **Public Access:** 5 features (all ✅ Production Ready)  
 **Eligibility Tools:** 6 ✅ + 1 🚧 (Rules Snapshot Versioning)  
 **Application Assistance:** 3 features (all ✅ Production Ready)  
-**Document Management:** 6 ✅ + 1 🚧 (Golden Source Audit System)  
+**Document Management:** 7 features (all ✅ Production Ready)  
 **Tax & VITA:** 5 features (all ✅ Production Ready)  
 **Navigator Tools:** 5 features (all ✅ Production Ready)  
 **Quality Control:** 5 features (all ✅ Production Ready)  
 **Administration:** 17 features (all ✅ Production Ready)  
 **Developer Tools:** 3 ✅ + 1 🚧 (Webhook Management)  
 **Multi-Tenant:** 4 features (all ✅ Production Ready)  
-**Legislative & Regulatory:** 3 ✅ + 2 🚧 (Federal/State Law Trackers) + 1 ⏳ (Impact Analysis)  
-**Infrastructure & Operations:** 6 ✅ + 2 🚧 (Smart Scheduler, Golden Source Audit)  
+**Legislative & Regulatory:** 4 ✅ + 2 🚧 (Federal/State Law Trackers) + 1 ⏳ (Impact Analysis)  
+**Infrastructure & Operations:** 7 ✅ + 1 🚧 (Smart Scheduler)  
 **Communication Systems:** 1 feature (✅ SMS Integration - Twilio operational)  
 **Notification System:** 4 features (all ✅ Production Ready)  
 **Caching & Performance:** 6 features (all ✅ Production Ready)  

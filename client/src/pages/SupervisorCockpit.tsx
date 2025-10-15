@@ -11,6 +11,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { EmptyState } from "@/components/ui/empty-state";
 import { 
   AlertTriangle, 
   TrendingUp, 
@@ -276,7 +277,7 @@ export default function SupervisorCockpit() {
         {/* Header */}
         <div className="flex justify-between items-start">
           <div className="space-y-2">
-            <h1 className="text-4xl font-bold tracking-tight" data-testid="page-title">
+            <h1 className="text-3xl font-bold tracking-tight" data-testid="page-title">
               Quality Assurance Command Center
             </h1>
             <p className="text-muted-foreground text-lg max-w-3xl" data-testid="page-subtitle">
@@ -329,13 +330,13 @@ export default function SupervisorCockpit() {
                 <Skeleton className="h-32" />
               </div>
             ) : criticalAlerts.length === 0 ? (
-              <div className="text-center py-12" data-testid="empty-state-alerts">
-                <div className="mx-auto w-16 h-16 bg-green-100 dark:bg-green-950 rounded-full flex items-center justify-center mb-4">
-                  <CheckCircle2 className="h-8 w-8 text-green-600" />
-                </div>
-                <p className="text-xl font-semibold mb-2">No Critical Alerts</p>
-                <p className="text-muted-foreground">Your team is maintaining excellent quality standards!</p>
-              </div>
+              <EmptyState
+                icon={CheckCircle2}
+                iconColor="green"
+                title="No Critical Alerts"
+                description="Your team is maintaining excellent quality standards!"
+                data-testid="empty-state-alerts"
+              />
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {criticalAlerts.map((alert) => {
@@ -630,11 +631,13 @@ export default function SupervisorCockpit() {
               {casesLoading ? (
                 <Skeleton className="h-64" />
               ) : filteredCases.length === 0 ? (
-                <div className="text-center py-12" data-testid="empty-state-cases">
-                  <CheckCircle2 className="h-12 w-12 mx-auto mb-2 text-green-600" />
-                  <p className="font-semibold">No Flagged Cases</p>
-                  <p className="text-sm text-muted-foreground">All cases are within acceptable quality thresholds</p>
-                </div>
+                <EmptyState
+                  icon={CheckCircle2}
+                  iconColor="green"
+                  title="No Flagged Cases"
+                  description="All cases are within acceptable quality thresholds"
+                  data-testid="empty-state-cases"
+                />
               ) : (
                 <div className="max-h-96 overflow-auto">
                   <Table>

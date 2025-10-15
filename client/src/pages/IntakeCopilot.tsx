@@ -23,6 +23,7 @@ import { fadeVariants, containerVariants } from "@/lib/animations";
 import { useToast } from "@/hooks/use-toast";
 import QuickRating from "@/components/QuickRating";
 import { IntakeCopilotProgressIndicator } from "@/components/IntakeCopilotProgressIndicator";
+import { EmptyState } from "@/components/ui/empty-state";
 
 interface IntakeSession {
   id: string;
@@ -316,10 +317,13 @@ export function IntakeCopilot() {
                         className="space-y-4"
                       >
                         {messages.length === 0 && (
-                          <div className="text-center py-8 text-muted-foreground">
-                            <MessageSquare className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                            <p>Start the conversation by sending a message below!</p>
-                          </div>
+                          <EmptyState
+                            icon={MessageSquare}
+                            iconColor="gray"
+                            title="Start the conversation"
+                            description="Send a message below to begin your application!"
+                            data-testid="empty-state-messages"
+                          />
                         )}
                         {messages.map((message) => (
                           <div key={message.id}>

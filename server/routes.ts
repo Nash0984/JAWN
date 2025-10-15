@@ -56,7 +56,9 @@ import {
   documentRequirementTemplates,
   noticeTemplates,
   publicFaq,
-  notifications
+  notifications,
+  stateOptionsWaivers,
+  marylandStateOptionStatus
 } from "@shared/schema";
 import { z } from "zod";
 import bcrypt from "bcryptjs";
@@ -922,6 +924,66 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
       documentsProcessed: result.documentIds.length,
       documentIds: result.documentIds
     });
+  }));
+
+  // Get FNS State Options with Maryland status
+  app.get("/api/fns-state-options", requireAdmin, asyncHandler(async (req: Request, res: Response) => {
+    const { category, isParticipating } = req.query;
+    
+    // Build the query with join
+    let query = db
+      .select({
+        id: stateOptionsWaivers.id,
+        optionCode: stateOptionsWaivers.optionCode,
+        optionName: stateOptionsWaivers.optionName,
+        category: stateOptionsWaivers.category,
+        description: stateOptionsWaivers.description,
+        statutoryCitation: stateOptionsWaivers.statutoryCitation,
+        regulatoryCitation: stateOptionsWaivers.regulatoryCitation,
+        policyEngineVariable: stateOptionsWaivers.policyEngineVariable,
+        eligibilityImpact: stateOptionsWaivers.eligibilityImpact,
+        benefitImpact: stateOptionsWaivers.benefitImpact,
+        sourceUrl: stateOptionsWaivers.sourceUrl,
+        isActive: stateOptionsWaivers.isActive,
+        // Maryland status fields
+        marylandStatus: {
+          id: marylandStateOptionStatus.id,
+          isParticipating: marylandStateOptionStatus.isParticipating,
+          adoptionDate: marylandStateOptionStatus.adoptionDate,
+          expirationDate: marylandStateOptionStatus.expirationDate,
+          waiverType: marylandStateOptionStatus.waiverType,
+          affectedCounties: marylandStateOptionStatus.affectedCounties,
+          policyReference: marylandStateOptionStatus.policyReference,
+          notes: marylandStateOptionStatus.notes,
+          dataSource: marylandStateOptionStatus.dataSource,
+          lastVerifiedAt: marylandStateOptionStatus.lastVerifiedAt,
+        }
+      })
+      .from(stateOptionsWaivers)
+      .leftJoin(
+        marylandStateOptionStatus,
+        eq(marylandStateOptionStatus.stateOptionId, stateOptionsWaivers.id)
+      );
+    
+    // Apply filters
+    const conditions = [];
+    
+    if (category) {
+      conditions.push(eq(stateOptionsWaivers.category, category as string));
+    }
+    
+    if (isParticipating !== undefined) {
+      const participatingValue = isParticipating === 'true';
+      conditions.push(eq(marylandStateOptionStatus.isParticipating, participatingValue));
+    }
+    
+    if (conditions.length > 0) {
+      query = query.where(and(...conditions)) as any;
+    }
+    
+    const results = await query;
+    
+    res.json(results);
   }));
 
   // Trigger FNS State Options Report parsing (28 SNAP options/waivers)
