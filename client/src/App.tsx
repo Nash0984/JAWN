@@ -47,6 +47,7 @@ import ScenarioWorkspace from "@/pages/ScenarioWorkspace";
 import AbawdVerificationAdmin from "@/pages/AbawdVerificationAdmin";
 import CrossEnrollmentAdmin from "@/pages/CrossEnrollmentAdmin";
 import SmsConfig from "@/pages/admin/SmsConfig";
+import FNSStateOptionsManager from "@/pages/admin/FNSStateOptionsManager";
 import DocumentReviewQueue from "@/pages/DocumentReviewQueue";
 import TaxPreparation from "@/pages/TaxPreparation";
 import CountyManagement from "@/pages/CountyManagement";
@@ -400,6 +401,13 @@ function Router() {
             {() => (
               <ProtectedRoute requireAdmin>
                 <SmsConfig />
+              </ProtectedRoute>
+            )}
+          </Route>
+          <Route path="/admin/fns-state-options">
+            {() => (
+              <ProtectedRoute requireAdmin>
+                <FNSStateOptionsManager />
               </ProtectedRoute>
             )}
           </Route>

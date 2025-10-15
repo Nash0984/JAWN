@@ -9,7 +9,7 @@ Preferred communication style: Simple, everyday language.
 # System Architecture
 
 ## UI/UX
-The frontend is built with React 18, TypeScript, Vite, shadcn/ui (Radix UI), and Tailwind CSS. It emphasizes modularity, accessibility, and mobile-first responsiveness. Key features include a `PolicyChatWidget`, Command Palette, animations, resizable split views, skeleton loading states, auto-save, progress indicators, and a 2-minute quick screener. The platform also offers a public applicant portal for document checklist generation, notice letter explanation, and simplified policy search, adhering to civic tech best practices.
+The frontend is built with React 18, TypeScript, Vite, shadcn/ui (Radix UI), and Tailwind CSS. It emphasizes modularity, accessibility, and mobile-first responsiveness. Key features include Command Palette (Cmd+K global navigation), animations, resizable split views, skeleton loading states, auto-save, progress indicators, and a 2-minute quick screener. The platform also offers a public applicant portal for document checklist generation, notice letter explanation, and simplified policy search, adhering to civic tech best practices.
 
 ## Technical Implementations
 The backend uses Express.js with TypeScript and PostgreSQL via Drizzle ORM on Neon Database. It incorporates a multi-stage document processing pipeline for OCR, classification, semantic chunking, and embedding generation. The Google Gemini API is central for analysis, query processing, and RAG. A "Living Policy Manual" and "Rules Extraction Pipeline" convert human-readable policy text into structured "Rules as Code." Google Cloud Storage handles document file storage.

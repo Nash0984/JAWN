@@ -19,9 +19,10 @@ This document defines the design system for the Maryland Multi-Program Benefits 
 7. [Spacing & Layout](#spacing--layout)
 8. [Forms & Inputs](#forms--inputs)
 9. [Navigation Patterns](#navigation-patterns)
-10. [Data Visualization](#data-visualization)
-11. [Animation & Motion](#animation--motion)
-12. [Dark Mode](#dark-mode)
+10. [Keyboard Shortcuts & Interaction Patterns](#keyboard-shortcuts--interaction-patterns)
+11. [Data Visualization](#data-visualization)
+12. [Animation & Motion](#animation--motion)
+13. [Dark Mode](#dark-mode)
 
 ---
 
@@ -1151,6 +1152,80 @@ function NavItem({ icon, label, href }: NavItemProps) {
   </ol>
 </nav>
 ```
+
+---
+
+## Keyboard Shortcuts & Interaction Patterns
+
+### Global Keyboard Shortcuts
+
+The platform implements keyboard shortcuts for efficient navigation and power users.
+
+#### Command Palette
+**Shortcut:** `Cmd+K` (Mac) or `Ctrl+K` (Windows/Linux)
+
+**Purpose:** Global search and quick navigation to any page
+
+**Implementation:**
+```tsx
+// Keyboard event listener (client/src/components/CommandPalette.tsx)
+useEffect(() => {
+  const down = (e: KeyboardEvent) => {
+    if (e.key === "k" && (e.metaKey || e.ctrlKey)) {
+      e.preventDefault();
+      setOpen((open) => !open);
+    }
+  };
+  
+  document.addEventListener("keydown", down);
+  return () => document.removeEventListener("keydown", down);
+}, []);
+```
+
+**Features:**
+- Role-based navigation filtering (shows only pages accessible to current user)
+- Grouped navigation (Main, Documents, Tools, Admin, Settings, Public Tools)
+- Search-as-you-type filtering
+- Icon-based visual navigation
+- ESC to close
+
+**Visual Indicator:**
+Display the shortcut hint in navigation:
+```tsx
+<kbd className="pointer-events-none inline-flex h-5 select-none items-center gap-1 rounded border bg-muted px-1.5 font-mono text-[10px] font-medium text-muted-foreground opacity-100">
+  <span className="text-xs">⌘</span>K
+</kbd>
+```
+
+### Navigation Keyboard Patterns
+
+**Tab Navigation:**
+- All interactive elements must be keyboard accessible
+- Tab order follows visual hierarchy (top → bottom, left → right)
+- Focus indicators visible with 3px blue outline (`ring-2 ring-primary`)
+
+**Form Navigation:**
+- Tab: Move to next field
+- Shift+Tab: Move to previous field
+- Enter: Submit form (when in last field)
+- Arrow keys: Navigate radio buttons and select options
+
+**Dialog/Modal Shortcuts:**
+- ESC: Close dialog/modal
+- Tab: Cycle through focusable elements within modal (trap focus)
+
+### Accessibility Keyboard Support
+
+**Interactive Components:**
+- All buttons, links, and inputs must be keyboard accessible
+- Custom components must implement proper ARIA labels
+- Focus states must be clearly visible (Maryland DHS Blue outline)
+
+**Screen Reader Support:**
+- Use semantic HTML (`<button>`, `<nav>`, `<main>`)
+- Provide `aria-label` for icon-only buttons
+- Use `role="navigation"` for nav elements
+- Implement `aria-live` regions for dynamic updates
 
 ---
 
