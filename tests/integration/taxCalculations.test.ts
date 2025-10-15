@@ -218,8 +218,8 @@ describe('Tax Calculations - 2024 Tax Year', () => {
       const wages = 45000;
       const federalTax = 5400;
       
-      expect(formatCurrency(toCents(wages))).toContain('450');
-      expect(formatCurrency(toCents(federalTax))).toContain('54');
+      expect(formatCurrency(toCents(wages))).toBe('$45,000.00');
+      expect(formatCurrency(toCents(federalTax))).toBe('$5,400.00');
     });
   });
 });
