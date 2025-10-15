@@ -17,6 +17,7 @@ import {
   type InsertEligibilityCalculation,
   type InsertRuleChangeLog,
 } from "../../shared/schema";
+import { rulesAsCodeService } from "./rulesAsCodeService";
 
 // ============================================================================
 // Maryland SNAP Rules Engine - Deterministic Eligibility Calculations
@@ -88,52 +89,28 @@ export interface DocumentChecklistItem {
 class RulesEngine {
   /**
    * Get active rules for a specific date (defaults to current date)
+   * Delegates to rulesAsCodeService for versioning logic
    */
   private async getActiveIncomeLimits(
     benefitProgramId: string,
     householdSize: number,
     effectiveDate: Date = new Date()
   ): Promise<SnapIncomeLimit | null> {
-    const [limit] = await db
-      .select()
-      .from(snapIncomeLimits)
-      .where(
-        and(
-          eq(snapIncomeLimits.benefitProgramId, benefitProgramId),
-          eq(snapIncomeLimits.householdSize, householdSize),
-          eq(snapIncomeLimits.isActive, true),
-          lte(snapIncomeLimits.effectiveDate, effectiveDate),
-          or(
-            isNull(snapIncomeLimits.endDate),
-            gte(snapIncomeLimits.endDate, effectiveDate)
-          )
-        )
-      )
-      .orderBy(desc(snapIncomeLimits.effectiveDate))
-      .limit(1);
-    
-    return limit || null;
+    return await rulesAsCodeService.getActiveIncomeLimits(
+      benefitProgramId,
+      householdSize,
+      effectiveDate
+    );
   }
 
   private async getActiveDeductions(
     benefitProgramId: string,
     effectiveDate: Date = new Date()
   ): Promise<SnapDeduction[]> {
-    return await db
-      .select()
-      .from(snapDeductions)
-      .where(
-        and(
-          eq(snapDeductions.benefitProgramId, benefitProgramId),
-          eq(snapDeductions.isActive, true),
-          lte(snapDeductions.effectiveDate, effectiveDate),
-          or(
-            isNull(snapDeductions.endDate),
-            gte(snapDeductions.endDate, effectiveDate)
-          )
-        )
-      )
-      .orderBy(snapDeductions.deductionType);
+    return await rulesAsCodeService.getActiveDeductions(
+      benefitProgramId,
+      effectiveDate
+    );
   }
 
   private async getActiveAllotment(
@@ -141,25 +118,11 @@ class RulesEngine {
     householdSize: number,
     effectiveDate: Date = new Date()
   ): Promise<SnapAllotment | null> {
-    const [allotment] = await db
-      .select()
-      .from(snapAllotments)
-      .where(
-        and(
-          eq(snapAllotments.benefitProgramId, benefitProgramId),
-          eq(snapAllotments.householdSize, householdSize),
-          eq(snapAllotments.isActive, true),
-          lte(snapAllotments.effectiveDate, effectiveDate),
-          or(
-            isNull(snapAllotments.endDate),
-            gte(snapAllotments.endDate, effectiveDate)
-          )
-        )
-      )
-      .orderBy(desc(snapAllotments.effectiveDate))
-      .limit(1);
-    
-    return allotment || null;
+    return await rulesAsCodeService.getActiveAllotment(
+      benefitProgramId,
+      householdSize,
+      effectiveDate
+    );
   }
 
   private async getCategoricalEligibilityRule(
@@ -167,27 +130,11 @@ class RulesEngine {
     ruleCode: string,
     effectiveDate: Date = new Date()
   ): Promise<CategoricalEligibilityRule | null> {
-    if (!ruleCode) return null;
-
-    const [rule] = await db
-      .select()
-      .from(categoricalEligibilityRules)
-      .where(
-        and(
-          eq(categoricalEligibilityRules.benefitProgramId, benefitProgramId),
-          eq(categoricalEligibilityRules.ruleCode, ruleCode),
-          eq(categoricalEligibilityRules.isActive, true),
-          lte(categoricalEligibilityRules.effectiveDate, effectiveDate),
-          or(
-            isNull(categoricalEligibilityRules.endDate),
-            gte(categoricalEligibilityRules.endDate, effectiveDate)
-          )
-        )
-      )
-      .orderBy(desc(categoricalEligibilityRules.effectiveDate))
-      .limit(1);
-    
-    return rule || null;
+    return await rulesAsCodeService.getCategoricalEligibilityRule(
+      benefitProgramId,
+      ruleCode,
+      effectiveDate
+    );
   }
 
   /**

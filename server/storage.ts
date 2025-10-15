@@ -198,6 +198,12 @@ import {
   securityEvents,
   type SecurityEvent,
   type InsertSecurityEvent,
+  webhooks,
+  type Webhook,
+  type InsertWebhook,
+  webhookDeliveryLogs,
+  type WebhookDeliveryLog,
+  type InsertWebhookDeliveryLog,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and, ilike, sql, or, isNull, lte, gte } from "drizzle-orm";
@@ -672,6 +678,21 @@ export interface IStorage {
   createTrainingIntervention(intervention: InsertTrainingIntervention): Promise<TrainingIntervention>;
   getTrainingIntervention(id: string): Promise<TrainingIntervention | undefined>;
   getTrainingInterventions(filters?: { targetErrorCategory?: string }): Promise<TrainingIntervention[]>;
+
+  // ============================================================================
+  // Webhooks - Event notification system
+  // ============================================================================
+
+  // Webhooks
+  createWebhook(webhook: InsertWebhook): Promise<Webhook>;
+  getWebhook(id: string): Promise<Webhook | undefined>;
+  getWebhooks(filters?: { tenantId?: string; apiKeyId?: string; status?: string }): Promise<Webhook[]>;
+  updateWebhook(id: string, updates: Partial<Webhook>): Promise<Webhook>;
+  deleteWebhook(id: string): Promise<void>;
+
+  // Webhook Delivery Logs
+  createWebhookDeliveryLog(log: InsertWebhookDeliveryLog): Promise<WebhookDeliveryLog>;
+  getWebhookDeliveryLogs(webhookId: string, limit?: number): Promise<WebhookDeliveryLog[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -3446,6 +3467,70 @@ export class DatabaseStorage implements IStorage {
       .select()
       .from(trainingInterventions)
       .orderBy(desc(trainingInterventions.completedDate));
+  }
+
+  // ============================================================================
+  // Webhooks - Event notification system
+  // ============================================================================
+
+  async createWebhook(webhook: InsertWebhook): Promise<Webhook> {
+    const [created] = await db.insert(webhooks).values(webhook).returning();
+    return created;
+  }
+
+  async getWebhook(id: string): Promise<Webhook | undefined> {
+    return await db.query.webhooks.findFirst({
+      where: eq(webhooks.id, id),
+    });
+  }
+
+  async getWebhooks(filters?: { tenantId?: string; apiKeyId?: string; status?: string }): Promise<Webhook[]> {
+    let query = db.select().from(webhooks);
+
+    const conditions = [];
+    if (filters?.tenantId) {
+      conditions.push(eq(webhooks.tenantId, filters.tenantId));
+    }
+    if (filters?.apiKeyId) {
+      conditions.push(eq(webhooks.apiKeyId, filters.apiKeyId));
+    }
+    if (filters?.status) {
+      conditions.push(eq(webhooks.status, filters.status));
+    }
+
+    if (conditions.length > 0) {
+      query = query.where(and(...conditions)) as any;
+    }
+
+    return await query.orderBy(desc(webhooks.createdAt));
+  }
+
+  async updateWebhook(id: string, updates: Partial<Webhook>): Promise<Webhook> {
+    const [updated] = await db
+      .update(webhooks)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(webhooks.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteWebhook(id: string): Promise<void> {
+    await db.delete(webhooks).where(eq(webhooks.id, id));
+  }
+
+  // Webhook Delivery Logs
+  async createWebhookDeliveryLog(log: InsertWebhookDeliveryLog): Promise<WebhookDeliveryLog> {
+    const [created] = await db.insert(webhookDeliveryLogs).values(log).returning();
+    return created;
+  }
+
+  async getWebhookDeliveryLogs(webhookId: string, limit: number = 50): Promise<WebhookDeliveryLog[]> {
+    return await db
+      .select()
+      .from(webhookDeliveryLogs)
+      .where(eq(webhookDeliveryLogs.webhookId, webhookId))
+      .orderBy(desc(webhookDeliveryLogs.createdAt))
+      .limit(limit);
   }
 }
 

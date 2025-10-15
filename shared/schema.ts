@@ -4053,30 +4053,70 @@ export type ApiUsageLog = typeof apiUsageLogs.$inferSelect;
 export const webhooks = pgTable("webhooks", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   
-  // API key reference
-  apiKeyId: varchar("api_key_id").references(() => apiKeys.id, { onDelete: "cascade" }).notNull(),
+  // API key reference (optional - for API partner webhooks)
+  apiKeyId: varchar("api_key_id").references(() => apiKeys.id, { onDelete: "cascade" }),
+  
+  // Multi-tenant support
+  tenantId: varchar("tenant_id").references((): any => tenants.id),
   
   // Webhook config
   url: text("url").notNull(), // Partner's webhook URL
-  events: jsonb("events").notNull(), // Array of event types: ['eligibility.checked', 'document.verified']
+  events: text("events").array().notNull(), // Array of event types: ['sms.received', 'application.submitted', 'document.processed']
   secret: text("secret").notNull(), // HMAC secret for signature verification
   
   // Status
   status: text("status").notNull().default("active"), // active, paused, failed
   
+  // Retry configuration
+  maxRetries: integer("max_retries").notNull().default(3),
+  retryCount: integer("retry_count").notNull().default(0),
+  
   // Delivery tracking
+  lastTriggeredAt: timestamp("last_triggered_at"),
   lastDeliveryAt: timestamp("last_delivery_at"),
   lastDeliveryStatus: text("last_delivery_status"), // success, failed
+  lastResponse: jsonb("last_response"), // Last webhook response
   failureCount: integer("failure_count").notNull().default(0),
   
   // Config
-  retryConfig: jsonb("retry_config"), // Retry configuration
+  retryConfig: jsonb("retry_config"), // Advanced retry configuration
   
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 }, (table) => ({
   apiKeyIdx: index("webhooks_api_key_idx").on(table.apiKeyId),
+  tenantIdx: index("webhooks_tenant_idx").on(table.tenantId),
   statusIdx: index("webhooks_status_idx").on(table.status),
+}));
+
+// Webhook Delivery Logs - Track individual webhook delivery attempts
+export const webhookDeliveryLogs = pgTable("webhook_delivery_logs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  webhookId: varchar("webhook_id").references(() => webhooks.id, { onDelete: "cascade" }).notNull(),
+  
+  // Event details
+  eventType: text("event_type").notNull(), // 'sms.received', 'application.submitted', etc.
+  payload: jsonb("payload").notNull(), // The event payload sent
+  
+  // Delivery attempt
+  attemptNumber: integer("attempt_number").notNull().default(1),
+  httpStatus: integer("http_status"), // HTTP response status code
+  responseBody: text("response_body"), // Response from webhook endpoint
+  responseHeaders: jsonb("response_headers"), // Response headers
+  
+  // Timing
+  deliveredAt: timestamp("delivered_at"),
+  responseTime: integer("response_time"), // in milliseconds
+  
+  // Status
+  status: text("status").notNull(), // 'success', 'failed', 'pending'
+  errorMessage: text("error_message"), // Error message if failed
+  
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+  webhookIdIdx: index("webhook_logs_webhook_id_idx").on(table.webhookId),
+  statusIdx: index("webhook_logs_status_idx").on(table.status),
+  createdAtIdx: index("webhook_logs_created_at_idx").on(table.createdAt),
 }));
 
 // Webhook insert/select types
@@ -4085,10 +4125,18 @@ export const insertWebhookSchema = createInsertSchema(webhooks).omit({
   createdAt: true,
   updatedAt: true,
   failureCount: true,
+  retryCount: true,
+});
+
+export const insertWebhookDeliveryLogSchema = createInsertSchema(webhookDeliveryLogs).omit({
+  id: true,
+  createdAt: true,
 });
 
 export type InsertWebhook = z.infer<typeof insertWebhookSchema>;
 export type Webhook = typeof webhooks.$inferSelect;
+export type InsertWebhookDeliveryLog = z.infer<typeof insertWebhookDeliveryLogSchema>;
+export type WebhookDeliveryLog = typeof webhookDeliveryLogs.$inferSelect;
 
 // Multi-county schema insert/select types
 export const insertCountySchema = createInsertSchema(counties).omit({
@@ -4334,6 +4382,33 @@ export type InsertMonitoringMetric = z.infer<typeof insertMonitoringMetricSchema
 export type MonitoringMetric = typeof monitoringMetrics.$inferSelect;
 export type InsertAlertHistory = z.infer<typeof insertAlertHistorySchema>;
 export type AlertHistory = typeof alertHistory.$inferSelect;
+
+// ============================================================================
+// COUNTY TAX RATES - Maryland County Tax Rate Management
+// ============================================================================
+
+export const countyTaxRates = pgTable("county_tax_rates", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  countyName: text("county_name").notNull(),
+  taxYear: integer("tax_year").notNull(),
+  minRate: real("min_rate").notNull(),
+  maxRate: real("max_rate").notNull(),
+  effectiveDate: timestamp("effective_date").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  countyYearIdx: index("county_tax_rates_county_year_idx").on(table.countyName, table.taxYear),
+}));
+
+// Insert/select schemas
+export const insertCountyTaxRateSchema = createInsertSchema(countyTaxRates).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type InsertCountyTaxRate = z.infer<typeof insertCountyTaxRateSchema>;
+export type CountyTaxRate = typeof countyTaxRates.$inferSelect;
 
 // ============================================================================
 // QC (QUALITY CONTROL) ANALYTICS - Maryland SNAP Predictive Analytics

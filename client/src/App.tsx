@@ -48,6 +48,11 @@ import AbawdVerificationAdmin from "@/pages/AbawdVerificationAdmin";
 import CrossEnrollmentAdmin from "@/pages/CrossEnrollmentAdmin";
 import SmsConfig from "@/pages/admin/SmsConfig";
 import FNSStateOptionsManager from "@/pages/admin/FNSStateOptionsManager";
+import FederalLawTracker from "@/pages/admin/FederalLawTracker";
+import MarylandStateLawTracker from "@/pages/admin/MarylandStateLawTracker";
+import SmartScheduler from "@/pages/admin/SmartScheduler";
+import CountyTaxRates from "@/pages/admin/CountyTaxRates";
+import WebhookManagement from "@/pages/admin/WebhookManagement";
 import DocumentReviewQueue from "@/pages/DocumentReviewQueue";
 import TaxPreparation from "@/pages/TaxPreparation";
 import CountyManagement from "@/pages/CountyManagement";
@@ -408,6 +413,41 @@ function Router() {
             {() => (
               <ProtectedRoute requireAdmin>
                 <FNSStateOptionsManager />
+              </ProtectedRoute>
+            )}
+          </Route>
+          <Route path="/admin/federal-law-tracker">
+            {() => (
+              <ProtectedRoute requireAdmin>
+                <FederalLawTracker />
+              </ProtectedRoute>
+            )}
+          </Route>
+          <Route path="/admin/maryland-law-tracker">
+            {() => (
+              <ProtectedRoute requireAdmin>
+                <MarylandStateLawTracker />
+              </ProtectedRoute>
+            )}
+          </Route>
+          <Route path="/admin/scheduler">
+            {() => (
+              <ProtectedRoute requireAdmin>
+                <SmartScheduler />
+              </ProtectedRoute>
+            )}
+          </Route>
+          <Route path="/admin/county-tax-rates">
+            {() => (
+              <ProtectedRoute requireAdmin>
+                <CountyTaxRates />
+              </ProtectedRoute>
+            )}
+          </Route>
+          <Route path="/admin/webhooks">
+            {() => (
+              <ProtectedRoute requireAdmin>
+                <WebhookManagement />
               </ProtectedRoute>
             )}
           </Route>
