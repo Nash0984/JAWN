@@ -2,6 +2,7 @@ import { storage } from "./storage";
 import bcrypt from "bcryptjs";
 import { seedMarylandTestCases } from "./seedMarylandTestCases";
 import { seedQCData } from "./seedQcData";
+import { seedDhsForms } from "./seedDhsForms";
 import { db } from "./db";
 import { eq } from "drizzle-orm";
 import { benefitPrograms } from "@shared/schema";
@@ -538,6 +539,7 @@ export async function initializeSystemData() {
     await seedMarylandDemoScenarios();
     await seedMarylandTestCases();
     await seedQCData();
+    await seedDhsForms();
     
     console.log('✓ System data initialization complete');
   } catch (error) {
