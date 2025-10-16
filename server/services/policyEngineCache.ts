@@ -1,6 +1,6 @@
-import { createHash } from 'crypto';
 import NodeCache from 'node-cache';
 import type { PolicyEngineHousehold, BenefitResult } from './policyEngine.service';
+import { generateHouseholdHash } from './cacheService';
 
 /**
  * PolicyEngine Calculation Cache Service
@@ -49,6 +49,7 @@ class PolicyEngineCacheService {
   
   /**
    * Generate deterministic hash from household parameters
+   * Uses deep serialization to handle nested objects correctly and prevent cache collisions
    */
   private generateKey(household: PolicyEngineHousehold): string {
     // Create stable key from household characteristics
@@ -67,8 +68,8 @@ class PolicyEngineCacheService {
       elderlyOrDisabled: household.elderlyOrDisabled || false
     };
     
-    const json = JSON.stringify(keyData, Object.keys(keyData).sort());
-    return createHash('sha256').update(json).digest('hex');
+    // Use shared generateHouseholdHash for consistent deep serialization
+    return generateHouseholdHash(keyData);
   }
   
   /**
