@@ -44,6 +44,7 @@ export interface BenefitCalculationResult {
   childTaxCredit: number;
   ssi: number;
   tanf: number;
+  ohep: number;
   householdNetIncome: number;
   householdTax: number;
   householdBenefits: number;
@@ -137,6 +138,7 @@ export class PolicyEngineHttpClient {
         spm_unit: {
           members: allMembers,
           // Request benefit calculations (SSI is person-level, not SPM-level)
+          // Note: LIHEAP/OHEP not available in PolicyEngine API
           snap: { [year]: null },
           tanf: { [year]: null },
           spm_unit_net_income: { [year]: null },
@@ -228,13 +230,18 @@ export class PolicyEngineHttpClient {
         }
       }
       
+      // Convert Medicaid value (can be numeric or boolean) to boolean
+      const medicaidValue = this.extractEntityValue(data, 'people', 'adult_0', 'medicaid', year);
+      const medicaidEligible = typeof medicaidValue === 'number' ? medicaidValue > 0 : Boolean(medicaidValue);
+      
       const benefits: BenefitCalculationResult = {
         snap: this.extractEntityValue(data, 'spm_units', 'spm_unit', 'snap', year) || 0,
-        medicaid: this.extractEntityValue(data, 'people', 'adult_0', 'medicaid', year) || false,
+        medicaid: medicaidEligible,
         eitc: this.extractEntityValue(data, 'tax_units', 'tax_unit', 'eitc', year) || 0,
         childTaxCredit: this.extractEntityValue(data, 'tax_units', 'tax_unit', 'ctc', year) || 0,
         ssi: totalSSI,
         tanf: this.extractEntityValue(data, 'spm_units', 'spm_unit', 'tanf', year) || 0,
+        ohep: 0,  // OHEP/LIHEAP not available in PolicyEngine API - would require separate calculation
         householdNetIncome: this.extractEntityValue(data, 'spm_units', 'spm_unit', 'spm_unit_net_income', year) || 0,
         householdTax: this.extractEntityValue(data, 'tax_units', 'tax_unit', 'income_tax', year) || 0,
         householdBenefits: this.extractEntityValue(data, 'spm_units', 'spm_unit', 'spm_unit_benefits', year) || 0,

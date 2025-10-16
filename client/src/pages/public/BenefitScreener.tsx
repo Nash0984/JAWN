@@ -15,7 +15,7 @@ import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { CheckCircle2, DollarSign, Heart, Baby, Home, Users, Calculator, Info, ArrowRight, Save } from "lucide-react";
+import { CheckCircle2, DollarSign, Heart, Baby, Home, Users, Calculator, Info, ArrowRight, Save, Zap } from "lucide-react";
 
 const screenerSchema = z.object({
   adults: z.coerce.number().min(1, "At least 1 adult required").max(20),
@@ -40,6 +40,7 @@ interface BenefitResult {
   childTaxCredit: number;
   ssi: number;
   tanf: number;
+  ohep: number;
   householdNetIncome: number;
   householdTax: number;
   householdBenefits: number;
@@ -159,7 +160,7 @@ export default function BenefitScreener() {
     (results.benefits.snap + results.benefits.ssi + results.benefits.tanf) : 0;
 
   const totalYearlyBenefits = results?.benefits ?
-    (results.benefits.eitc + results.benefits.childTaxCredit) : 0;
+    (results.benefits.eitc + results.benefits.childTaxCredit + results.benefits.ohep) : 0;
 
   const eligibleCount = results?.benefits ? [
     results.benefits.snap > 0,
@@ -167,7 +168,8 @@ export default function BenefitScreener() {
     results.benefits.eitc > 0,
     results.benefits.childTaxCredit > 0,
     results.benefits.ssi > 0,
-    results.benefits.tanf > 0
+    results.benefits.tanf > 0,
+    results.benefits.ohep > 0
   ].filter(Boolean).length : 0;
 
   return (
@@ -575,6 +577,19 @@ export default function BenefitScreener() {
                           </div>
                         </div>
                         <p className="font-bold text-teal-600">${results.benefits.tanf.toFixed(0)}/mo</p>
+                      </div>
+                    )}
+
+                    {results.benefits.ohep > 0 && (
+                      <div className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-800 rounded-lg" data-testid="benefit-ohep">
+                        <div className="flex items-center gap-3">
+                          <Zap className="w-5 h-5 text-amber-600" />
+                          <div>
+                            <p className="font-medium">OHEP (Energy Assistance)</p>
+                            <p className="text-sm text-gray-500">Annual benefit</p>
+                          </div>
+                        </div>
+                        <p className="font-bold text-amber-600">${results.benefits.ohep.toFixed(0)}/yr</p>
                       </div>
                     )}
 

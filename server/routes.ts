@@ -5772,6 +5772,7 @@ If the question cannot be answered with the available information, say so clearl
           childTaxCredit: z.number(),
           ssi: z.number(),
           tanf: z.number(),
+          ohep: z.number(),
           householdNetIncome: z.number(),
           householdTax: z.number(),
           householdBenefits: z.number(),
@@ -5798,7 +5799,8 @@ If the question cannot be answered with the available information, say so clearl
       validated.benefitResults.benefits.eitc > 0,
       validated.benefitResults.benefits.childTaxCredit > 0,
       validated.benefitResults.benefits.ssi > 0,
-      validated.benefitResults.benefits.tanf > 0
+      validated.benefitResults.benefits.tanf > 0,
+      validated.benefitResults.benefits.ohep > 0
     ].filter(Boolean).length;
     
     // Get IP and user agent for metadata
