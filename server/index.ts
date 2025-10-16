@@ -222,7 +222,8 @@ app.use(detectCountyContext);
 app.use([
   "/api/policyengine/calculate", 
   "/api/policyengine/summary",
-  "/api/benefits/calculate-hybrid"  // Quick Screener public endpoint
+  "/api/benefits/calculate-hybrid",  // Quick Screener public endpoint
+  "/api/benefits/calculate-hybrid-summary"  // Benefit Screener public endpoint
 ], (req, res, next) => {
   // Mark request to skip CSRF protection
   (req as any).skipCsrf = true;

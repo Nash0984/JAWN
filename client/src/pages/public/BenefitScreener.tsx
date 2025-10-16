@@ -16,6 +16,7 @@ import { Badge } from "@/components/ui/badge";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { CheckCircle2, DollarSign, Heart, Baby, Home, Users, Calculator, Info, ArrowRight, Save, Zap } from "lucide-react";
+import { PolicyEngineVerificationBadge } from "@/components/PolicyEngineVerificationBadge";
 
 const screenerSchema = z.object({
   adults: z.coerce.number().min(1, "At least 1 adult required").max(20),
@@ -52,6 +53,12 @@ interface ScreenerResponse {
   benefits: BenefitResult;
   summary: string;
   error?: string;
+  verifications?: {
+    snap?: { match: boolean; policyEngineAmount: number; marylandAmount: number } | null;
+    tanf?: { match: boolean; policyEngineAmount: number; marylandAmount: number } | null;
+    ohep?: { match: boolean; policyEngineAmount: number; marylandAmount: number } | null;
+    medicaid?: { match: boolean; policyEngineEligible: boolean; marylandEligible: boolean } | null;
+  };
 }
 
 // Generate or retrieve session ID
@@ -90,7 +97,7 @@ export default function BenefitScreener() {
 
   const calculateMutation = useMutation({
     mutationFn: async (data: ScreenerFormData) => {
-      const response = await apiRequest("POST", "/api/policyengine/summary", data);
+      const response = await apiRequest("POST", "/api/benefits/calculate-hybrid-summary", data);
       return await response.json() as ScreenerResponse;
     },
     onSuccess: (data) => {
@@ -509,6 +516,9 @@ export default function BenefitScreener() {
                           <div>
                             <p className="font-medium">SNAP (Food Assistance)</p>
                             <p className="text-sm text-gray-500">Monthly benefit</p>
+                            {results.verifications?.snap && (
+                              <PolicyEngineVerificationBadge isMatch={results.verifications.snap.match} />
+                            )}
                           </div>
                         </div>
                         <p className="font-bold text-blue-600">${results.benefits.snap.toFixed(0)}/mo</p>
@@ -522,6 +532,9 @@ export default function BenefitScreener() {
                           <div>
                             <p className="font-medium">Medicaid</p>
                             <p className="text-sm text-gray-500">Health coverage</p>
+                            {results.verifications?.medicaid && (
+                              <PolicyEngineVerificationBadge isMatch={results.verifications.medicaid.match} />
+                            )}
                           </div>
                         </div>
                         <Badge variant="default" className="bg-green-600">Eligible</Badge>
@@ -574,6 +587,9 @@ export default function BenefitScreener() {
                           <div>
                             <p className="font-medium">TANF (Cash Assistance)</p>
                             <p className="text-sm text-gray-500">Monthly benefit</p>
+                            {results.verifications?.tanf && (
+                              <PolicyEngineVerificationBadge isMatch={results.verifications.tanf.match} />
+                            )}
                           </div>
                         </div>
                         <p className="font-bold text-teal-600">${results.benefits.tanf.toFixed(0)}/mo</p>
@@ -587,6 +603,9 @@ export default function BenefitScreener() {
                           <div>
                             <p className="font-medium">OHEP (Energy Assistance)</p>
                             <p className="text-sm text-gray-500">Annual benefit</p>
+                            {results.verifications?.ohep && (
+                              <PolicyEngineVerificationBadge isMatch={results.verifications.ohep.match} />
+                            )}
                           </div>
                         </div>
                         <p className="font-bold text-amber-600">${results.benefits.ohep.toFixed(0)}/yr</p>
