@@ -5,71 +5,110 @@
  * with graceful degradation when packages are not available
  */
 
+import { useState, useEffect, ComponentType, ReactNode } from "react";
+
 let Sentry: any = null;
 let sentryEnabled = false;
+let initializationPromise: Promise<void> | null = null;
 
 // Try to import Sentry packages - gracefully handle if not installed
-try {
-  Sentry = require("@sentry/react");
-  
-  const dsn = import.meta.env.VITE_SENTRY_DSN;
-  
-  if (dsn) {
-    const environment = import.meta.env.VITE_SENTRY_ENVIRONMENT || import.meta.env.MODE || "development";
-    const tracesSampleRate = parseFloat(import.meta.env.VITE_SENTRY_TRACES_SAMPLE_RATE || "0.1");
+async function initializeSentry() {
+  try {
+    const sentryModule = await import("@sentry/react");
+    Sentry = sentryModule.default || sentryModule;
     
-    Sentry.init({
-      dsn,
-      environment,
+    const dsn = import.meta.env.VITE_SENTRY_DSN;
+    
+    if (dsn) {
+      const environment = import.meta.env.VITE_SENTRY_ENVIRONMENT || import.meta.env.MODE || "development";
+      const tracesSampleRate = parseFloat(import.meta.env.VITE_SENTRY_TRACES_SAMPLE_RATE || "0.1");
       
-      // Performance monitoring
-      tracesSampleRate,
-      
-      // Integrations
-      integrations: [
-        Sentry.browserTracingIntegration(),
-        Sentry.replayIntegration({
-          maskAllText: true, // Mask all text to protect PII
-          blockAllMedia: true, // Block all media
-        }),
-      ],
-      
-      // Session replay sample rate
-      replaysSessionSampleRate: 0.1,
-      replaysOnErrorSampleRate: 1.0, // Always capture replay on error
-      
-      // PII filtering
-      beforeSend(event, hint) {
-        // Remove PII from error messages
-        if (event.exception?.values) {
-          event.exception.values.forEach(exception => {
-            if (exception.value) {
-              // Scrub SSN patterns
-              exception.value = exception.value.replace(/\b\d{3}-\d{2}-\d{4}\b/g, "[SSN REDACTED]");
-              // Scrub email addresses
-              exception.value = exception.value.replace(/\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/g, "[EMAIL REDACTED]");
-              // Scrub phone numbers
-              exception.value = exception.value.replace(/\b\d{3}[-.]?\d{3}[-.]?\d{4}\b/g, "[PHONE REDACTED]");
-            }
-          });
-        }
+      Sentry.init({
+        dsn,
+        environment,
         
-        return event;
-      },
-    });
-    
-    sentryEnabled = true;
-    console.log(`✅ Sentry initialized (${environment}) on frontend`);
-  } else {
-    console.warn("⚠️  Sentry DSN not configured (VITE_SENTRY_DSN). Frontend error tracking disabled.");
+        // Performance monitoring
+        tracesSampleRate,
+        
+        // Integrations
+        integrations: [
+          Sentry.browserTracingIntegration(),
+          Sentry.replayIntegration({
+            maskAllText: true, // Mask all text to protect PII
+            blockAllMedia: true, // Block all media
+          }),
+        ],
+        
+        // Session replay sample rate
+        replaysSessionSampleRate: 0.1,
+        replaysOnErrorSampleRate: 1.0, // Always capture replay on error
+        
+        // PII filtering
+        beforeSend(event: any, hint: any) {
+          // Remove PII from error messages
+          if (event.exception?.values) {
+            event.exception.values.forEach((exception: any) => {
+              if (exception.value) {
+                // Scrub SSN patterns
+                exception.value = exception.value.replace(/\b\d{3}-\d{2}-\d{4}\b/g, "[SSN REDACTED]");
+                // Scrub email addresses
+                exception.value = exception.value.replace(/\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/g, "[EMAIL REDACTED]");
+                // Scrub phone numbers
+                exception.value = exception.value.replace(/\b\d{3}[-.]?\d{3}[-.]?\d{4}\b/g, "[PHONE REDACTED]");
+              }
+            });
+          }
+          
+          return event;
+        },
+      });
+      
+      sentryEnabled = true;
+      console.log(`✅ Sentry initialized (${environment}) on frontend`);
+    } else {
+      console.warn("⚠️  Sentry DSN not configured (VITE_SENTRY_DSN). Frontend error tracking disabled.");
+    }
+  } catch (error) {
+    console.warn("⚠️  Sentry packages not installed. Frontend error tracking disabled.");
+    sentryEnabled = false;
   }
-} catch (error) {
-  console.warn("⚠️  Sentry packages not installed. Frontend error tracking disabled.");
-  sentryEnabled = false;
+}
+
+// Initialize Sentry and store the promise
+initializationPromise = initializeSentry();
+
+/**
+ * Sentry Error Boundary Component
+ * Handles async initialization by starting with a fallback and upgrading to real ErrorBoundary
+ */
+export function SentryErrorBoundary({ children }: { children: ReactNode }) {
+  const [ErrorBoundary, setErrorBoundary] = useState<ComponentType<{ children: ReactNode }> | null>(null);
+
+  useEffect(() => {
+    // Wait for Sentry to initialize
+    initializationPromise?.then(() => {
+      if (sentryEnabled && Sentry?.ErrorBoundary) {
+        // Update to use the real Sentry ErrorBoundary
+        setErrorBoundary(() => Sentry.ErrorBoundary);
+      } else {
+        // Use fallback (no-op) ErrorBoundary
+        setErrorBoundary(() => ({ children }: { children: ReactNode }) => <>{children}</>);
+      }
+    });
+  }, []);
+
+  // While initializing, render children directly (will upgrade to ErrorBoundary once ready)
+  if (!ErrorBoundary) {
+    return <>{children}</>;
+  }
+
+  // Render with the appropriate ErrorBoundary (real or fallback)
+  return <ErrorBoundary>{children}</ErrorBoundary>;
 }
 
 /**
- * Get Sentry Error Boundary component
+ * Get Sentry Error Boundary component (deprecated - use SentryErrorBoundary component instead)
+ * @deprecated Use SentryErrorBoundary component for proper async handling
  */
 export function getSentryErrorBoundary() {
   if (sentryEnabled && Sentry?.ErrorBoundary) {
@@ -164,6 +203,7 @@ export function isSentryEnabled(): boolean {
 }
 
 export default {
+  SentryErrorBoundary,
   getSentryErrorBoundary,
   setUserContext,
   captureException,
