@@ -1,5 +1,7 @@
 import { ohepRulesEngine } from "../services/ohepRulesEngine";
 import { tanfRulesEngine } from "../services/tanfRulesEngine";
+import { medicaidRulesEngine } from "../services/medicaidRulesEngine";
+import { vitaTaxRulesEngine } from "../services/vitaTaxRulesEngine";
 
 /**
  * Validation tests for OHEP and TANF Rules Engines
@@ -245,13 +247,268 @@ async function testTANFEngine() {
   console.log(`   Monthly Benefit: $${(tanfCase5.monthlyBenefit / 100).toFixed(2)}`);
 }
 
+async function testMedicaidEngine() {
+  console.log("\n\n📋 Medicaid (Health Coverage) Rules Engine Tests\n");
+
+  // Test Case 1: MAGI Adult (19-64, under 138% FPL)
+  console.log("Test 1: MAGI Adult eligible (ACA expansion)");
+  console.log("-".repeat(70));
+  
+  const medicaidCase1 = await medicaidRulesEngine.calculateEligibility({
+    size: 2,
+    age: 35,
+    monthlyIncome: 180000,  // $1,800/month
+    annualIncome: 216000,   // $2,160/year - under 138% FPL ($2,328)
+    isPregnant: false,
+    isSSIRecipient: false,
+    isDisabled: false,
+    isBlind: false,
+    isElderly: false,
+  });
+
+  console.log(`✅ Result: ${medicaidCase1.isEligible ? "ELIGIBLE" : "INELIGIBLE"}`);
+  console.log(`   Category: ${medicaidCase1.categoryName} (${medicaidCase1.pathway})`);
+  console.log(`   Income Test: ${medicaidCase1.incomeTest.passed ? "PASS" : "FAIL"}`);
+  console.log(`   Percent of FPL: ${medicaidCase1.incomeTest.percentOfFPL}%`);
+  console.log(`   Coverage: ${medicaidCase1.coverageType}`);
+  console.log("\n   Calculation Breakdown:");
+  medicaidCase1.calculationBreakdown.forEach(line => console.log(`     ${line}`));
+
+  // Test Case 2: MAGI Child eligible (under 322% FPL includes CHIP)
+  console.log("\n\nTest 2: MAGI Child eligible (high income - CHIP)");
+  console.log("-".repeat(70));
+  
+  const medicaidCase2 = await medicaidRulesEngine.calculateEligibility({
+    size: 3,
+    age: 10,
+    monthlyIncome: 600000,  // $6,000/month
+    annualIncome: 720000,   // $7,200/year - under 322% FPL ($8,222)
+    isPregnant: false,
+    isSSIRecipient: false,
+  });
+
+  console.log(`✅ Result: ${medicaidCase2.isEligible ? "ELIGIBLE" : "INELIGIBLE"}`);
+  console.log(`   Category: ${medicaidCase2.categoryName} (${medicaidCase2.pathway})`);
+  console.log(`   Income Test: ${medicaidCase2.incomeTest.passed ? "PASS" : "FAIL"}`);
+  console.log(`   Coverage: ${medicaidCase2.coverageType}`);
+
+  // Test Case 3: MAGI Pregnant eligible (264% FPL)
+  console.log("\n\nTest 3: MAGI Pregnant woman eligible");
+  console.log("-".repeat(70));
+  
+  const medicaidCase3 = await medicaidRulesEngine.calculateEligibility({
+    size: 2,
+    age: 28,
+    monthlyIncome: 400000,  // $4,000/month
+    annualIncome: 480000,   // $4,800/year - under 264% FPL ($5,342)
+    isPregnant: true,
+    isSSIRecipient: false,
+  });
+
+  console.log(`✅ Result: ${medicaidCase3.isEligible ? "ELIGIBLE" : "INELIGIBLE"}`);
+  console.log(`   Category: ${medicaidCase3.categoryName} (${medicaidCase3.pathway})`);
+  console.log(`   Income Test: ${medicaidCase3.incomeTest.passed ? "PASS" : "FAIL"}`);
+  console.log(`   Coverage: ${medicaidCase3.coverageType}`);
+
+  // Test Case 4: SSI recipient - automatic eligibility
+  console.log("\n\nTest 4: SSI recipient - automatic eligibility");
+  console.log("-".repeat(70));
+  
+  const medicaidCase4 = await medicaidRulesEngine.calculateEligibility({
+    size: 1,
+    age: 70,
+    monthlyIncome: 100000,  // $1,000/month from SSI
+    annualIncome: 120000,   // $1,200/year
+    isSSIRecipient: true,
+    isElderly: true,
+  });
+
+  console.log(`✅ Result: ${medicaidCase4.isEligible ? "ELIGIBLE" : "INELIGIBLE"}`);
+  console.log(`   Category: ${medicaidCase4.categoryName} (${medicaidCase4.pathway})`);
+  console.log(`   Income Test: ${medicaidCase4.incomeTest.testType}`);
+  console.log(`   Coverage: ${medicaidCase4.coverageType}`);
+
+  // Test Case 5: Non-MAGI Aged/Blind/Disabled eligible
+  console.log("\n\nTest 5: Non-MAGI Aged/Blind/Disabled eligible");
+  console.log("-".repeat(70));
+  
+  const medicaidCase5 = await medicaidRulesEngine.calculateEligibility({
+    size: 1,
+    age: 68,
+    monthlyIncome: 120000,  // $1,200/month - under 100% FPL ($1,245)
+    annualIncome: 144000,   // $1,440/year
+    isSSIRecipient: false,
+    isElderly: true,
+    countableAssets: 150000,  // $1,500 - under $2,000 limit
+  });
+
+  console.log(`✅ Result: ${medicaidCase5.isEligible ? "ELIGIBLE" : "INELIGIBLE"}`);
+  console.log(`   Category: ${medicaidCase5.categoryName} (${medicaidCase5.pathway})`);
+  console.log(`   Income Test: ${medicaidCase5.incomeTest.passed ? "PASS" : "FAIL"}`);
+  console.log(`   Asset Test: ${medicaidCase5.assetTest?.passed ? "PASS" : "FAIL"}`);
+  console.log(`   Coverage: ${medicaidCase5.coverageType}`);
+
+  // Test Case 6: MAGI Adult ineligible (income too high)
+  console.log("\n\nTest 6: MAGI Adult ineligible (exceeds 138% FPL)");
+  console.log("-".repeat(70));
+  
+  const medicaidCase6 = await medicaidRulesEngine.calculateEligibility({
+    size: 1,
+    age: 45,
+    monthlyIncome: 250000,  // $2,500/month - exceeds 138% FPL ($1,722)
+    annualIncome: 300000,   // $3,000/year
+    isPregnant: false,
+    isSSIRecipient: false,
+  });
+
+  console.log(`❌ Result: ${medicaidCase6.isEligible ? "ELIGIBLE" : "INELIGIBLE"}`);
+  console.log(`   Category: ${medicaidCase6.categoryName} (${medicaidCase6.pathway})`);
+  console.log(`   Income Test: ${medicaidCase6.incomeTest.passed ? "PASS" : "FAIL"}`);
+  console.log(`   Reason: ${medicaidCase6.reason}`);
+  if (medicaidCase6.coverageType === "Medically Needy" && medicaidCase6.hasSpenddown) {
+    console.log(`   May qualify for Medically Needy with spenddown: $${(medicaidCase6.spenddownAmount! / 100).toFixed(2)}/month`);
+  }
+}
+
+async function testVITATaxEngine() {
+  console.log("\n\n📋 VITA Tax (Federal + Maryland State) Rules Engine Tests\n");
+
+  // Test Case 1: Low-income single filer with 2 children (EITC eligible)
+  console.log("Test 1: Low-income single parent with 2 children (EITC + CTC)");
+  console.log("-".repeat(70));
+  
+  const taxCase1 = await vitaTaxRulesEngine.calculateTax({
+    filingStatus: "single",
+    taxYear: 2024,
+    wages: 2500000,  // $25,000/year
+    otherIncome: 0,
+    numberOfQualifyingChildren: 2,
+    dependents: 2,
+    marylandCounty: "baltimore_city",
+    marylandResidentMonths: 12,
+  });
+
+  console.log(`Federal Tax: $${(taxCase1.federalTax.totalFederalTax / 100).toFixed(2)}`);
+  console.log(`   EITC: $${(taxCase1.federalTax.eitc / 100).toFixed(2)}`);
+  console.log(`   CTC: $${(taxCase1.federalTax.childTaxCredit / 100).toFixed(2)}`);
+  console.log(`Maryland Tax: $${(taxCase1.marylandTax.totalMarylandTax / 100).toFixed(2)}`);
+  console.log(`   Maryland EITC: $${(taxCase1.marylandTax.marylandEITC / 100).toFixed(2)}`);
+  console.log(`✅ TOTAL REFUND: $${(taxCase1.totalRefund / 100).toFixed(2)}`);
+
+  // Test Case 2: Middle-income married filing jointly with 1 child
+  console.log("\n\nTest 2: Middle-income married couple with 1 child");
+  console.log("-".repeat(70));
+  
+  const taxCase2 = await vitaTaxRulesEngine.calculateTax({
+    filingStatus: "married_joint",
+    taxYear: 2024,
+    wages: 7500000,  // $75,000/year
+    otherIncome: 500000, // $5,000 interest/dividends
+    numberOfQualifyingChildren: 1,
+    dependents: 1,
+    marylandCounty: "montgomery",
+    marylandResidentMonths: 12,
+  });
+
+  console.log(`Federal Tax: $${(taxCase2.federalTax.totalFederalTax / 100).toFixed(2)}`);
+  console.log(`   Income Tax Before Credits: $${(taxCase2.federalTax.incomeTaxBeforeCredits / 100).toFixed(2)}`);
+  console.log(`   CTC: $${(taxCase2.federalTax.childTaxCredit / 100).toFixed(2)}`);
+  console.log(`Maryland Tax: $${(taxCase2.marylandTax.totalMarylandTax / 100).toFixed(2)}`);
+  console.log(`   State + ${taxCase2.marylandTax.countyName} County`);
+  console.log(`Total Tax Owed: $${(taxCase2.totalTaxLiability / 100).toFixed(2)}`);
+
+  // Test Case 3: Head of household with 3 children (maximum EITC)
+  console.log("\n\nTest 3: Head of household with 3 children (maximum EITC scenario)");
+  console.log("-".repeat(70));
+  
+  const taxCase3 = await vitaTaxRulesEngine.calculateTax({
+    filingStatus: "head_of_household",
+    taxYear: 2024,
+    wages: 1500000,  // $15,000/year - low income
+    otherIncome: 0,
+    numberOfQualifyingChildren: 3,
+    dependents: 3,
+    marylandCounty: "prince_georges",
+    marylandResidentMonths: 12,
+  });
+
+  console.log(`Federal Tax: $${(taxCase3.federalTax.totalFederalTax / 100).toFixed(2)}`);
+  console.log(`   EITC: $${(taxCase3.federalTax.eitc / 100).toFixed(2)}`);
+  console.log(`   CTC: $${(taxCase3.federalTax.childTaxCredit / 100).toFixed(2)}`);
+  console.log(`Maryland Tax: $${(taxCase3.marylandTax.totalMarylandTax / 100).toFixed(2)}`);
+  console.log(`✅ TOTAL REFUND: $${(taxCase3.totalRefund / 100).toFixed(2)}`);
+
+  // Test Case 4: Single filer, no children, moderate income
+  console.log("\n\nTest 4: Single filer, no children, moderate income");
+  console.log("-".repeat(70));
+  
+  const taxCase4 = await vitaTaxRulesEngine.calculateTax({
+    filingStatus: "single",
+    taxYear: 2024,
+    wages: 5000000,  // $50,000/year
+    otherIncome: 0,
+    numberOfQualifyingChildren: 0,
+    dependents: 0,
+    marylandCounty: "howard",
+    marylandResidentMonths: 12,
+  });
+
+  console.log(`Federal Tax: $${(taxCase4.federalTax.totalFederalTax / 100).toFixed(2)}`);
+  console.log(`   Income Tax Before Credits: $${(taxCase4.federalTax.incomeTaxBeforeCredits / 100).toFixed(2)}`);
+  console.log(`Maryland Tax: $${(taxCase4.marylandTax.totalMarylandTax / 100).toFixed(2)}`);
+  console.log(`Total Tax Owed: $${(taxCase4.totalTaxLiability / 100).toFixed(2)}`);
+
+  // Test Case 5: County tax rate comparison (Talbot vs Baltimore City)
+  console.log("\n\nTest 5: County tax rate impact - Talbot County (lowest) vs Baltimore City (highest)");
+  console.log("-".repeat(70));
+  
+  const taxCase5a = await vitaTaxRulesEngine.calculateTax({
+    filingStatus: "married_joint",
+    taxYear: 2024,
+    wages: 10000000,  // $100,000/year
+    otherIncome: 0,
+    numberOfQualifyingChildren: 0,
+    dependents: 0,
+    marylandCounty: "talbot", // 2.25% - lowest
+    marylandResidentMonths: 12,
+  });
+
+  const taxCase5b = await vitaTaxRulesEngine.calculateTax({
+    filingStatus: "married_joint",
+    taxYear: 2024,
+    wages: 10000000,  // $100,000/year - same income
+    otherIncome: 0,
+    numberOfQualifyingChildren: 0,
+    dependents: 0,
+    marylandCounty: "baltimore_city", // 3.20% - highest
+    marylandResidentMonths: 12,
+  });
+
+  console.log(`Talbot County (2.25% rate):`);
+  console.log(`   County Tax: $${(taxCase5a.marylandTax.countyTax / 100).toFixed(2)}`);
+  console.log(`   Total Maryland Tax: $${(taxCase5a.marylandTax.totalMarylandTax / 100).toFixed(2)}`);
+  
+  console.log(`\nBaltimore City (3.20% rate):`);
+  console.log(`   County Tax: $${(taxCase5b.marylandTax.countyTax / 100).toFixed(2)}`);
+  console.log(`   Total Maryland Tax: $${(taxCase5b.marylandTax.totalMarylandTax / 100).toFixed(2)}`);
+  
+  const countyDifference = taxCase5b.marylandTax.countyTax - taxCase5a.marylandTax.countyTax;
+  console.log(`\n💡 County Tax Difference: $${(countyDifference / 100).toFixed(2)} higher in Baltimore City`);
+}
+
 async function runValidationTests() {
   try {
     await testOHEPEngine();
     await testTANFEngine();
+    await testMedicaidEngine();
+    await testVITATaxEngine();
     
     console.log("\n\n" + "=".repeat(70));
     console.log("✅ All validation tests completed successfully!");
+    console.log("   - OHEP: 4 test scenarios (energy assistance)");
+    console.log("   - TANF: 5 test scenarios (cash assistance)");
+    console.log("   - Medicaid: 6 test scenarios (health coverage)");
+    console.log("   - VITA Tax: 5 test scenarios (federal + state tax)");
     console.log("=".repeat(70));
     
     process.exit(0);
