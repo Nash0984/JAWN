@@ -85,6 +85,37 @@ async function testOHEPEngine() {
   console.log(`   Benefit Type: ${ohepCase3.benefitType}`);
   console.log(`   Benefit Amount: $${(ohepCase3.benefitAmount / 100).toFixed(2)}`);
   console.log(`   Priority Group: ${ohepCase3.priorityGroup}`);
+
+  // Test Case 4: Arrearage assistance - REGRESSION TEST for $300 limit
+  console.log("\n\nTest 4: Arrearage assistance (REGRESSION TEST - must be $300 max)");
+  console.log("-".repeat(70));
+  
+  const ohepCase4 = await ohepRulesEngine.calculateEligibility({
+    size: 4,
+    grossMonthlyIncome: 120000,  // $1,200/month
+    grossAnnualIncome: 144000,   // $1,440/year
+    hasElderlyMember: false,
+    hasDisabledMember: true,
+    hasChildUnder6: false,
+    isCrisisSituation: false,
+    hasArrearage: true,  // Has past-due bills
+    heatingFuelType: "electric",
+  });
+
+  console.log(`✅ Result: ${ohepCase4.isEligible ? "ELIGIBLE" : "INELIGIBLE"}`);
+  console.log(`   Income Test: ${ohepCase4.incomeTest.passed ? "PASS" : "FAIL"}`);
+  console.log(`   Benefit Type: ${ohepCase4.benefitType}`);
+  console.log(`   Benefit Amount: $${(ohepCase4.benefitAmount / 100).toFixed(2)}`);
+  
+  // CRITICAL ASSERTION: Arrearage benefit must be exactly $300
+  if (ohepCase4.benefitAmount !== 30000) {
+    throw new Error(
+      `❌ ARREARAGE REGRESSION TEST FAILED! ` +
+      `Expected $300.00, got $${(ohepCase4.benefitAmount / 100).toFixed(2)}. ` +
+      `This is a compliance violation - check seed data and DHS policy!`
+    );
+  }
+  console.log(`   ✓ REGRESSION TEST PASSED: Arrearage benefit correctly capped at $300`);
 }
 
 async function testTANFEngine() {

@@ -142,12 +142,12 @@ export async function seedRulesEngineData() {
         benefitProgramId: ohepProgram!.id,
         tierType: "arrearage",
         benefitName: "Arrearage Assistance",
-        maxBenefitAmount: 200000, // $2,000 max
+        maxBenefitAmount: 30000, // $300 max (CORRECTED per MD DHS policy)
         eligibilityConditions: { hasPastDueBills: true, amountPastDue: ">$0" },
         vendorPaymentOnly: true,
         effectiveDate: new Date("2024-10-01"),
         isActive: true,
-        notes: "Assistance with past due utility bills",
+        notes: "Assistance with past due utility bills - $300 maximum per Maryland DHS policy",
       },
     ]);
     console.log("✓ Seeded OHEP benefit tiers");
