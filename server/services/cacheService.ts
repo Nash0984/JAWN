@@ -1,10 +1,33 @@
 import NodeCache from 'node-cache';
+import crypto from 'crypto';
 
 const cache = new NodeCache({
-  stdTTL: 300,
+  stdTTL: 300, // 5 minutes default TTL
   checkperiod: 60,
   useClones: false,
 });
+
+// Generate deterministic hash for household data to use as cache key
+// Uses deep serialization to handle nested objects correctly
+export function generateHouseholdHash(householdData: any): string {
+  // Recursively sort all object keys at every nesting level
+  const deepSort = (obj: any): any => {
+    if (obj === null || typeof obj !== 'object') {
+      return obj;
+    }
+    if (Array.isArray(obj)) {
+      return obj.map(deepSort);
+    }
+    const sorted: Record<string, any> = {};
+    Object.keys(obj).sort().forEach(key => {
+      sorted[key] = deepSort(obj[key]);
+    });
+    return sorted;
+  };
+  
+  const normalized = JSON.stringify(deepSort(householdData));
+  return crypto.createHash('md5').update(normalized).digest('hex').substring(0, 16);
+}
 
 export const cacheService = {
   get<T>(key: string): T | undefined {
@@ -42,6 +65,13 @@ export const CACHE_KEYS = {
   MANUAL_SECTION: (sectionId: number) => `manual_section:${sectionId}`,
   MANUAL_SECTIONS: (programId: number) => `manual_sections:${programId}`,
   DOCUMENT_REQUIREMENTS: (programId: number) => `doc_requirements:${programId}`,
+  
+  // Rules Engine Calculation Caching
+  RULES_ENGINE_CALC: (programCode: string, householdHash: string) => `rules:${programCode}:${householdHash}`,
+  POLICYENGINE_CALC: (householdHash: string) => `pe:calc:${householdHash}`,
+  POLICYENGINE_SUMMARY: (householdHash: string) => `pe:summary:${householdHash}`,
+  HYBRID_CALC: (programCode: string, householdHash: string) => `hybrid:${programCode}:${householdHash}`,
+  HYBRID_SUMMARY: (householdHash: string) => `hybrid:summary:${householdHash}`,
 };
 
 export const invalidateRulesCache = (programId: number) => {

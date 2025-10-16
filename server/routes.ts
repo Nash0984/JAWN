@@ -15,7 +15,7 @@ import { auditService } from "./services/auditService";
 import { documentVerificationService } from "./services/documentVerificationService";
 import { textGenerationService } from "./services/textGenerationService";
 import { notificationService } from "./services/notification.service";
-import { cacheService, CACHE_KEYS, invalidateRulesCache } from "./services/cacheService";
+import { cacheService, CACHE_KEYS, invalidateRulesCache, generateHouseholdHash } from "./services/cacheService";
 import { kpiTrackingService } from "./services/kpiTracking.service";
 import { achievementSystemService } from "./services/achievementSystem.service";
 import { leaderboardService } from "./services/leaderboard.service";
@@ -2056,6 +2056,22 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
 
     const validated = inputSchema.parse(req.body);
     
+    // Determine program code
+    const programCode = validated.programCode || 'MD_SNAP'; // Default to SNAP for now
+    
+    // Generate cache key from household data
+    const householdHash = generateHouseholdHash(validated);
+    const cacheKey = CACHE_KEYS.HYBRID_CALC(programCode, householdHash);
+    
+    // Check cache first
+    const cachedResponse = cacheService.get<any>(cacheKey);
+    if (cachedResponse) {
+      console.log(`✅ Cache hit for hybrid calculation endpoint (${programCode}, hash: ${householdHash})`);
+      return res.json(cachedResponse);
+    }
+    
+    console.log(`❌ Cache miss for hybrid calculation endpoint (${programCode}, hash: ${householdHash})`);
+    
     // For structured input (not natural language), call rulesEngineAdapter directly
     // to preserve all parameters including assets
     const { rulesEngineAdapter } = await import("./services/rulesEngineAdapter");
@@ -2070,9 +2086,6 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
       hasTANF: validated.hasTANF,
       benefitProgramId: validated.benefitProgramId,
     };
-    
-    // Determine program code
-    const programCode = validated.programCode || 'MD_SNAP'; // Default to SNAP for now
     
     // Calculate using rules engine adapter (preserves all structured input including assets)
     const adapterResult = await rulesEngineAdapter.calculateEligibility(programCode, input);
@@ -2162,6 +2175,10 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
         };
       }
     }
+
+    // Cache the response
+    cacheService.set(cacheKey, response);
+    console.log(`💾 Cached hybrid calculation response (${programCode}, hash: ${householdHash})`);
 
     res.json(response);
   }));
@@ -5172,6 +5189,19 @@ If the question cannot be answered with the available information, say so clearl
     
     const validated = inputSchema.parse(req.body);
     
+    // Generate cache key from household data
+    const householdHash = generateHouseholdHash(validated);
+    const cacheKey = CACHE_KEYS.HYBRID_SUMMARY(householdHash);
+    
+    // Check cache first
+    const cachedResponse = cacheService.get<any>(cacheKey);
+    if (cachedResponse) {
+      console.log(`✅ Cache hit for hybrid summary endpoint (hash: ${householdHash})`);
+      return res.json(cachedResponse);
+    }
+    
+    console.log(`❌ Cache miss for hybrid summary endpoint (hash: ${householdHash})`);
+    
     // Get benefit program for SNAP
     const snapProgram = await storage.getBenefitProgramByCode("MD_SNAP");
     if (!snapProgram) {
@@ -5253,7 +5283,7 @@ If the question cannot be answered with the available information, say so clearl
       } : null
     };
 
-    res.json({
+    const response = {
       success: true,
       benefits,
       verifications,
@@ -5264,7 +5294,13 @@ If the question cannot be answered with the available information, say so clearl
         ohep: ohepResult,
         medicaid: medicaidResult
       }
-    });
+    };
+
+    // Cache the response
+    cacheService.set(cacheKey, response);
+    console.log(`💾 Cached hybrid summary response (hash: ${householdHash})`);
+
+    res.json(response);
   }));
 
   // Test PolicyEngine connection
