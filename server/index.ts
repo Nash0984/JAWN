@@ -2,6 +2,7 @@
 // SENTRY INITIALIZATION - Must be first to capture all errors
 // ============================================================================
 import { 
+  setupSentry,
   getSentryRequestHandler, 
   getSentryTracingHandler, 
   getSentryErrorHandler,
@@ -66,12 +67,6 @@ const app = express();
 
 // Trust proxy - Required for rate limiting and sessions behind reverse proxies/load balancers
 app.set('trust proxy', 1);
-
-// ============================================================================
-// SENTRY REQUEST HANDLERS - Must be before all other middleware
-// ============================================================================
-app.use(getSentryRequestHandler()); // Request context and tracing
-app.use(getSentryTracingHandler()); // Performance monitoring
 
 // Security headers with Helmet - Environment-aware CSP
 const isDevelopment = process.env.NODE_ENV === 'development';
@@ -234,6 +229,15 @@ app.use("/api/", (req, res, next) => {
 });
 
 (async () => {
+  // ============================================================================
+  // SENTRY SETUP - Initialize and attach middleware BEFORE other initialization
+  // ============================================================================
+  await setupSentry(); // Must await to ensure Sentry is ready
+  
+  // Attach Sentry middleware AFTER initialization (so handlers are real, not no-ops)
+  app.use(getSentryRequestHandler()); // Request context and tracing
+  app.use(getSentryTracingHandler()); // Performance monitoring
+  
   // Initialize system data (benefit programs, etc.)
   await initializeSystemData();
   

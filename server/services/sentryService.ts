@@ -15,124 +15,137 @@ let sentryEnabled = false;
 let sentryConfigured = false;
 
 // Try to import Sentry packages - gracefully handle if not installed
-try {
-  Sentry = require("@sentry/node");
-  const ProfilingIntegration = require("@sentry/profiling-node").ProfilingIntegration;
-  
-  // Check if DSN is configured
-  const dsn = process.env.SENTRY_DSN;
-  
-  if (dsn) {
-    const environment = process.env.SENTRY_ENVIRONMENT || process.env.NODE_ENV || "development";
-    const tracesSampleRate = parseFloat(process.env.SENTRY_TRACES_SAMPLE_RATE || "0.1");
-    const profilesSampleRate = parseFloat(process.env.SENTRY_PROFILES_SAMPLE_RATE || "0.1");
+async function initializeSentry() {
+  try {
+    const sentryModule = await import("@sentry/node");
+    Sentry = sentryModule.default || sentryModule;
+    const profilingModule = await import("@sentry/profiling-node");
+    const nodeProfilingIntegration = profilingModule.nodeProfilingIntegration;
     
-    // Get release version from package.json
-    let release = "unknown";
-    try {
-      const packageJson = require("../../package.json");
-      release = packageJson.version || "unknown";
-    } catch (e) {
-      console.warn("⚠️  Could not read package.json for Sentry release version");
-    }
+    // Check if DSN is configured
+    const dsn = process.env.SENTRY_DSN;
     
-    Sentry.init({
-      dsn,
-      environment,
-      release,
+    if (dsn) {
+      const environment = process.env.SENTRY_ENVIRONMENT || process.env.NODE_ENV || "development";
+      const tracesSampleRate = parseFloat(process.env.SENTRY_TRACES_SAMPLE_RATE || "0.1");
+      const profilesSampleRate = parseFloat(process.env.SENTRY_PROFILES_SAMPLE_RATE || "0.1");
       
-      // Performance monitoring
-      tracesSampleRate, // Capture 10% of transactions by default
-      profilesSampleRate, // Profile 10% of transactions
+      // Get release version from package.json
+      let release = "unknown";
+      try {
+        const packageJson = await import("../../package.json");
+        release = (packageJson as any).version || "unknown";
+      } catch (e) {
+        console.warn("⚠️  Could not read package.json for Sentry release version");
+      }
       
-      // Integrations
-      integrations: [
-        // Enable HTTP instrumentation
-        new Sentry.Integrations.Http({ tracing: true }),
-        // Enable Express.js middleware instrumentation
-        new Sentry.Integrations.Express({ app: undefined as any }),
-        // Enable profiling
-        new ProfilingIntegration(),
-      ],
-      
-      // PII filtering - never send sensitive data
-      beforeSend(event, hint) {
-        // Remove PII from error messages and stack traces
-        if (event.exception?.values) {
-          event.exception.values.forEach(exception => {
-            if (exception.value) {
-              // Scrub SSN patterns
-              exception.value = exception.value.replace(/\b\d{3}-\d{2}-\d{4}\b/g, "[SSN REDACTED]");
-              // Scrub email addresses
-              exception.value = exception.value.replace(/\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/g, "[EMAIL REDACTED]");
-              // Scrub phone numbers
-              exception.value = exception.value.replace(/\b\d{3}[-.]?\d{3}[-.]?\d{4}\b/g, "[PHONE REDACTED]");
-            }
-          });
-        }
+      Sentry.init({
+        dsn,
+        environment,
+        release,
         
-        // Remove sensitive request data
-        if (event.request) {
-          // Remove cookies that might contain session tokens
-          delete event.request.cookies;
-          // Remove authorization headers
-          if (event.request.headers) {
-            delete event.request.headers.authorization;
-            delete event.request.headers.cookie;
-          }
-          // Remove query params that might contain sensitive data
-          if (event.request.query_string) {
-            const sensitiveParams = ['ssn', 'password', 'token', 'api_key'];
-            sensitiveParams.forEach(param => {
-              if (event.request?.query_string) {
-                event.request.query_string = event.request.query_string.replace(
-                  new RegExp(`${param}=[^&]*`, 'gi'),
-                  `${param}=[REDACTED]`
-                );
+        // Performance monitoring
+        tracesSampleRate, // Capture 10% of transactions by default
+        profilesSampleRate, // Profile 10% of transactions
+        
+        // Integrations
+        integrations: [
+          // Enable HTTP instrumentation
+          new Sentry.Integrations.Http({ tracing: true }),
+          // Enable Express.js middleware instrumentation
+          new Sentry.Integrations.Express({ app: undefined as any }),
+          // Enable profiling
+          nodeProfilingIntegration(),
+        ],
+        
+        // PII filtering - never send sensitive data
+        beforeSend(event: any, hint: any) {
+          // Remove PII from error messages and stack traces
+          if (event.exception?.values) {
+            event.exception.values.forEach((exception: any) => {
+              if (exception.value) {
+                // Scrub SSN patterns
+                exception.value = exception.value.replace(/\b\d{3}-\d{2}-\d{4}\b/g, "[SSN REDACTED]");
+                // Scrub email addresses
+                exception.value = exception.value.replace(/\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/g, "[EMAIL REDACTED]");
+                // Scrub phone numbers
+                exception.value = exception.value.replace(/\b\d{3}[-.]?\d{3}[-.]?\d{4}\b/g, "[PHONE REDACTED]");
               }
             });
           }
-        }
+          
+          // Remove sensitive request data
+          if (event.request) {
+            // Remove cookies that might contain session tokens
+            delete event.request.cookies;
+            // Remove authorization headers
+            if (event.request.headers) {
+              delete event.request.headers.authorization;
+              delete event.request.headers.cookie;
+            }
+            // Remove query params that might contain sensitive data
+            if (event.request.query_string) {
+              const sensitiveParams = ['ssn', 'password', 'token', 'api_key'];
+              sensitiveParams.forEach(param => {
+                if (event.request?.query_string) {
+                  event.request.query_string = event.request.query_string.replace(
+                    new RegExp(`${param}=[^&]*`, 'gi'),
+                    `${param}=[REDACTED]`
+                  );
+                }
+              });
+            }
+          }
+          
+          return event;
+        },
         
-        return event;
-      },
+        // Don't report errors from certain paths
+        ignoreErrors: [
+          // Browser extensions
+          'top.GLOBALS',
+          // Random plugins/extensions
+          'originalCreateNotification',
+          'canvas.contentDocument',
+          'MyApp_RemoveAllHighlights',
+          // Facebook borked
+          'fb_xd_fragment',
+          // ISP "optimizing" proxy - `Cache-Control: no-transform` seems to reduce this. (thanks @acdha)
+          'bmi_SafeAddOnload',
+          'EBCallBackMessageReceived',
+          // See http://toolbar.conduit.com/Developer/HtmlAndGadget/Methods/JSInjection.aspx
+          'conduitPage',
+        ],
+      });
       
-      // Don't report errors from certain paths
-      ignoreErrors: [
-        // Browser extensions
-        'top.GLOBALS',
-        // Random plugins/extensions
-        'originalCreateNotification',
-        'canvas.contentDocument',
-        'MyApp_RemoveAllHighlights',
-        // Facebook borked
-        'fb_xd_fragment',
-        // ISP "optimizing" proxy - `Cache-Control: no-transform` seems to reduce this. (thanks @acdha)
-        'bmi_SafeAddOnload',
-        'EBCallBackMessageReceived',
-        // See http://toolbar.conduit.com/Developer/HtmlAndGadget/Methods/JSInjection.aspx
-        'conduitPage',
-      ],
-    });
-    
-    sentryEnabled = true;
-    sentryConfigured = true;
-    console.log(`✅ Sentry initialized (${environment}) - Release: ${release}`);
-    console.log(`   Traces sample rate: ${tracesSampleRate * 100}%`);
-    console.log(`   Profiles sample rate: ${profilesSampleRate * 100}%`);
-  } else {
-    console.warn("⚠️  Sentry DSN not configured (SENTRY_DSN). Error tracking disabled.");
-    console.warn("   Add SENTRY_DSN to environment variables to enable Sentry monitoring.");
+      sentryEnabled = true;
+      sentryConfigured = true;
+      console.log(`✅ Sentry initialized (${environment}) - Release: ${release}`);
+      console.log(`   Traces sample rate: ${tracesSampleRate * 100}%`);
+      console.log(`   Profiles sample rate: ${profilesSampleRate * 100}%`);
+    } else {
+      console.warn("⚠️  Sentry DSN not configured (SENTRY_DSN). Error tracking disabled.");
+      console.warn("   Add SENTRY_DSN to environment variables to enable Sentry monitoring.");
+    }
+  } catch (error) {
+    console.warn("⚠️  Sentry packages not installed. Error tracking disabled.");
+    console.warn("   Run: npm install @sentry/node @sentry/react @sentry/profiling-node");
+    sentryEnabled = false;
   }
-} catch (error) {
-  console.warn("⚠️  Sentry packages not installed. Error tracking disabled.");
-  console.warn("   Run: npm install @sentry/node @sentry/react @sentry/profiling-node");
-  sentryEnabled = false;
+}
+
+/**
+ * Setup Sentry - Call this async function during server bootstrap
+ * BEFORE attaching any middleware
+ */
+export async function setupSentry() {
+  await initializeSentry();
 }
 
 /**
  * Get Sentry request handler middleware
  * Must be used before any other request handlers
+ * Must call setupSentry() first!
  */
 export function getSentryRequestHandler() {
   if (sentryEnabled && Sentry?.Handlers?.requestHandler) {
@@ -144,6 +157,7 @@ export function getSentryRequestHandler() {
 /**
  * Get Sentry tracing middleware
  * Enables performance monitoring for requests
+ * Must call setupSentry() first!
  */
 export function getSentryTracingHandler() {
   if (sentryEnabled && Sentry?.Handlers?.tracingHandler) {
@@ -155,6 +169,7 @@ export function getSentryTracingHandler() {
 /**
  * Get Sentry error handler middleware
  * Must be used after all other request handlers but before error handlers
+ * Must call setupSentry() first!
  */
 export function getSentryErrorHandler() {
   if (sentryEnabled && Sentry?.Handlers?.errorHandler) {
