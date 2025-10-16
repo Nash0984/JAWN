@@ -197,25 +197,85 @@ class ECFRBulkDownloader {
     const sections: ECFRSection[] = [];
     
     try {
-      // Navigate XML structure to find Part 273
-      // XML structure: ECFR > TITLE > SUBTITLE > CHAPTER > SUBCHAPTER > PART > SECTION
-      const title = parsed?.ECFR?.TITLE;
-      if (!title) {
-        console.warn('⚠️ Could not find TITLE in XML structure');
-        return sections;
-      }
+      // Debug: Log XML root structure for diagnostics
+      console.log('🔍 XML Root:', Object.keys(parsed).join(', '));
       
-      // Find Part 273 within the structure
-      const parts = this.findParts(title);
-      const part273 = parts.find((p: any) => this.getPartNumber(p) === this.SNAP_PART);
+      // GovInfo eCFR XML structure: DLPSTEXTCLASS > TEXT > BODY > ECFRBRWS > DIV1 (TYPE="TITLE")
+      // ECFRBRWS is an array of volumes - we need to search ALL volumes for Part 273
+      let part273 = null;
+      
+      // Pattern 1: DLPSTEXTCLASS > TEXT > BODY > ECFRBRWS (GovInfo structure)
+      if (parsed?.DLPSTEXTCLASS?.TEXT?.BODY?.ECFRBRWS) {
+        const ecfrbrws = Array.isArray(parsed.DLPSTEXTCLASS.TEXT.BODY.ECFRBRWS) 
+          ? parsed.DLPSTEXTCLASS.TEXT.BODY.ECFRBRWS 
+          : [parsed.DLPSTEXTCLASS.TEXT.BODY.ECFRBRWS];
+        
+        console.log(`✓ Found ${ecfrbrws.length} volumes in ECFRBRWS array`);
+        
+        // Search through all volumes for Part 273
+        for (let i = 0; i < ecfrbrws.length; i++) {
+          const volume = ecfrbrws[i];
+          if (volume?.DIV1?.TYPE === 'TITLE') {
+            const volumeTitle = volume.DIV1;
+            const volumeName = volumeTitle.HEAD || `Volume ${i + 1}`;
+            
+            // Find all parts in this volume
+            const parts = this.findParts(volumeTitle);
+            console.log(`🔍 Volume ${i + 1} (${volumeName}): Found ${parts.length} parts`);
+            
+            // Check if Part 273 is in this volume
+            part273 = parts.find((p: any) => this.getPartNumber(p) === this.SNAP_PART);
+            
+            if (part273) {
+              console.log(`✅ Found Part 273 in Volume ${i + 1}`);
+              break;
+            }
+          }
+        }
+      }
+      // Pattern 2: ECFR > TITLE (legacy format - single volume)
+      else if (parsed?.ECFR?.TITLE) {
+        const title = parsed.ECFR.TITLE;
+        console.log('✓ Found TITLE via parsed.ECFR.TITLE');
+        const parts = this.findParts(title);
+        console.log(`🔍 Found ${parts.length} total parts`);
+        part273 = parts.find((p: any) => this.getPartNumber(p) === this.SNAP_PART);
+      }
+      // Pattern 3: Direct TITLE root
+      else if (parsed?.TITLE) {
+        const title = parsed.TITLE;
+        console.log('✓ Found TITLE via parsed.TITLE');
+        const parts = this.findParts(title);
+        console.log(`🔍 Found ${parts.length} total parts`);
+        part273 = parts.find((p: any) => this.getPartNumber(p) === this.SNAP_PART);
+      }
+      // Pattern 4: CFR > TITLE
+      else if (parsed?.CFR?.TITLE) {
+        const title = parsed.CFR.TITLE;
+        console.log('✓ Found TITLE via parsed.CFR.TITLE');
+        const parts = this.findParts(title);
+        console.log(`🔍 Found ${parts.length} total parts`);
+        part273 = parts.find((p: any) => this.getPartNumber(p) === this.SNAP_PART);
+      }
+      // Pattern 5: USLM > TITLE (United States Legislative Markup)
+      else if (parsed?.USLM?.TITLE) {
+        const title = parsed.USLM.TITLE;
+        console.log('✓ Found TITLE via parsed.USLM.TITLE');
+        const parts = this.findParts(title);
+        console.log(`🔍 Found ${parts.length} total parts`);
+        part273 = parts.find((p: any) => this.getPartNumber(p) === this.SNAP_PART);
+      }
       
       if (!part273) {
-        console.warn('⚠️ Could not find Part 273 in XML');
+        console.warn('⚠️ Could not find Part 273 in any volume');
         return sections;
       }
+      
+      console.log('✅ Found Part 273, extracting sections...');
       
       // Extract all sections from Part 273
       const sectionElements = this.findSections(part273);
+      console.log(`🔍 Found ${sectionElements.length} section elements in Part 273`);
       
       for (const sectionEl of sectionElements) {
         const section = this.parseSection(sectionEl);
@@ -233,10 +293,22 @@ class ECFRBulkDownloader {
   
   /**
    * Recursively find all PART elements in XML
+   * GovInfo uses DIV5 elements with TYPE="PART"
    */
   private findParts(obj: any): any[] {
     const parts: any[] = [];
     
+    // GovInfo structure: DIV5 with TYPE="PART"
+    if (obj?.DIV5) {
+      const div5s = Array.isArray(obj.DIV5) ? obj.DIV5 : [obj.DIV5];
+      for (const div of div5s) {
+        if (div?.TYPE === 'PART') {
+          parts.push(div);
+        }
+      }
+    }
+    
+    // Legacy structure: direct PART elements
     if (obj?.PART) {
       if (Array.isArray(obj.PART)) {
         parts.push(...obj.PART);
@@ -264,10 +336,28 @@ class ECFRBulkDownloader {
   
   /**
    * Find all SECTION elements within a PART
+   * GovInfo uses DIV6/DIV8 elements with TYPE="SECTION"
    */
   private findSections(part: any): any[] {
     const sections: any[] = [];
     
+    // GovInfo structure: Look for DIV elements with TYPE="SECTION"
+    for (const key in part) {
+      if (key.match(/^DIV\d+$/)) {
+        const divs = Array.isArray(part[key]) ? part[key] : [part[key]];
+        for (const div of divs) {
+          if (div?.TYPE === 'SECTION') {
+            sections.push(div);
+          }
+          // Sections might be nested within subparts
+          if (div?.TYPE === 'SUBPART') {
+            sections.push(...this.findSections(div));
+          }
+        }
+      }
+    }
+    
+    // Legacy structure: direct SECTION elements
     if (part?.SECTION) {
       if (Array.isArray(part.SECTION)) {
         sections.push(...part.SECTION);
@@ -276,7 +366,7 @@ class ECFRBulkDownloader {
       }
     }
     
-    // Some XML structures nest sections differently
+    // Some XML structures nest sections in SUBPART
     for (const key in part) {
       if (key.includes('SUBPART') && part[key]?.SECTION) {
         const subpartSections = Array.isArray(part[key].SECTION) 
@@ -291,16 +381,24 @@ class ECFRBulkDownloader {
   
   /**
    * Parse individual SECTION element to extract content
+   * GovInfo uses DIV elements with N attribute for section number
    */
   private parseSection(sectionEl: any): ECFRSection | null {
     try {
-      const sectionNumber = sectionEl?.N || sectionEl?.number || sectionEl?.NUM || '';
+      // GovInfo: N attribute contains full section number (e.g., "273.1")
+      // We need to extract just the subsection number after "273."
+      const fullNumber = sectionEl?.N || sectionEl?.number || sectionEl?.NUM || '';
+      const sectionNumber = fullNumber.includes('.') 
+        ? fullNumber.split('.').pop() || fullNumber 
+        : fullNumber;
+      
       const subject = sectionEl?.SUBJECT || sectionEl?.HEAD || '';
       
       // Extract text content recursively
       const content = this.extractTextContent(sectionEl);
       
       if (!sectionNumber || !content) {
+        console.warn(`⚠️ Skipping section - missing number or content (N: ${fullNumber})`);
         return null;
       }
       
