@@ -1,10 +1,13 @@
 import { useEffect } from "react";
 import { useLocation } from "wouter";
 import { useAuth } from "@/hooks/useAuth";
+import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Link } from "wouter";
 import { AlertCircle, Home } from "lucide-react";
+import ConsentModal from "@/components/ConsentModal";
+import type { UserConsent } from "@shared/schema";
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
@@ -12,6 +15,8 @@ interface ProtectedRouteProps {
   requireStaff?: boolean; // Requires navigator, caseworker, admin, or super_admin
   requireAdmin?: boolean; // Requires admin or super_admin
 }
+
+const CURRENT_POLICY_VERSION = "1.0";
 
 export default function ProtectedRoute({
   children,
@@ -21,6 +26,17 @@ export default function ProtectedRoute({
 }: ProtectedRouteProps) {
   const { user, isAuthenticated, isLoading, isStaff, isAdmin } = useAuth();
   const [, setLocation] = useLocation();
+
+  // Check for user consent
+  const { data: latestConsent, isLoading: isConsentLoading } = useQuery<UserConsent | null>({
+    queryKey: ["/api/legal/consent/latest"],
+    enabled: isAuthenticated && !!user,
+  });
+
+  const needsConsent = isAuthenticated && 
+    user && 
+    !isConsentLoading && 
+    (!latestConsent || latestConsent.policyVersion !== CURRENT_POLICY_VERSION);
 
   useEffect(() => {
     // Wait for auth to load before redirecting
@@ -32,8 +48,8 @@ export default function ProtectedRoute({
     }
   }, [isAuthenticated, isLoading, setLocation]);
 
-  // Show loading state while checking auth
-  if (isLoading) {
+  // Show loading state while checking auth or consent
+  if (isLoading || (isAuthenticated && isConsentLoading)) {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary" data-testid="loading-spinner"></div>
@@ -44,6 +60,11 @@ export default function ProtectedRoute({
   // Don't render anything while redirecting to login
   if (!isAuthenticated) {
     return null;
+  }
+
+  // Show consent modal if user hasn't consented to current policy version
+  if (needsConsent && user) {
+    return <ConsentModal isOpen={true} userId={user.id} />;
   }
 
   // Check role-based access

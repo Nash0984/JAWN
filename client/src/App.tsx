@@ -44,6 +44,13 @@ import { PolicyChanges } from "@/pages/PolicyChanges";
 import { ComplianceAdmin } from "@/pages/ComplianceAdmin";
 import { IntakeCopilot } from "@/pages/IntakeCopilot";
 import ScenarioWorkspace from "@/pages/ScenarioWorkspace";
+import LegalHub from "@/pages/legal/index";
+import PrivacyPolicy from "@/pages/legal/PrivacyPolicy";
+import TermsOfService from "@/pages/legal/TermsOfService";
+import AccessibilityStatement from "@/pages/legal/AccessibilityStatement";
+import DataSecurityPolicy from "@/pages/legal/DataSecurityPolicy";
+import BreachNotificationPolicy from "@/pages/legal/BreachNotificationPolicy";
+import Disclaimer from "@/pages/legal/Disclaimer";
 import AbawdVerificationAdmin from "@/pages/AbawdVerificationAdmin";
 import CrossEnrollmentAdmin from "@/pages/CrossEnrollmentAdmin";
 import SmsConfig from "@/pages/admin/SmsConfig";
@@ -70,6 +77,7 @@ import { SessionExpiryProvider } from "@/contexts/SessionExpiryContext";
 import { InstallPrompt } from "@/components/InstallPrompt";
 import { TenantProvider } from "@/contexts/TenantContext";
 import { TenantThemeProvider } from "@/components/TenantThemeProvider";
+import Footer from "@/components/Footer";
 
 function Router() {
   const [location] = useLocation();
@@ -107,6 +115,15 @@ function Router() {
           <Route path="/public/search" component={SimplifiedSearch} />
           <Route path="/screener" component={BenefitScreener} />
           <Route path="/public/quick-screener" component={QuickScreener} />
+          
+          {/* Legal Pages - Public access (no login required) */}
+          <Route path="/legal" component={LegalHub} />
+          <Route path="/legal/privacy" component={PrivacyPolicy} />
+          <Route path="/legal/terms" component={TermsOfService} />
+          <Route path="/legal/accessibility" component={AccessibilityStatement} />
+          <Route path="/legal/security" component={DataSecurityPolicy} />
+          <Route path="/legal/breach-notification" component={BreachNotificationPolicy} />
+          <Route path="/legal/disclaimer" component={Disclaimer} />
           
           {/* Role-specific dashboards */}
           <Route path="/dashboard/client">
@@ -459,6 +476,9 @@ function Router() {
       
       {/* Mobile Bottom Navigation - Only shown on small screens and non-auth pages */}
       {!isAuthPage && <MobileBottomNav />}
+      
+      {/* Footer - Visible on all pages except auth pages */}
+      {!isAuthPage && <Footer />}
     </div>
   );
 }

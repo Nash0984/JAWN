@@ -512,6 +512,53 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
     res.json({ user: userWithoutPassword });
   });
 
+  // ============================================================================
+  // LEGAL CONSENT ENDPOINTS - HIPAA Compliance & Policy Tracking
+  // ============================================================================
+  
+  // Record user consent for legal policies
+  app.post("/api/legal/consent", requireAuth, asyncHandler(async (req: Request, res: Response) => {
+    const { policyType, policyVersion } = req.body;
+
+    // Validate required fields
+    if (!policyType || !policyVersion) {
+      throw validationError("Policy type and version are required");
+    }
+
+    // Validate policyType
+    const validPolicyTypes = ['privacy', 'terms', 'both'];
+    if (!validPolicyTypes.includes(policyType)) {
+      throw validationError("Policy type must be 'privacy', 'terms', or 'both'");
+    }
+
+    // Record consent with audit info
+    const consent = await storage.createUserConsent({
+      userId: req.user!.id,
+      policyType,
+      policyVersion,
+      ipAddress: req.ip || req.socket.remoteAddress,
+      userAgent: req.get('user-agent'),
+    });
+
+    res.status(201).json(consent);
+  }));
+
+  // Get latest user consent status
+  app.get("/api/legal/consent/latest", requireAuth, asyncHandler(async (req: Request, res: Response) => {
+    const { policyType } = req.query;
+
+    const consent = await storage.getLatestUserConsent(
+      req.user!.id,
+      policyType as string | undefined
+    );
+
+    if (!consent) {
+      return res.status(404).json({ error: "No consent record found" });
+    }
+
+    res.json(consent);
+  }));
+
   // Get benefit programs
   app.get("/api/benefit-programs", async (req: Request, res: Response) => {
     try {

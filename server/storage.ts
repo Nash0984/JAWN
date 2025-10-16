@@ -204,6 +204,9 @@ import {
   webhookDeliveryLogs,
   type WebhookDeliveryLog,
   type InsertWebhookDeliveryLog,
+  userConsents,
+  type UserConsent,
+  type InsertUserConsent,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and, ilike, sql, or, isNull, lte, gte } from "drizzle-orm";
@@ -215,6 +218,11 @@ export interface IStorage {
   getUsers(filters?: { role?: string; countyId?: string }): Promise<User[]>;
   createUser(user: InsertUser): Promise<User>;
   updateUser(id: string, updates: Partial<User>): Promise<User>;
+
+  // User Consents
+  createUserConsent(consent: InsertUserConsent): Promise<UserConsent>;
+  getLatestUserConsent(userId: string, policyType?: string): Promise<UserConsent | undefined>;
+  getUserConsents(userId: string): Promise<UserConsent[]>;
 
   // Documents
   createDocument(document: InsertDocument): Promise<Document>;
@@ -734,6 +742,27 @@ export class DatabaseStorage implements IStorage {
       .where(eq(users.id, id))
       .returning();
     return user;
+  }
+
+  // User Consents
+  async createUserConsent(consent: InsertUserConsent): Promise<UserConsent> {
+    const [userConsent] = await db.insert(userConsents).values(consent).returning();
+    return userConsent;
+  }
+
+  async getLatestUserConsent(userId: string, policyType?: string): Promise<UserConsent | undefined> {
+    let query = db.select().from(userConsents).where(eq(userConsents.userId, userId));
+    
+    if (policyType) {
+      query = query.where(and(eq(userConsents.userId, userId), eq(userConsents.policyType, policyType)));
+    }
+    
+    const [consent] = await query.orderBy(desc(userConsents.consentedAt)).limit(1);
+    return consent || undefined;
+  }
+
+  async getUserConsents(userId: string): Promise<UserConsent[]> {
+    return await db.select().from(userConsents).where(eq(userConsents.userId, userId)).orderBy(desc(userConsents.consentedAt));
   }
 
   // Documents
