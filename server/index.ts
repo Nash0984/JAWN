@@ -218,8 +218,12 @@ app.get("/api/csrf-token", (req, res) => {
 // County Context Middleware - detects user's county for tenant isolation
 app.use(detectCountyContext);
 
-// Public PolicyEngine endpoints bypass CSRF (read-only calculations, no state changes)
-app.use(["/api/policyengine/calculate", "/api/policyengine/summary"], (req, res, next) => {
+// Public calculation endpoints bypass CSRF (read-only calculations, no state changes)
+app.use([
+  "/api/policyengine/calculate", 
+  "/api/policyengine/summary",
+  "/api/benefits/calculate-hybrid"  // Quick Screener public endpoint
+], (req, res, next) => {
   // Mark request to skip CSRF protection
   (req as any).skipCsrf = true;
   return next();

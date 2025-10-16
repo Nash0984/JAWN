@@ -28,6 +28,7 @@ export interface HouseholdInput {
   grossMonthlyIncome: number; // in cents
   earnedIncome: number; // in cents
   unearnedIncome: number; // in cents
+  assets?: number; // in cents - countable household resources
   hasElderly?: boolean; // 60+ years
   hasDisabled?: boolean;
   dependentCareExpenses?: number; // in cents
@@ -178,6 +179,67 @@ class RulesEngine {
       }
       if (bypassNetIncomeTest) {
         calculationBreakdown.push(`✓ Net income test bypassed (categorical eligibility)`);
+      }
+    }
+
+    // Step 2.5: Asset/Resource Limit Test (if assets provided)
+    if (household.assets !== undefined) {
+      // Federal SNAP asset limits (7 CFR § 273.8)
+      const assetLimit = (household.hasElderly || household.hasDisabled) ? 425000 : 275000; // $4,250 or $2,750
+      const assetLimitLabel = assetLimit === 425000 ? '$4,250 (elderly/disabled)' : '$2,750';
+      
+      calculationBreakdown.push(`Asset limit: ${assetLimitLabel}`);
+      calculationBreakdown.push(`Household assets: $${(household.assets / 100).toFixed(2)}`);
+      
+      if (household.assets > assetLimit) {
+        ineligibilityReasons.push(
+          `Assets ($${(household.assets / 100).toFixed(2)}) exceed limit (${assetLimitLabel})`
+        );
+        calculationBreakdown.push(
+          `✗ Asset test failed: $${(household.assets / 100).toFixed(2)} > ${assetLimitLabel}`
+        );
+        
+        // If assets exceed limit, household is ineligible (unless categorical eligibility applies)
+        if (!categoricalRule || !categoricalRule.bypassAssetTest) {
+          return {
+            isEligible: false,
+            reason: `Household assets ($${(household.assets / 100).toFixed(2)}) exceed the ${assetLimitLabel} limit`,
+            ineligibilityReasons,
+            grossIncomeTest: { passed: false, limit: incomeLimit.grossMonthlyLimit, actual: household.grossMonthlyIncome },
+            netIncomeTest: { passed: false, limit: incomeLimit.netMonthlyLimit, actual: 0 },
+            deductions: {
+              standardDeduction: 0,
+              earnedIncomeDeduction: 0,
+              dependentCareDeduction: 0,
+              medicalExpenseDeduction: 0,
+              shelterDeduction: 0,
+              total: 0,
+            },
+            monthlyBenefit: 0,
+            maxAllotment: allotment.amount,
+            calculationBreakdown,
+            rulesSnapshot: {
+              incomeLimitId: incomeLimit.id,
+              deductionIds: [],
+              allotmentId: allotment.id,
+              categoricalRuleId: categoricalRule?.id,
+            },
+            policyCitations: [
+              {
+                sectionNumber: '7 CFR § 273.8',
+                sectionTitle: 'Resource eligibility standards',
+                ruleType: 'asset',
+                description: `SNAP asset limit: ${assetLimitLabel}`,
+              },
+            ],
+          };
+        } else {
+          calculationBreakdown.push(`✓ Asset test bypassed (categorical eligibility: ${categoricalRule.ruleName})`);
+        }
+      } else {
+        calculationBreakdown.push(
+          `✓ Asset test: $${(household.assets / 100).toFixed(2)} ≤ ${assetLimitLabel}`
+        );
       }
     }
 

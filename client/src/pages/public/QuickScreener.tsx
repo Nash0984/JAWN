@@ -3,6 +3,8 @@ import { useLocation } from "wouter";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
+import { useMutation } from "@tanstack/react-query";
+import { apiRequest } from "@/lib/queryClient";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
@@ -10,7 +12,8 @@ import { Input } from "@/components/ui/input";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { CheckCircle2, ArrowRight, Info, Users, DollarSign, PiggyBank, Heart } from "lucide-react";
+import { CheckCircle2, ArrowRight, Info, Users, DollarSign, PiggyBank, Heart, Loader2 } from "lucide-react";
+import { PolicyEngineVerificationBadge } from "@/components/PolicyEngineVerificationBadge";
 
 // Ultra-minimal screener schema - only 5-7 questions
 const quickScreenerSchema = z.object({
@@ -32,9 +35,32 @@ const quickScreenerSchema = z.object({
 
 type QuickScreenerFormData = z.infer<typeof quickScreenerSchema>;
 
+interface HybridCalculationResult {
+  primary: {
+    eligible: boolean;
+    amount: number;
+    reason: string;
+    citations: string[];
+    source: string;
+    breakdown: any[];
+    type: 'deterministic' | 'ai_guidance';
+  };
+  verification?: {
+    eligible: boolean;
+    amount: number;
+    source: string;
+    match: boolean;
+    difference: number;
+  };
+  metadata: {
+    responseTime: number;
+    queryClassification?: string;
+  };
+}
+
 export default function QuickScreener() {
   const [, setLocation] = useLocation();
-  const [result, setResult] = useState<"eligible" | "maybe" | null>(null);
+  const [result, setResult] = useState<HybridCalculationResult | null>(null);
 
   const form = useForm<QuickScreenerFormData>({
     resolver: zodResolver(quickScreenerSchema),
@@ -47,17 +73,46 @@ export default function QuickScreener() {
     }
   });
 
+  // Mutation for hybrid calculation endpoint
+  const calculateMutation = useMutation({
+    mutationFn: async (data: QuickScreenerFormData): Promise<HybridCalculationResult> => {
+      // The combined question asks "60+ or disabled", so we set both flags if yes
+      const hasElderlyOrDisabled = data.hasElderlyOrDisabled === 'yes';
+      
+      // Convert savings yes/no to approximate asset amount for rules engine
+      // Quick screener asks about $2,750 threshold
+      // Send in DOLLARS (adapter will convert to cents like it does for income)
+      const estimatedAssets = data.hasSavingsOver2750 === 'yes' ? 3000 : 1000; // $3,000 or $1,000 in dollars
+      
+      const response = await fetch('/api/benefits/calculate-hybrid', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          programCode: 'MD_SNAP', // Quick screener focuses on SNAP
+          householdSize: data.householdSize,
+          income: data.monthlyIncome,
+          assets: estimatedAssets, // Estimated assets based on $2,750 threshold
+          hasElderly: hasElderlyOrDisabled,
+          hasDisabled: hasElderlyOrDisabled, // Set both flags from combined question
+          verifyWithPolicyEngine: true, // Enable verification
+        }),
+      });
+      
+      if (!response.ok) {
+        throw new Error('Failed to calculate eligibility');
+      }
+      
+      return response.json();
+    },
+    onSuccess: (data) => {
+      setResult(data);
+    },
+  });
+
   const onSubmit = (data: QuickScreenerFormData) => {
-    // Simple eligibility logic - index toward inclusivity (reduce false negatives)
-    const monthlyIncomeLimit = data.householdSize * 2000; // Rough SNAP guideline
-    const hasAssetIssue = data.hasSavingsOver2750 === "yes" && data.hasElderlyOrDisabled === "no";
-    
-    // Conservative eligibility check
-    if (data.monthlyIncome <= monthlyIncomeLimit && !hasAssetIssue) {
-      setResult("eligible");
-    } else {
-      setResult("maybe"); // Still show "may qualify" to reduce false negatives
-    }
+    calculateMutation.mutate(data);
   };
 
   // Reset and start over
@@ -251,32 +306,56 @@ export default function QuickScreener() {
                     size="lg"
                     className="w-full h-11 text-base font-semibold"
                     data-testid="button-check-eligibility"
+                    disabled={calculateMutation.isPending}
                   >
-                    Check Eligibility
-                    <ArrowRight className="ml-2 w-5 h-5" />
+                    {calculateMutation.isPending ? (
+                      <>
+                        <Loader2 className="mr-2 w-5 h-5 animate-spin" />
+                        Calculating...
+                      </>
+                    ) : (
+                      <>
+                        Check Eligibility
+                        <ArrowRight className="ml-2 w-5 h-5" />
+                      </>
+                    )}
                   </Button>
                 </form>
               </Form>
             </CardContent>
           </Card>
         ) : (
-          <Card data-testid="card-eligibility-result" className="border-green-200 dark:border-green-800">
-            <CardHeader className="bg-green-50 dark:bg-green-900/20">
-              <CardTitle className="flex items-center gap-3 text-2xl text-green-700 dark:text-green-400">
-                <CheckCircle2 className="w-8 h-8" />
-                {result === "eligible" ? "You May Qualify!" : "You Might Qualify!"}
-              </CardTitle>
-              <CardDescription className="text-base text-green-600 dark:text-green-500">
-                {result === "eligible" 
-                  ? "Based on your answers, you may be eligible for benefits."
-                  : "You might be eligible for some benefits. We recommend taking the full screening."}
-              </CardDescription>
+          <Card data-testid="card-eligibility-result" className={result.primary.eligible ? "border-green-200 dark:border-green-800" : "border-gray-200"}>
+            <CardHeader className={result.primary.eligible ? "bg-green-50 dark:bg-green-900/20" : "bg-gray-50 dark:bg-gray-900/20"}>
+              <div className="flex items-start justify-between gap-4">
+                <div className="flex-1">
+                  <CardTitle className={`flex items-center gap-3 text-2xl ${result.primary.eligible ? "text-green-700 dark:text-green-400" : "text-gray-700 dark:text-gray-400"}`}>
+                    <CheckCircle2 className="w-8 h-8" />
+                    {result.primary.eligible ? "You May Qualify!" : "Not Eligible Based on Income"}
+                  </CardTitle>
+                  <CardDescription className={`text-base ${result.primary.eligible ? "text-green-600 dark:text-green-500" : "text-gray-600 dark:text-gray-500"}`}>
+                    {result.primary.eligible 
+                      ? `Estimated monthly benefit: $${result.primary.amount.toFixed(0)}`
+                      : result.primary.reason}
+                  </CardDescription>
+                </div>
+                {result.verification && (
+                  <PolicyEngineVerificationBadge
+                    isMatch={result.verification.match}
+                    difference={result.verification.difference}
+                    primaryAmount={result.primary.amount}
+                  />
+                )}
+              </div>
             </CardHeader>
             <CardContent className="pt-6 space-y-6">
               <Alert>
                 <Info className="h-5 w-5" />
                 <AlertDescription className="text-base">
-                  This is a quick check only. For accurate benefit estimates and to apply, please use our detailed screener or contact a navigator.
+                  {result.primary.type === 'deterministic' 
+                    ? "Calculated using Maryland's official SNAP eligibility rules." 
+                    : "This is a quick estimate. For detailed benefit calculations and to apply, please use our detailed screener or contact a navigator."
+                  }
                 </AlertDescription>
               </Alert>
 

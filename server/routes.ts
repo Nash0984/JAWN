@@ -2046,6 +2046,7 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
       householdSize: z.number().int().positive(),
       adultCount: z.number().int().positive().optional().default(1),
       income: z.number().nonnegative(),
+      assets: z.number().nonnegative().optional(),
       hasElderly: z.boolean().optional(),
       hasDisabled: z.boolean().optional(),
       hasSSI: z.boolean().optional(),
@@ -2055,18 +2056,44 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
 
     const validated = inputSchema.parse(req.body);
     
-    // Build query from input for hybrid service
-    let query = `${validated.householdSize} people, $${validated.income} monthly income`;
-    if (validated.hasElderly) query += ', has elderly';
-    if (validated.hasDisabled) query += ', has disabled';
-    if (validated.hasSSI) query += ', receives SSI';
-    if (validated.hasTANF) query += ', receives TANF';
+    // For structured input (not natural language), call rulesEngineAdapter directly
+    // to preserve all parameters including assets
+    const { rulesEngineAdapter } = await import("./services/rulesEngineAdapter");
     
-    // Route through hybrid service with program context
-    const result = await hybridService.search(
-      query,
-      validated.programCode || validated.benefitProgramId
-    );
+    const input: any = {
+      householdSize: validated.householdSize,
+      income: validated.income,
+      assets: validated.assets,
+      hasElderly: validated.hasElderly,
+      hasDisabled: validated.hasDisabled,
+      hasSSI: validated.hasSSI,
+      hasTANF: validated.hasTANF,
+      benefitProgramId: validated.benefitProgramId,
+    };
+    
+    // Determine program code
+    const programCode = validated.programCode || 'MD_SNAP'; // Default to SNAP for now
+    
+    // Calculate using rules engine adapter (preserves all structured input including assets)
+    const adapterResult = await rulesEngineAdapter.calculateEligibility(programCode, input);
+    
+    // Format result similar to hybridService response structure
+    const result: any = {
+      type: 'deterministic',
+      calculation: adapterResult ? {
+        eligible: adapterResult.eligible,
+        estimatedBenefit: adapterResult.estimatedBenefit,
+        reason: adapterResult.reason,
+        breakdown: adapterResult.breakdown,
+        policyCitations: adapterResult.citations.map(c => ({
+          sectionNumber: c.split(':')[0] || '',
+          sectionTitle: '',
+          ruleType: 'snap',
+          description: c,
+        })),
+      } : undefined,
+      responseTime: 0,
+    };
 
     // Build primary calculation response
     // Normalize type to expected UI contract: 'deterministic' or 'ai_guidance'

@@ -267,6 +267,7 @@ class HybridService {
             const input: HybridEligibilityPayload = {
               householdSize: params.householdSize,
               income: params.income,
+              assets: params.assets,
               hasElderly: params.hasElderly,
               hasDisabled: params.hasDisabled,
               hasSSI: params.hasSSI,
