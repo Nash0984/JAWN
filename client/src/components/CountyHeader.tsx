@@ -1,5 +1,6 @@
 import { useBranding } from "@/contexts/BrandingContext";
 import { Building2 } from "lucide-react";
+import { MarylandLogo } from "./MarylandLogo";
 
 export function CountyHeader() {
   const { branding, isLoading } = useBranding();
@@ -26,6 +27,12 @@ export function CountyHeader() {
           alt={`${branding.countyName} Logo`}
           className="h-10 w-10 object-contain"
           data-testid="img-county-logo"
+        />
+      ) : branding.countyName?.toLowerCase().includes('maryland') || branding.countyName?.toLowerCase().includes('state') ? (
+        <MarylandLogo 
+          variant="seal"
+          className="h-10 w-10" 
+          data-testid="img-maryland-seal"
         />
       ) : (
         <Building2 
