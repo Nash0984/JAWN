@@ -9,8 +9,11 @@ import {
 
 interface PolicyEngineVerificationBadgeProps {
   isMatch: boolean;
-  confidenceScore: number;
+  confidenceScore?: number;
   variancePercentage?: number | null;
+  // New props for hybrid endpoint compatibility
+  difference?: number; // Dollar difference between Maryland and PolicyEngine
+  primaryAmount?: number; // Maryland calculation amount
   compact?: boolean;
   className?: string;
 }
@@ -19,38 +22,56 @@ export function PolicyEngineVerificationBadge({
   isMatch,
   confidenceScore,
   variancePercentage,
+  difference,
+  primaryAmount,
   compact = false,
   className = ''
 }: PolicyEngineVerificationBadgeProps) {
+  
+  // Calculate variance percentage from difference if not provided
+  const calculatedVariance = variancePercentage ?? 
+    (difference !== undefined && primaryAmount && primaryAmount > 0 
+      ? Math.abs((difference / primaryAmount) * 100) 
+      : null);
+  
+  // Use confidence score if provided, otherwise derive from match status
+  const effectiveConfidence = confidenceScore ?? (isMatch ? 1.0 : 0.0);
+  
   // Determine badge appearance based on verification result
   const getBadgeVariant = () => {
     if (!isMatch) return 'destructive';
-    if (confidenceScore >= 0.9) return 'default';
-    if (confidenceScore >= 0.7) return 'secondary';
+    if (effectiveConfidence >= 0.9) return 'default';
+    if (effectiveConfidence >= 0.7) return 'secondary';
     return 'outline';
   };
 
   const getIcon = () => {
     if (!isMatch) return ShieldAlert;
-    if (confidenceScore >= 0.9) return ShieldCheck;
-    if (confidenceScore >= 0.7) return Shield;
+    if (effectiveConfidence >= 0.9) return ShieldCheck;
+    if (effectiveConfidence >= 0.7) return Shield;
     return ShieldQuestion;
   };
 
   const getTooltipText = () => {
     if (!isMatch) {
-      return `Verification failed${variancePercentage != null ? ` (${variancePercentage.toFixed(1)}% variance)` : ''}. Result differs from PolicyEngine calculation.`;
+      const diffText = difference !== undefined ? ` ($${Math.abs(difference).toFixed(2)} difference)` : '';
+      const varText = calculatedVariance != null ? ` (${calculatedVariance.toFixed(1)}% variance)` : '';
+      return `Verification failed${diffText}${varText}. Result differs from PolicyEngine calculation.`;
     }
     
-    if (confidenceScore >= 0.9) {
-      return `Verified by PolicyEngine ✓ (${(confidenceScore * 100).toFixed(0)}% confidence${variancePercentage != null ? `, ${variancePercentage.toFixed(1)}% variance` : ''})`;
+    if (effectiveConfidence >= 0.9) {
+      const confText = confidenceScore !== undefined ? ` (${(confidenceScore * 100).toFixed(0)}% confidence)` : '';
+      const varText = calculatedVariance != null ? `, ${calculatedVariance.toFixed(1)}% variance` : '';
+      return `Verified by PolicyEngine ✓${confText}${varText}`;
     }
     
-    if (confidenceScore >= 0.7) {
-      return `Verified with minor variance (${(confidenceScore * 100).toFixed(0)}% confidence${variancePercentage != null ? `, ${variancePercentage.toFixed(1)}% variance` : ''})`;
+    if (effectiveConfidence >= 0.7) {
+      const confText = confidenceScore !== undefined ? ` (${(confidenceScore * 100).toFixed(0)}% confidence)` : '';
+      const varText = calculatedVariance != null ? `, ${calculatedVariance.toFixed(1)}% variance` : '';
+      return `Verified with minor variance${confText}${varText}`;
     }
     
-    return `Low confidence verification (${(confidenceScore * 100).toFixed(0)}% confidence)`;
+    return `Low confidence verification (${(effectiveConfidence * 100).toFixed(0)}% confidence)`;
   };
 
   const getBadgeText = () => {
@@ -59,8 +80,8 @@ export function PolicyEngineVerificationBadge({
     }
     
     if (!isMatch) return 'Verification Failed';
-    if (confidenceScore >= 0.9) return 'Verified by PolicyEngine ✓';
-    if (confidenceScore >= 0.7) return 'Verified (Minor Variance)';
+    if (effectiveConfidence >= 0.9) return 'Verified by PolicyEngine ✓';
+    if (effectiveConfidence >= 0.7) return 'Verified (Minor Variance)';
     return 'Low Confidence';
   };
 
