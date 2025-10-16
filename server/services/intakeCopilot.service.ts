@@ -54,12 +54,8 @@ export class IntakeCopilotService {
     
     const response = await this.gemini.models.generateContent({
       model: this.model,
-      contents: [{
-        role: "user",
-        parts: [{ text: fullPrompt }]
-      }]
+      contents: [{ role: 'user', parts: [{ text: fullPrompt }] }]
     });
-
     const assistantMessage = response.text || "I apologize, but I couldn't process that. Could you please rephrase?";
     const extracted = await this.extractDataFromMessage(userMessage, session);
     
@@ -273,12 +269,8 @@ Return JSON in this format:
     try {
       const response = await this.gemini.models.generateContent({
         model: this.model,
-        contents: [{
-          role: "user",
-          parts: [{ text: extractionPrompt }]
-        }]
+        contents: [{ role: 'user', parts: [{ text: extractionPrompt }] }]
       });
-
       const text = response.text || "{}";
       const jsonMatch = text.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
@@ -317,12 +309,8 @@ Return as a JSON array of strings: ["question1", "question2", "question3"]`;
     try {
       const response = await this.gemini.models.generateContent({
         model: this.model,
-        contents: [{
-          role: "user",
-          parts: [{ text: questionPrompt }]
-        }]
+        contents: [{ role: 'user', parts: [{ text: questionPrompt }] }]
       });
-
       const text = response.text || "[]";
       const jsonMatch = text.match(/\[[\s\S]*\]/);
       if (jsonMatch) {

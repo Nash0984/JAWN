@@ -107,7 +107,7 @@ Format the response as markdown with headers, tables, and clear paragraphs. DO N
 
       const result = await ai.models.generateContent({
         model: "gemini-2.0-flash-exp",
-        contents: prompt
+        contents: [{ role: 'user', parts: [{ text: prompt }] }]
       });
       const text = result.text || "";
 
@@ -188,7 +188,7 @@ Format as markdown. DO NOT include code blocks - just return the markdown text d
 
       const result = await ai.models.generateContent({
         model: "gemini-2.0-flash-exp",
-        contents: prompt
+        contents: [{ role: 'user', parts: [{ text: prompt }] }]
       });
       const text = result.text || "";
 
@@ -269,7 +269,7 @@ Format as markdown. DO NOT include code blocks - just return the markdown text d
 
       const result = await ai.models.generateContent({
         model: "gemini-2.0-flash-exp",
-        contents: prompt
+        contents: [{ role: 'user', parts: [{ text: prompt }] }]
       });
       const text = result.text || "";
 
@@ -349,7 +349,7 @@ Format as markdown. DO NOT include code blocks - just return the markdown text d
 
       const result = await ai.models.generateContent({
         model: "gemini-2.0-flash-exp",
-        contents: prompt
+        contents: [{ role: 'user', parts: [{ text: prompt }] }]
       });
       const text = result.text || "";
 
@@ -429,7 +429,7 @@ Format as markdown. DO NOT include code blocks - just return the markdown text d
 
       const result = await ai.models.generateContent({
         model: "gemini-2.0-flash-exp",
-        contents: prompt
+        contents: [{ role: 'user', parts: [{ text: prompt }] }]
       });
       const text = result.text || "";
 

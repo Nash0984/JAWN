@@ -104,31 +104,25 @@ function getGeminiClient() {
 }
 
 async function analyzeImageWithGemini(base64Image: string, prompt: string): Promise<string> {
-  const gemini = getGeminiClient();
-  const response = await gemini.models.generateContent({
+  const ai = getGeminiClient();
+  const response = await ai.models.generateContent({
     model: "gemini-2.0-flash",
-    contents: [
-      {
-        parts: [
-          { text: prompt },
-          {
-            inlineData: {
-              mimeType: "image/jpeg",
-              data: base64Image
-            }
-          }
-        ]
-      }
-    ]
+    contents: [{
+      role: 'user',
+      parts: [
+        { text: prompt },
+        { inlineData: { mimeType: "image/jpeg", data: base64Image } }
+      ]
+    }]
   });
   return response.text || "";
 }
 
 async function generateTextWithGemini(prompt: string): Promise<string> {
-  const gemini = getGeminiClient();
-  const response = await gemini.models.generateContent({
+  const ai = getGeminiClient();
+  const response = await ai.models.generateContent({
     model: "gemini-2.0-flash",
-    contents: prompt
+    contents: [{ role: 'user', parts: [{ text: prompt }] }]
   });
   return response.text || "";
 }

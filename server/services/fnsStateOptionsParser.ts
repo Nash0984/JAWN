@@ -21,7 +21,21 @@ export class FNSStateOptionsParser {
     if (!GEMINI_API_KEY) {
       throw new Error('GEMINI_API_KEY or GOOGLE_API_KEY environment variable is required');
     }
+    
+    // Workaround: @google/genai prioritizes GOOGLE_API_KEY, so temporarily override it
+    const originalGoogleApiKey = process.env.GOOGLE_API_KEY;
+    if (process.env.GEMINI_API_KEY) {
+      process.env.GOOGLE_API_KEY = process.env.GEMINI_API_KEY;
+    }
+    
     this.genAI = new GoogleGenAI({ apiKey: GEMINI_API_KEY });
+    
+    // Restore original value
+    if (originalGoogleApiKey) {
+      process.env.GOOGLE_API_KEY = originalGoogleApiKey;
+    } else {
+      delete process.env.GOOGLE_API_KEY;
+    }
   }
 
   /**
@@ -91,17 +105,11 @@ Return a JSON array of all 28 options. Be precise with citations and state codes
 PDF Text (first 50000 chars):
 ${pdfText.substring(0, 50000)}`;
 
-    const result = await this.genAI.models.generateContent({
+    const response = await this.genAI.models.generateContent({
       model: 'gemini-2.0-flash-exp',
-      contents: [
-        {
-          role: 'user',
-          parts: [{ text: prompt }],
-        },
-      ],
+      contents: [{ role: 'user', parts: [{ text: prompt }] }]
     });
-    
-    const text = result.text || '';
+    const text = response.text || "";
     
     try {
       const parsed = JSON.parse(text);
@@ -158,17 +166,11 @@ For each option, determine if Maryland participates. Return a JSON array with:
 Maryland Section:
 ${marylandSection}`;
 
-    const result = await this.genAI.models.generateContent({
+    const response = await this.genAI.models.generateContent({
       model: 'gemini-2.0-flash-exp',
-      contents: [
-        {
-          role: 'user',
-          parts: [{ text: prompt }],
-        },
-      ],
+      contents: [{ role: 'user', parts: [{ text: prompt }] }]
     });
-    
-    const text = result.text || '';
+    const text = response.text || "";
     
     try {
       const parsed = JSON.parse(text);

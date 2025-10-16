@@ -216,7 +216,7 @@ If no income limits are found, return: {"incomeLimits": []}`;
 
     const result = await ai.models.generateContent({
       model: "gemini-2.0-flash-exp",
-      contents: prompt
+      contents: [{ role: 'user', parts: [{ text: prompt }] }]
     });
     const responseText = result.text || "{}";
     
@@ -262,7 +262,7 @@ If none found: {"deductions": []}`;
 
     const result = await ai.models.generateContent({
       model: "gemini-2.0-flash-exp",
-      contents: prompt
+      contents: [{ role: 'user', parts: [{ text: prompt }] }]
     });
     const responseText = result.text || "{}";
     
@@ -303,7 +303,7 @@ If none found: {"allotments": []}`;
 
     const result = await ai.models.generateContent({
       model: "gemini-2.0-flash-exp",
-      contents: prompt
+      contents: [{ role: 'user', parts: [{ text: prompt }] }]
     });
     const responseText = result.text || "{}";
     
@@ -348,7 +348,7 @@ If none found: {"categoricalRules": []}`;
 
     const result = await ai.models.generateContent({
       model: "gemini-2.0-flash-exp",
-      contents: prompt
+      contents: [{ role: 'user', parts: [{ text: prompt }] }]
     });
     const responseText = result.text || "{}";
     
@@ -394,7 +394,7 @@ If none found: {"documentRequirements": []}`;
 
     const result = await ai.models.generateContent({
       model: "gemini-2.0-flash-exp",
-      contents: prompt
+      contents: [{ role: 'user', parts: [{ text: prompt }] }]
     });
     const responseText = result.text || "{}";
     
