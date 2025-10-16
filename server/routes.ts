@@ -2038,6 +2038,107 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
     }
   });
 
+  // Hybrid benefit calculation - Routes to Maryland Rules-as-Code engines with optional PolicyEngine verification
+  app.post("/api/benefits/calculate-hybrid", asyncHandler(async (req: Request, res: Response) => {
+    const inputSchema = z.object({
+      programCode: z.string().optional(),
+      benefitProgramId: z.string().optional(),
+      householdSize: z.number().int().positive(),
+      adultCount: z.number().int().positive().optional().default(1),
+      income: z.number().nonnegative(),
+      hasElderly: z.boolean().optional(),
+      hasDisabled: z.boolean().optional(),
+      hasSSI: z.boolean().optional(),
+      hasTANF: z.boolean().optional(),
+      verifyWithPolicyEngine: z.boolean().optional().default(false),
+    });
+
+    const validated = inputSchema.parse(req.body);
+    
+    // Build query from input for hybrid service
+    let query = `${validated.householdSize} people, $${validated.income} monthly income`;
+    if (validated.hasElderly) query += ', has elderly';
+    if (validated.hasDisabled) query += ', has disabled';
+    if (validated.hasSSI) query += ', receives SSI';
+    if (validated.hasTANF) query += ', receives TANF';
+    
+    // Route through hybrid service with program context
+    const result = await hybridService.search(
+      query,
+      validated.programCode || validated.benefitProgramId
+    );
+
+    // Build primary calculation response
+    // Normalize type to expected UI contract: 'deterministic' or 'ai_guidance'
+    const normalizedType = result.type === 'deterministic' ? 'deterministic' : 'ai_guidance';
+    
+    const response: any = {
+      primary: {
+        eligible: result.calculation?.eligible || false,
+        amount: result.calculation?.estimatedBenefit || 0,
+        reason: result.calculation?.reason || result.answer,
+        citations: result.calculation?.policyCitations?.map(c => c.description) || [],
+        source: 'maryland_rules_engine',
+        breakdown: result.calculation?.breakdown || [],
+        type: normalizedType,
+      },
+      metadata: {
+        responseTime: result.responseTime,
+        queryClassification: result.classification?.type || result.classification?.queryType,
+      }
+    };
+
+    // If verification requested, compare with PolicyEngine
+    if (validated.verifyWithPolicyEngine) {
+      try {
+        const { policyEngineService } = await import("./services/policyEngine.service");
+        
+        // Calculate proper adult/child split
+        const adults = validated.adultCount;
+        const children = Math.max(0, validated.householdSize - adults);
+        
+        const policyEngineResult = await policyEngineService.calculateBenefits({
+          adults,
+          children,
+          employmentIncome: validated.income,
+          hasDisability: validated.hasDisabled,
+          receivesSSI: validated.hasSSI,
+        });
+
+        if (policyEngineResult.success && policyEngineResult.benefits) {
+          // Map to appropriate benefit program
+          let policyEngineAmount = 0;
+          
+          if (validated.programCode === 'MD_SNAP' || !validated.programCode) {
+            policyEngineAmount = policyEngineResult.benefits.snap || 0;
+          } else if (validated.programCode === 'MEDICAID') {
+            policyEngineAmount = policyEngineResult.benefits.medicaid || 0;
+          } else if (validated.programCode === 'MD_TANF') {
+            policyEngineAmount = policyEngineResult.benefits.tanf || 0;
+          }
+
+          const match = Math.abs(response.primary.amount - policyEngineAmount) < 10; // $10 tolerance
+
+          response.verification = {
+            eligible: policyEngineAmount > 0,
+            amount: policyEngineAmount,
+            source: 'policyengine',
+            match,
+            difference: response.primary.amount - policyEngineAmount,
+          };
+        }
+      } catch (error) {
+        console.error('PolicyEngine verification failed:', error);
+        response.verification = {
+          error: 'Verification failed',
+          source: 'policyengine',
+        };
+      }
+    }
+
+    res.json(response);
+  }));
+
   // Get active SNAP income limits
   app.get("/api/rules/income-limits", requireAuth, async (req: Request, res: Response) => {
     try {
