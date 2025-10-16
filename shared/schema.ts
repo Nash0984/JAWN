@@ -345,6 +345,361 @@ export const snapAllotments = pgTable("snap_allotments", {
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
+// ============================================================================
+// OHEP (Office of Home Energy Programs) RULES ENGINE TABLES
+// ============================================================================
+
+// OHEP Income Limits - Based on % FPL
+export const ohepIncomeLimits = pgTable("ohep_income_limits", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  benefitProgramId: varchar("benefit_program_id").references(() => benefitPrograms.id).notNull(),
+  manualSectionId: varchar("manual_section_id").references(() => manualSections.id),
+  householdSize: integer("household_size").notNull(),
+  percentOfFPL: integer("percent_of_fpl").notNull(), // e.g., 60 for 60% FPL
+  monthlyIncomeLimit: integer("monthly_income_limit").notNull(), // in cents
+  annualIncomeLimit: integer("annual_income_limit").notNull(), // in cents
+  effectiveDate: timestamp("effective_date").notNull(),
+  endDate: timestamp("end_date"),
+  isActive: boolean("is_active").default(true).notNull(),
+  notes: text("notes"),
+  createdBy: varchar("created_by").references(() => users.id),
+  approvedBy: varchar("approved_by").references(() => users.id),
+  approvedAt: timestamp("approved_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+// OHEP Benefit Tiers - Crisis vs Regular Assistance
+export const ohepBenefitTiers = pgTable("ohep_benefit_tiers", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  benefitProgramId: varchar("benefit_program_id").references(() => benefitPrograms.id).notNull(),
+  manualSectionId: varchar("manual_section_id").references(() => manualSections.id),
+  tierType: text("tier_type").notNull(), // crisis, regular, arrearage
+  benefitName: text("benefit_name").notNull(),
+  maxBenefitAmount: integer("max_benefit_amount").notNull(), // in cents
+  eligibilityConditions: jsonb("eligibility_conditions"), // When this tier applies
+  vendorPaymentOnly: boolean("vendor_payment_only").default(true).notNull(),
+  effectiveDate: timestamp("effective_date").notNull(),
+  endDate: timestamp("end_date"),
+  isActive: boolean("is_active").default(true).notNull(),
+  notes: text("notes"),
+  createdBy: varchar("created_by").references(() => users.id),
+  approvedBy: varchar("approved_by").references(() => users.id),
+  approvedAt: timestamp("approved_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+// OHEP Seasonal Factors - Heating vs Cooling Season
+export const ohepSeasonalFactors = pgTable("ohep_seasonal_factors", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  benefitProgramId: varchar("benefit_program_id").references(() => benefitPrograms.id).notNull(),
+  season: text("season").notNull(), // heating, cooling
+  startMonth: integer("start_month").notNull(), // 1-12
+  endMonth: integer("end_month").notNull(), // 1-12
+  priorityGroups: jsonb("priority_groups"), // elderly, disabled, children under 6
+  effectiveYear: integer("effective_year").notNull(),
+  isActive: boolean("is_active").default(true).notNull(),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+// ============================================================================
+// TANF (Temporary Cash Assistance) RULES ENGINE TABLES
+// ============================================================================
+
+// TANF Income Limits - Needs standard by household size
+export const tanfIncomeLimits = pgTable("tanf_income_limits", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  benefitProgramId: varchar("benefit_program_id").references(() => benefitPrograms.id).notNull(),
+  manualSectionId: varchar("manual_section_id").references(() => manualSections.id),
+  householdSize: integer("household_size").notNull(),
+  needsStandard: integer("needs_standard").notNull(), // in cents - max countable income
+  paymentStandard: integer("payment_standard").notNull(), // in cents - max benefit
+  effectiveDate: timestamp("effective_date").notNull(),
+  endDate: timestamp("end_date"),
+  isActive: boolean("is_active").default(true).notNull(),
+  notes: text("notes"),
+  createdBy: varchar("created_by").references(() => users.id),
+  approvedBy: varchar("approved_by").references(() => users.id),
+  approvedAt: timestamp("approved_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+// TANF Asset Limits
+export const tanfAssetLimits = pgTable("tanf_asset_limits", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  benefitProgramId: varchar("benefit_program_id").references(() => benefitPrograms.id).notNull(),
+  manualSectionId: varchar("manual_section_id").references(() => manualSections.id),
+  assetType: text("asset_type").notNull(), // liquid, vehicle, property
+  maxAssetValue: integer("max_asset_value").notNull(), // in cents
+  exclusions: jsonb("exclusions"), // What assets are excluded
+  effectiveDate: timestamp("effective_date").notNull(),
+  endDate: timestamp("end_date"),
+  isActive: boolean("is_active").default(true).notNull(),
+  notes: text("notes"),
+  createdBy: varchar("created_by").references(() => users.id),
+  approvedBy: varchar("approved_by").references(() => users.id),
+  approvedAt: timestamp("approved_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+// TANF Work Requirements
+export const tanfWorkRequirements = pgTable("tanf_work_requirements", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  benefitProgramId: varchar("benefit_program_id").references(() => benefitPrograms.id).notNull(),
+  manualSectionId: varchar("manual_section_id").references(() => manualSections.id),
+  householdType: text("household_type").notNull(), // single_parent, two_parent
+  requiredHoursPerWeek: integer("required_hours_per_week").notNull(),
+  exemptionCategories: jsonb("exemption_categories"), // disabled, caring for infant, etc.
+  sanctionPolicy: jsonb("sanction_policy"), // What happens if requirements not met
+  effectiveDate: timestamp("effective_date").notNull(),
+  endDate: timestamp("end_date"),
+  isActive: boolean("is_active").default(true).notNull(),
+  notes: text("notes"),
+  createdBy: varchar("created_by").references(() => users.id),
+  approvedBy: varchar("approved_by").references(() => users.id),
+  approvedAt: timestamp("approved_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+// TANF Time Limits
+export const tanfTimeLimits = pgTable("tanf_time_limits", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  benefitProgramId: varchar("benefit_program_id").references(() => benefitPrograms.id).notNull(),
+  manualSectionId: varchar("manual_section_id").references(() => manualSections.id),
+  limitType: text("limit_type").notNull(), // lifetime, continuous
+  maxMonths: integer("max_months").notNull(),
+  hardshipExemptions: jsonb("hardship_exemptions"),
+  effectiveDate: timestamp("effective_date").notNull(),
+  endDate: timestamp("end_date"),
+  isActive: boolean("is_active").default(true).notNull(),
+  notes: text("notes"),
+  createdBy: varchar("created_by").references(() => users.id),
+  approvedBy: varchar("approved_by").references(() => users.id),
+  approvedAt: timestamp("approved_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+// ============================================================================
+// MEDICAID RULES ENGINE TABLES
+// ============================================================================
+
+// Medicaid Income Limits - By Category (Adult, Child, Pregnant, Elderly)
+export const medicaidIncomeLimits = pgTable("medicaid_income_limits", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  benefitProgramId: varchar("benefit_program_id").references(() => benefitPrograms.id).notNull(),
+  manualSectionId: varchar("manual_section_id").references(() => manualSections.id),
+  category: text("category").notNull(), // adult, child, pregnant, elderly_disabled
+  householdSize: integer("household_size").notNull(),
+  percentOfFPL: integer("percent_of_fpl").notNull(), // e.g., 138 for adults, 322 for children
+  monthlyIncomeLimit: integer("monthly_income_limit").notNull(), // in cents
+  annualIncomeLimit: integer("annual_income_limit").notNull(), // in cents
+  effectiveDate: timestamp("effective_date").notNull(),
+  endDate: timestamp("end_date"),
+  isActive: boolean("is_active").default(true).notNull(),
+  notes: text("notes"),
+  createdBy: varchar("created_by").references(() => users.id),
+  approvedBy: varchar("approved_by").references(() => users.id),
+  approvedAt: timestamp("approved_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+// Medicaid MAGI Rules - Modified Adjusted Gross Income methodology
+export const medicaidMAGIRules = pgTable("medicaid_magi_rules", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  benefitProgramId: varchar("benefit_program_id").references(() => benefitPrograms.id).notNull(),
+  manualSectionId: varchar("manual_section_id").references(() => manualSections.id),
+  ruleName: text("rule_name").notNull(),
+  incomeInclusions: jsonb("income_inclusions").notNull(), // What income counts
+  incomeExclusions: jsonb("income_exclusions").notNull(), // What income doesn't count
+  deductionsAllowed: jsonb("deductions_allowed"), // Allowed deductions from MAGI
+  effectiveDate: timestamp("effective_date").notNull(),
+  endDate: timestamp("end_date"),
+  isActive: boolean("is_active").default(true).notNull(),
+  notes: text("notes"),
+  createdBy: varchar("created_by").references(() => users.id),
+  approvedBy: varchar("approved_by").references(() => users.id),
+  approvedAt: timestamp("approved_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+// Medicaid Non-MAGI Rules - For elderly/disabled populations
+export const medicaidNonMAGIRules = pgTable("medicaid_non_magi_rules", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  benefitProgramId: varchar("benefit_program_id").references(() => benefitPrograms.id).notNull(),
+  manualSectionId: varchar("manual_section_id").references(() => manualSections.id),
+  ruleName: text("rule_name").notNull(),
+  category: text("category").notNull(), // ssi_related, aged_blind_disabled
+  incomeMethodology: jsonb("income_methodology").notNull(),
+  assetTest: jsonb("asset_test"), // Asset limits and exclusions
+  medicallyNeedyRules: jsonb("medically_needy_rules"), // Spenddown rules
+  effectiveDate: timestamp("effective_date").notNull(),
+  endDate: timestamp("end_date"),
+  isActive: boolean("is_active").default(true).notNull(),
+  notes: text("notes"),
+  createdBy: varchar("created_by").references(() => users.id),
+  approvedBy: varchar("approved_by").references(() => users.id),
+  approvedAt: timestamp("approved_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+// Medicaid Categories - Defines all eligibility pathways
+export const medicaidCategories = pgTable("medicaid_categories", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  benefitProgramId: varchar("benefit_program_id").references(() => benefitPrograms.id).notNull(),
+  categoryCode: text("category_code").notNull().unique(), // MAGI_ADULT, MAGI_CHILD, MAGI_PREGNANT, SSI, ABD
+  categoryName: text("category_name").notNull(),
+  description: text("description"),
+  usesMAGI: boolean("uses_magi").notNull(), // true = MAGI methodology, false = Non-MAGI
+  eligibilityCriteria: jsonb("eligibility_criteria").notNull(),
+  priorityOrder: integer("priority_order").notNull(), // Order to check categories
+  effectiveDate: timestamp("effective_date").notNull(),
+  endDate: timestamp("end_date"),
+  isActive: boolean("is_active").default(true).notNull(),
+  notes: text("notes"),
+  createdBy: varchar("created_by").references(() => users.id),
+  approvedBy: varchar("approved_by").references(() => users.id),
+  approvedAt: timestamp("approved_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+// ============================================================================
+// VITA TAX RULES ENGINE TABLES - Federal Tax Calculations
+// ============================================================================
+
+// Federal Tax Brackets - Progressive tax rates
+export const federalTaxBrackets = pgTable("federal_tax_brackets", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  taxYear: integer("tax_year").notNull(),
+  filingStatus: text("filing_status").notNull(), // single, married_joint, married_separate, head_of_household
+  bracketNumber: integer("bracket_number").notNull(), // 1-7
+  minIncome: integer("min_income").notNull(), // in cents
+  maxIncome: integer("max_income"), // in cents, null for top bracket
+  taxRate: real("tax_rate").notNull(), // e.g., 0.10 for 10%
+  effectiveDate: timestamp("effective_date").notNull(),
+  isActive: boolean("is_active").default(true).notNull(),
+  notes: text("notes"),
+  createdBy: varchar("created_by").references(() => users.id),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+// Federal Standard Deductions
+export const federalStandardDeductions = pgTable("federal_standard_deductions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  taxYear: integer("tax_year").notNull(),
+  filingStatus: text("filing_status").notNull(),
+  deductionAmount: integer("deduction_amount").notNull(), // in cents
+  additionalAge65: integer("additional_age_65"), // Additional deduction if 65+
+  additionalBlind: integer("additional_blind"), // Additional if blind
+  effectiveDate: timestamp("effective_date").notNull(),
+  isActive: boolean("is_active").default(true).notNull(),
+  notes: text("notes"),
+  createdBy: varchar("created_by").references(() => users.id),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+// EITC Tables - Earned Income Tax Credit lookup tables
+export const eitcTables = pgTable("eitc_tables", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  taxYear: integer("tax_year").notNull(),
+  qualifyingChildren: integer("qualifying_children").notNull(), // 0, 1, 2, 3+
+  filingStatus: text("filing_status").notNull(),
+  maxCredit: integer("max_credit").notNull(), // in cents
+  phaseInRate: real("phase_in_rate").notNull(), // e.g., 0.34 for 34%
+  phaseOutStart: integer("phase_out_start").notNull(), // AGI where phaseout begins (cents)
+  phaseOutRate: real("phase_out_rate").notNull(),
+  phaseOutEnd: integer("phase_out_end").notNull(), // AGI where credit = 0
+  investmentIncomeLimit: integer("investment_income_limit"), // Max investment income allowed
+  effectiveDate: timestamp("effective_date").notNull(),
+  isActive: boolean("is_active").default(true).notNull(),
+  notes: text("notes"),
+  createdBy: varchar("created_by").references(() => users.id),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+// Child Tax Credit Rules
+export const ctcRules = pgTable("ctc_rules", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  taxYear: integer("tax_year").notNull(),
+  creditPerChild: integer("credit_per_child").notNull(), // in cents
+  refundableAmount: integer("refundable_amount").notNull(), // Additional CTC refundable portion
+  phaseOutStart: integer("phase_out_start").notNull(), // AGI threshold by filing status
+  phaseOutRate: real("phase_out_rate").notNull(),
+  childAgeCutoff: integer("child_age_cutoff").notNull(), // e.g., 17
+  effectiveDate: timestamp("effective_date").notNull(),
+  isActive: boolean("is_active").default(true).notNull(),
+  notes: text("notes"),
+  createdBy: varchar("created_by").references(() => users.id),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+// ============================================================================
+// MARYLAND STATE TAX RULES ENGINE TABLES
+// ============================================================================
+
+// Maryland Tax Rates - State income tax brackets
+export const marylandTaxRates = pgTable("maryland_tax_rates", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  taxYear: integer("tax_year").notNull(),
+  filingStatus: text("filing_status").notNull(),
+  bracketNumber: integer("bracket_number").notNull(),
+  minIncome: integer("min_income").notNull(), // in cents
+  maxIncome: integer("max_income"), // in cents
+  taxRate: real("tax_rate").notNull(), // State tax rate
+  effectiveDate: timestamp("effective_date").notNull(),
+  isActive: boolean("is_active").default(true).notNull(),
+  notes: text("notes"),
+  createdBy: varchar("created_by").references(() => users.id),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+// Maryland County Tax Rates - Local income tax by county
+export const marylandCountyTaxRates = pgTable("maryland_county_tax_rates", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  taxYear: integer("tax_year").notNull(),
+  countyCode: text("county_code").notNull(), // BALTIMORE, MONTGOMERY, etc.
+  countyName: text("county_name").notNull(),
+  taxRate: real("tax_rate").notNull(), // County tax rate
+  effectiveDate: timestamp("effective_date").notNull(),
+  isActive: boolean("is_active").default(true).notNull(),
+  notes: text("notes"),
+  createdBy: varchar("created_by").references(() => users.id),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+// Maryland State Credits
+export const marylandStateCredits = pgTable("maryland_state_credits", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  taxYear: integer("tax_year").notNull(),
+  creditCode: text("credit_code").notNull(), // MD_EITC, POVERTY_CREDIT, etc.
+  creditName: text("credit_name").notNull(),
+  creditType: text("credit_type").notNull(), // refundable, nonrefundable
+  calculationMethod: jsonb("calculation_method").notNull(), // How to calculate
+  maxCredit: integer("max_credit"), // Maximum credit amount in cents
+  effectiveDate: timestamp("effective_date").notNull(),
+  isActive: boolean("is_active").default(true).notNull(),
+  notes: text("notes"),
+  createdBy: varchar("created_by").references(() => users.id),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
 // Categorical Eligibility Rules - SSI, TANF, General Assistance recipients
 export const categoricalEligibilityRules = pgTable("categorical_eligibility_rules", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -607,6 +962,172 @@ export const snapAllotmentsRelations = relations(snapAllotments, ({ one }) => ({
   manualSection: one(manualSections, {
     fields: [snapAllotments.manualSectionId],
     references: [manualSections.id],
+  }),
+}));
+
+// OHEP Relations
+export const ohepIncomeLimitsRelations = relations(ohepIncomeLimits, ({ one }) => ({
+  benefitProgram: one(benefitPrograms, {
+    fields: [ohepIncomeLimits.benefitProgramId],
+    references: [benefitPrograms.id],
+  }),
+  manualSection: one(manualSections, {
+    fields: [ohepIncomeLimits.manualSectionId],
+    references: [manualSections.id],
+  }),
+}));
+
+export const ohepBenefitTiersRelations = relations(ohepBenefitTiers, ({ one }) => ({
+  benefitProgram: one(benefitPrograms, {
+    fields: [ohepBenefitTiers.benefitProgramId],
+    references: [benefitPrograms.id],
+  }),
+  manualSection: one(manualSections, {
+    fields: [ohepBenefitTiers.manualSectionId],
+    references: [manualSections.id],
+  }),
+}));
+
+export const ohepSeasonalFactorsRelations = relations(ohepSeasonalFactors, ({ one }) => ({
+  benefitProgram: one(benefitPrograms, {
+    fields: [ohepSeasonalFactors.benefitProgramId],
+    references: [benefitPrograms.id],
+  }),
+}));
+
+// TANF Relations
+export const tanfIncomeLimitsRelations = relations(tanfIncomeLimits, ({ one }) => ({
+  benefitProgram: one(benefitPrograms, {
+    fields: [tanfIncomeLimits.benefitProgramId],
+    references: [benefitPrograms.id],
+  }),
+  manualSection: one(manualSections, {
+    fields: [tanfIncomeLimits.manualSectionId],
+    references: [manualSections.id],
+  }),
+}));
+
+export const tanfAssetLimitsRelations = relations(tanfAssetLimits, ({ one }) => ({
+  benefitProgram: one(benefitPrograms, {
+    fields: [tanfAssetLimits.benefitProgramId],
+    references: [benefitPrograms.id],
+  }),
+  manualSection: one(manualSections, {
+    fields: [tanfAssetLimits.manualSectionId],
+    references: [manualSections.id],
+  }),
+}));
+
+export const tanfWorkRequirementsRelations = relations(tanfWorkRequirements, ({ one }) => ({
+  benefitProgram: one(benefitPrograms, {
+    fields: [tanfWorkRequirements.benefitProgramId],
+    references: [benefitPrograms.id],
+  }),
+  manualSection: one(manualSections, {
+    fields: [tanfWorkRequirements.manualSectionId],
+    references: [manualSections.id],
+  }),
+}));
+
+export const tanfTimeLimitsRelations = relations(tanfTimeLimits, ({ one }) => ({
+  benefitProgram: one(benefitPrograms, {
+    fields: [tanfTimeLimits.benefitProgramId],
+    references: [benefitPrograms.id],
+  }),
+  manualSection: one(manualSections, {
+    fields: [tanfTimeLimits.manualSectionId],
+    references: [manualSections.id],
+  }),
+}));
+
+// Medicaid Relations
+export const medicaidIncomeLimitsRelations = relations(medicaidIncomeLimits, ({ one }) => ({
+  benefitProgram: one(benefitPrograms, {
+    fields: [medicaidIncomeLimits.benefitProgramId],
+    references: [benefitPrograms.id],
+  }),
+  manualSection: one(manualSections, {
+    fields: [medicaidIncomeLimits.manualSectionId],
+    references: [manualSections.id],
+  }),
+}));
+
+export const medicaidMAGIRulesRelations = relations(medicaidMAGIRules, ({ one }) => ({
+  benefitProgram: one(benefitPrograms, {
+    fields: [medicaidMAGIRules.benefitProgramId],
+    references: [benefitPrograms.id],
+  }),
+  manualSection: one(manualSections, {
+    fields: [medicaidMAGIRules.manualSectionId],
+    references: [manualSections.id],
+  }),
+}));
+
+export const medicaidNonMAGIRulesRelations = relations(medicaidNonMAGIRules, ({ one }) => ({
+  benefitProgram: one(benefitPrograms, {
+    fields: [medicaidNonMAGIRules.benefitProgramId],
+    references: [benefitPrograms.id],
+  }),
+  manualSection: one(manualSections, {
+    fields: [medicaidNonMAGIRules.manualSectionId],
+    references: [manualSections.id],
+  }),
+}));
+
+export const medicaidCategoriesRelations = relations(medicaidCategories, ({ one }) => ({
+  benefitProgram: one(benefitPrograms, {
+    fields: [medicaidCategories.benefitProgramId],
+    references: [benefitPrograms.id],
+  }),
+}));
+
+// Tax Rules Relations
+export const federalTaxBracketsRelations = relations(federalTaxBrackets, ({ one }) => ({
+  creator: one(users, {
+    fields: [federalTaxBrackets.createdBy],
+    references: [users.id],
+  }),
+}));
+
+export const federalStandardDeductionsRelations = relations(federalStandardDeductions, ({ one }) => ({
+  creator: one(users, {
+    fields: [federalStandardDeductions.createdBy],
+    references: [users.id],
+  }),
+}));
+
+export const eitcTablesRelations = relations(eitcTables, ({ one }) => ({
+  creator: one(users, {
+    fields: [eitcTables.createdBy],
+    references: [users.id],
+  }),
+}));
+
+export const ctcRulesRelations = relations(ctcRules, ({ one }) => ({
+  creator: one(users, {
+    fields: [ctcRules.createdBy],
+    references: [users.id],
+  }),
+}));
+
+export const marylandTaxRatesRelations = relations(marylandTaxRates, ({ one }) => ({
+  creator: one(users, {
+    fields: [marylandTaxRates.createdBy],
+    references: [users.id],
+  }),
+}));
+
+export const marylandCountyTaxRatesRelations = relations(marylandCountyTaxRates, ({ one }) => ({
+  creator: one(users, {
+    fields: [marylandCountyTaxRates.createdBy],
+    references: [users.id],
+  }),
+}));
+
+export const marylandStateCreditsRelations = relations(marylandStateCredits, ({ one }) => ({
+  creator: one(users, {
+    fields: [marylandStateCredits.createdBy],
+    references: [users.id],
   }),
 }));
 
@@ -1304,6 +1825,32 @@ export type SnapDeduction = typeof snapDeductions.$inferSelect;
 
 export type InsertSnapAllotment = z.infer<typeof insertSnapAllotmentSchema>;
 export type SnapAllotment = typeof snapAllotments.$inferSelect;
+
+// OHEP Types
+export type OhepIncomeLimit = typeof ohepIncomeLimits.$inferSelect;
+export type OhepBenefitTier = typeof ohepBenefitTiers.$inferSelect;
+export type OhepSeasonalFactor = typeof ohepSeasonalFactors.$inferSelect;
+
+// TANF Types
+export type TanfIncomeLimit = typeof tanfIncomeLimits.$inferSelect;
+export type TanfAssetLimit = typeof tanfAssetLimits.$inferSelect;
+export type TanfWorkRequirement = typeof tanfWorkRequirements.$inferSelect;
+export type TanfTimeLimit = typeof tanfTimeLimits.$inferSelect;
+
+// Medicaid Types
+export type MedicaidIncomeLimit = typeof medicaidIncomeLimits.$inferSelect;
+export type MedicaidMAGIRule = typeof medicaidMAGIRules.$inferSelect;
+export type MedicaidNonMAGIRule = typeof medicaidNonMAGIRules.$inferSelect;
+export type MedicaidCategory = typeof medicaidCategories.$inferSelect;
+
+// Tax Rules Types
+export type FederalTaxBracket = typeof federalTaxBrackets.$inferSelect;
+export type FederalStandardDeduction = typeof federalStandardDeductions.$inferSelect;
+export type EitcTable = typeof eitcTables.$inferSelect;
+export type CtcRule = typeof ctcRules.$inferSelect;
+export type MarylandTaxRate = typeof marylandTaxRates.$inferSelect;
+export type MarylandCountyTaxRate = typeof marylandCountyTaxRates.$inferSelect;
+export type MarylandStateCredit = typeof marylandStateCredits.$inferSelect;
 
 export type InsertCategoricalEligibilityRule = z.infer<typeof insertCategoricalEligibilityRuleSchema>;
 export type CategoricalEligibilityRule = typeof categoricalEligibilityRules.$inferSelect;
