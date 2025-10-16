@@ -110,6 +110,32 @@ A consistent Dollar→Cent conversion pattern ensures all calculations are perfo
 ### Implementation Status
 All 5 rules engines (SNAP, OHEP, TANF, Medicaid, VITA Tax) are production-ready. Hybrid integration, adapter, endpoints, verification system, updated screeners, and unit testing are complete. CSRF security for public calculation endpoints is implemented.
 
+## Multilingual Support (Paused for Production)
+
+**Status**: Infrastructure built, implementation paused to establish English gold standard first.
+
+### What's Been Built
+- **Database Schema**: `dhs_forms` table supports 6 languages (English, Spanish, Amharic, Arabic, Burmese, Chinese Traditional/Simplified)
+- **Form Library**: Seed file ready with 15+ Maryland DHS forms including:
+  - OHEP Application (latest 2025-09-12 version)
+  - Request for Assistance (Form 9711) in all 6 languages
+  - Change Report, Fair Hearing Request, QMB/SLMB Medicare forms
+  - Direct Deposit Authorization (English & Spanish)
+- **Data Structure**: Version tracking, program linkage, fillable PDF flags, metadata support
+
+### Implementation Strategy
+1. **Phase 1 (Current)**: Validate English-only production version with Rules-as-Code verification
+2. **Phase 2 (Post-Production)**: Activate multilingual features based on proven gold standard
+3. **Rationale**: Ensure core functionality is production-tested before adding language complexity
+
+### Technical Readiness
+All multilingual infrastructure is code-complete and preserved in:
+- Schema: `shared/schema.ts` (dhsForms table, indexes, Zod schemas)
+- Seed Data: `server/seedDhsForms.ts` (15 forms across 6 languages)
+- Integration: Ready to activate in `server/seedData.ts` when production validation complete
+
+This approach ensures the multilingual version inherits a battle-tested, validated foundation rather than multiplying potential issues across language variants.
+
 # External Dependencies
 
 -   **AI Services**: Google Gemini API (`@google/genai`).

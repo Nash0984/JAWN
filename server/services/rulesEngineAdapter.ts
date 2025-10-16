@@ -10,6 +10,7 @@ import { ohepRulesEngine } from './ohepRulesEngine';
 import { tanfRulesEngine } from './tanfRulesEngine';
 import { medicaidRulesEngine } from './medicaidRulesEngine';
 import { vitaTaxRulesEngine } from './vitaTaxRulesEngine';
+import { cacheService, CACHE_KEYS, generateHouseholdHash } from './cacheService';
 
 export interface HybridEligibilityPayload {
   // Common household fields
@@ -97,6 +98,7 @@ class RulesEngineAdapterService {
 
   /**
    * Calculate eligibility using appropriate rules engine
+   * with caching support
    */
   async calculateEligibility(
     programCode: string,
@@ -110,7 +112,28 @@ class RulesEngineAdapterService {
     }
 
     try {
-      return await adapter(input);
+      // Generate cache key from household data
+      const householdHash = generateHouseholdHash(input);
+      const cacheKey = CACHE_KEYS.RULES_ENGINE_CALC(programCode, householdHash);
+      
+      // Check cache first
+      const cachedResult = cacheService.get<HybridCalculationResult>(cacheKey);
+      if (cachedResult) {
+        console.log(`✅ Cache hit for ${programCode} calculation (hash: ${householdHash})`);
+        return cachedResult;
+      }
+      
+      // Cache miss - compute using adapter
+      console.log(`❌ Cache miss for ${programCode} calculation (hash: ${householdHash})`);
+      const result = await adapter(input);
+      
+      // Cache the result before returning (default TTL: 300 seconds)
+      if (result) {
+        cacheService.set(cacheKey, result);
+        console.log(`💾 Cached ${programCode} calculation result (hash: ${householdHash})`);
+      }
+      
+      return result;
     } catch (error) {
       console.error(`Error in ${programCode} adapter:`, error);
       return null;
