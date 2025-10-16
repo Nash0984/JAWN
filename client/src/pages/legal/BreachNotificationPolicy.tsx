@@ -83,7 +83,7 @@ export default function BreachNotificationPolicy() {
 
           <h3>Breach Classification</h3>
           <ul>
-            <li><strong>Critical (P0):</strong> Large-scale breach affecting >500 individuals or sensitive PHI exposure</li>
+            <li><strong>Critical (P0):</strong> Large-scale breach affecting &gt;500 individuals or sensitive PHI exposure</li>
             <li><strong>High (P1):</strong> Breach affecting &lt;500 individuals with confirmed PHI access</li>
             <li><strong>Medium (P2):</strong> Limited breach with low risk of harm</li>
             <li><strong>Low (P3):</strong> Security incident not meeting breach threshold</li>
@@ -122,7 +122,7 @@ export default function BreachNotificationPolicy() {
 
           <h3>HHS Secretary Notification</h3>
           <ul>
-            <li><strong>Large Breach (>500 individuals):</strong> Contemporaneous with individual notice (within 60 days)</li>
+            <li><strong>Large Breach (&gt;500 individuals):</strong> Contemporaneous with individual notice (within 60 days)</li>
             <li><strong>Small Breach (&lt;500 individuals):</strong> Annual log submission within 60 days of calendar year end</li>
             <li><strong>Method:</strong> Electronic submission via HHS Breach Portal (https://ocrportal.hhs.gov/ocr/breach)</li>
           </ul>
@@ -134,7 +134,7 @@ export default function BreachNotificationPolicy() {
           <ul>
             <li><strong>Timeframe:</strong> Without unreasonable delay</li>
             <li><strong>Recipient:</strong> Maryland Attorney General's Office</li>
-            <li><strong>Threshold:</strong> Notification required if >1,000 Maryland residents affected</li>
+            <li><strong>Threshold:</strong> Notification required if &gt;1,000 Maryland residents affected</li>
           </ul>
         </section>
 
@@ -223,7 +223,7 @@ export default function BreachNotificationPolicy() {
 
           <h3>Maryland Attorney General</h3>
           <ul>
-            <li><strong>Threshold:</strong> >1,000 Maryland residents affected</li>
+            <li><strong>Threshold:</strong> &gt;1,000 Maryland residents affected</li>
             <li><strong>Method:</strong> Written notification to Consumer Protection Division</li>
             <li><strong>Content:</strong> Timing of breach, number affected, actions taken</li>
           </ul>

@@ -17,6 +17,7 @@ Preferred communication style: Simple, everyday language.
 ## Known Issues
 1. **Rate Limiting IPv6**: ValidationError ERR_ERL_KEY_GEN_IPV6 on 4 rate limiters. Non-blocking warnings. Needs IP normalization.
 2. **Metrics Table Missing**: Error code 42P01. Non-blocking for core functionality.
+3. **Nodemailer Installation**: Peer dependency conflict with @tailwindcss/vite and vite@7.x prevents automatic installation via packager. Manual installation required with `--legacy-peer-deps` flag. Email service configured with graceful fallback.
 
 # System Architecture
 

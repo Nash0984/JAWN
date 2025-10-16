@@ -22,9 +22,18 @@ The Maryland Benefits Navigator system includes an email notification backup sys
 
 ### Step 1: Install Nodemailer
 
+**Note:** If you encounter peer dependency conflicts with `@tailwindcss/vite` and `vite@7.x`, use the `--legacy-peer-deps` flag:
+
 ```bash
-npm install nodemailer @types/nodemailer
+npm install nodemailer @types/nodemailer --legacy-peer-deps
 ```
+
+Alternatively, use `--force`:
+```bash
+npm install nodemailer @types/nodemailer --force
+```
+
+The peer dependency warning is unrelated to nodemailer and can be safely ignored.
 
 ### Step 2: Configure Environment Variables
 
