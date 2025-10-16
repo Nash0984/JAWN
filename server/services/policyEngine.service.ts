@@ -32,6 +32,7 @@ export interface BenefitResult {
   childTaxCredit: number;
   ssi: number;
   tanf: number;
+  ohep: number;
   householdNetIncome: number;
   householdTax: number;
   householdBenefits: number;
@@ -140,6 +141,7 @@ class PolicyEngineService {
       childTaxCredit: 0,
       ssi: 0,
       tanf: 0,
+      ohep: 0,
       householdNetIncome: 0,
       householdTax: 0,
       householdBenefits: 0,
@@ -175,6 +177,9 @@ class PolicyEngineService {
     }
     if (benefits.tanf > 0) {
       benefitList.push(`• TANF: $${benefits.tanf.toFixed(0)}/month`);
+    }
+    if (benefits.ohep > 0) {
+      benefitList.push(`• OHEP (Energy Assistance): $${benefits.ohep.toFixed(0)}/year`);
     }
 
     if (benefitList.length === 0) {

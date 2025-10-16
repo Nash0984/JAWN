@@ -594,6 +594,7 @@ export namespace PolicyEngineAPI {
     eitc: number;
     ctc: number;
     ssi: number;
+    ohep: number;
     [key: string]: any;
   }
   
