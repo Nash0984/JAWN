@@ -11,13 +11,13 @@ import { useLanguage } from "@/hooks/useLanguage";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 
-// Maryland DHS Header Component matching official style guide
-const MarylandDHSHeader = ({ t }: { t: any }) => (
+// Maryland State Header Component matching official branding
+const MarylandStateHeader = ({ t }: { t: any }) => (
   <div className="flex items-center gap-3">
     <MarylandFlag className="h-10 w-10 flex-shrink-0" />
     <div className="hidden sm:block">
-      <div className="text-sm font-semibold text-white leading-tight">Maryland</div>
-      <div className="text-xs text-white/90">Department of Human Services</div>
+      <div className="text-sm font-semibold text-white leading-tight">State of Maryland</div>
+      <div className="text-xs text-white/90">Benefits Navigator</div>
     </div>
   </div>
 );
@@ -105,14 +105,14 @@ export default function Navigation() {
   );
 
   return (
-    <nav className="bg-md-blue border-b-4 border-md-gold sticky top-0 z-50" role="navigation" aria-label="Main navigation">
+    <nav className="bg-md-red border-b-4 border-md-gold sticky top-0 z-50" role="navigation" aria-label="Main navigation">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between items-center h-16">
-          {/* Maryland DHS Logo/Branding */}
+          {/* Maryland State Logo/Branding */}
           <div className="flex items-center">
             <Link href="/">
               <div className="cursor-pointer" data-testid="nav-logo">
-                <MarylandDHSHeader t={t} />
+                <MarylandStateHeader t={t} />
               </div>
             </Link>
             
