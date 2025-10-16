@@ -51,6 +51,7 @@ import AccessibilityStatement from "@/pages/legal/AccessibilityStatement";
 import DataSecurityPolicy from "@/pages/legal/DataSecurityPolicy";
 import BreachNotificationPolicy from "@/pages/legal/BreachNotificationPolicy";
 import Disclaimer from "@/pages/legal/Disclaimer";
+import License from "@/pages/legal/License";
 import AbawdVerificationAdmin from "@/pages/AbawdVerificationAdmin";
 import CrossEnrollmentAdmin from "@/pages/CrossEnrollmentAdmin";
 import SmsConfig from "@/pages/admin/SmsConfig";
@@ -120,6 +121,7 @@ function Router() {
           <Route path="/legal" component={LegalHub} />
           <Route path="/legal/privacy" component={PrivacyPolicy} />
           <Route path="/legal/terms" component={TermsOfService} />
+          <Route path="/legal/license" component={License} />
           <Route path="/legal/accessibility" component={AccessibilityStatement} />
           <Route path="/legal/security" component={DataSecurityPolicy} />
           <Route path="/legal/breach-notification" component={BreachNotificationPolicy} />

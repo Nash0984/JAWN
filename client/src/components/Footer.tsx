@@ -30,6 +30,11 @@ export default function Footer() {
                 </Link>
               </li>
               <li>
+                <Link href="/legal/license" className="text-muted-foreground hover:text-foreground transition-colors" data-testid="link-footer-license">
+                  License & Copyright
+                </Link>
+              </li>
+              <li>
                 <Link href="/legal/accessibility" className="text-muted-foreground hover:text-foreground transition-colors" data-testid="link-footer-accessibility">
                   Accessibility
                 </Link>
@@ -77,9 +82,17 @@ export default function Footer() {
         
         {/* Bottom Bar */}
         <div className="pt-6 border-t flex flex-col sm:flex-row justify-between items-center gap-4">
-          <p className="text-sm text-muted-foreground" data-testid="text-footer-copyright">
-            © {currentYear} Maryland Benefits Platform. All rights reserved.
-          </p>
+          <div className="text-sm text-muted-foreground text-center sm:text-left">
+            <p data-testid="text-footer-copyright">
+              © {currentYear} Maryland Benefits Navigator Contributors. All rights reserved.
+            </p>
+            <p className="mt-1" data-testid="text-footer-license">
+              Licensed under{" "}
+              <Link href="/legal/license" className="text-primary hover:underline">
+                MIT License
+              </Link>
+            </p>
+          </div>
           <div className="flex items-center gap-4 text-sm">
             <Link href="/legal/privacy" className="text-muted-foreground hover:text-foreground transition-colors" data-testid="link-footer-bottom-privacy">
               Privacy

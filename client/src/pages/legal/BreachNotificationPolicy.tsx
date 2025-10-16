@@ -84,7 +84,7 @@ export default function BreachNotificationPolicy() {
           <h3>Breach Classification</h3>
           <ul>
             <li><strong>Critical (P0):</strong> Large-scale breach affecting >500 individuals or sensitive PHI exposure</li>
-            <li><strong>High (P1):</strong> Breach affecting <500 individuals with confirmed PHI access</li>
+            <li><strong>High (P1):</strong> Breach affecting &lt;500 individuals with confirmed PHI access</li>
             <li><strong>Medium (P2):</strong> Limited breach with low risk of harm</li>
             <li><strong>Low (P3):</strong> Security incident not meeting breach threshold</li>
           </ul>
@@ -123,7 +123,7 @@ export default function BreachNotificationPolicy() {
           <h3>HHS Secretary Notification</h3>
           <ul>
             <li><strong>Large Breach (>500 individuals):</strong> Contemporaneous with individual notice (within 60 days)</li>
-            <li><strong>Small Breach (<500 individuals):</strong> Annual log submission within 60 days of calendar year end</li>
+            <li><strong>Small Breach (&lt;500 individuals):</strong> Annual log submission within 60 days of calendar year end</li>
             <li><strong>Method:</strong> Electronic submission via HHS Breach Portal (https://ocrportal.hhs.gov/ocr/breach)</li>
           </ul>
 
@@ -218,7 +218,7 @@ export default function BreachNotificationPolicy() {
           <ul>
             <li><strong>Portal Submission:</strong> Electronic filing via HHS Breach Portal</li>
             <li><strong>Information Provided:</strong> Number of affected individuals, breach details, steps taken</li>
-            <li><strong>Annual Report:</strong> Log of breaches <500 individuals submitted by March 1</li>
+            <li><strong>Annual Report:</strong> Log of breaches &lt;500 individuals submitted by March 1</li>
           </ul>
 
           <h3>Maryland Attorney General</h3>

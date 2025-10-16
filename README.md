@@ -448,16 +448,78 @@ The system implements Maryland Digital Style Guide (2023):
 - **Feature Requests**: Community discussions
 
 ### Contributing
+
+We welcome contributions from the community! See our [Contributing Guidelines](./CONTRIBUTING.md) for details on:
+
+- Code of Conduct
+- Development setup and workflow
+- How to submit issues and pull requests
+- Coding standards and best practices
+- License agreement for contributors
+
+**Quick Start for Contributors:**
+
 1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Add tests for new features
-5. Submit a pull request
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+3. Make your changes and add tests
+4. Ensure all tests pass (`npm test`)
+5. Commit your changes (`git commit -m 'feat: Add amazing feature'`)
+6. Push to your fork (`git push origin feature/amazing-feature`)
+7. Open a Pull Request
 
-## 📄 License
+## 📄 License & Copyright
 
-This project is developed for Maryland Department of Human Services and follows applicable state and federal regulations for public benefit systems.
+### Open Source License
+
+This project is **open source** software licensed under the **MIT License**. This means you are free to use, modify, and distribute this software for any purpose, including commercial applications.
+
+**Copyright © 2025 Maryland Benefits Navigator Contributors**
+
+See the [LICENSE](./LICENSE) file for the full license text.
+
+### What This Means
+
+✅ **You can:**
+- Use this software for any purpose
+- Modify the code to fit your needs
+- Distribute original or modified versions
+- Use in commercial projects
+- Sublicense to others
+
+✅ **You must:**
+- Include the original copyright notice and license text in any copies or substantial portions of the software
+
+❌ **No warranty:**
+- This software is provided "as is" without warranty of any kind
+
+### IP Ownership Model
+
+While the code is open source under the MIT License, copyright remains with the original authors and contributors. This establishes clear intellectual property ownership while allowing the community to benefit from and improve upon the work.
+
+For production deployments, you should:
+1. Review the license terms
+2. Ensure compliance with applicable regulations (HIPAA, state privacy laws, etc.)
+3. Implement appropriate security measures for your use case
+
+### Related Legal Documentation
+
+For comprehensive legal and policy information, visit our [Legal Hub](/legal):
+- [Privacy Policy](/legal/privacy) - HIPAA-compliant data protection
+- [Terms of Service](/legal/terms) - Platform usage terms
+- [License & Copyright](/legal/license) - Complete licensing information
+- [Security Policy](/legal/security) - Technical safeguards and encryption
+- [Accessibility Statement](/legal/accessibility) - WCAG 2.1 AA compliance
+
+### Compliance & Regulations
+
+This platform is designed to comply with:
+- **HIPAA** - Health Insurance Portability and Accountability Act
+- **Maryland State Law** - State-specific privacy and data protection requirements
+- **Federal Regulations** - SNAP, Medicaid, TANF, and IRS VITA program requirements
+- **WCAG 2.1 AA** - Web Content Accessibility Guidelines
 
 ---
 
 **Maryland Universal Benefits-Tax Navigator** - Comprehensive financial optimization through integrated benefit eligibility and tax preparation.
+
+**Open Source** • **MIT Licensed** • **Community Driven**
