@@ -11,6 +11,8 @@ import { queryClassifier, type ClassificationResult } from './queryClassifier';
 import { rulesEngine } from './rulesEngine';
 import { ragService } from './ragService';
 import { storage } from '../storage';
+import { programDetection, type ProgramMatch } from './programDetection';
+import { rulesEngineAdapter, type HybridEligibilityPayload, type HybridCalculationResult } from './rulesEngineAdapter';
 
 export interface HybridSearchResult {
   answer: string;
@@ -97,52 +99,75 @@ class HybridService {
     benefitProgramId?: string
   ): Promise<HybridSearchResult> {
     
-    // Check if we can calculate directly from extracted parameters
+    // Step 1: Load program metadata and create bidirectional maps
+    const programs = await storage.getBenefitPrograms();
+    const programIdMap: Record<string, string> = {}; // code → UUID
+    const programCodeMap: Record<string, string> = {}; // UUID → code
+    for (const program of programs) {
+      programIdMap[program.code] = program.id;
+      programCodeMap[program.id] = program.code;
+    }
+    
+    // Step 2: If benefitProgramId is a UUID, map it to program code for detection
+    let programCode: string | undefined;
+    if (benefitProgramId && programCodeMap[benefitProgramId]) {
+      programCode = programCodeMap[benefitProgramId];
+    }
+    
+    // Step 3: Detect which program(s) the query is about
+    // Pass program code instead of UUID for proper detection
+    const programMatches = programDetection.detectProgram(query, programCode);
+    console.log('Detected programs:', programMatches);
+    
+    // Step 4: Check if we can calculate directly from extracted parameters
     if (queryClassifier.canCalculateDirectly(classification) && classification.extractedParams) {
       const params = classification.extractedParams;
       
-      // Get SNAP program if not provided
-      if (!benefitProgramId) {
-        const programs = await storage.getBenefitPrograms();
-        const snapProgram = programs.find(p => p.code === 'MD_SNAP');
-        if (snapProgram) {
-          benefitProgramId = snapProgram.id;
-        }
-      }
-
-      if (benefitProgramId) {
-        // Calculate eligibility using Rules Engine
-        const household = {
-          size: params.householdSize || 1,
-          grossMonthlyIncome: params.income || 0,
-          earnedIncome: 0,
-          unearnedIncome: params.income || 0,
-          hasElderly: params.hasElderly || false,
-          hasDisabled: params.hasDisabled || false,
-          dependentCareExpenses: 0,
-          medicalExpenses: 0,
-          shelterCosts: 0,
-          categoricalEligibility: params.hasSSI ? 'SSI' : params.hasTANF ? 'TANF' : undefined,
+      // Step 5: Try each program candidate until we get a result
+      for (const match of programMatches) {
+        // Resolve program ID if needed (for SNAP and other DB-dependent programs)
+        const resolvedProgramId = match.programCode === 'MD_SNAP' 
+          ? (benefitProgramId || programIdMap[match.programCode])
+          : undefined;
+        
+        // Build normalized input payload
+        const input: HybridEligibilityPayload = {
+          householdSize: params.householdSize,
+          income: params.income,
+          hasElderly: params.hasElderly,
+          hasDisabled: params.hasDisabled,
+          hasSSI: params.hasSSI,
+          hasTANF: params.hasTANF,
+          benefitProgramId: resolvedProgramId,
         };
         
-        const calculation = await rulesEngine.calculateEligibility(benefitProgramId, household);
+        // Step 5: Route to appropriate rules engine via adapter
+        const calculation = await rulesEngineAdapter.calculateEligibility(match.programCode, input);
+        
+        if (calculation) {
+          const answer = this.formatAdapterCalculationAnswer(calculation, match, params);
 
-        const answer = this.formatCalculationAnswer(calculation, params);
-
-        return {
-          answer,
-          type: 'deterministic',
-          classification,
-          calculation: {
-            eligible: calculation.isEligible,
-            estimatedBenefit: calculation.monthlyBenefit,
-            reason: calculation.reason || '',
-            breakdown: calculation.calculationBreakdown,
-            appliedRules: calculation.calculationBreakdown,
-          },
-          nextSteps: this.generateNextSteps(calculation, params),
-          responseTime: 0,
-        };
+          return {
+            answer,
+            type: 'deterministic',
+            classification,
+            calculation: {
+              eligible: calculation.eligible,
+              estimatedBenefit: calculation.estimatedBenefit,
+              reason: calculation.reason,
+              breakdown: calculation.breakdown,
+              appliedRules: calculation.breakdown,
+              policyCitations: calculation.citations.map(c => ({
+                sectionNumber: c.split(':')[0] || '',
+                sectionTitle: '',
+                ruleType: 'eligibility',
+                description: c,
+              })),
+            },
+            nextSteps: this.generateAdapterNextSteps(calculation, match, params),
+            responseTime: 0,
+          };
+        }
       }
     }
 
@@ -151,7 +176,7 @@ class HybridService {
     
     const guidanceMessage = classification.extractedParams 
       ? this.buildGuidanceMessage(classification.extractedParams)
-      : 'To check your SNAP eligibility, I need some information about your household.';
+      : 'To check your eligibility, I need some information about your household.';
 
     return {
       answer: `${guidanceMessage}\n\n${ragResult.answer}`,
@@ -165,7 +190,7 @@ class HybridService {
       nextSteps: [
         'Use the Eligibility Checker tool to get a personalized calculation',
         'Provide your household size and monthly income',
-        'Indicate if anyone receives SSI or TANF benefits',
+        'Indicate any special circumstances (disability, elderly, etc.)',
       ],
       responseTime: 0,
     };
@@ -208,32 +233,51 @@ class HybridService {
     benefitProgramId?: string
   ): Promise<HybridSearchResult> {
     
+    // Load program metadata and create bidirectional maps
+    const programs = await storage.getBenefitPrograms();
+    const programIdMap: Record<string, string> = {}; // code → UUID
+    const programCodeMap: Record<string, string> = {}; // UUID → code
+    for (const program of programs) {
+      programIdMap[program.code] = program.id;
+      programCodeMap[program.id] = program.code;
+    }
+    
+    // If benefitProgramId is a UUID, map it to program code for detection
+    let programCode: string | undefined;
+    if (benefitProgramId && programCodeMap[benefitProgramId]) {
+      programCode = programCodeMap[benefitProgramId];
+    }
+    
+    // Detect programs (pass code instead of UUID)
+    const programMatches = programDetection.detectProgram(query, programCode);
+    
     // Run both Rules Engine and RAG in parallel
     const [calculationResult, ragResult] = await Promise.all([
       (async () => {
         if (queryClassifier.canCalculateDirectly(classification) && classification.extractedParams) {
           const params = classification.extractedParams;
           
-          if (!benefitProgramId) {
-            const programs = await storage.getBenefitPrograms();
-            const snapProgram = programs.find(p => p.code === 'MD_SNAP');
-            if (snapProgram) benefitProgramId = snapProgram.id;
-          }
-
-          if (benefitProgramId) {
-            const household = {
-              size: params.householdSize || 1,
-              grossMonthlyIncome: params.income || 0,
-              earnedIncome: 0,
-              unearnedIncome: params.income || 0,
-              hasElderly: params.hasElderly || false,
-              hasDisabled: params.hasDisabled || false,
-              dependentCareExpenses: 0,
-              medicalExpenses: 0,
-              shelterCosts: 0,
-              categoricalEligibility: params.hasSSI ? 'SSI' : params.hasTANF ? 'TANF' : undefined,
+          // Try each program candidate
+          for (const match of programMatches) {
+            // Resolve program ID if needed
+            const resolvedProgramId = match.programCode === 'MD_SNAP' 
+              ? (benefitProgramId || programIdMap[match.programCode])
+              : undefined;
+            
+            const input: HybridEligibilityPayload = {
+              householdSize: params.householdSize,
+              income: params.income,
+              hasElderly: params.hasElderly,
+              hasDisabled: params.hasDisabled,
+              hasSSI: params.hasSSI,
+              hasTANF: params.hasTANF,
+              benefitProgramId: resolvedProgramId,
             };
-            return await rulesEngine.calculateEligibility(benefitProgramId, household);
+            
+            const result = await rulesEngineAdapter.calculateEligibility(match.programCode, input);
+            if (result) {
+              return { calculation: result, match };
+            }
           }
         }
         return null;
@@ -245,7 +289,11 @@ class HybridService {
     let answer = '';
     
     if (calculationResult) {
-      answer = this.formatCalculationAnswer(calculationResult, classification.extractedParams || {});
+      answer = this.formatAdapterCalculationAnswer(
+        calculationResult.calculation, 
+        calculationResult.match, 
+        classification.extractedParams || {}
+      );
       answer += '\n\n**Why This Calculation:**\n' + ragResult.answer;
     } else {
       answer = ragResult.answer;
@@ -256,12 +304,17 @@ class HybridService {
       type: 'hybrid',
       classification,
       calculation: calculationResult ? {
-        eligible: calculationResult.isEligible,
-        estimatedBenefit: calculationResult.monthlyBenefit,
-        reason: calculationResult.reason || '',
-        breakdown: calculationResult.calculationBreakdown,
-        appliedRules: calculationResult.calculationBreakdown,
-        policyCitations: calculationResult.policyCitations,
+        eligible: calculationResult.calculation.eligible,
+        estimatedBenefit: calculationResult.calculation.estimatedBenefit,
+        reason: calculationResult.calculation.reason,
+        breakdown: calculationResult.calculation.breakdown,
+        appliedRules: calculationResult.calculation.breakdown,
+        policyCitations: calculationResult.calculation.citations.map(c => ({
+          sectionNumber: c.split(':')[0] || '',
+          sectionTitle: '',
+          ruleType: 'eligibility',
+          description: c,
+        })),
       } : undefined,
       aiExplanation: {
         answer: ragResult.answer,
@@ -270,7 +323,7 @@ class HybridService {
         relevanceScore: ragResult.relevanceScore,
       },
       nextSteps: calculationResult 
-        ? this.generateNextSteps(calculationResult, classification.extractedParams || {})
+        ? this.generateAdapterNextSteps(calculationResult.calculation, calculationResult.match, classification.extractedParams || {})
         : this.generatePolicyNextSteps(query),
       responseTime: 0,
     };
@@ -344,9 +397,66 @@ class HybridService {
   private generatePolicyNextSteps(query: string): string[] {
     return [
       'Use the Eligibility Checker to see if you qualify',
-      'Review the full SNAP Policy Manual for detailed regulations',
+      'Review the full Policy Manual for detailed regulations',
       'Contact your local Department of Social Services for personalized assistance',
     ];
+  }
+
+  /**
+   * Format adapter calculation result into plain language answer
+   */
+  private formatAdapterCalculationAnswer(calculation: HybridCalculationResult, match: ProgramMatch, params: any): string {
+    const householdInfo = params.householdSize 
+      ? `for a household of ${params.householdSize}` 
+      : '';
+    const incomeInfo = params.income 
+      ? ` with monthly income of $${(params.income / 100).toFixed(2)}` 
+      : '';
+
+    if (calculation.eligible) {
+      const benefit = calculation.estimatedBenefit 
+        ? `$${(calculation.estimatedBenefit / 100).toFixed(2)}` 
+        : '';
+      
+      if (calculation.calculationType === 'tax') {
+        return `**Tax Calculation Results** ${householdInfo}${incomeInfo}:\n\n${calculation.reason}\n\n` +
+          `**Federal Tax:** $${((calculation.federalTax || 0) / 100).toFixed(2)}\n` +
+          `**Maryland Tax:** $${((calculation.stateTax || 0) / 100).toFixed(2)}\n` +
+          `**Total Refund:** ${benefit}`;
+      } else {
+        return `**Good news!** Based on Maryland ${match.displayName} rules, you appear to be eligible ${householdInfo}${incomeInfo}.\n\n` +
+          `${benefit ? `Your estimated benefit is **${benefit} per month**.\n\n` : ''}${calculation.reason || ''}`;
+      }
+    } else {
+      return `Based on Maryland ${match.displayName} rules ${householdInfo}${incomeInfo}, you may not be eligible at this time.\n\n${calculation.reason || ''}`;
+    }
+  }
+
+  /**
+   * Generate context-aware next steps for adapter results
+   */
+  private generateAdapterNextSteps(calculation: HybridCalculationResult, match: ProgramMatch, params: any): string[] {
+    const steps: string[] = [];
+
+    if (calculation.eligible) {
+      if (calculation.programCode === 'MD_VITA_TAX') {
+        steps.push('Schedule a VITA tax preparation appointment');
+        steps.push('Gather all tax documents (W-2s, 1099s, etc.)');
+        steps.push('Bring identification and Social Security cards');
+      } else {
+        steps.push(`Complete a full ${match.displayName} application at MarylandBenefits.gov`);
+        steps.push('Gather required documents (proof of income, identity, residency)');
+        steps.push('Schedule an interview with your local Department of Social Services');
+      }
+    } else {
+      steps.push('Use the Benefit Calculator to explore different scenarios');
+      steps.push('Check if you qualify for other assistance programs');
+      if (calculation.reason.toLowerCase().includes('income')) {
+        steps.push('Consider deductions like shelter costs and medical expenses that may help you qualify');
+      }
+    }
+
+    return steps;
   }
 }
 
