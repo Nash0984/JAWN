@@ -4,7 +4,7 @@ import { documentProcessor } from './documentProcessor';
 import type { Document, InsertDocument } from '@shared/schema';
 import { db } from '../db';
 import { documents, policySources } from '@shared/schema';
-import { eq } from 'drizzle-orm';
+import { eq, and } from 'drizzle-orm';
 
 /**
  * eCFR Bulk Downloader Service
@@ -71,10 +71,16 @@ class ECFRBulkDownloader {
       const remoteLastModified = lastModifiedHeader ? new Date(lastModifiedHeader) : new Date();
       
       for (const section of sections) {
-        // Check for existing section
+        // Check for existing section - CRITICAL FIX: Must check both sectionNumber AND sourceUrl
+        // to avoid false matches with Maryland documents that have same section numbers
         const existingDocs = await db.select()
           .from(documents)
-          .where(eq(documents.sectionNumber, section.number))
+          .where(
+            and(
+              eq(documents.sectionNumber, section.number),
+              eq(documents.sourceUrl, this.ECFR_TITLE_7_URL)
+            )
+          )
           .limit(1);
         
         const existingDoc = existingDocs[0];
