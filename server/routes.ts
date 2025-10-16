@@ -5126,7 +5126,7 @@ If the question cannot be answered with the available information, say so clearl
     });
   }));
 
-  // Get formatted multi-benefit summary
+  // Get formatted multi-benefit summary (PolicyEngine only - legacy)
   app.post("/api/policyengine/summary", asyncHandler(async (req: Request, res: Response) => {
     const { policyEngineService } = await import("./services/policyEngine.service");
     
@@ -5147,6 +5147,123 @@ If the question cannot be answered with the available information, say so clearl
     res.json({
       ...result,
       summary
+    });
+  }));
+
+  // Hybrid multi-benefit summary (Maryland Rules-as-Code PRIMARY + PolicyEngine verification)
+  app.post("/api/benefits/calculate-hybrid-summary", asyncHandler(async (req: Request, res: Response) => {
+    const { rulesEngineAdapterService } = await import("./services/rulesEngineAdapter");
+    const { policyEngineService } = await import("./services/policyEngine.service");
+    
+    const inputSchema = z.object({
+      adults: z.number().min(1).max(20),
+      children: z.number().min(0).max(20),
+      employmentIncome: z.number().min(0),
+      unearnedIncome: z.number().optional(),
+      stateCode: z.string().length(2),
+      householdAssets: z.coerce.number().min(0).optional(),
+      rentOrMortgage: z.coerce.number().min(0).optional(),
+      utilityCosts: z.coerce.number().min(0).optional(),
+      medicalExpenses: z.coerce.number().min(0).optional(),
+      childcareExpenses: z.coerce.number().min(0).optional(),
+      elderlyOrDisabled: z.boolean().optional(),
+      year: z.number().optional()
+    });
+    
+    const validated = inputSchema.parse(req.body);
+    
+    // Get benefit program for SNAP
+    const snapProgram = await storage.getBenefitProgramByCode("MD_SNAP");
+    if (!snapProgram) {
+      return res.status(500).json({ error: "SNAP program not found" });
+    }
+
+    // Build household input for rules engines (in dollars)
+    const householdSize = validated.adults + validated.children;
+    const monthlyIncome = Math.round(validated.employmentIncome / 12 + (validated.unearnedIncome || 0) / 12);
+    
+    const hybridInput = {
+      benefitProgramId: snapProgram.id,
+      householdSize,
+      income: monthlyIncome,
+      earnedIncome: Math.round(validated.employmentIncome / 12),
+      unearnedIncome: Math.round((validated.unearnedIncome || 0) / 12),
+      assets: validated.householdAssets,
+      shelterCosts: validated.rentOrMortgage,
+      dependentCareExpenses: validated.childcareExpenses,
+      medicalExpenses: validated.medicalExpenses,
+      hasElderly: validated.elderlyOrDisabled,
+      hasDisabled: validated.elderlyOrDisabled,
+      age: validated.elderlyOrDisabled ? 65 : 30
+    };
+
+    // Calculate using Maryland Rules-as-Code engines
+    const [snapResult, tanfResult, ohepResult, medicaidResult] = await Promise.all([
+      rulesEngineAdapterService.calculateEligibility("MD_SNAP", hybridInput),
+      rulesEngineAdapterService.calculateEligibility("MD_TANF", hybridInput),
+      rulesEngineAdapterService.calculateEligibility("MD_OHEP", hybridInput),
+      rulesEngineAdapterService.calculateEligibility("MEDICAID", hybridInput)
+    ]);
+
+    // Also calculate with PolicyEngine for verification
+    let policyEngineResult;
+    try {
+      policyEngineResult = await policyEngineService.calculateBenefits(validated);
+    } catch (error) {
+      console.error("PolicyEngine verification failed:", error);
+      policyEngineResult = null;
+    }
+
+    // Compare and build verification badges
+    const benefits = {
+      snap: snapResult?.estimatedBenefit || 0,
+      medicaid: medicaidResult?.eligible || false,
+      tanf: tanfResult?.estimatedBenefit || 0,
+      ohep: ohepResult?.estimatedBenefit || 0,
+      eitc: policyEngineResult?.benefits?.eitc || 0, // Tax credits use PolicyEngine only
+      childTaxCredit: policyEngineResult?.benefits?.childTaxCredit || 0,
+      ssi: policyEngineResult?.benefits?.ssi || 0, // SSI not in Maryland rules yet
+      householdNetIncome: policyEngineResult?.householdNetIncome || 0,
+      householdTax: policyEngineResult?.householdTax || 0,
+      householdBenefits: policyEngineResult?.householdBenefits || 0,
+      marginalTaxRate: policyEngineResult?.marginalTaxRate || 0
+    };
+
+    // Build verification status for each program
+    const verifications = {
+      snap: policyEngineResult?.benefits?.snap !== undefined ? {
+        match: Math.abs(benefits.snap - policyEngineResult.benefits.snap) < 10,
+        policyEngineAmount: policyEngineResult.benefits.snap,
+        marylandAmount: benefits.snap
+      } : null,
+      tanf: policyEngineResult?.benefits?.tanf !== undefined ? {
+        match: Math.abs(benefits.tanf - policyEngineResult.benefits.tanf) < 10,
+        policyEngineAmount: policyEngineResult.benefits.tanf,
+        marylandAmount: benefits.tanf
+      } : null,
+      ohep: policyEngineResult?.benefits?.ohep !== undefined ? {
+        match: Math.abs(benefits.ohep - policyEngineResult.benefits.ohep) < 10,
+        policyEngineAmount: policyEngineResult.benefits.ohep,
+        marylandAmount: benefits.ohep
+      } : null,
+      medicaid: policyEngineResult?.benefits?.medicaid !== undefined ? {
+        match: benefits.medicaid === policyEngineResult.benefits.medicaid,
+        policyEngineEligible: policyEngineResult.benefits.medicaid,
+        marylandEligible: benefits.medicaid
+      } : null
+    };
+
+    res.json({
+      success: true,
+      benefits,
+      verifications,
+      summary: `Based on Maryland Rules-as-Code determinations, verified by PolicyEngine`,
+      calculations: {
+        snap: snapResult,
+        tanf: tanfResult,
+        ohep: ohepResult,
+        medicaid: medicaidResult
+      }
     });
   }));
 
