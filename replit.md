@@ -80,6 +80,7 @@ Tracks navigator performance and awards achievements based on operational KPIs.
 -   **Data Management**: PostgreSQL for core data, Google Cloud Storage for files.
 -   **Authentication & Authorization**: Basic user authentication with roles, object-level security, and robust CSRF protection.
 -   **Production Security Hardening**: Field-level encryption, secure file uploads, strong password enforcement, enhanced session security, CORS hardening, security headers, XSS sanitization, SQL injection protection, and a Security Monitoring Dashboard.
+-   **Field-Level Encryption**: AES-256-GCM encryption for sensitive PII (SSNs, bank account numbers, tax data). Key management via ENCRYPTION_KEY environment variable (64-char hex). Supports zero-downtime key rotation using ENCRYPTION_KEY_PREVIOUS. See docs/ENCRYPTION_KEY_MANAGEMENT.md for setup and rotation procedures.
 -   **Production Readiness & Hardening**: Production environment validation, health check endpoints, role-based rate limiting, DoS protection, database connection pooling, and graceful shutdown.
 -   **Unified Household Profiler**: Single profile for benefits and tax workflows.
 -   **E-Filing Roadmap**: Phased approach for federal/Maryland e-filing.
