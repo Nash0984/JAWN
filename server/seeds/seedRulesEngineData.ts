@@ -1,4 +1,5 @@
 import { db } from "../db";
+import { eq } from "drizzle-orm";
 import { 
   benefitPrograms,
   povertyLevels,
@@ -9,6 +10,7 @@ import {
   tanfAssetLimits,
   tanfWorkRequirements,
   tanfTimeLimits,
+  medicaidIncomeLimits,
 } from "../../shared/schema";
 
 /**
@@ -288,6 +290,122 @@ export async function seedRulesEngineData() {
       },
     ]);
     console.log("✓ Seeded TANF time limits");
+  }
+
+  // ============================================================================
+  // MEDICAID RULES ENGINE DATA
+  // ============================================================================
+
+  // Get or create Medicaid program
+  let medicaidProgram = await db.query.benefitPrograms.findFirst({
+    where: eq(benefitPrograms.code, "MEDICAID"),
+  });
+
+  if (!medicaidProgram) {
+    [medicaidProgram] = await db.insert(benefitPrograms).values({
+      name: "Maryland Medicaid",
+      code: "MEDICAID",
+      description: "Maryland's Medicaid health coverage program with MAGI and Non-MAGI pathways",
+      programType: "benefit",
+      hasRulesEngine: true,
+      hasPolicyEngineValidation: true,
+      hasConversationalAI: true,
+      primarySourceUrl: "https://mmcp.health.maryland.gov/Pages/Medicaid-Manual.aspx",
+      sourceType: "web_scraping",
+      isActive: true,
+    }).returning();
+    console.log("✓ Created Medicaid program");
+  }
+
+  // Step 10: Seed Medicaid Income Limits (MAGI pathways)
+  const existingMedicaidLimits = await db.select().from(medicaidIncomeLimits);
+  if (existingMedicaidLimits.length === 0) {
+    // MAGI Adults (138% FPL - ACA expansion)
+    const adultLimits = [
+      { size: 1, monthly: 172200, annual: 206640 },  // 138% FPL
+      { size: 2, monthly: 232800, annual: 279360 },
+      { size: 3, monthly: 293400, annual: 352080 },
+      { size: 4, monthly: 354000, annual: 424800 },
+    ];
+
+    for (const limit of adultLimits) {
+      await db.insert(medicaidIncomeLimits).values({
+        benefitProgramId: medicaidProgram!.id,
+        category: "adult",
+        householdSize: limit.size,
+        percentOfFPL: 138,
+        monthlyIncomeLimit: limit.monthly,
+        annualIncomeLimit: limit.annual,
+        effectiveDate: new Date("2024-01-01"),
+        isActive: true,
+        notes: "MAGI Adults - Maryland Medicaid expansion (138% FPL)",
+      });
+    }
+
+    // MAGI Children (322% FPL - includes CHIP)
+    const childLimits = [
+      { size: 2, monthly: 543600, annual: 652320 },  // 322% FPL
+      { size: 3, monthly: 685200, annual: 822240 },
+      { size: 4, monthly: 826800, annual: 992160 },
+    ];
+
+    for (const limit of childLimits) {
+      await db.insert(medicaidIncomeLimits).values({
+        benefitProgramId: medicaidProgram!.id,
+        category: "child",
+        householdSize: limit.size,
+        percentOfFPL: 322,
+        monthlyIncomeLimit: limit.monthly,
+        annualIncomeLimit: limit.annual,
+        effectiveDate: new Date("2024-01-01"),
+        isActive: true,
+        notes: "MAGI Children - Maryland includes CHIP (322% FPL)",
+      });
+    }
+
+    // MAGI Pregnant (264% FPL)
+    const pregnantLimits = [
+      { size: 1, monthly: 329400, annual: 395280 },  // 264% FPL
+      { size: 2, monthly: 445200, annual: 534240 },
+      { size: 3, monthly: 561000, annual: 673200 },
+    ];
+
+    for (const limit of pregnantLimits) {
+      await db.insert(medicaidIncomeLimits).values({
+        benefitProgramId: medicaidProgram!.id,
+        category: "pregnant",
+        householdSize: limit.size,
+        percentOfFPL: 264,
+        monthlyIncomeLimit: limit.monthly,
+        annualIncomeLimit: limit.annual,
+        effectiveDate: new Date("2024-01-01"),
+        isActive: true,
+        notes: "MAGI Pregnant Women - Maryland (264% FPL)",
+      });
+    }
+
+    // Non-MAGI Aged/Blind/Disabled (100% FPL)
+    const abdLimits = [
+      { size: 1, monthly: 124500, annual: 149400 },  // 100% FPL
+      { size: 2, monthly: 168500, annual: 202200 },
+      { size: 3, monthly: 212500, annual: 255000 },
+    ];
+
+    for (const limit of abdLimits) {
+      await db.insert(medicaidIncomeLimits).values({
+        benefitProgramId: medicaidProgram!.id,
+        category: "elderly_disabled",
+        householdSize: limit.size,
+        percentOfFPL: 100,
+        monthlyIncomeLimit: limit.monthly,
+        annualIncomeLimit: limit.annual,
+        effectiveDate: new Date("2024-01-01"),
+        isActive: true,
+        notes: "Non-MAGI Aged/Blind/Disabled - Maryland (100% FPL)",
+      });
+    }
+
+    console.log("✓ Seeded Medicaid income limits");
   }
 
   console.log("✅ Rules Engine seed data complete!");
