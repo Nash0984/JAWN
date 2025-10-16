@@ -320,7 +320,7 @@ class DocumentProcessor {
       const ai = getGemini();
       const response = await ai.models.generateContent({
         model: "gemini-1.5-pro",
-        contents: prompt
+        contents: [{ role: 'user', parts: [{ text: prompt }] }]
       });
 
       return JSON.parse(response.text || "{}");

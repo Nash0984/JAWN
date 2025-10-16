@@ -401,7 +401,7 @@ Return as JSON object with only the fields found.`;
 
     const response = await genai.models.generateContent({
       model: "gemini-2.0-flash",
-      contents: prompt
+      contents: [{ role: 'user', parts: [{ text: prompt }] }]
     });
     
     const text = response.text || '{}';
@@ -453,7 +453,7 @@ Context: User is asking about benefit programs. Keep response helpful and brief.
 
     const response = await genai.models.generateContent({
       model: "gemini-2.0-flash",
-      contents: prompt
+      contents: [{ role: 'user', parts: [{ text: prompt }] }]
     });
     
     return (response.text || smsTemplates.error()).substring(0, 160);

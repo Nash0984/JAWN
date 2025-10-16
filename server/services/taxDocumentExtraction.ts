@@ -190,15 +190,13 @@ Extract all fields precisely as they appear on the form. For empty boxes, use 0 
     const ai = getGemini();
     const result = await ai.models.generateContent({
       model: "gemini-2.5-flash",
-      contents: [
-        { text: prompt },
-        {
-          inlineData: {
-            mimeType,
-            data: base64Image,
-          },
-        },
-      ],
+      contents: [{
+        role: 'user',
+        parts: [
+          { text: prompt },
+          { inlineData: { mimeType, data: base64Image } }
+        ]
+      }]
     });
 
     const responseText = result.text || "";
@@ -272,10 +270,13 @@ Return JSON with:
     const ai = getGemini();
     const result = await ai.models.generateContent({
       model: "gemini-2.5-flash",
-      contents: [
-        { text: prompt },
-        { inlineData: { mimeType, data: base64Image } },
-      ],
+      contents: [{
+        role: 'user',
+        parts: [
+          { text: prompt },
+          { inlineData: { mimeType, data: base64Image } }
+        ]
+      }]
     });
 
     const responseText = result.text || "";
@@ -336,10 +337,13 @@ Return JSON with:
     const ai = getGemini();
     const result = await ai.models.generateContent({
       model: "gemini-2.5-flash",
-      contents: [
-        { text: prompt },
-        { inlineData: { mimeType, data: base64Image } },
-      ],
+      contents: [{
+        role: 'user',
+        parts: [
+          { text: prompt },
+          { inlineData: { mimeType, data: base64Image } }
+        ]
+      }]
     });
 
     const responseText = result.text || "";
@@ -416,10 +420,13 @@ SLCSP = Second Lowest Cost Silver Plan. Part III contains monthly amounts.`;
     const ai = getGemini();
     const result = await ai.models.generateContent({
       model: "gemini-2.5-flash",
-      contents: [
-        { text: prompt },
-        { inlineData: { mimeType, data: base64Image } },
-      ],
+      contents: [{
+        role: 'user',
+        parts: [
+          { text: prompt },
+          { inlineData: { mimeType, data: base64Image } }
+        ]
+      }]
     });
 
     const responseText = result.text || "";

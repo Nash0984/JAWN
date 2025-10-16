@@ -130,7 +130,7 @@ class RAGService {
       const testPrompt = "Respond with OK";
       const response = await ai.models.generateContent({
         model: "gemini-2.5-flash",
-        contents: testPrompt
+        contents: [{ role: 'user', parts: [{ text: testPrompt }] }]
       });
       
       geminiAvailable = !!response.text;
@@ -208,7 +208,7 @@ class RAGService {
       const startTime = Date.now();
       const response = await ai.models.generateContent({
         model: "gemini-2.5-flash",
-        contents: prompt
+        contents: [{ role: 'user', parts: [{ text: prompt }] }]
       });
       let responseText = response.text || "";
       
@@ -329,7 +329,7 @@ class RAGService {
       
       const response = await ai.models.generateContent({
         model: "gemini-2.5-flash",
-        contents: prompt
+        contents: [{ role: 'user', parts: [{ text: prompt }] }]
       });
 
       // Strip markdown code blocks if present
@@ -359,7 +359,7 @@ class RAGService {
       
       const result = await ai.models.embedContent({
         model: "text-embedding-004",
-        contents: text
+        content: { role: 'user', parts: [{ text }] }
       });
       
       return result.embeddings?.[0]?.values || [];
@@ -525,7 +525,7 @@ class RAGService {
       
       const response = await ai.models.generateContent({
         model: "gemini-2.5-flash",
-        contents: prompt
+        contents: [{ role: 'user', parts: [{ text: prompt }] }]
       });
       const answer = response.text || "I'm unable to provide an answer based on the available information.";
 
