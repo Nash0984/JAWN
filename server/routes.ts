@@ -246,7 +246,7 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
       healthStatus.services.geminiApi = {
         status: "not_configured",
         configured: false,
-        message: "Gemini API key not configured"
+        message: "Google API key not configured"
       };
     }
 

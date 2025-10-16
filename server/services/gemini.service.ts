@@ -8,27 +8,12 @@ import { embeddingCache } from "./embeddingCache";
  * We force GEMINI_API_KEY by temporarily setting process.env.GOOGLE_API_KEY to ensure correct key is used
  */
 export function getGeminiClient() {
-  const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
+  const apiKey = process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY;
   if (!apiKey) {
     throw new Error("Gemini API key not configured");
   }
   
-  // Workaround: @google/genai prioritizes GOOGLE_API_KEY, so temporarily override it
-  const originalGoogleApiKey = process.env.GOOGLE_API_KEY;
-  if (process.env.GEMINI_API_KEY) {
-    process.env.GOOGLE_API_KEY = process.env.GEMINI_API_KEY;
-  }
-  
-  const client = new GoogleGenAI({ apiKey });
-  
-  // Restore original value
-  if (originalGoogleApiKey) {
-    process.env.GOOGLE_API_KEY = originalGoogleApiKey;
-  } else {
-    delete process.env.GOOGLE_API_KEY;
-  }
-  
-  return client;
+  return new GoogleGenAI({ apiKey });
 }
 
 /**
@@ -67,8 +52,9 @@ export async function analyzeImageWithGemini(base64Image: string, prompt: string
  * OPTIMIZED: Uses embedding cache to reduce API calls by 60-80%
  * Embeddings are deterministic - same text always produces same embedding
  * 
- * Note: @google/genai may not support embedContent in the same way as @google/generative-ai
- * This implementation attempts to use the new API pattern
+ * FIXED: Uses correct @google/genai API format
+ * - API expects 'contents' (plural) as an array of strings
+ * - Response has 'embeddings' array, access first element with [0]
  */
 export async function generateEmbedding(text: string): Promise<number[]> {
   try {
@@ -79,14 +65,14 @@ export async function generateEmbedding(text: string): Promise<number[]> {
     }
     
     // Cache miss - generate new embedding
-    // Note: Embedding API may differ in @google/genai - this may need adjustment
     const ai = getGeminiClient();
     const response = await ai.models.embedContent({
       model: "text-embedding-004",
-      content: { role: 'user', parts: [{ text }] }
+      contents: [text]  // Correct format: array of strings
     });
     
-    const embedding = response.embedding?.values || [];
+    // Response has embeddings array, get first (and only) embedding
+    const embedding = response.embeddings?.[0]?.values || [];
     
     // Store in cache for future use
     if (embedding.length > 0) {

@@ -5,7 +5,7 @@ import type { InsertStateOptionWaiver, InsertMarylandStateOptionStatus } from '@
 import { GoogleGenAI } from '@google/genai';
 import { eq } from 'drizzle-orm';
 
-const GEMINI_API_KEY = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || '';
+const GEMINI_API_KEY = process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY || '';
 
 /**
  * FNS State Options Report Parser
@@ -19,23 +19,10 @@ export class FNSStateOptionsParser {
 
   constructor() {
     if (!GEMINI_API_KEY) {
-      throw new Error('GEMINI_API_KEY or GOOGLE_API_KEY environment variable is required');
-    }
-    
-    // Workaround: @google/genai prioritizes GOOGLE_API_KEY, so temporarily override it
-    const originalGoogleApiKey = process.env.GOOGLE_API_KEY;
-    if (process.env.GEMINI_API_KEY) {
-      process.env.GOOGLE_API_KEY = process.env.GEMINI_API_KEY;
+      throw new Error('GOOGLE_API_KEY or GEMINI_API_KEY environment variable is required');
     }
     
     this.genAI = new GoogleGenAI({ apiKey: GEMINI_API_KEY });
-    
-    // Restore original value
-    if (originalGoogleApiKey) {
-      process.env.GOOGLE_API_KEY = originalGoogleApiKey;
-    } else {
-      delete process.env.GOOGLE_API_KEY;
-    }
   }
 
   /**
