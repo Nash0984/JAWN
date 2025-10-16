@@ -6,6 +6,18 @@ The Maryland Universal Financial Navigator is an AI-powered platform designed to
 
 Preferred communication style: Simple, everyday language.
 
+# Recent Fixes (October 2025)
+
+## Critical Bugs Resolved
+1. **FNS State Options Parser** (User Feedback Issue): Fixed JSON parsing error caused by Gemini API returning markdown code fences (```json). Parser now strips fences before parsing. All 28 SNAP options extract successfully.
+2. **Gemini API Authentication**: Resolved GOOGLE_API_KEY vs GEMINI_API_KEY mislabeling. All services now use correct key priority (GOOGLE_API_KEY first). Removed env var mutations.
+3. **RAG Embeddings**: Fixed embedContent API format. 100% embedding coverage (4,963 chunks). Semantic search fully operational with citations.
+4. **eCFR Policy Parser**: Fixed XML sourceUrl check. 293 documents synchronized with accurate counts.
+
+## Known Issues
+1. **Rate Limiting IPv6**: ValidationError ERR_ERL_KEY_GEN_IPV6 on 4 rate limiters. Non-blocking warnings. Needs IP normalization.
+2. **Metrics Table Missing**: Error code 42P01. Non-blocking for core functionality.
+
 # System Architecture
 
 ## UI/UX

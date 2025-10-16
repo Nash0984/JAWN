@@ -99,7 +99,15 @@ ${pdfText.substring(0, 50000)}`;
     const text = response.text || "";
     
     try {
-      const parsed = JSON.parse(text);
+      // Strip markdown code fences if present
+      let jsonText = text.trim();
+      if (jsonText.startsWith('```')) {
+        // Remove opening fence (```json or ```)
+        jsonText = jsonText.replace(/^```(?:json|JSON)?\n?/, '');
+        // Remove closing fence
+        jsonText = jsonText.replace(/\n?```\s*$/, '');
+      }
+      const parsed = JSON.parse(jsonText.trim());
       const options = Array.isArray(parsed) ? parsed : [];
       
       // Enforce exactly 28 options
@@ -160,7 +168,15 @@ ${marylandSection}`;
     const text = response.text || "";
     
     try {
-      const parsed = JSON.parse(text);
+      // Strip markdown code fences if present
+      let jsonText = text.trim();
+      if (jsonText.startsWith('```')) {
+        // Remove opening fence (```json or ```)
+        jsonText = jsonText.replace(/^```(?:json|JSON)?\n?/, '');
+        // Remove closing fence
+        jsonText = jsonText.replace(/\n?```\s*$/, '');
+      }
+      const parsed = JSON.parse(jsonText.trim());
       const statusData = Array.isArray(parsed) ? parsed : [];
       
       // Validate we have status for all options

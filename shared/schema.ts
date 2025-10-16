@@ -3354,7 +3354,7 @@ export const stateOptionsWaivers = pgTable("state_options_waivers", {
 // Maryland State Option Status - What Maryland currently participates in
 export const marylandStateOptionStatus = pgTable("maryland_state_option_status", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  stateOptionId: varchar("state_option_id").references(() => stateOptionsWaivers.id).notNull(),
+  stateOptionId: varchar("state_option_id").references(() => stateOptionsWaivers.id).notNull().unique(),
   isParticipating: boolean("is_participating").notNull(), // Maryland's current status
   adoptionDate: timestamp("adoption_date"), // When Maryland adopted this option
   expirationDate: timestamp("expiration_date"), // For temporary waivers
