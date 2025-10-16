@@ -4524,3 +4524,39 @@ export type InsertJobAid = z.infer<typeof insertJobAidSchema>;
 export type JobAid = typeof jobAids.$inferSelect;
 export type InsertTrainingIntervention = z.infer<typeof insertTrainingInterventionSchema>;
 export type TrainingIntervention = typeof trainingInterventions.$inferSelect;
+
+// ============================================================================
+// USER CONSENTS - HIPAA Compliance & Legal Policy Tracking
+// ============================================================================
+
+export const userConsents = pgTable("user_consents", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id).notNull(),
+  policyType: text("policy_type").notNull(), // 'privacy', 'terms', 'both'
+  policyVersion: text("policy_version").notNull(), // '1.0', '2.0', etc.
+  consentedAt: timestamp("consented_at").defaultNow().notNull(),
+  ipAddress: text("ip_address"),
+  userAgent: text("user_agent"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+  userIdIdx: index("user_consents_user_id_idx").on(table.userId),
+  policyTypeIdx: index("user_consents_policy_type_idx").on(table.policyType),
+}));
+
+// Relations
+export const userConsentsRelations = relations(userConsents, ({ one }) => ({
+  user: one(users, {
+    fields: [userConsents.userId],
+    references: [users.id],
+  }),
+}));
+
+// Insert/select schemas
+export const insertUserConsentSchema = createInsertSchema(userConsents).omit({
+  id: true,
+  consentedAt: true,
+  createdAt: true,
+});
+
+export type InsertUserConsent = z.infer<typeof insertUserConsentSchema>;
+export type UserConsent = typeof userConsents.$inferSelect;
