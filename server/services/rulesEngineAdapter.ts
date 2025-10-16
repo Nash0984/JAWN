@@ -123,16 +123,18 @@ class RulesEngineAdapterService {
   private async snapAdapter(input: HybridEligibilityPayload): Promise<HybridCalculationResult | null> {
     if (!input.benefitProgramId) return null;
 
+    // Convert dollars to cents for rules engine (expects all values in cents)
     const household = {
       size: input.householdSize || 1,
-      grossMonthlyIncome: input.income || 0,
-      earnedIncome: input.earnedIncome || 0,
-      unearnedIncome: input.unearnedIncome || input.income || 0,
+      grossMonthlyIncome: (input.income || 0) * 100, // Convert dollars to cents
+      earnedIncome: (input.earnedIncome || 0) * 100,
+      unearnedIncome: (input.unearnedIncome || input.income || 0) * 100,
+      assets: input.assets !== undefined ? input.assets * 100 : undefined, // Convert dollars to cents
       hasElderly: input.hasElderly || false,
       hasDisabled: input.hasDisabled || false,
-      dependentCareExpenses: input.dependentCareExpenses || 0,
-      medicalExpenses: input.medicalExpenses || 0,
-      shelterCosts: input.shelterCosts || 0,
+      dependentCareExpenses: (input.dependentCareExpenses || 0) * 100,
+      medicalExpenses: (input.medicalExpenses || 0) * 100,
+      shelterCosts: (input.shelterCosts || 0) * 100,
       categoricalEligibility: input.hasSSI ? 'SSI' : input.hasTANF ? 'TANF' : undefined,
     };
 
