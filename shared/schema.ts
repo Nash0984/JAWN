@@ -328,7 +328,11 @@ export const snapIncomeLimits = pgTable("snap_income_limits", {
   approvedAt: timestamp("approved_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
-});
+}, (table) => ({
+  householdSizeActiveIdx: index("snap_income_limits_household_size_active_idx").on(table.householdSize, table.isActive),
+  effectiveDateActiveIdx: index("snap_income_limits_effective_date_active_idx").on(table.effectiveDate, table.isActive),
+  benefitProgramHouseholdActiveIdx: index("snap_income_limits_benefit_program_household_active_idx").on(table.benefitProgramId, table.householdSize, table.isActive),
+}));
 
 // SNAP Deduction Rules - Standard, earned income, dependent care, shelter, medical
 export const snapDeductions = pgTable("snap_deductions", {
@@ -371,7 +375,10 @@ export const snapAllotments = pgTable("snap_allotments", {
   approvedAt: timestamp("approved_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
-});
+}, (table) => ({
+  householdSizeActiveIdx: index("snap_allotments_household_size_active_idx").on(table.householdSize, table.isActive),
+  benefitProgramHouseholdActiveIdx: index("snap_allotments_benefit_program_household_active_idx").on(table.benefitProgramId, table.householdSize, table.isActive),
+}));
 
 // ============================================================================
 // OHEP (Office of Home Energy Programs) RULES ENGINE TABLES
@@ -395,7 +402,11 @@ export const ohepIncomeLimits = pgTable("ohep_income_limits", {
   approvedAt: timestamp("approved_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
-});
+}, (table) => ({
+  householdSizeActiveIdx: index("ohep_income_limits_household_size_active_idx").on(table.householdSize, table.isActive),
+  effectiveDateActiveIdx: index("ohep_income_limits_effective_date_active_idx").on(table.effectiveDate, table.isActive),
+  benefitProgramHouseholdActiveIdx: index("ohep_income_limits_benefit_program_household_active_idx").on(table.benefitProgramId, table.householdSize, table.isActive),
+}));
 
 // OHEP Benefit Tiers - Crisis vs Regular Assistance
 export const ohepBenefitTiers = pgTable("ohep_benefit_tiers", {
@@ -416,7 +427,10 @@ export const ohepBenefitTiers = pgTable("ohep_benefit_tiers", {
   approvedAt: timestamp("approved_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
-});
+}, (table) => ({
+  tierTypeActiveIdx: index("ohep_benefit_tiers_tier_type_active_idx").on(table.tierType, table.isActive),
+  benefitProgramTierActiveIdx: index("ohep_benefit_tiers_benefit_program_tier_active_idx").on(table.benefitProgramId, table.tierType, table.isActive),
+}));
 
 // OHEP Seasonal Factors - Heating vs Cooling Season
 export const ohepSeasonalFactors = pgTable("ohep_seasonal_factors", {
@@ -454,7 +468,11 @@ export const tanfIncomeLimits = pgTable("tanf_income_limits", {
   approvedAt: timestamp("approved_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
-});
+}, (table) => ({
+  householdSizeActiveIdx: index("tanf_income_limits_household_size_active_idx").on(table.householdSize, table.isActive),
+  effectiveDateActiveIdx: index("tanf_income_limits_effective_date_active_idx").on(table.effectiveDate, table.isActive),
+  benefitProgramHouseholdActiveIdx: index("tanf_income_limits_benefit_program_household_active_idx").on(table.benefitProgramId, table.householdSize, table.isActive),
+}));
 
 // TANF Asset Limits
 export const tanfAssetLimits = pgTable("tanf_asset_limits", {
@@ -537,7 +555,11 @@ export const medicaidIncomeLimits = pgTable("medicaid_income_limits", {
   approvedAt: timestamp("approved_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
-});
+}, (table) => ({
+  householdSizeActiveIdx: index("medicaid_income_limits_household_size_active_idx").on(table.householdSize, table.isActive),
+  effectiveDateActiveIdx: index("medicaid_income_limits_effective_date_active_idx").on(table.effectiveDate, table.isActive),
+  benefitProgramHouseholdActiveIdx: index("medicaid_income_limits_benefit_program_household_active_idx").on(table.benefitProgramId, table.householdSize, table.isActive),
+}));
 
 // Medicaid MAGI Rules - Modified Adjusted Gross Income methodology
 export const medicaidMAGIRules = pgTable("medicaid_magi_rules", {
@@ -793,7 +815,12 @@ export const eligibilityCalculations = pgTable("eligibility_calculations", {
   calculatedBy: varchar("calculated_by").references(() => users.id),
   ipAddress: text("ip_address"),
   userAgent: text("user_agent"),
-});
+}, (table) => ({
+  userIdIdx: index("eligibility_calculations_user_id_idx").on(table.userId),
+  benefitProgramIdIdx: index("eligibility_calculations_benefit_program_id_idx").on(table.benefitProgramId),
+  calculatedAtIdx: index("eligibility_calculations_calculated_at_idx").on(table.calculatedAt),
+  benefitProgramCalculatedIdx: index("eligibility_calculations_benefit_program_calculated_idx").on(table.benefitProgramId, table.calculatedAt),
+}));
 
 // Rule Change Log - Track all changes to policy rules
 export const ruleChangeLogs = pgTable("rule_change_logs", {
@@ -946,7 +973,11 @@ export const clientCases = pgTable("client_cases", {
   createdBy: varchar("created_by").references(() => users.id).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
-});
+}, (table) => ({
+  benefitProgramStatusIdx: index("client_cases_benefit_program_status_idx").on(table.benefitProgramId, table.status),
+  navigatorStatusIdx: index("client_cases_assigned_navigator_status_idx").on(table.assignedNavigator, table.status),
+  createdAtIdx: index("client_cases_created_at_idx").on(table.createdAt),
+}));
 
 // Relations for Rules as Code tables
 export const povertyLevelsRelations = relations(povertyLevels, ({ one }) => ({
@@ -2591,6 +2622,7 @@ export const householdProfiles = pgTable("household_profiles", {
 }, (table) => ({
   userIdIdx: index("household_profiles_user_idx").on(table.userId),
   clientCaseIdIdx: index("household_profiles_case_idx").on(table.clientCaseId),
+  stateCodeIdx: index("household_profiles_state_code_idx").on(table.stateCode),
   profileModeIdx: index("household_profiles_mode_idx").on(table.profileMode),
   isActiveIdx: index("household_profiles_active_idx").on(table.isActive),
 }));
