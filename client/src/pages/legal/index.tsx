@@ -7,7 +7,8 @@ import {
   Lock, 
   AlertTriangle, 
   Info,
-  ChevronRight
+  ChevronRight,
+  Scale
 } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -30,6 +31,15 @@ const legalPages = [
     path: "/legal/terms",
     lastUpdated: "October 16, 2025",
     color: "text-green-600 dark:text-green-400"
+  },
+  {
+    id: "license",
+    title: "License & Copyright",
+    description: "Open source licensing and intellectual property information.",
+    icon: Scale,
+    path: "/legal/license",
+    lastUpdated: "October 16, 2025",
+    color: "text-indigo-600 dark:text-indigo-400"
   },
   {
     id: "accessibility",
