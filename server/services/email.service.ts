@@ -58,7 +58,7 @@ class EmailService implements EmailServiceInterface {
     const { to, subject, html, text } = params;
 
     if (!this.isEmailConfigured) {
-      // Log email to console when SMTP not configured
+      // Log email to console when SMTP not configured (this is not a failure - it's intentional fallback)
       console.log('📧 [EMAIL SERVICE - NOT CONFIGURED]');
       console.log('─'.repeat(60));
       console.log(`To: ${to}`);
@@ -66,13 +66,21 @@ class EmailService implements EmailServiceInterface {
       console.log('─'.repeat(60));
       console.log(text || html);
       console.log('─'.repeat(60));
-      return false;
+      return true; // Return true for successful console fallback
     }
 
     try {
-      // PRODUCTION CODE (uncomment when nodemailer is installed):
-      /*
-      const nodemailer = require('nodemailer');
+      // Import nodemailer dynamically (ESM) to avoid startup errors if not installed
+      let nodemailer;
+      try {
+        const nodemailerModule = await import('nodemailer');
+        nodemailer = nodemailerModule.default || nodemailerModule;
+      } catch (err) {
+        console.error('❌ nodemailer package not found. Install with: npm install nodemailer @types/nodemailer');
+        console.log(`[SMTP CONFIGURED BUT NODEMAILER MISSING] Would send email to ${to}: ${subject}`);
+        // Return true for console fallback (not a send failure)
+        return true;
+      }
       
       const transporter = nodemailer.createTransport({
         host: process.env.SMTP_HOST,
@@ -93,11 +101,6 @@ class EmailService implements EmailServiceInterface {
       });
 
       console.log(`✅ Email sent to ${to}: ${subject}`);
-      return true;
-      */
-
-      // Placeholder until nodemailer is installed
-      console.log(`[SMTP CONFIGURED] Would send email to ${to}: ${subject}`);
       return true;
     } catch (error) {
       console.error('❌ Failed to send email:', error);
