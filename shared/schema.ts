@@ -54,6 +54,34 @@ export const documentTypes = pgTable("document_types", {
   isActive: boolean("is_active").default(true).notNull(),
 });
 
+export const dhsForms = pgTable("dhs_forms", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  formNumber: text("form_number").notNull(), // DHS-FIA-9780, DHS-FIA-9711, etc.
+  name: text("name").notNull(), // "OHEP Application", "Request for Assistance", etc.
+  language: text("language").notNull().default("en"), // en, es, am (Amharic), ar (Arabic), bu (Burmese), zh (Chinese)
+  languageName: text("language_name").notNull().default("English"), // English, Spanish, Amharic, Arabic, Burmese, Chinese
+  version: text("version").notNull(), // "2025", "2024-04-01", etc.
+  programCode: text("program_code"), // MD_SNAP, MD_OHEP, MD_TANF, MD_MEDICAID, etc.
+  formType: text("form_type").notNull(), // application, supplemental, change_report, appeal, verification
+  description: text("description"),
+  objectPath: text("object_path"), // GCS path to stored PDF
+  sourceUrl: text("source_url").notNull(), // Original DHS URL
+  fileSize: integer("file_size"), // in bytes
+  documentHash: text("document_hash"), // SHA-256 hash for integrity
+  downloadedAt: timestamp("downloaded_at").defaultNow().notNull(),
+  lastModifiedAt: timestamp("last_modified_at"), // Last modified date from source
+  isLatestVersion: boolean("is_latest_version").default(true).notNull(), // Marks current version
+  isFillable: boolean("is_fillable").default(false).notNull(), // PDF has form fields
+  metadata: jsonb("metadata"), // Additional form-specific metadata
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  languageIdx: index("dhs_forms_language_idx").on(table.language),
+  programCodeIdx: index("dhs_forms_program_code_idx").on(table.programCode),
+  formTypeIdx: index("dhs_forms_form_type_idx").on(table.formType),
+  latestVersionIdx: index("dhs_forms_latest_version_idx").on(table.isLatestVersion),
+}));
+
 export const documents = pgTable("documents", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   filename: text("filename").notNull(),
@@ -1674,6 +1702,15 @@ export const insertDocumentTypeSchema = createInsertSchema(documentTypes).omit({
 });
 export type InsertDocumentType = z.infer<typeof insertDocumentTypeSchema>;
 export type DocumentType = typeof documentTypes.$inferSelect;
+
+export const insertDhsFormSchema = createInsertSchema(dhsForms).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+  downloadedAt: true,
+});
+export type InsertDhsForm = z.infer<typeof insertDhsFormSchema>;
+export type DhsForm = typeof dhsForms.$inferSelect;
 
 // Rules as Code Insert Schemas
 export const insertPovertyLevelSchema = createInsertSchema(povertyLevels).omit({
