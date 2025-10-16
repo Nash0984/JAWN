@@ -4,10 +4,10 @@ import type { Document, DocumentRequirementRule } from '../../shared/schema';
 import { ragService } from './ragService';
 import { ObjectStorageService } from '../objectStorage';
 
-const geminiApiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
+const geminiApiKey = process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY;
 
 if (!geminiApiKey) {
-  console.warn('⚠️ Gemini API key not found - document verification will be limited');
+  console.warn('⚠️ Google API key not found - document verification will be limited');
 }
 
 const genAI = geminiApiKey ? new GoogleGenAI({ apiKey: geminiApiKey }) : null;

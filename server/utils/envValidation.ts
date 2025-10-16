@@ -158,12 +158,12 @@ export class EnvValidator {
     const errors: string[] = [];
     const warnings: string[] = [];
     
-    // Check if at least one AI API key is present
+    // Check if at least one AI API key is present (prefer GEMINI_API_KEY)
     const hasGemini = !!process.env.GEMINI_API_KEY;
     const hasGoogle = !!process.env.GOOGLE_API_KEY;
     
     if (!hasGemini && !hasGoogle) {
-      errors.push('Either GEMINI_API_KEY or GOOGLE_API_KEY must be set for AI functionality');
+      errors.push('GEMINI_API_KEY must be set for AI functionality (GOOGLE_API_KEY can be used as fallback)');
     }
     
     // Validate each config

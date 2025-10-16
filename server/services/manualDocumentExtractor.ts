@@ -54,7 +54,7 @@ export async function extractPdfText(buffer: Buffer): Promise<{ text: string; pa
     const data = await pdf(new Uint8Array(buffer));
     return {
       text: data.text,
-      pageCount: data.numpages,
+      pageCount: (data as any).numpages,
     };
   } catch (error) {
     console.error('Error extracting PDF text:', error);

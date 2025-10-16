@@ -1,32 +1,23 @@
-import { GoogleGenAI } from "@google/genai";
 import { storage } from "../storage";
 import { ReadingLevelService } from "./readingLevelService";
 import { auditService } from "./auditService";
 import { ragCache } from "./ragCache";
+import { getGeminiClient, generateEmbedding as geminiGenerateEmbedding } from "./gemini.service";
 
-// Lazy Gemini initialization to prevent server crash at import-time
-let gemini: GoogleGenAI | null = null;
+// Track Gemini availability
 let geminiAvailable = true;
 let lastGeminiError: Date | null = null;
 
-function getGemini(): GoogleGenAI | null {
-  if (!gemini) {
-    const apiKey = process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY;
-    if (!apiKey) {
-      geminiAvailable = false;
-      return null;
-    }
-    try {
-      gemini = new GoogleGenAI({ apiKey });
-      geminiAvailable = true;
-    } catch (error) {
-      console.error('Failed to initialize Gemini API:', error);
-      geminiAvailable = false;
-      lastGeminiError = new Date();
-      return null;
-    }
+// Use getGeminiClient from gemini.service.ts which has the working workaround
+function getGemini() {
+  try {
+    return getGeminiClient();
+  } catch (error) {
+    console.error('Failed to get Gemini client:', error);
+    geminiAvailable = false;
+    lastGeminiError = new Date();
+    return null;
   }
-  return gemini;
 }
 
 /**
@@ -351,22 +342,9 @@ class RAGService {
   }
 
   private async generateEmbedding(text: string): Promise<number[]> {
-    try {
-      const ai = getGemini();
-      if (!ai) {
-        throw new Error("Gemini API not available");
-      }
-      
-      const result = await ai.models.embedContent({
-        model: "text-embedding-004",
-        content: { role: 'user', parts: [{ text }] }
-      });
-      
-      return result.embeddings?.[0]?.values || [];
-    } catch (error) {
-      console.error("Embedding generation error:", error);
-      throw new Error("Failed to generate embeddings");
-    }
+    // Use the working implementation from gemini.service.ts
+    // This includes proper caching and error handling
+    return geminiGenerateEmbedding(text);
   }
 
   private async retrieveRelevantChunks(

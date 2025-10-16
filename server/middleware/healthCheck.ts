@@ -93,11 +93,11 @@ export async function readinessCheck(req: Request, res: Response): Promise<void>
     };
   }
 
-  // 3. AI Service check (optional but warn if missing)
-  const hasAIKey = !!(process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY);
+  // 3. AI Service check (optional but warn if missing) - prefer GOOGLE_API_KEY
+  const hasAIKey = !!(process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY);
   health.checks.ai_service = {
     status: hasAIKey ? 'pass' : 'fail',
-    message: hasAIKey ? 'AI service configured' : 'AI API key not configured'
+    message: hasAIKey ? 'AI service configured' : 'GOOGLE_API_KEY not configured'
   };
   
   if (!hasAIKey) {

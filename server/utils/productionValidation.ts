@@ -118,8 +118,8 @@ export class ProductionValidator {
     {
       name: 'AI Service API Keys',
       check: () => ({
-        passed: !!(process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY),
-        message: 'Set GEMINI_API_KEY or GOOGLE_API_KEY for AI functionality'
+        passed: !!(process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY),
+        message: 'Set GOOGLE_API_KEY for AI functionality (GEMINI_API_KEY can be used as fallback)'
       }),
       severity: 'critical',
       category: 'operational'
@@ -315,7 +315,7 @@ ALLOWED_ORIGINS=https://yourdomain.com,https://www.yourdomain.com
 # AI SERVICES (REQUIRED)
 # ============================================================================
 
-# Google Gemini API Key (or GOOGLE_API_KEY)
+# Google Gemini API Key (preferred - GOOGLE_API_KEY can be used as fallback)
 GEMINI_API_KEY=
 
 # ============================================================================
