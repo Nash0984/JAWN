@@ -177,55 +177,65 @@ export function TaxSlayerComparison({ vitaSessionId, taxslayerReturnId }: TaxSla
     );
   }
 
+  // Extract our system's calculated values
+  const ourAGI = ourCalculation ? (ourCalculation as any).adjustedGrossIncome : undefined;
+  const ourTax = ourCalculation ? (ourCalculation as any).calculatedFederalTax : undefined;
+  const ourRefund = ourCalculation ? (ourCalculation as any).estimatedFederalRefund : undefined;
+  const ourEITC = ourCalculation ? (ourCalculation as any).estimatedEITC : undefined;
+  const ourCTC = ourCalculation ? (ourCalculation as any).estimatedCTC : undefined;
+  const ourEducationCredits = ourCalculation ? (ourCalculation as any).estimatedEducationCredits : undefined;
+  const ourWithholding = ourCalculation ? (ourCalculation as any).federalTaxWithheld : undefined;
+  const ourTaxableIncome = ourCalculation ? (ourCalculation as any).taxableIncome : undefined;
+
   // Build comparison rows
   const comparisonRows: ComparisonRow[] = [
     {
       field: "Federal AGI",
       taxslayerValue: taxslayerData.federalAGI || 0,
-      ourValue: undefined, // TODO: Extract from our calculation
-      ...calculateVariance(taxslayerData.federalAGI || 0, undefined),
+      ourValue: ourAGI,
+      ...calculateVariance(taxslayerData.federalAGI || 0, ourAGI),
     },
     {
       field: "Federal Taxable Income",
       taxslayerValue: taxslayerData.federalTaxableIncome || 0,
-      ourValue: undefined,
-      ...calculateVariance(taxslayerData.federalTaxableIncome || 0, undefined),
+      ourValue: ourTaxableIncome,
+      ...calculateVariance(taxslayerData.federalTaxableIncome || 0, ourTaxableIncome),
     },
     {
       field: "Federal Tax",
       taxslayerValue: taxslayerData.federalTax || 0,
-      ourValue: undefined,
-      ...calculateVariance(taxslayerData.federalTax || 0, undefined),
+      ourValue: ourTax,
+      ...calculateVariance(taxslayerData.federalTax || 0, ourTax),
     },
     {
       field: "Federal Withholding",
       taxslayerValue: taxslayerData.federalWithheld || 0,
-      ourValue: undefined,
-      ...calculateVariance(taxslayerData.federalWithheld || 0, undefined),
+      ourValue: ourWithholding,
+      ...calculateVariance(taxslayerData.federalWithheld || 0, ourWithholding),
     },
     {
       field: "Federal Refund/Owed",
       taxslayerValue: taxslayerData.federalRefund || 0,
-      ourValue: undefined,
-      ...calculateVariance(taxslayerData.federalRefund || 0, undefined),
+      ourValue: ourRefund,
+      ...calculateVariance(taxslayerData.federalRefund || 0, ourRefund),
     },
     {
       field: "EITC",
       taxslayerValue: taxslayerData.eitcAmount || 0,
-      ourValue: undefined,
-      ...calculateVariance(taxslayerData.eitcAmount || 0, undefined),
+      ourValue: ourEITC,
+      ...calculateVariance(taxslayerData.eitcAmount || 0, ourEITC),
     },
     {
       field: "CTC",
       taxslayerValue: taxslayerData.ctcAmount || 0,
-      ourValue: undefined,
-      ...calculateVariance(taxslayerData.ctcAmount || 0, undefined),
+      ourValue: ourCTC,
+      ...calculateVariance(taxslayerData.ctcAmount || 0, ourCTC),
     },
     {
       field: "Education Credits",
       taxslayerValue: taxslayerData.educationCredits || 0,
-      ourValue: undefined,
-      ...calculateVariance(taxslayerData.educationCredits || 0, undefined),
+      ourValue: ourEducationCredits,
+      ...calculateVariance(taxslayerData.educationCredits || 0, ourEducationCredits),
     },
   ];
 
