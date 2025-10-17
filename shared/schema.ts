@@ -4077,6 +4077,45 @@ export const versionCheckLogs = pgTable("version_check_logs", {
   updateDetectedIdx: index("version_check_logs_update_detected_idx").on(table.updateDetected),
 }));
 
+// Smart Scheduler Configuration - Admin-configurable settings for each data source
+export const schedulerConfigs = pgTable("scheduler_configs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  sourceName: text("source_name").notNull().unique(), // ecfr, irs_publications, federal_bills, etc.
+  displayName: text("display_name").notNull(),
+  description: text("description").notNull(),
+  isEnabled: boolean("is_enabled").default(true).notNull(),
+  cronExpression: text("cron_expression").notNull(), // 0 0 * * 0 for weekly
+  lastRunAt: timestamp("last_run_at"),
+  nextRunAt: timestamp("next_run_at"),
+  lastStatus: text("last_status"), // success, error
+  lastError: text("last_error"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  sourceNameIdx: index("scheduler_configs_source_name_idx").on(table.sourceName),
+  isEnabledIdx: index("scheduler_configs_is_enabled_idx").on(table.isEnabled),
+}));
+
+// Verified Data Sources - Admin-uploaded golden source documents
+export const verifiedDataSources = pgTable("verified_data_sources", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  sourceName: text("source_name").notNull(), // ecfr, irs_publications, etc.
+  fileName: text("file_name").notNull(),
+  objectPath: text("object_path").notNull(), // Path in object storage
+  fileSize: integer("file_size").notNull(),
+  mimeType: text("mime_type").notNull(),
+  version: text("version").notNull(), // Edition number, date, or version identifier
+  uploadedBy: varchar("uploaded_by").references(() => users.id).notNull(),
+  verificationNotes: text("verification_notes"),
+  replacesVersion: text("replaces_version"), // Version this replaces
+  isActive: boolean("is_active").default(true).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+  sourceNameIdx: index("verified_data_sources_source_name_idx").on(table.sourceName),
+  isActiveIdx: index("verified_data_sources_is_active_idx").on(table.isActive),
+  uploadedByIdx: index("verified_data_sources_uploaded_by_idx").on(table.uploadedBy),
+}));
+
 // State Options & Waivers - Master list of 28 FNS SNAP options/waivers
 export const stateOptionsWaivers = pgTable("state_options_waivers", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -4228,6 +4267,17 @@ export const insertVersionCheckLogSchema = createInsertSchema(versionCheckLogs).
   checkedAt: true,
 });
 
+export const insertSchedulerConfigSchema = createInsertSchema(schedulerConfigs).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertVerifiedDataSourceSchema = createInsertSchema(verifiedDataSources).omit({
+  id: true,
+  createdAt: true,
+});
+
 export const insertStateOptionWaiverSchema = createInsertSchema(stateOptionsWaivers).omit({
   id: true,
   createdAt: true,
@@ -4271,6 +4321,10 @@ export type InsertPublicLaw = z.infer<typeof insertPublicLawSchema>;
 export type PublicLaw = typeof publicLaws.$inferSelect;
 export type InsertVersionCheckLog = z.infer<typeof insertVersionCheckLogSchema>;
 export type VersionCheckLog = typeof versionCheckLogs.$inferSelect;
+export type InsertSchedulerConfig = z.infer<typeof insertSchedulerConfigSchema>;
+export type SchedulerConfig = typeof schedulerConfigs.$inferSelect;
+export type InsertVerifiedDataSource = z.infer<typeof insertVerifiedDataSourceSchema>;
+export type VerifiedDataSource = typeof verifiedDataSources.$inferSelect;
 export type InsertStateOptionWaiver = z.infer<typeof insertStateOptionWaiverSchema>;
 export type StateOptionWaiver = typeof stateOptionsWaivers.$inferSelect;
 export type InsertMarylandStateOptionStatus = z.infer<typeof insertMarylandStateOptionStatusSchema>;

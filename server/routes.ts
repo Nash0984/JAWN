@@ -1146,7 +1146,7 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
   app.get("/api/scheduler/status", requireAdmin, asyncHandler(async (req: Request, res: Response) => {
     const { smartScheduler } = await import("./services/smartScheduler");
     
-    const status = smartScheduler.getStatus();
+    const status = await smartScheduler.getStatus();
     
     res.json({
       success: true,
@@ -1166,6 +1166,127 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
       res.json({
         success: true,
         message: `Successfully triggered ${source} check`,
+      });
+    } catch (error) {
+      res.status(400).json({
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
+    }
+  }));
+
+  // Smart Scheduler - Toggle schedule on/off
+  app.patch("/api/scheduler/toggle/:source", requireAdmin, asyncHandler(async (req: Request, res: Response) => {
+    const { smartScheduler } = await import("./services/smartScheduler");
+    const { source } = req.params;
+    const { enabled } = req.body;
+    
+    if (typeof enabled !== 'boolean') {
+      return res.status(400).json({
+        success: false,
+        error: 'enabled must be a boolean',
+      });
+    }
+    
+    try {
+      await smartScheduler.toggleSchedule(source, enabled);
+      res.json({
+        success: true,
+        message: `Successfully ${enabled ? 'enabled' : 'disabled'} ${source} schedule`,
+      });
+    } catch (error) {
+      res.status(400).json({
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
+    }
+  }));
+
+  // Smart Scheduler - Update schedule frequency
+  app.patch("/api/scheduler/frequency/:source", requireAdmin, asyncHandler(async (req: Request, res: Response) => {
+    const { smartScheduler } = await import("./services/smartScheduler");
+    const { source } = req.params;
+    const { cronExpression } = req.body;
+    
+    if (typeof cronExpression !== 'string') {
+      return res.status(400).json({
+        success: false,
+        error: 'cronExpression must be a string',
+      });
+    }
+    
+    try {
+      await smartScheduler.updateFrequency(source, cronExpression);
+      res.json({
+        success: true,
+        message: `Successfully updated ${source} frequency`,
+      });
+    } catch (error) {
+      res.status(400).json({
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
+    }
+  }));
+
+  // Smart Scheduler - Upload verified document
+  app.post("/api/scheduler/upload/:source", requireAdmin, upload.single('file'), asyncHandler(async (req: Request, res: Response) => {
+    const { source } = req.params;
+    const { version, verificationNotes } = req.body;
+    const file = req.file;
+    
+    if (!file) {
+      return res.status(400).json({
+        success: false,
+        error: 'No file uploaded',
+      });
+    }
+    
+    if (!version) {
+      return res.status(400).json({
+        success: false,
+        error: 'version is required',
+      });
+    }
+    
+    try {
+      // Upload to object storage
+      const { ObjectStorageService } = await import("./objectStorage");
+      const objectStorageService = new ObjectStorageService();
+      const uploadUrl = await objectStorageService.getObjectEntityUploadURL();
+      
+      const uploadResponse = await fetch(uploadUrl, {
+        method: 'PUT',
+        body: file.buffer,
+        headers: {
+          'Content-Type': file.mimetype,
+        },
+      });
+      
+      if (!uploadResponse.ok) {
+        throw new Error(`Upload failed: ${uploadResponse.statusText}`);
+      }
+      
+      const objectPath = objectStorageService.normalizeObjectEntityPath(uploadUrl);
+      
+      // Store in database
+      const { verifiedDataSources } = await import("@shared/schema");
+      const [verifiedSource] = await storage.db.insert(verifiedDataSources).values({
+        sourceName: source,
+        fileName: file.originalname,
+        objectPath,
+        fileSize: file.size,
+        mimeType: file.mimetype,
+        version,
+        uploadedBy: req.user!.id,
+        verificationNotes: verificationNotes || null,
+        isActive: true,
+      }).returning();
+      
+      res.json({
+        success: true,
+        message: `Successfully uploaded verified ${source} document`,
+        data: verifiedSource,
       });
     } catch (error) {
       res.status(400).json({
