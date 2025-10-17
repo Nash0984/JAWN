@@ -627,6 +627,54 @@ export interface IStorage {
   deleteVitaIntakeSession(id: string): Promise<void>;
 
   // ============================================================================
+  // E-File Monitoring
+  // ============================================================================
+  
+  // E-File Metrics
+  getEFileMetrics(): Promise<{
+    statusCounts: { status: string; count: number; federal: number; maryland: number }[];
+    errorRate: number;
+    recentActivity: { date: string; transmitted: number; accepted: number; rejected: number }[];
+    totalSubmissions: number;
+    pendingRetries: number;
+  }>;
+  
+  // E-File Submissions
+  getEFileSubmissions(filters?: {
+    status?: string;
+    startDate?: Date;
+    endDate?: Date;
+    clientName?: string;
+    taxYear?: number;
+    limit?: number;
+    offset?: number;
+  }): Promise<{
+    submissions: Array<{
+      id: string;
+      clientName: string;
+      taxYear: number;
+      federalStatus: string;
+      marylandStatus?: string;
+      federalTransmissionId?: string;
+      marylandTransmissionId?: string;
+      preparerName: string;
+      submittedAt?: Date;
+      updatedAt: Date;
+      hasErrors: boolean;
+    }>;
+    total: number;
+  }>;
+  
+  // E-File Submission Details
+  getEFileSubmissionDetails(id: string): Promise<{
+    federal: FederalTaxReturn;
+    maryland?: MarylandTaxReturn;
+    preparer: User;
+    reviewer?: User;
+    scenario?: HouseholdScenario;
+  } | undefined>;
+
+  // ============================================================================
   // Audit Logging & Security Monitoring
   // ============================================================================
 
@@ -3189,6 +3237,265 @@ export class DatabaseStorage implements IStorage {
 
   async deleteVitaIntakeSession(id: string): Promise<void> {
     await db.delete(vitaIntakeSessions).where(eq(vitaIntakeSessions.id, id));
+  }
+
+  // ============================================================================
+  // E-File Monitoring Implementation
+  // ============================================================================
+
+  async getEFileMetrics(): Promise<{
+    statusCounts: { status: string; count: number; federal: number; maryland: number }[];
+    errorRate: number;
+    recentActivity: { date: string; transmitted: number; accepted: number; rejected: number }[];
+    totalSubmissions: number;
+    pendingRetries: number;
+  }> {
+    // Get status counts
+    const federalStatusCounts = await db
+      .select({
+        status: federalTaxReturns.efileStatus,
+        count: sql<number>`count(*)::int`,
+      })
+      .from(federalTaxReturns)
+      .groupBy(federalTaxReturns.efileStatus);
+
+    const marylandStatusCounts = await db
+      .select({
+        status: marylandTaxReturns.efileStatus,
+        count: sql<number>`count(*)::int`,
+      })
+      .from(marylandTaxReturns)
+      .groupBy(marylandTaxReturns.efileStatus);
+
+    // Merge status counts
+    const statusCountsMap = new Map<string, { count: number; federal: number; maryland: number }>();
+    
+    federalStatusCounts.forEach(({ status, count }) => {
+      statusCountsMap.set(status || 'draft', { 
+        count: count, 
+        federal: count, 
+        maryland: 0 
+      });
+    });
+
+    marylandStatusCounts.forEach(({ status, count }) => {
+      const existing = statusCountsMap.get(status || 'draft');
+      if (existing) {
+        existing.count += count;
+        existing.maryland = count;
+      } else {
+        statusCountsMap.set(status || 'draft', { 
+          count: count, 
+          federal: 0, 
+          maryland: count 
+        });
+      }
+    });
+
+    const statusCounts = Array.from(statusCountsMap.entries()).map(([status, data]) => ({
+      status,
+      ...data,
+    }));
+
+    // Calculate error rate (rejected / transmitted)
+    const rejected = statusCounts.find(s => s.status === 'rejected')?.count || 0;
+    const transmitted = statusCounts.find(s => s.status === 'transmitted')?.count || 0;
+    const accepted = statusCounts.find(s => s.status === 'accepted')?.count || 0;
+    const errorRate = (transmitted + accepted) > 0 ? (rejected / (transmitted + accepted + rejected)) * 100 : 0;
+
+    // Get recent activity (last 7 days)
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+
+    const recentFederal = await db
+      .select({
+        date: sql<string>`DATE(${federalTaxReturns.efileSubmittedAt})`,
+        status: federalTaxReturns.efileStatus,
+        count: sql<number>`count(*)::int`,
+      })
+      .from(federalTaxReturns)
+      .where(gte(federalTaxReturns.efileSubmittedAt, sevenDaysAgo))
+      .groupBy(sql`DATE(${federalTaxReturns.efileSubmittedAt})`, federalTaxReturns.efileStatus);
+
+    const activityMap = new Map<string, { transmitted: number; accepted: number; rejected: number }>();
+    
+    recentFederal.forEach(({ date, status, count }) => {
+      if (!activityMap.has(date)) {
+        activityMap.set(date, { transmitted: 0, accepted: 0, rejected: 0 });
+      }
+      const activity = activityMap.get(date)!;
+      if (status === 'transmitted') activity.transmitted += count;
+      if (status === 'accepted') activity.accepted += count;
+      if (status === 'rejected') activity.rejected += count;
+    });
+
+    const recentActivity = Array.from(activityMap.entries()).map(([date, data]) => ({
+      date,
+      ...data,
+    })).sort((a, b) => a.date.localeCompare(b.date));
+
+    // Total submissions
+    const totalFederal = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(federalTaxReturns);
+    const totalSubmissions = totalFederal[0]?.count || 0;
+
+    // Pending retries (rejected status that could be retried)
+    const pendingRetries = rejected;
+
+    return {
+      statusCounts,
+      errorRate,
+      recentActivity,
+      totalSubmissions,
+      pendingRetries,
+    };
+  }
+
+  async getEFileSubmissions(filters?: {
+    status?: string;
+    startDate?: Date;
+    endDate?: Date;
+    clientName?: string;
+    taxYear?: number;
+    limit?: number;
+    offset?: number;
+  }): Promise<{
+    submissions: Array<{
+      id: string;
+      clientName: string;
+      taxYear: number;
+      federalStatus: string;
+      marylandStatus?: string;
+      federalTransmissionId?: string;
+      marylandTransmissionId?: string;
+      preparerName: string;
+      submittedAt?: Date;
+      updatedAt: Date;
+      hasErrors: boolean;
+    }>;
+    total: number;
+  }> {
+    const conditions = [];
+
+    if (filters?.status) {
+      conditions.push(eq(federalTaxReturns.efileStatus, filters.status));
+    }
+
+    if (filters?.startDate) {
+      conditions.push(gte(federalTaxReturns.efileSubmittedAt, filters.startDate));
+    }
+
+    if (filters?.endDate) {
+      conditions.push(lte(federalTaxReturns.efileSubmittedAt, filters.endDate));
+    }
+
+    if (filters?.taxYear) {
+      conditions.push(eq(federalTaxReturns.taxYear, filters.taxYear));
+    }
+
+    // Get count first
+    const countResult = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(federalTaxReturns)
+      .where(conditions.length > 0 ? and(...conditions) : undefined);
+
+    const total = countResult[0]?.count || 0;
+
+    // Get submissions with joins
+    const submissions = await db
+      .select({
+        id: federalTaxReturns.id,
+        taxYear: federalTaxReturns.taxYear,
+        federalStatus: federalTaxReturns.efileStatus,
+        federalTransmissionId: federalTaxReturns.efileTransmissionId,
+        submittedAt: federalTaxReturns.efileSubmittedAt,
+        updatedAt: federalTaxReturns.updatedAt,
+        validationErrors: federalTaxReturns.validationErrors,
+        efileRejectionReason: federalTaxReturns.efileRejectionReason,
+        preparerId: federalTaxReturns.preparerId,
+        scenarioId: federalTaxReturns.scenarioId,
+        preparerUsername: users.username,
+        preparerFullName: users.fullName,
+        marylandStatus: marylandTaxReturns.efileStatus,
+        marylandTransmissionId: marylandTaxReturns.efileTransmissionId,
+        scenarioName: householdScenarios.scenarioName,
+      })
+      .from(federalTaxReturns)
+      .leftJoin(users, eq(federalTaxReturns.preparerId, users.id))
+      .leftJoin(marylandTaxReturns, eq(federalTaxReturns.id, marylandTaxReturns.federalReturnId))
+      .leftJoin(householdScenarios, eq(federalTaxReturns.scenarioId, householdScenarios.id))
+      .where(conditions.length > 0 ? and(...conditions) : undefined)
+      .orderBy(desc(federalTaxReturns.updatedAt))
+      .limit(filters?.limit || 50)
+      .offset(filters?.offset || 0);
+
+    const result = submissions.map(s => ({
+      id: s.id,
+      clientName: s.scenarioName || s.preparerFullName || s.preparerUsername || 'Unknown',
+      taxYear: s.taxYear,
+      federalStatus: s.federalStatus || 'draft',
+      marylandStatus: s.marylandStatus || undefined,
+      federalTransmissionId: s.federalTransmissionId || undefined,
+      marylandTransmissionId: s.marylandTransmissionId || undefined,
+      preparerName: s.preparerFullName || s.preparerUsername || 'Unknown',
+      submittedAt: s.submittedAt || undefined,
+      updatedAt: s.updatedAt,
+      hasErrors: !!(s.validationErrors || s.efileRejectionReason),
+    }));
+
+    return {
+      submissions: result,
+      total,
+    };
+  }
+
+  async getEFileSubmissionDetails(id: string): Promise<{
+    federal: FederalTaxReturn;
+    maryland?: MarylandTaxReturn;
+    preparer: User;
+    reviewer?: User;
+    scenario?: HouseholdScenario;
+  } | undefined> {
+    const federal = await db.query.federalTaxReturns.findFirst({
+      where: eq(federalTaxReturns.id, id),
+    });
+
+    if (!federal) {
+      return undefined;
+    }
+
+    const preparer = await db.query.users.findFirst({
+      where: eq(users.id, federal.preparerId),
+    });
+
+    if (!preparer) {
+      return undefined;
+    }
+
+    const reviewer = federal.reviewedBy
+      ? await db.query.users.findFirst({
+          where: eq(users.id, federal.reviewedBy),
+        })
+      : undefined;
+
+    const maryland = await db.query.marylandTaxReturns.findFirst({
+      where: eq(marylandTaxReturns.federalReturnId, federal.id),
+    });
+
+    const scenario = federal.scenarioId
+      ? await db.query.householdScenarios.findFirst({
+          where: eq(householdScenarios.id, federal.scenarioId),
+        })
+      : undefined;
+
+    return {
+      federal,
+      maryland,
+      preparer,
+      reviewer,
+      scenario,
+    };
   }
 
   // ============================================================================
