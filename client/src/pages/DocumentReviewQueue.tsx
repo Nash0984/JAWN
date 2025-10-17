@@ -723,5 +723,6 @@ export default function DocumentReviewQueue() {
         </DialogContent>
       </Dialog>
     </div>
+    </>
   );
 }

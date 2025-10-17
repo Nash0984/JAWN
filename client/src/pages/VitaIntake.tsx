@@ -5122,5 +5122,6 @@ export default function VitaIntake() {
         </div>
       </div>
     </div>
+    </>
   );
 }
