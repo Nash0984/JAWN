@@ -20,7 +20,7 @@ import { kpiTrackingService } from "./services/kpiTracking.service";
 import { achievementSystemService } from "./services/achievementSystem.service";
 import { leaderboardService } from "./services/leaderboard.service";
 import { taxDocExtractor } from "./services/taxDocumentExtraction";
-import { exportToPDF, exportToCSV } from "./services/taxslayerExport";
+import { exportToPDF, exportToCSV, exportChecklist, exportVarianceReport, exportFieldGuide } from "./services/taxslayerExport";
 import { GoogleGenAI } from "@google/genai";
 import { asyncHandler, validationError, notFoundError, externalServiceError, authorizationError } from "./middleware/errorHandler";
 import { requireAuth, requireStaff, requireAdmin } from "./middleware/auth";
@@ -7048,6 +7048,54 @@ If the question cannot be answered with the available information, say so clearl
     res.setHeader('Content-Type', 'text/csv');
     res.setHeader('Content-Disposition', `attachment; filename=taxslayer-comparison-${taxReturn.taxYear}-${req.params.id}.csv`);
     res.send(csvContent);
+  }));
+
+  // Generate Checklist PDF export
+  app.post("/api/taxslayer/:id/export-checklist", requireStaff, asyncHandler(async (req: Request, res: Response) => {
+    const taxReturn = await storage.getTaxslayerReturn(req.params.id);
+    
+    if (!taxReturn) {
+      throw notFoundError("TaxSlayer return not found");
+    }
+
+    const pdfBuffer = await exportChecklist(req.params.id);
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename=taxslayer-checklist-${taxReturn.taxYear}-${req.params.id}.pdf`);
+    res.send(pdfBuffer);
+  }));
+
+  // Generate Variance Report PDF export
+  app.post("/api/taxslayer/:id/export-variance", requireStaff, asyncHandler(async (req: Request, res: Response) => {
+    const taxReturn = await storage.getTaxslayerReturn(req.params.id);
+    
+    if (!taxReturn) {
+      throw notFoundError("TaxSlayer return not found");
+    }
+
+    // Optional: include our system's calculation for comparison
+    const ourCalculation = req.body.ourCalculation;
+
+    const pdfBuffer = await exportVarianceReport(req.params.id, ourCalculation);
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename=taxslayer-variance-${taxReturn.taxYear}-${req.params.id}.pdf`);
+    res.send(pdfBuffer);
+  }));
+
+  // Generate Field Guide PDF export
+  app.post("/api/taxslayer/:id/export-guide", requireStaff, asyncHandler(async (req: Request, res: Response) => {
+    const taxReturn = await storage.getTaxslayerReturn(req.params.id);
+    
+    if (!taxReturn) {
+      throw notFoundError("TaxSlayer return not found");
+    }
+
+    const pdfBuffer = await exportFieldGuide(req.params.id);
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename=taxslayer-guide-${taxReturn.taxYear}-${req.params.id}.pdf`);
+    res.send(pdfBuffer);
   }));
 
   // ==========================================

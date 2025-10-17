@@ -1,11 +1,20 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import type { TaxslayerReturn } from "@shared/schema";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { 
   AlertCircle, 
   CheckCircle2, 
@@ -15,9 +24,15 @@ import {
   ArrowRight,
   TrendingUp,
   TrendingDown,
-  Minus
+  Minus,
+  ChevronDown,
+  ClipboardList,
+  FileBarChart,
+  BookOpen,
+  Loader2
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useState } from "react";
 
 interface TaxSlayerComparisonProps {
   vitaSessionId: string;
@@ -35,9 +50,10 @@ interface ComparisonRow {
 
 export function TaxSlayerComparison({ vitaSessionId, taxslayerReturnId }: TaxSlayerComparisonProps) {
   const { toast } = useToast();
+  const [isExporting, setIsExporting] = useState(false);
 
   // Fetch TaxSlayer return data
-  const { data: taxslayerData, isLoading: isLoadingTaxslayer } = useQuery({
+  const { data: taxslayerData, isLoading: isLoadingTaxslayer } = useQuery<TaxslayerReturn>({
     queryKey: ["/api/taxslayer", vitaSessionId],
     enabled: !!vitaSessionId,
   });
@@ -48,62 +64,28 @@ export function TaxSlayerComparison({ vitaSessionId, taxslayerReturnId }: TaxSla
     enabled: !!vitaSessionId,
   });
 
-  // Export PDF mutation
-  const exportPdfMutation = useMutation({
-    mutationFn: async () => {
-      const id = taxslayerReturnId || taxslayerData?.id;
-      if (!id) throw new Error("No TaxSlayer return ID");
-      
-      const response = await fetch(`/api/taxslayer/${id}/export-pdf`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-      });
-      
-      if (!response.ok) throw new Error("Export failed");
-      
-      const blob = await response.blob();
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `taxslayer-return-${taxslayerData?.taxYear}-${id}.pdf`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      window.URL.revokeObjectURL(url);
-    },
-    onSuccess: () => {
-      toast({
-        title: "PDF Exported",
-        description: "TaxSlayer return PDF has been downloaded",
-      });
-    },
-    onError: () => {
-      toast({
-        title: "Export Failed",
-        description: "Failed to export PDF",
-        variant: "destructive",
-      });
-    },
-  });
-
-  // Export CSV mutation
-  const exportCsvMutation = useMutation({
-    mutationFn: async () => {
-      const id = taxslayerReturnId || taxslayerData?.id;
-      if (!id) throw new Error("No TaxSlayer return ID");
-      
-      const response = await fetch(`/api/taxslayer/${id}/export-csv`, {
+  // Generic export function
+  const handleExport = async (endpoint: string, filename: string, type: 'pdf' | 'csv' = 'pdf') => {
+    const id = taxslayerReturnId || taxslayerData?.id;
+    if (!id) throw new Error("No TaxSlayer return ID");
+    
+    setIsExporting(true);
+    
+    try {
+      const response = await fetch(`/api/taxslayer/${id}/${endpoint}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
         body: JSON.stringify({
           ourCalculation: ourCalculation ? {
-            federalAGI: 0, // TODO: Extract from our calculation
-            federalTax: 0,
-            federalRefund: 0,
-            eitcAmount: 0,
-            ctcAmount: 0,
+            federalAGI: (ourCalculation as any).adjustedGrossIncome || 0,
+            federalTax: (ourCalculation as any).calculatedFederalTax || 0,
+            federalRefund: (ourCalculation as any).estimatedFederalRefund || 0,
+            stateTax: (ourCalculation as any).calculatedStateTax || 0,
+            stateRefund: (ourCalculation as any).estimatedStateRefund || 0,
+            eitcAmount: (ourCalculation as any).estimatedEITC || 0,
+            ctcAmount: (ourCalculation as any).estimatedCTC || 0,
+            educationCredits: (ourCalculation as any).estimatedEducationCredits || 0,
           } : undefined,
         }),
       });
@@ -114,26 +96,71 @@ export function TaxSlayerComparison({ vitaSessionId, taxslayerReturnId }: TaxSla
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `taxslayer-comparison-${taxslayerData?.taxYear}-${id}.csv`;
+      a.download = filename;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
       window.URL.revokeObjectURL(url);
-    },
-    onSuccess: () => {
+
       toast({
-        title: "CSV Exported",
-        description: "Comparison data has been downloaded",
+        title: "Export Successful",
+        description: `${filename} has been downloaded`,
       });
-    },
-    onError: () => {
+    } catch (error) {
       toast({
         title: "Export Failed",
-        description: "Failed to export CSV",
+        description: "Failed to generate export. Please try again.",
         variant: "destructive",
       });
-    },
-  });
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
+  // Export worksheet PDF
+  const exportWorksheet = () => {
+    handleExport(
+      "export-pdf",
+      `taxslayer-worksheet-${taxslayerData?.taxYear}-${taxslayerData?.id}.pdf`,
+      'pdf'
+    );
+  };
+
+  // Export checklist PDF
+  const exportChecklist = () => {
+    handleExport(
+      "export-checklist",
+      `taxslayer-checklist-${taxslayerData?.taxYear}-${taxslayerData?.id}.pdf`,
+      'pdf'
+    );
+  };
+
+  // Export variance report PDF
+  const exportVarianceReport = () => {
+    handleExport(
+      "export-variance",
+      `taxslayer-variance-${taxslayerData?.taxYear}-${taxslayerData?.id}.pdf`,
+      'pdf'
+    );
+  };
+
+  // Export field guide PDF
+  const exportFieldGuide = () => {
+    handleExport(
+      "export-guide",
+      `taxslayer-guide-${taxslayerData?.taxYear}-${taxslayerData?.id}.pdf`,
+      'pdf'
+    );
+  };
+
+  // Export CSV
+  const exportCsv = () => {
+    handleExport(
+      "export-csv",
+      `taxslayer-comparison-${taxslayerData?.taxYear}-${taxslayerData?.id}.csv`,
+      'csv'
+    );
+  };
 
   if (isLoadingTaxslayer || isLoadingOurs) {
     return <div className="text-center p-8">Loading comparison data...</div>;
@@ -150,60 +177,70 @@ export function TaxSlayerComparison({ vitaSessionId, taxslayerReturnId }: TaxSla
     );
   }
 
+  // Extract our system's calculated values
+  const ourAGI = ourCalculation ? (ourCalculation as any).adjustedGrossIncome : undefined;
+  const ourTax = ourCalculation ? (ourCalculation as any).calculatedFederalTax : undefined;
+  const ourRefund = ourCalculation ? (ourCalculation as any).estimatedFederalRefund : undefined;
+  const ourEITC = ourCalculation ? (ourCalculation as any).estimatedEITC : undefined;
+  const ourCTC = ourCalculation ? (ourCalculation as any).estimatedCTC : undefined;
+  const ourEducationCredits = ourCalculation ? (ourCalculation as any).estimatedEducationCredits : undefined;
+  const ourWithholding = ourCalculation ? (ourCalculation as any).federalTaxWithheld : undefined;
+  const ourTaxableIncome = ourCalculation ? (ourCalculation as any).taxableIncome : undefined;
+
   // Build comparison rows
   const comparisonRows: ComparisonRow[] = [
     {
       field: "Federal AGI",
       taxslayerValue: taxslayerData.federalAGI || 0,
-      ourValue: undefined, // TODO: Extract from our calculation
-      ...calculateVariance(taxslayerData.federalAGI || 0, undefined),
+      ourValue: ourAGI,
+      ...calculateVariance(taxslayerData.federalAGI || 0, ourAGI),
     },
     {
       field: "Federal Taxable Income",
       taxslayerValue: taxslayerData.federalTaxableIncome || 0,
-      ourValue: undefined,
-      ...calculateVariance(taxslayerData.federalTaxableIncome || 0, undefined),
+      ourValue: ourTaxableIncome,
+      ...calculateVariance(taxslayerData.federalTaxableIncome || 0, ourTaxableIncome),
     },
     {
       field: "Federal Tax",
       taxslayerValue: taxslayerData.federalTax || 0,
-      ourValue: undefined,
-      ...calculateVariance(taxslayerData.federalTax || 0, undefined),
+      ourValue: ourTax,
+      ...calculateVariance(taxslayerData.federalTax || 0, ourTax),
     },
     {
       field: "Federal Withholding",
       taxslayerValue: taxslayerData.federalWithheld || 0,
-      ourValue: undefined,
-      ...calculateVariance(taxslayerData.federalWithheld || 0, undefined),
+      ourValue: ourWithholding,
+      ...calculateVariance(taxslayerData.federalWithheld || 0, ourWithholding),
     },
     {
       field: "Federal Refund/Owed",
       taxslayerValue: taxslayerData.federalRefund || 0,
-      ourValue: undefined,
-      ...calculateVariance(taxslayerData.federalRefund || 0, undefined),
+      ourValue: ourRefund,
+      ...calculateVariance(taxslayerData.federalRefund || 0, ourRefund),
     },
     {
       field: "EITC",
       taxslayerValue: taxslayerData.eitcAmount || 0,
-      ourValue: undefined,
-      ...calculateVariance(taxslayerData.eitcAmount || 0, undefined),
+      ourValue: ourEITC,
+      ...calculateVariance(taxslayerData.eitcAmount || 0, ourEITC),
     },
     {
       field: "CTC",
       taxslayerValue: taxslayerData.ctcAmount || 0,
-      ourValue: undefined,
-      ...calculateVariance(taxslayerData.ctcAmount || 0, undefined),
+      ourValue: ourCTC,
+      ...calculateVariance(taxslayerData.ctcAmount || 0, ourCTC),
     },
     {
       field: "Education Credits",
       taxslayerValue: taxslayerData.educationCredits || 0,
-      ourValue: undefined,
-      ...calculateVariance(taxslayerData.educationCredits || 0, undefined),
+      ourValue: ourEducationCredits,
+      ...calculateVariance(taxslayerData.educationCredits || 0, ourEducationCredits),
     },
   ];
 
   const hasWarnings = taxslayerData.hasValidationWarnings;
-  const warnings = taxslayerData.validationWarnings || [];
+  const warnings = (taxslayerData.validationWarnings as string[]) || [];
 
   return (
     <div className="space-y-6">
@@ -215,26 +252,70 @@ export function TaxSlayerComparison({ vitaSessionId, taxslayerReturnId }: TaxSla
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => exportPdfMutation.mutate()}
-            disabled={exportPdfMutation.isPending}
-            data-testid="button-export-pdf"
-          >
-            <FileText className="h-4 w-4 mr-2" />
-            Export PDF
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => exportCsvMutation.mutate()}
-            disabled={exportCsvMutation.isPending}
-            data-testid="button-export-csv"
-          >
-            <Download className="h-4 w-4 mr-2" />
-            Export CSV
-          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button 
+                variant="outline" 
+                disabled={isExporting}
+                data-testid="button-export-dropdown"
+              >
+                {isExporting ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Exporting...
+                  </>
+                ) : (
+                  <>
+                    <Download className="h-4 w-4 mr-2" />
+                    Export Options
+                    <ChevronDown className="h-4 w-4 ml-2" />
+                  </>
+                )}
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-56">
+              <DropdownMenuLabel>PDF Exports</DropdownMenuLabel>
+              <DropdownMenuItem 
+                onClick={exportWorksheet}
+                data-testid="export-worksheet"
+              >
+                <FileText className="h-4 w-4 mr-2" />
+                Entry Worksheet
+                <span className="ml-auto text-xs text-muted-foreground">Main</span>
+              </DropdownMenuItem>
+              <DropdownMenuItem 
+                onClick={exportChecklist}
+                data-testid="export-checklist"
+              >
+                <ClipboardList className="h-4 w-4 mr-2" />
+                Line-by-Line Checklist
+              </DropdownMenuItem>
+              <DropdownMenuItem 
+                onClick={exportVarianceReport}
+                data-testid="export-variance"
+              >
+                <FileBarChart className="h-4 w-4 mr-2" />
+                Variance Report
+                <span className="ml-auto text-xs text-muted-foreground">Supervisor</span>
+              </DropdownMenuItem>
+              <DropdownMenuItem 
+                onClick={exportFieldGuide}
+                data-testid="export-guide"
+              >
+                <BookOpen className="h-4 w-4 mr-2" />
+                Field Mapping Guide
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuLabel>Other Formats</DropdownMenuLabel>
+              <DropdownMenuItem 
+                onClick={exportCsv}
+                data-testid="export-csv"
+              >
+                <Download className="h-4 w-4 mr-2" />
+                Export to CSV
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
 
@@ -281,18 +362,19 @@ export function TaxSlayerComparison({ vitaSessionId, taxslayerReturnId }: TaxSla
       </Card>
 
       {/* Income Documents Summary */}
-      {(taxslayerData.w2Forms?.length > 0 || taxslayerData.form1099s?.length > 0) && (
+      {((Array.isArray(taxslayerData.w2Forms) && taxslayerData.w2Forms.length > 0) || 
+        (Array.isArray(taxslayerData.form1099s) && taxslayerData.form1099s.length > 0)) && (
         <Card>
           <CardHeader>
             <CardTitle>Income Documents</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              {taxslayerData.w2Forms?.length > 0 && (
+              {Array.isArray(taxslayerData.w2Forms) && taxslayerData.w2Forms.length > 0 && (
                 <div>
                   <h4 className="font-semibold mb-2">W-2 Forms ({taxslayerData.w2Forms.length})</h4>
                   <div className="space-y-2">
-                    {taxslayerData.w2Forms.map((w2: any, idx: number) => (
+                    {(taxslayerData.w2Forms as any[]).map((w2: any, idx: number) => (
                       <div key={idx} className="flex items-center justify-between p-3 bg-muted rounded-lg">
                         <div>
                           <div className="font-medium">{w2.employer || "Unknown Employer"}</div>
@@ -310,11 +392,11 @@ export function TaxSlayerComparison({ vitaSessionId, taxslayerReturnId }: TaxSla
                 </div>
               )}
 
-              {taxslayerData.form1099s?.length > 0 && (
+              {Array.isArray(taxslayerData.form1099s) && taxslayerData.form1099s.length > 0 && (
                 <div>
                   <h4 className="font-semibold mb-2">1099 Forms ({taxslayerData.form1099s.length})</h4>
                   <div className="space-y-2">
-                    {taxslayerData.form1099s.map((form1099: any, idx: number) => (
+                    {(taxslayerData.form1099s as any[]).map((form1099: any, idx: number) => (
                       <div key={idx} className="flex items-center justify-between p-3 bg-muted rounded-lg">
                         <div>
                           <div className="font-medium">{form1099.payer || "Unknown Payer"}</div>
@@ -348,28 +430,28 @@ export function TaxSlayerComparison({ vitaSessionId, taxslayerReturnId }: TaxSla
             <div className="space-y-2">
               <div className="flex items-center justify-between">
                 <span className="font-medium">Business Name:</span>
-                <span>{taxslayerData.scheduleC.businessName}</span>
+                <span>{(taxslayerData.scheduleC as any).businessName}</span>
               </div>
-              {taxslayerData.scheduleC.ein && (
+              {(taxslayerData.scheduleC as any).ein && (
                 <div className="flex items-center justify-between">
                   <span className="font-medium">EIN:</span>
-                  <span>{taxslayerData.scheduleC.ein}</span>
+                  <span>{(taxslayerData.scheduleC as any).ein}</span>
                 </div>
               )}
               <Separator />
               <div className="flex items-center justify-between">
                 <span className="font-medium">Gross Receipts:</span>
-                <span>{formatCurrency(taxslayerData.scheduleC.grossReceipts)}</span>
+                <span>{formatCurrency((taxslayerData.scheduleC as any).grossReceipts)}</span>
               </div>
               <div className="flex items-center justify-between">
                 <span className="font-medium">Expenses:</span>
-                <span>{formatCurrency(taxslayerData.scheduleC.expenses)}</span>
+                <span>{formatCurrency((taxslayerData.scheduleC as any).expenses)}</span>
               </div>
               <Separator />
               <div className="flex items-center justify-between font-semibold">
                 <span>Net Profit:</span>
-                <span className={taxslayerData.scheduleC.netProfit < 0 ? "text-destructive" : ""}>
-                  {formatCurrency(taxslayerData.scheduleC.netProfit)}
+                <span className={(taxslayerData.scheduleC as any).netProfit < 0 ? "text-destructive" : ""}>
+                  {formatCurrency((taxslayerData.scheduleC as any).netProfit)}
                 </span>
               </div>
             </div>
