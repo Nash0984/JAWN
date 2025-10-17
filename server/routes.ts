@@ -5268,7 +5268,7 @@ If the question cannot be answered with the available information, say so clearl
 
   // Hybrid multi-benefit summary (Maryland Rules-as-Code PRIMARY + PolicyEngine verification)
   app.post("/api/benefits/calculate-hybrid-summary", asyncHandler(async (req: Request, res: Response) => {
-    const { rulesEngineAdapterService } = await import("./services/rulesEngineAdapter");
+    const { rulesEngineAdapter: rulesEngineAdapterService } = await import("./services/rulesEngineAdapter");
     const { policyEngineService } = await import("./services/policyEngine.service");
     
     const inputSchema = z.object({
@@ -6131,32 +6131,32 @@ If the question cannot be answered with the available information, say so clearl
     const schema = z.object({
       sessionId: z.string(),
       householdData: z.object({
-        adults: z.number(),
-        children: z.number(),
-        employmentIncome: z.number(),
-        unearnedIncome: z.number().optional(),
+        adults: z.coerce.number(),
+        children: z.coerce.number(),
+        employmentIncome: z.coerce.number(),
+        unearnedIncome: z.coerce.number().optional(),
         stateCode: z.string(),
-        householdAssets: z.number().optional(),
-        rentOrMortgage: z.number().optional(),
-        utilityCosts: z.number().optional(),
-        medicalExpenses: z.number().optional(),
-        childcareExpenses: z.number().optional(),
+        householdAssets: z.coerce.number().optional(),
+        rentOrMortgage: z.coerce.number().optional(),
+        utilityCosts: z.coerce.number().optional(),
+        medicalExpenses: z.coerce.number().optional(),
+        childcareExpenses: z.coerce.number().optional(),
         elderlyOrDisabled: z.boolean().optional()
       }),
       benefitResults: z.object({
         success: z.boolean(),
         benefits: z.object({
-          snap: z.number(),
+          snap: z.coerce.number(),
           medicaid: z.boolean(),
-          eitc: z.number(),
-          childTaxCredit: z.number(),
-          ssi: z.number(),
-          tanf: z.number(),
-          ohep: z.number(),
-          householdNetIncome: z.number(),
-          householdTax: z.number(),
-          householdBenefits: z.number(),
-          marginalTaxRate: z.number()
+          eitc: z.coerce.number(),
+          childTaxCredit: z.coerce.number(),
+          ssi: z.coerce.number(),
+          tanf: z.coerce.number(),
+          ohep: z.coerce.number(),
+          householdNetIncome: z.coerce.number(),
+          householdTax: z.coerce.number(),
+          householdBenefits: z.coerce.number(),
+          marginalTaxRate: z.coerce.number()
         })
       })
     });
