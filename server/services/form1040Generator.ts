@@ -96,7 +96,7 @@ export class Form1040Generator {
     
     // Filing status and personal information
     this.drawFilingStatus(taxInput.filingStatus);
-    this.drawPersonalInfo(personalInfo);
+    this.drawPersonalInfo(personalInfo, options.taxYear);
     
     // Income section (Lines 1-9)
     this.drawIncomeSection(taxInput, taxResult);
@@ -186,7 +186,7 @@ export class Form1040Generator {
   /**
    * Draw personal information
    */
-  private drawPersonalInfo(info: Form1040PersonalInfo): void {
+  private drawPersonalInfo(info: Form1040PersonalInfo, taxYear: number): void {
     this.doc.setFont('helvetica', 'bold');
     this.doc.text('Your Information', this.margin, this.currentY);
     this.currentY += this.lineHeight;
@@ -207,11 +207,12 @@ export class Form1040Generator {
     this.doc.text(`${info.city}, ${info.state} ${info.zipCode}`, this.margin + 20, this.currentY);
     this.currentY += this.lineHeight + 5;
     
-    // Virtual currency question (required IRS disclosure)
+    // Virtual currency question (required IRS disclosure starting 2020)
     this.doc.setFontSize(9);
     const vcYesBox = info.virtualCurrency ? '☑' : '☐';
     const vcNoBox = info.virtualCurrency ? '☐' : '☑';
-    this.doc.text(`At any time during 2024, did you: (a) receive (as a reward, award, or payment for property or services); or`, this.margin + 20, this.currentY);
+    const vcYear = taxYear;
+    this.doc.text(`At any time during ${vcYear}, did you: (a) receive (as a reward, award, or payment for property or services); or`, this.margin + 20, this.currentY);
     this.currentY += 10;
     this.doc.text(`(b) sell, exchange, or otherwise dispose of a digital asset (or a financial interest in a digital asset)?`, this.margin + 20, this.currentY);
     this.currentY += 10;
@@ -425,7 +426,7 @@ export class Form1040Generator {
     this.drawLine('25', 'Federal income tax withheld', taxResult.federalWithholding);
     
     // Line 26: Estimated tax payments
-    this.drawLine('26', '2024 estimated tax payments', taxResult.estimatedTaxPayments);
+    this.drawLine('26', `${options.taxYear} estimated tax payments`, taxResult.estimatedTaxPayments);
     
     // Line 27: Earned income credit (EIC)
     this.drawLine('27', 'Earned income credit (EIC)', taxResult.eitc);
