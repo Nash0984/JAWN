@@ -1,384 +1,344 @@
 /**
- * Alert Service
+ * Alert Service - Database-Driven Alert Rules System
  * 
- * Monitors metrics and sends alerts when thresholds are exceeded
- * Prevents alert spam with rate limiting and cooldown periods
+ * Monitors metrics and sends alerts when thresholds are exceeded.
+ * Supports email, SMS, and in-app notifications with cooldown protection.
  */
 
 import { db } from "../db";
-import { alertHistory, type InsertAlertHistory } from "@shared/schema";
-import { eq, and, gte, desc } from "drizzle-orm";
-import { ALERT_THRESHOLDS, CRITICAL_ERROR_PATTERNS, ALERT_CHANNELS, ALERT_RATE_LIMITS } from "../config/alerts";
+import { alertRules, alertHistory, users, type AlertRule, type InsertAlertHistory } from "@shared/schema";
+import { eq, and, or, inArray } from "drizzle-orm";
 import { metricsService } from "./metricsService";
-
-interface AlertContext {
-  metric: string;
-  value: number;
-  threshold: number;
-  severity: 'critical' | 'warning' | 'info';
-  metadata?: Record<string, any>;
-  tenantId?: string | null;
-}
+import { notificationService } from "./notification.service";
+import { emailService } from "./email.service";
+import { sendSMS } from "./smsService";
 
 export class AlertService {
-  private alertCounts: Map<string, { count: number; resetTime: number }> = new Map();
+  /**
+   * Check all enabled alert rules against current metrics
+   */
+  async evaluateAlerts(tenantId?: string): Promise<void> {
+    try {
+      const rules = await this.getEnabledRules(tenantId);
+      
+      if (rules.length === 0) {
+        return;
+      }
+
+      const timeRange = {
+        start: new Date(Date.now() - 5 * 60 * 1000), // Last 5 minutes
+        end: new Date()
+      };
+
+      const metrics = await metricsService.getAllMetrics(timeRange, tenantId || undefined);
+      
+      for (const rule of rules) {
+        await this.evaluateRule(rule, metrics);
+      }
+    } catch (error) {
+      console.error('Error evaluating alerts:', error);
+    }
+  }
 
   /**
-   * Check all metric thresholds and send alerts if needed
+   * Get all enabled alert rules
    */
-  async checkThresholds(tenantId?: string | null): Promise<void> {
-    const now = new Date();
-    const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000);
+  private async getEnabledRules(tenantId?: string): Promise<AlertRule[]> {
+    const conditions = [eq(alertRules.enabled, true)];
+    
+    if (tenantId) {
+      conditions.push(eq(alertRules.tenantId, tenantId));
+    }
 
-    for (const threshold of ALERT_THRESHOLDS) {
-      try {
-        const windowStart = new Date(now.getTime() - threshold.window * 1000);
+    return await db.query.alertRules.findMany({
+      where: and(...conditions)
+    });
+  }
+
+  /**
+   * Evaluate single rule against metrics
+   */
+  private async evaluateRule(rule: AlertRule, metrics: any): Promise<void> {
+    try {
+      // Extract metric value based on metricType
+      const metricValue = this.extractMetricValue(rule.metricType, metrics);
+      
+      if (metricValue === null || metricValue === undefined) {
+        return; // Metric not available
+      }
+      
+      // Check threshold
+      const triggered = this.checkThreshold(metricValue, rule.threshold, rule.comparison);
+      
+      if (triggered) {
+        // Check cooldown
+        if (this.isInCooldown(rule)) {
+          return;
+        }
         
-        // Get metric summary for the time window, filtered by tenantId if provided
-        const summary = await metricsService.getMetricsSummary(
-          threshold.metric,
-          windowStart,
-          now,
-          tenantId
-        );
-
-        if (!summary) continue;
-
-        // Check if threshold is exceeded
-        let shouldAlert = false;
-        let actualValue = 0;
-
-        if (threshold.metric.includes('rate')) {
-          // For rates, use average
-          actualValue = summary.avg;
-          shouldAlert = actualValue > threshold.threshold;
-        } else if (threshold.metric.includes('p95')) {
-          actualValue = summary.p95;
-          shouldAlert = actualValue > threshold.threshold;
-        } else if (threshold.metric.includes('p50')) {
-          actualValue = summary.p50;
-          shouldAlert = actualValue > threshold.threshold;
-        } else {
-          actualValue = summary.avg;
-          shouldAlert = actualValue > threshold.threshold;
-        }
-
-        if (shouldAlert) {
-          await this.sendAlert({
-            metric: threshold.metric,
-            value: actualValue,
-            threshold: threshold.threshold,
-            severity: threshold.severity,
-            metadata: {
-              description: threshold.description,
-              summary,
-            },
-            tenantId,
-          });
-        }
-      } catch (error) {
-        console.error(`Failed to check threshold for ${threshold.metric}:`, error);
+        // Trigger alert
+        await this.triggerAlert(rule, metricValue);
       }
-    }
-  }
-
-  /**
-   * Check for critical error patterns in recent errors
-   */
-  async checkCriticalPatterns(tenantId?: string | null): Promise<void> {
-    const now = new Date();
-    const fiveMinutesAgo = new Date(now.getTime() - 5 * 60 * 1000);
-
-    const topErrors = await metricsService.getTopErrors(fiveMinutesAgo, now, 20, tenantId);
-
-    for (const error of topErrors) {
-      const errorType = error.errorType.toLowerCase();
-      
-      for (const pattern of CRITICAL_ERROR_PATTERNS) {
-        if (errorType.includes(pattern.toLowerCase())) {
-          await this.sendAlert({
-            metric: 'critical_error_pattern',
-            value: error.count,
-            threshold: 0,
-            severity: 'critical',
-            metadata: {
-              description: `Critical error pattern detected: ${pattern}`,
-              errorType: error.errorType,
-              count: error.count,
-              lastOccurrence: error.lastOccurrence,
-            },
-            tenantId,
-          });
-          break;
-        }
-      }
-    }
-  }
-
-  /**
-   * Send an alert through configured channels
-   */
-  async sendAlert(context: AlertContext): Promise<void> {
-    // Check rate limits
-    if (!this.shouldSendAlert(context.metric)) {
-      console.log(`Alert rate limited for metric: ${context.metric}`);
-      return;
-    }
-
-    const message = this.buildAlertMessage(context);
-    const channels: string[] = [];
-
-    // Send through all enabled channels
-    for (const channel of ALERT_CHANNELS) {
-      if (!channel.enabled) continue;
-
-      try {
-        switch (channel.type) {
-          case 'console':
-            this.sendConsoleAlert(message, context);
-            channels.push('console');
-            break;
-          case 'email':
-            await this.sendEmailAlert(message, context, channel.config);
-            channels.push('email');
-            break;
-          case 'slack':
-            await this.sendSlackAlert(message, context, channel.config);
-            channels.push('slack');
-            break;
-          case 'webhook':
-            await this.sendWebhookAlert(message, context, channel.config);
-            channels.push('webhook');
-            break;
-        }
-      } catch (error) {
-        console.error(`Failed to send alert via ${channel.type}:`, error);
-      }
-    }
-
-    // Record alert in history with tenantId for proper isolation
-    try {
-      await db.insert(alertHistory).values({
-        alertType: context.metric,
-        severity: context.severity,
-        message,
-        metadata: context.metadata as any,
-        channels: channels as any,
-        resolved: false,
-        tenantId: context.tenantId || null,
-      });
     } catch (error) {
-      console.error("Failed to record alert history:", error);
+      console.error(`Error evaluating rule ${rule.id}:`, error);
     }
-
-    // Update rate limit counter
-    this.incrementAlertCount(context.metric);
   }
 
   /**
-   * Build alert message
+   * Trigger alert and send notifications
    */
-  private buildAlertMessage(context: AlertContext): string {
-    const emoji = context.severity === 'critical' ? '🚨' : context.severity === 'warning' ? '⚠️' : 'ℹ️';
+  private async triggerAlert(rule: AlertRule, metricValue: number): Promise<void> {
+    const message = `Alert: ${rule.name} - ${rule.metricType} is ${metricValue.toFixed(2)} (threshold: ${rule.threshold})`;
     
-    return `${emoji} ${context.severity.toUpperCase()} ALERT: ${context.metadata?.description || context.metric}
+    // Record in alert_history
+    await db.insert(alertHistory).values({
+      alertType: rule.metricType,
+      severity: rule.severity,
+      message,
+      channels: rule.channels,
+      tenantId: rule.tenantId || null,
+    });
+
+    // Update lastTriggered
+    await db.update(alertRules)
+      .set({ lastTriggered: new Date() })
+      .where(eq(alertRules.id, rule.id));
+
+    // Send notifications via channels
+    await this.sendNotifications(rule, metricValue, message);
     
-Metric: ${context.metric}
-Current Value: ${context.value.toFixed(2)}
-Threshold: ${context.threshold}
-Time: ${new Date().toISOString()}
-
-${context.metadata ? `Additional Context:\n${JSON.stringify(context.metadata, null, 2)}` : ''}`;
+    console.log(`🚨 Alert triggered: ${rule.name} (${rule.severity}) - Value: ${metricValue}`);
   }
 
   /**
-   * Send console alert (always enabled)
+   * Send notifications via email/SMS/in-app
    */
-  private sendConsoleAlert(message: string, context: AlertContext): void {
-    const logLevel = context.severity === 'critical' || context.severity === 'warning' ? 'error' : 'warn';
-    console[logLevel]('\n' + '='.repeat(80));
-    console[logLevel](message);
-    console[logLevel]('='.repeat(80) + '\n');
-  }
-
-  /**
-   * Send email alert
-   */
-  private async sendEmailAlert(message: string, context: AlertContext, config: any): Promise<void> {
-    // Email sending would integrate with your email service
-    // For now, just log
-    console.log(`[EMAIL ALERT] To: ${config.to}`, message);
-    
-    // TODO: Integrate with email service (e.g., Nodemailer, SendGrid, etc.)
-    // const emailService = require('./email.service');
-    // await emailService.sendEmail({
-    //   to: config.to,
-    //   from: config.from,
-    //   subject: `[${context.severity.toUpperCase()}] Alert: ${context.metric}`,
-    //   text: message,
-    // });
-  }
-
-  /**
-   * Send Slack alert
-   */
-  private async sendSlackAlert(message: string, context: AlertContext, config: any): Promise<void> {
-    if (!config.webhookUrl) return;
-
+  private async sendNotifications(rule: AlertRule, metricValue: number, message: string): Promise<void> {
     try {
-      const color = context.severity === 'critical' ? 'danger' : context.severity === 'warning' ? 'warning' : 'good';
+      const channels = rule.channels as string[];
+      const recipients = await this.getRecipients(rule);
       
-      const response = await fetch(config.webhookUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          channel: config.channel,
-          username: config.username,
-          attachments: [{
-            color,
-            title: `${context.severity.toUpperCase()} Alert: ${context.metric}`,
-            text: message,
-            ts: Math.floor(Date.now() / 1000),
-          }],
-        }),
-      });
+      if (recipients.length === 0) {
+        console.warn(`No recipients found for alert rule: ${rule.name}`);
+        return;
+      }
 
-      if (!response.ok) {
-        throw new Error(`Slack webhook failed: ${response.statusText}`);
+      for (const user of recipients) {
+        // In-app notification
+        if (channels.includes('in_app')) {
+          try {
+            await notificationService.createNotification({
+              userId: user.id,
+              type: 'system_alert',
+              title: `Alert: ${rule.name}`,
+              message: `${rule.metricType} is ${metricValue.toFixed(2)} (threshold: ${rule.threshold})`,
+              priority: rule.severity === 'critical' ? 'urgent' : 'high',
+            });
+          } catch (error) {
+            console.error(`Failed to create in-app notification for user ${user.id}:`, error);
+          }
+        }
+
+        // Email notification
+        if (channels.includes('email') && user.email) {
+          try {
+            await emailService.sendNotificationEmail(
+              user.email,
+              `Alert: ${rule.name}`,
+              message
+            );
+          } catch (error) {
+            console.error(`Failed to send email to ${user.email}:`, error);
+          }
+        }
+
+        // SMS notification
+        if (channels.includes('sms') && user.phone && rule.tenantId) {
+          try {
+            await sendSMS(
+              user.phone,
+              `ALERT: ${rule.name} - ${rule.metricType} is ${metricValue.toFixed(2)}`,
+              rule.tenantId
+            );
+          } catch (error) {
+            console.error(`Failed to send SMS to ${user.phone}:`, error);
+          }
+        }
       }
     } catch (error) {
-      console.error("Failed to send Slack alert:", error);
+      console.error('Error sending notifications:', error);
     }
   }
 
   /**
-   * Send webhook alert
+   * Get alert recipients (by user IDs or roles)
    */
-  private async sendWebhookAlert(message: string, context: AlertContext, config: any): Promise<void> {
-    if (!config.url) return;
+  private async getRecipients(rule: AlertRule): Promise<Array<{ id: string; email: string | null; phone: string | null }>> {
+    const conditions = [];
 
-    try {
-      const response = await fetch(config.url, {
-        method: config.method || 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...config.headers,
-        },
-        body: JSON.stringify({
-          metric: context.metric,
-          value: context.value,
-          threshold: context.threshold,
-          severity: context.severity,
-          message,
-          metadata: context.metadata,
-          timestamp: new Date().toISOString(),
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error(`Webhook failed: ${response.statusText}`);
-      }
-    } catch (error) {
-      console.error("Failed to send webhook alert:", error);
-    }
-  }
-
-  /**
-   * Check if alert should be sent based on rate limits
-   */
-  private shouldSendAlert(metric: string): boolean {
-    const now = Date.now();
-    const key = metric;
-    const existing = this.alertCounts.get(key);
-
-    // Reset counter if cooldown period has passed
-    if (existing && now > existing.resetTime) {
-      this.alertCounts.delete(key);
-      return true;
+    // Get users by specific IDs
+    if (rule.recipientUserIds && Array.isArray(rule.recipientUserIds) && rule.recipientUserIds.length > 0) {
+      conditions.push(inArray(users.id, rule.recipientUserIds as string[]));
     }
 
-    // Check if we've exceeded the rate limit
-    if (existing && existing.count >= ALERT_RATE_LIMITS.maxAlertsPerMetricPerHour) {
-      return false;
+    // Get users by roles
+    if (rule.recipientRoles && Array.isArray(rule.recipientRoles) && rule.recipientRoles.length > 0) {
+      conditions.push(inArray(users.role, rule.recipientRoles as string[]));
     }
 
-    return true;
-  }
-
-  /**
-   * Increment alert count for rate limiting
-   */
-  private incrementAlertCount(metric: string): void {
-    const now = Date.now();
-    const key = metric;
-    const existing = this.alertCounts.get(key);
-
-    if (existing) {
-      existing.count++;
-    } else {
-      this.alertCounts.set(key, {
-        count: 1,
-        resetTime: now + ALERT_RATE_LIMITS.alertCooldownPeriod * 1000,
-      });
-    }
-  }
-
-  /**
-   * Resolve an alert
-   */
-  async resolveAlert(alertId: string): Promise<void> {
-    try {
-      await db
-        .update(alertHistory)
-        .set({
-          resolved: true,
-          resolvedAt: new Date(),
-        })
-        .where(eq(alertHistory.id, alertId));
-    } catch (error) {
-      console.error("Failed to resolve alert:", error);
-    }
-  }
-
-  /**
-   * Get recent alerts
-   */
-  async getRecentAlerts(limit: number = 50, severity?: string, tenantId?: string | null): Promise<any[]> {
-    try {
-      const conditions = [];
-      
-      if (severity) {
-        conditions.push(eq(alertHistory.severity, severity));
-      }
-
-      if (tenantId) {
-        conditions.push(eq(alertHistory.tenantId, tenantId));
-      }
-
-      const query = db
-        .select()
-        .from(alertHistory)
-        .orderBy(desc(alertHistory.createdAt))
-        .limit(limit);
-
-      if (conditions.length > 0) {
-        return await query.where(and(...conditions));
-      }
-
-      return await query;
-    } catch (error) {
-      console.error("Failed to get recent alerts:", error);
+    // If no conditions, return empty array
+    if (conditions.length === 0) {
       return [];
     }
+
+    const recipients = await db.query.users.findMany({
+      where: or(...conditions),
+      columns: {
+        id: true,
+        email: true,
+        phone: true,
+      }
+    });
+
+    return recipients;
+  }
+
+  /**
+   * Extract metric value from metrics object based on metricType
+   */
+  private extractMetricValue(metricType: string, metrics: any): number | null {
+    // Map metric types to their locations in the metrics object
+    const metricMap: Record<string, () => number | null> = {
+      // Error metrics
+      'error_rate': () => metrics.errors?.rate || null,
+      'error_total': () => metrics.errors?.total || null,
+      
+      // Performance metrics
+      'response_time': () => metrics.performance?.avgResponseTime || null,
+      'response_time_p95': () => metrics.performance?.p95ResponseTime || null,
+      'response_time_p99': () => metrics.performance?.p99ResponseTime || null,
+      'database_query_time': () => metrics.performance?.databaseQueryTime || null,
+      'api_latency': () => metrics.performance?.apiLatency || null,
+      
+      // Security metrics
+      'security_events': () => metrics.security?.totalEvents || null,
+      'failed_logins': () => metrics.security?.failedLogins || null,
+      'suspicious_activity': () => metrics.security?.suspiciousActivity || null,
+      
+      // E-Filing metrics
+      'efile_submissions': () => metrics.eFiling?.totalSubmissions || null,
+      'efile_error_rate': () => metrics.eFiling?.errorRate || null,
+      'efile_processing_time': () => metrics.eFiling?.avgProcessingTime || null,
+      
+      // AI metrics
+      'ai_cost': () => metrics.ai?.totalCost || null,
+      'ai_calls': () => metrics.ai?.totalCalls || null,
+      'ai_tokens': () => metrics.ai?.totalTokens || null,
+      
+      // Cache metrics (parse hit rate percentage string)
+      'cache_hit_rate': () => {
+        const hitRates = metrics.cache?.hitRates;
+        if (!hitRates) return null;
+        
+        // Get overall or first available hit rate
+        const rateStr = hitRates.overall || Object.values(hitRates)[0] as string;
+        if (!rateStr) return null;
+        
+        const match = rateStr.match(/(\d+(\.\d+)?)/);
+        return match ? parseFloat(match[1]) : null;
+      },
+    };
+
+    const extractor = metricMap[metricType];
+    if (extractor) {
+      return extractor();
+    }
+
+    console.warn(`Unknown metric type: ${metricType}`);
+    return null;
+  }
+
+  /**
+   * Check if value meets threshold condition
+   */
+  private checkThreshold(value: number, threshold: number, comparison: string): boolean {
+    switch (comparison) {
+      case 'greater_than':
+        return value > threshold;
+      case 'less_than':
+        return value < threshold;
+      case 'equals':
+        return value === threshold;
+      case 'greater_than_or_equal':
+        return value >= threshold;
+      case 'less_than_or_equal':
+        return value <= threshold;
+      default:
+        console.warn(`Unknown comparison operator: ${comparison}`);
+        return false;
+    }
+  }
+
+  /**
+   * Check if rule is in cooldown period
+   */
+  private isInCooldown(rule: AlertRule): boolean {
+    if (!rule.lastTriggered || !rule.cooldownMinutes) {
+      return false;
+    }
+    
+    const cooldownMs = rule.cooldownMinutes * 60 * 1000;
+    const timeSinceLastTrigger = Date.now() - rule.lastTriggered.getTime();
+    
+    return timeSinceLastTrigger < cooldownMs;
+  }
+
+  /**
+   * Get recent alert history
+   */
+  async getAlertHistory(limit: number = 50, tenantId?: string): Promise<any[]> {
+    const conditions = [];
+    
+    if (tenantId) {
+      conditions.push(eq(alertHistory.tenantId, tenantId));
+    }
+
+    const query = db.query.alertHistory.findMany({
+      limit,
+      orderBy: (alertHistory, { desc }) => [desc(alertHistory.createdAt)]
+    });
+
+    if (conditions.length > 0) {
+      return await db.query.alertHistory.findMany({
+        where: and(...conditions),
+        limit,
+        orderBy: (alertHistory, { desc }) => [desc(alertHistory.createdAt)]
+      });
+    }
+
+    return await query;
+  }
+
+  /**
+   * Resolve an alert (for backward compatibility)
+   */
+  async resolveAlert(alertId: string): Promise<void> {
+    await db.update(alertHistory)
+      .set({ 
+        resolved: true, 
+        resolvedAt: new Date() 
+      })
+      .where(eq(alertHistory.id, alertId));
+  }
+
+  /**
+   * Get recent alerts (for backward compatibility)
+   */
+  async getRecentAlerts(limit: number = 50, severity?: string, tenantId?: string | null): Promise<any[]> {
+    return this.getAlertHistory(limit, tenantId || undefined);
   }
 }
 
 export const alertService = new AlertService();
 
-// Run threshold checks every 5 minutes
-setInterval(() => {
-  alertService.checkThresholds().catch(console.error);
-  alertService.checkCriticalPatterns().catch(console.error);
-}, 5 * 60 * 1000);
-
-console.log("📊 Alert service initialized - checking thresholds every 5 minutes");
+console.log("📊 Database-driven Alert Service initialized");

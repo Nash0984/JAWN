@@ -50,6 +50,7 @@ import {
   insertVitaIntakeSessionSchema,
   insertTaxDocumentSchema,
   insertTaxslayerReturnSchema,
+  insertAlertRuleSchema,
   searchQueries,
   auditLogs,
   ruleChangeLogs,
@@ -64,7 +65,9 @@ import {
   marylandStateOptionStatus,
   federalBills,
   marylandBills,
-  publicLaws
+  publicLaws,
+  alertRules,
+  alertHistory
 } from "@shared/schema";
 import { z } from "zod";
 import bcrypt from "bcryptjs";
@@ -1286,6 +1289,26 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
       })),
     });
   }));
+
+  // Get realtime metrics for WebSocket fallback (HTTP polling)
+  app.get("/api/admin/metrics/realtime", requireAuth, requireAdmin, asyncHandler(async (req: Request, res: Response) => {
+    const { metricsService } = await import("./services/metricsService");
+    
+    try {
+      const metrics = await metricsService.getAllMetrics();
+      res.json({
+        success: true,
+        data: metrics,
+        timestamp: new Date().toISOString(),
+      });
+    } catch (error) {
+      console.error('Metrics polling error:', error);
+      res.status(500).json({
+        success: false,
+        error: 'Failed to fetch metrics',
+      });
+    }
+  }));
   
   // Trigger a test error for Sentry verification
   app.post("/api/admin/monitoring/test-error", requireAdmin, asyncHandler(async (req: Request, res: Response) => {
@@ -1371,6 +1394,85 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
       success: true,
       message: "Alert resolved successfully",
     });
+  }));
+
+  // ============================================================================
+  // ALERT RULES MANAGEMENT - CRUD operations for alert rules
+  // ============================================================================
+
+  // GET /api/admin/alerts - List all alert rules
+  app.get('/api/admin/alerts', requireAuth, requireAdmin, asyncHandler(async (req: Request, res: Response) => {
+    const tenantId = req.tenant?.tenant?.id || null;
+    
+    const conditions = [];
+    if (tenantId) {
+      conditions.push(eq(alertRules.tenantId, tenantId));
+    }
+
+    const rules = conditions.length > 0
+      ? await db.query.alertRules.findMany({
+          where: and(...conditions),
+          orderBy: [desc(alertRules.createdAt)]
+        })
+      : await db.query.alertRules.findMany({
+          orderBy: [desc(alertRules.createdAt)]
+        });
+    
+    res.json({ success: true, data: rules });
+  }));
+
+  // POST /api/admin/alerts - Create alert rule
+  app.post('/api/admin/alerts', requireAuth, requireAdmin, asyncHandler(async (req: Request, res: Response) => {
+    const validatedData = insertAlertRuleSchema.parse(req.body);
+    
+    const rule = await db.insert(alertRules).values({
+      ...validatedData,
+      createdBy: req.user!.id,
+      tenantId: req.tenant?.tenant?.id || null,
+    }).returning();
+    
+    res.json({ success: true, data: rule[0] });
+  }));
+
+  // PUT /api/admin/alerts/:id - Update alert rule
+  app.put('/api/admin/alerts/:id', requireAuth, requireAdmin, asyncHandler(async (req: Request, res: Response) => {
+    const { id } = req.params;
+    const validatedData = insertAlertRuleSchema.partial().parse(req.body);
+    
+    const rule = await db.update(alertRules)
+      .set({ ...validatedData, updatedAt: new Date() })
+      .where(eq(alertRules.id, id))
+      .returning();
+    
+    if (rule.length === 0) {
+      return res.status(404).json({ success: false, error: 'Alert rule not found' });
+    }
+    
+    res.json({ success: true, data: rule[0] });
+  }));
+
+  // DELETE /api/admin/alerts/:id - Delete alert rule
+  app.delete('/api/admin/alerts/:id', requireAuth, requireAdmin, asyncHandler(async (req: Request, res: Response) => {
+    const { id } = req.params;
+    
+    const result = await db.delete(alertRules).where(eq(alertRules.id, id)).returning();
+    
+    if (result.length === 0) {
+      return res.status(404).json({ success: false, error: 'Alert rule not found' });
+    }
+    
+    res.json({ success: true, message: 'Alert rule deleted successfully' });
+  }));
+
+  // GET /api/admin/alerts/history - Get alert history
+  app.get('/api/admin/alerts/history', requireAuth, requireAdmin, asyncHandler(async (req: Request, res: Response) => {
+    const { alertService } = await import("./services/alertService");
+    const { limit = '100' } = req.query;
+    const tenantId = req.tenant?.tenant?.id || undefined;
+    
+    const history = await alertService.getAlertHistory(parseInt(limit as string), tenantId);
+    
+    res.json({ success: true, data: history });
   }));
 
   // ============================================================================

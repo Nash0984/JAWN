@@ -308,6 +308,28 @@ app.use("/api/", (req, res, next) => {
   });
 
   // ============================================================================
+  // SCHEDULED ALERT EVALUATION - Run every 1 minute
+  // ============================================================================
+  let alertEvaluationInterval: NodeJS.Timeout | null = null;
+  
+  try {
+    const { alertService } = await import("./services/alertService");
+    
+    // Run alert evaluation every 1 minute
+    alertEvaluationInterval = setInterval(async () => {
+      try {
+        await alertService.evaluateAlerts();
+      } catch (error) {
+        console.error("❌ Error evaluating alerts:", error);
+      }
+    }, 60000); // 60 seconds
+    
+    console.log("📊 Alert evaluation scheduled (runs every 1 minute)");
+  } catch (error) {
+    console.error("❌ Failed to start alert evaluation scheduler:", error);
+  }
+
+  // ============================================================================
   // GRACEFUL SHUTDOWN HANDLING - Clean up resources on SIGTERM/SIGINT
   // ============================================================================
   const gracefulShutdown = async (signal: string) => {
@@ -338,6 +360,12 @@ app.use("/api/", (req, res, next) => {
         console.log("✅ Smart Scheduler stopped");
       } catch (error) {
         console.error("⚠️  Error stopping Smart Scheduler:", error);
+      }
+
+      // Stop Alert Evaluation scheduler
+      if (alertEvaluationInterval) {
+        clearInterval(alertEvaluationInterval);
+        console.log("✅ Alert evaluation scheduler stopped");
       }
 
       console.log("✅ Graceful shutdown complete");
