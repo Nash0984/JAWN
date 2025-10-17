@@ -555,6 +555,61 @@ This master index provides a complete map of all documentation across the Maryla
 
 ---
 
+### IRS VITA Publications
+
+#### Knowledge Base Sources
+**Status:** ✅ CURRENT (Updated Oct 17, 2025)  
+**Location:** `server/services/irsDirectDownloader.ts`  
+**Purpose:** IRS tax guidance publications for VITA program
+
+**IRS Publications Ingested (8 total):**
+
+1. **IRS Pub 4012** - VITA/TCE Volunteer Resource Guide
+   - Primary VITA reference guide for volunteer tax preparation
+   - Tax Year: 2025
+
+2. **IRS Pub 4491** - VITA/TCE Training Guide
+   - Core VITA training guide with lessons for all certification levels
+   - Tax Year: 2025
+
+3. **IRS Pub 4491-X** - VITA/TCE Training Supplement
+   - Updates to VITA training materials after initial printing
+   - Revision: 1-2025
+
+4. **IRS Pub 4961** - VITA/TCE Volunteer Standards of Conduct
+   - Required ethics training for all VITA volunteers
+   - Revision: 5-2025
+
+5. **IRS Form 6744** - VITA/TCE Volunteer Assistor Test/Retest
+   - Practice scenarios and certification test questions
+   - Tax Year: 2025 tax returns
+
+6. **IRS Pub 17** - Your Federal Income Tax ✨ NEW
+   - Comprehensive individual tax guide (300+ pages)
+   - Covers: Filing requirements, income types, deductions, credits
+   - Tax Year: 2024
+
+7. **IRS Pub 596** - Earned Income Credit (EIC) ✨ NEW
+   - Comprehensive EITC guide with eligibility rules and examples
+   - Covers: EITC eligibility, calculation tables, qualifying child requirements
+   - Tax Year: 2024
+
+8. **IRS Pub 972** - Child Tax Credit and Credit for Other Dependents ✨ NEW
+   - CTC and ODC comprehensive guide
+   - Covers: CTC/ODC eligibility, calculation, phase-out thresholds, Additional Child Tax Credit
+   - Tax Year: 2024
+
+**RAG Pipeline:**
+- PDF download from IRS.gov (predictable URL pattern: `/pub/irs-pdf/p{number}.pdf`)
+- Text extraction using pdf-parse library
+- Semantic chunking (500-1000 character chunks with context preservation)
+- Embedding generation via Google Gemini API
+- Automatic weekly updates via Smart Scheduler
+
+**When to Use:** Understanding VITA knowledge base sources, RAG system content, tax guidance capabilities.
+
+---
+
 ## 🎯 Documentation by Use Case
 
 ### Use Case 1: "I'm deploying to production"

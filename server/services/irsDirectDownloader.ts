@@ -67,6 +67,30 @@ export class IRSDirectDownloader {
       minRevisionYear: 2025,
       description: 'Practice scenarios and certification test questions (2025 tax returns)',
     },
+    {
+      number: 'p17',
+      name: 'IRS Pub 17 - Your Federal Income Tax',
+      url: `${this.IRS_PDF_BASE_URL}/p17.pdf`,
+      type: 'publication',
+      minRevisionYear: 2024,
+      description: 'Comprehensive individual tax guide covering filing requirements, income types, deductions, and credits (2024 tax year)',
+    },
+    {
+      number: 'p596',
+      name: 'IRS Pub 596 - Earned Income Credit (EIC)',
+      url: `${this.IRS_PDF_BASE_URL}/p596.pdf`,
+      type: 'publication',
+      minRevisionYear: 2024,
+      description: 'Comprehensive EITC guide with eligibility rules, calculation tables, qualifying child requirements, and examples (2024 tax year)',
+    },
+    {
+      number: 'p972',
+      name: 'IRS Pub 972 - Child Tax Credit and Credit for Other Dependents',
+      url: `${this.IRS_PDF_BASE_URL}/p972.pdf`,
+      type: 'publication',
+      minRevisionYear: 2024,
+      description: 'CTC and ODC guide covering eligibility, calculation, phase-out thresholds, and Additional Child Tax Credit (2024 tax year)',
+    },
   ];
 
   /**
