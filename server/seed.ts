@@ -8,6 +8,7 @@ import {
   generateJobAids, 
   generateTrainingInterventions 
 } from "./services/qcSyntheticData";
+import { seedDemoMetrics } from './seeds/demoMetrics';
 
 /**
  * Seed initial tenants and their branding
@@ -279,7 +280,10 @@ async function seedTenants() {
     console.log("   • Job Aids: Comprehensive training materials for caseworkers");
     console.log("   • Training Impact: Demonstrating measurable error rate improvements");
     
-    console.log("\n🎉 Tenant, API key, and QC Analytics seeding completed successfully!");
+    // Seed demo metrics for monitoring dashboard
+    await seedDemoMetrics();
+    
+    console.log("\n🎉 Tenant, API key, QC Analytics, and Demo Metrics seeding completed successfully!");
   } catch (error) {
     console.error("❌ Error seeding tenants:", error);
     throw error;

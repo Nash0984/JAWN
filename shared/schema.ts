@@ -5065,6 +5065,30 @@ export const alertHistory = pgTable("alert_history", {
   createdAtIdx: index("alert_history_created_at_idx").on(table.createdAt),
 }));
 
+export const alertRules = pgTable("alert_rules", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull(), // "High Error Rate", "Slow API Response", etc.
+  metricType: text("metric_type").notNull(), // error_rate, response_time, cache_hit_rate, etc.
+  threshold: real("threshold").notNull(), // Numeric threshold value
+  comparison: text("comparison").notNull(), // greater_than, less_than, equals
+  severity: text("severity").notNull(), // critical, warning, info
+  channels: jsonb("channels").notNull(), // ['email', 'sms', 'in_app']
+  enabled: boolean("enabled").notNull().default(true),
+  cooldownMinutes: integer("cooldown_minutes").default(30), // Prevent alert spam
+  lastTriggered: timestamp("last_triggered"),
+  recipientUserIds: jsonb("recipient_user_ids"), // Array of user IDs to notify
+  recipientRoles: jsonb("recipient_roles"), // ['admin', 'navigator'] - role-based recipients
+  metadata: jsonb("metadata"), // Additional config
+  tenantId: varchar("tenant_id").references(() => tenants.id),
+  createdBy: varchar("created_by").references(() => users.id).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  metricTypeIdx: index("alert_rules_metric_type_idx").on(table.metricType),
+  enabledIdx: index("alert_rules_enabled_idx").on(table.enabled),
+  tenantIdx: index("alert_rules_tenant_idx").on(table.tenantId),
+}));
+
 // Relations
 export const monitoringMetricsRelations = relations(monitoringMetrics, ({ one }) => ({
   tenant: one(tenants, {
@@ -5080,6 +5104,17 @@ export const alertHistoryRelations = relations(alertHistory, ({ one }) => ({
   }),
 }));
 
+export const alertRulesRelations = relations(alertRules, ({ one }) => ({
+  tenant: one(tenants, {
+    fields: [alertRules.tenantId],
+    references: [tenants.id],
+  }),
+  createdByUser: one(users, {
+    fields: [alertRules.createdBy],
+    references: [users.id],
+  }),
+}));
+
 // Insert/select schemas
 export const insertMonitoringMetricSchema = createInsertSchema(monitoringMetrics).omit({
   id: true,
@@ -5091,10 +5126,19 @@ export const insertAlertHistorySchema = createInsertSchema(alertHistory).omit({
   createdAt: true,
 });
 
+export const insertAlertRuleSchema = createInsertSchema(alertRules).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+  lastTriggered: true,
+});
+
 export type InsertMonitoringMetric = z.infer<typeof insertMonitoringMetricSchema>;
 export type MonitoringMetric = typeof monitoringMetrics.$inferSelect;
 export type InsertAlertHistory = z.infer<typeof insertAlertHistorySchema>;
 export type AlertHistory = typeof alertHistory.$inferSelect;
+export type InsertAlertRule = z.infer<typeof insertAlertRuleSchema>;
+export type AlertRule = typeof alertRules.$inferSelect;
 
 // ============================================================================
 // COUNTY TAX RATES - Maryland County Tax Rate Management

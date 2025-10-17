@@ -2,16 +2,34 @@ import { WebSocket, WebSocketServer } from "ws";
 import { IncomingMessage, Server } from "http";
 import { parse } from "url";
 import session from "express-session";
+import { metricsService, type RealtimeMetricUpdate } from "./metricsService";
+import type { MonitoringDashboardMetrics } from "@shared/monitoring";
+import { db } from "../db";
+import { users } from "@shared/schema";
+import { eq } from "drizzle-orm";
 
 interface AuthenticatedWebSocket extends WebSocket {
   userId?: string;
   isAlive?: boolean;
 }
 
+/**
+ * Helper function to get user by ID with role check
+ */
+async function getUserById(userId: string) {
+  const user = await db.query.users.findFirst({
+    where: eq(users.id, userId),
+    columns: { id: true, role: true },
+  });
+  return user;
+}
+
 export class WebSocketService {
   private wss: WebSocketServer;
   private clients: Map<string, Set<AuthenticatedWebSocket>> = new Map();
   private heartbeatInterval: NodeJS.Timeout | null = null;
+  private metricsSubscribers: Set<string> = new Set();
+  private metricsInterval: NodeJS.Timeout | null = null;
   private sessionParser: any;
 
   constructor(server: Server, sessionMiddleware: any) {
@@ -25,6 +43,7 @@ export class WebSocketService {
 
     this.wss.on("connection", this.handleConnection.bind(this));
     this.startHeartbeat();
+    this.startMetricsBroadcast();
 
     console.log("WebSocket server initialized on /ws/notifications");
   }
@@ -99,8 +118,15 @@ export class WebSocketService {
 
   private handleMessage(ws: AuthenticatedWebSocket, data: any) {
     // Handle client messages (e.g., subscription preferences, ping)
-    if (data.type === "ping") {
-      this.sendToClient(ws, { type: "pong", timestamp: new Date().toISOString() });
+    switch (data.type) {
+      case "ping":
+        this.sendToClient(ws, { type: "pong", timestamp: new Date().toISOString() });
+        break;
+      case "subscribe_metrics":
+        if (ws.userId) {
+          this.handleMetricsSubscribe(ws, ws.userId);
+        }
+        break;
     }
   }
 
@@ -113,6 +139,12 @@ export class WebSocketService {
           this.clients.delete(ws.userId);
         }
       }
+      
+      // Remove from metrics subscribers if no more connections
+      if (!this.clients.has(ws.userId)) {
+        this.metricsSubscribers.delete(ws.userId);
+      }
+      
       console.log(`WebSocket client disconnected: ${ws.userId}`);
     }
   }
@@ -128,6 +160,79 @@ export class WebSocketService {
         ws.ping();
       });
     }, 30000);
+  }
+
+  /**
+   * Start broadcasting metrics to subscribed admins
+   */
+  private startMetricsBroadcast() {
+    this.metricsInterval = setInterval(async () => {
+      if (this.metricsSubscribers.size === 0) return; // Skip if no subscribers
+      
+      try {
+        const metrics = await metricsService.getAllMetrics();
+        this.broadcastMetrics(metrics);
+      } catch (error) {
+        console.error('Metrics broadcast error:', error);
+      }
+    }, 30000); // 30 seconds
+  }
+
+  /**
+   * Broadcast metrics to subscribed admin users
+   */
+  public broadcastMetrics(metrics: MonitoringDashboardMetrics) {
+    const payload = {
+      type: 'metrics_update',
+      data: metrics,
+      timestamp: new Date().toISOString(),
+    };
+
+    // Send metrics directly without double-wrapping in notification envelope
+    this.metricsSubscribers.forEach((userId) => {
+      const userSockets = this.clients.get(userId);
+      if (userSockets && userSockets.size > 0) {
+        const message = JSON.stringify(payload);
+        userSockets.forEach((ws) => {
+          if (ws.readyState === WebSocket.OPEN) {
+            ws.send(message);
+          }
+        });
+      }
+    });
+  }
+
+  /**
+   * Handle metrics subscription from client
+   */
+  private async handleMetricsSubscribe(ws: AuthenticatedWebSocket, userId: string) {
+    // Verify admin role
+    const user = await getUserById(userId);
+    if (user?.role !== 'admin') {
+      ws.send(JSON.stringify({ 
+        type: 'error', 
+        message: 'Unauthorized: Admin role required for metrics' 
+      }));
+      return;
+    }
+
+    this.metricsSubscribers.add(userId);
+    
+    // Send immediate snapshot
+    try {
+      const metrics = await metricsService.getAllMetrics();
+      ws.send(JSON.stringify({
+        type: 'metrics_snapshot',
+        data: metrics,
+        timestamp: new Date().toISOString(),
+      }));
+    } catch (error) {
+      console.error('Error sending metrics snapshot:', error);
+      ws.send(JSON.stringify({
+        type: 'error',
+        message: 'Failed to fetch metrics snapshot',
+      }));
+    }
   }
 
   private sendToClient(ws: WebSocket, data: any) {
@@ -215,6 +320,9 @@ export class WebSocketService {
   public shutdown() {
     if (this.heartbeatInterval) {
       clearInterval(this.heartbeatInterval);
+    }
+    if (this.metricsInterval) {
+      clearInterval(this.metricsInterval);
     }
     this.wss.close();
     console.log("WebSocket server shut down");
