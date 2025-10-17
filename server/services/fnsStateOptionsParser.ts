@@ -29,6 +29,16 @@ export class FNSStateOptionsParser {
    * Download and parse the FNS State Options Report
    */
   async downloadAndParse(): Promise<{ optionsCreated: number; marylandStatusCreated: number }> {
+    // Check if we already have data for this edition
+    const existingData = await db.query.stateOptionsWaivers.findFirst({
+      where: eq(stateOptionsWaivers.fnsReportEdition, this.REPORT_EDITION),
+    });
+    
+    if (existingData) {
+      console.log(`⏭️  FNS State Options Report Edition ${this.REPORT_EDITION} already in database - skipping download`);
+      return { optionsCreated: 0, marylandStatusCreated: 0 };
+    }
+    
     console.log('📥 Downloading FNS State Options Report (17th Edition, August 2025)...');
     
     // Download PDF
