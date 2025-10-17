@@ -3,6 +3,7 @@ import type { TaxCalculationResult, TaxHouseholdInput } from './policyEngineTaxC
 import { db } from '../db';
 import { countyTaxRates } from '@shared/schema';
 import { eq, and } from 'drizzle-orm';
+import { getTaxYearConfig } from './taxYearConfig';
 
 /**
  * Maryland Form 502 PDF Generator
@@ -117,7 +118,7 @@ export interface MarylandTaxResult {
   effectiveMarylandRate: number;
 }
 
-// Maryland county tax rates (2024)
+// Maryland county tax rates (fallback for all years if database lookup fails)
 const COUNTY_TAX_RATES: Record<string, { min: number; max: number }> = {
   'ALLEGANY': { min: 0.0225, max: 0.032 },
   'ANNE ARUNDEL': { min: 0.0225, max: 0.032 },
@@ -145,27 +146,6 @@ const COUNTY_TAX_RATES: Record<string, { min: number; max: number }> = {
   'WORCESTER': { min: 0.0225, max: 0.0125 }
 };
 
-// Maryland state tax brackets (2024)
-const MARYLAND_TAX_BRACKETS = [
-  { limit: 1000, rate: 0.02 },
-  { limit: 2000, rate: 0.03 },
-  { limit: 3000, rate: 0.04 },
-  { limit: 100000, rate: 0.0475 },
-  { limit: 125000, rate: 0.05 },
-  { limit: 150000, rate: 0.0525 },
-  { limit: 250000, rate: 0.055 },
-  { limit: Infinity, rate: 0.0575 }
-];
-
-// Maryland standard deductions (2024)
-const MARYLAND_STANDARD_DEDUCTIONS: Record<string, number> = {
-  'single': 2350,
-  'married_joint': 4700,
-  'married_separate': 2350,
-  'head_of_household': 2350,
-  'qualifying_widow': 4700
-};
-
 export class Form502Generator {
   private doc!: jsPDF;
   private readonly pageWidth = 8.5 * 72;
@@ -189,25 +169,28 @@ export class Form502Generator {
     // Maryland additions to federal AGI
     const marylandAdditions = marylandInput.stateTaxRefund || 0;
     
+    // Get tax year configuration
+    const taxConfig = getTaxYearConfig(taxYear);
+    
     // Maryland subtractions from federal AGI
     const ssSubtraction = marylandInput.socialSecurityBenefits || 0;
     const railroadSubtraction = marylandInput.railroadRetirement || 0;
-    const pensionSubtraction = Math.min(marylandInput.pensionIncome || 0, 35700);
+    const pensionSubtraction = Math.min(marylandInput.pensionIncome || 0, taxConfig.maryland.pensionSubtractionMax);
     const marylandSubtractions = ssSubtraction + railroadSubtraction + pensionSubtraction;
     
     // Maryland AGI
     const marylandAGI = federalAGI + marylandAdditions - marylandSubtractions;
     
-    // Maryland deductions
-    const marylandStandardDeduction = MARYLAND_STANDARD_DEDUCTIONS[taxInput.filingStatus] || 2350;
+    // Maryland deductions (use year-specific values)
+    const marylandStandardDeduction = taxConfig.maryland.standardDeductions[taxInput.filingStatus] || taxConfig.maryland.standardDeductions.single;
     const marylandItemizedDeduction = federalTaxResult.deductionBreakdown.itemizedDeduction * 0.85; // MD allows 85% of federal itemized
     const marylandDeduction = Math.max(marylandStandardDeduction, marylandItemizedDeduction);
     
     // Maryland taxable income
     const marylandTaxableIncome = Math.max(0, marylandAGI - marylandDeduction);
     
-    // Calculate Maryland state tax using progressive brackets
-    const marylandStateTax = this.calculateProgressiveTax(marylandTaxableIncome, MARYLAND_TAX_BRACKETS);
+    // Calculate Maryland state tax using progressive brackets (year-specific)
+    const marylandStateTax = this.calculateProgressiveTax(marylandTaxableIncome, taxConfig.maryland.stateTaxBrackets);
     
     // Calculate county tax (fetch from database with fallback to hard-coded rates)
     const countyRate = await this.getCountyTaxRate(county, marylandTaxableIncome, taxYear);
@@ -215,8 +198,8 @@ export class Form502Generator {
     
     const totalMarylandTax = marylandStateTax + countyTax;
     
-    // Maryland EITC (50% of federal EITC for 2024)
-    const marylandEITC = federalTaxResult.eitc * 0.50;
+    // Maryland EITC (percentage varies by year - use config)
+    const marylandEITC = federalTaxResult.eitc * taxConfig.maryland.eitcPercentage;
     
     // Poverty level credit (simplified calculation)
     const povertyLevelCredit = this.calculatePovertyLevelCredit(marylandAGI, taxInput.filingStatus);
