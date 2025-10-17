@@ -67,7 +67,9 @@ import {
   marylandBills,
   publicLaws,
   alertRules,
-  alertHistory
+  alertHistory,
+  consentForms,
+  clientConsents
 } from "@shared/schema";
 import { z } from "zod";
 import bcrypt from "bcryptjs";
@@ -3415,54 +3417,131 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
     res.json(consents);
   }));
 
-  // Create a new client consent
+  // Enhanced client consent recording with VITA session linkage and audit trail
   app.post("/api/consent/client-consents", requireAuth, asyncHandler(async (req: Request, res: Response) => {
-    const validatedData = clientConsentSchema.parse(req.body);
+    const {
+      clientCaseId,
+      consentFormId,
+      vitaIntakeSessionId, // NEW: Link to VITA session
+      signatureMetadata, // NEW: {typedName, date, ipAddress, userAgent, method}
+      benefitProgramsAuthorized, // NEW: Programs authorized
+      notes
+    } = req.body;
     
-    // Verify that the form exists and is active
-    const form = await storage.getConsentForm(validatedData.consentFormId);
-    if (!form) {
-      throw validationError("Consent form not found");
-    }
-    if (!form.isActive) {
-      throw validationError("Consent form is not active");
+    // Validate required fields
+    if (!clientCaseId || !consentFormId) {
+      return res.status(400).json({
+        success: false,
+        error: 'clientCaseId and consentFormId are required'
+      });
     }
     
-    // Calculate expiration date if the form has an expiration period
-    let expiresAt: Date | null = null;
-    if (form.expirationDays) {
-      const consentDate = new Date(validatedData.consentDate);
-      expiresAt = new Date(consentDate.getTime() + form.expirationDays * 24 * 60 * 60 * 1000);
+    // Fetch consent form to get version and content
+    const consentForm = await db.query.consentForms.findFirst({
+      where: eq(consentForms.id, consentFormId)
+    });
+    
+    if (!consentForm) {
+      return res.status(404).json({
+        success: false,
+        error: 'Consent form not found'
+      });
     }
-
-    const consentData = {
-      clientCaseId: validatedData.clientCaseId,
-      consentFormId: validatedData.consentFormId,
-      consentGiven: validatedData.consentGiven,
-      consentDate: new Date(validatedData.consentDate),
-      signatureMethod: validatedData.signatureMethod,
-      notes: validatedData.notes,
-      expiresAt
-    };
-
-    const consent = await storage.createClientConsent(consentData);
-    res.json(consent);
+    
+    if (!consentForm.isActive) {
+      return res.status(400).json({
+        success: false,
+        error: 'Consent form is not currently active'
+      });
+    }
+    
+    // Get client IP and user agent for audit trail
+    const ipAddress = req.ip || req.headers['x-forwarded-for'] || req.socket.remoteAddress;
+    const userAgent = req.headers['user-agent'];
+    
+    // Calculate expiration date if form has expirationDays
+    const expiresAt = consentForm.expirationDays
+      ? new Date(Date.now() + consentForm.expirationDays * 24 * 60 * 60 * 1000)
+      : null;
+    
+    // Insert client consent with enhanced metadata
+    const [consent] = await db.insert(clientConsents).values({
+      clientCaseId,
+      consentFormId,
+      sessionId: req.sessionID, // Existing session tracking
+      vitaIntakeSessionId, // NEW: VITA session linkage
+      consentGiven: true,
+      consentDate: new Date(),
+      signatureMetadata, // NEW: Structured signature data
+      acceptedFormVersion: `v${consentForm.version}`, // NEW: Track version
+      acceptedFormContent: consentForm.formContent, // NEW: Copy of accepted text
+      benefitProgramsAuthorized, // NEW: Programs authorized
+      ipAddress: ipAddress?.toString(), // NEW: Client IP
+      userAgent, // NEW: Browser user agent
+      expiresAt,
+      notes,
+    }).returning();
+    
+    // Log audit event
+    await db.insert(auditLogs).values({
+      userId: req.user!.id,
+      action: 'irs_consent_recorded',
+      resource: 'client_consent',
+      resourceId: consent.id,
+      details: {
+        formCode: consentForm.formCode,
+        formVersion: consentForm.version,
+        vitaSessionId: vitaIntakeSessionId,
+        benefitPrograms: benefitProgramsAuthorized,
+        signatureMethod: signatureMetadata?.method,
+      },
+      ipAddress: ipAddress?.toString(),
+      userAgent,
+    });
+    
+    res.status(201).json({
+      success: true,
+      data: consent
+    });
   }));
 
   // GET consent form by code - Used for IRS consent form retrieval
-  app.get("/api/consent/forms/:code", asyncHandler(async (req: Request, res: Response) => {
+  app.get("/api/consent/forms/:code", requireAuth, asyncHandler(async (req: Request, res: Response) => {
+    const { code } = req.params;
+    
     const form = await db.query.consentForms.findFirst({
       where: and(
-        eq(consentForms.formCode, req.params.code),
+        eq(consentForms.formCode, code),
         eq(consentForms.isActive, true)
       )
     });
     
     if (!form) {
-      return res.status(404).json({ success: false, error: 'Consent form not found' });
+      return res.status(404).json({ 
+        success: false, 
+        error: `Consent form '${code}' not found or inactive` 
+      });
     }
     
     res.json({ success: true, data: form });
+  }));
+
+  // Retrieve consent for a specific VITA session
+  app.get("/api/consent/client-consents/vita-session/:sessionId", requireAuth, asyncHandler(async (req: Request, res: Response) => {
+    const { sessionId } = req.params;
+    
+    const consents = await db.query.clientConsents.findMany({
+      where: eq(clientConsents.vitaIntakeSessionId, sessionId),
+      with: {
+        consentForm: true, // Include form details
+      },
+      orderBy: [desc(clientConsents.consentDate)]
+    });
+    
+    res.json({
+      success: true,
+      data: consents
+    });
   }));
 
   // Enhanced client consent recording with VITA session linkage and audit trail
@@ -3521,9 +3600,9 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
     await db.insert(auditLogs).values({
       userId: req.user!.id,
       action: 'irs_consent_recorded',
-      resourceType: 'client_consent',
+      resource: 'client_consent',
       resourceId: consent.id,
-      metadata: {
+      details: {
         consentFormCode: form.formCode,
         sessionId,
         benefitPrograms,

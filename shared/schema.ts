@@ -1497,9 +1497,19 @@ export const consentForms = pgTable("consent_forms", {
   approvedAt: timestamp("approved_at"),
   effectiveDate: timestamp("effective_date"),
   endDate: timestamp("end_date"),
+  
+  // IRS-specific fields for Use & Disclosure Consent
+  benefitPrograms: jsonb("benefit_programs"), // Array of program codes: ['snap', 'medicaid', 'tca', 'ohep']
+  legalLanguageVersion: text("legal_language_version"), // Track IRS language version for compliance
+  irsPublicationRef: text("irs_publication_ref"), // e.g., "Pub 4299 (2024)"
+  disclosureScope: jsonb("disclosure_scope"), // Specific data elements authorized for disclosure
+  
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
-});
+}, (table) => ({
+  // Add index for code lookups
+  formCodeIdx: index("consent_forms_code_idx").on(table.formCode),
+}));
 
 export const clientConsents = pgTable("client_consents", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -1517,8 +1527,22 @@ export const clientConsents = pgTable("client_consents", {
   revokedReason: text("revoked_reason"),
   notes: text("notes"),
   metadata: jsonb("metadata"), // Additional consent metadata (benefitPrograms, userAgent, formVersion, etc.)
+  
+  // Enhanced signature metadata and IRS compliance tracking
+  signatureMetadata: jsonb("signature_metadata"), // {typedName, date, ipAddress, userAgent, method}
+  acceptedFormVersion: text("accepted_form_version"), // Version of form accepted (for audit)
+  acceptedFormContent: text("accepted_form_content"), // Copy of accepted text (for legal record)
+  benefitProgramsAuthorized: jsonb("benefit_programs_authorized"), // Programs authorized in this consent
+  vitaIntakeSessionId: varchar("vita_intake_session_id").references(() => vitaIntakeSessions.id), // Link to VITA session
+  userAgent: text("user_agent"), // Browser user agent
+  
   createdAt: timestamp("created_at").defaultNow().notNull(),
-});
+}, (table) => ({
+  // Add indexes for common queries
+  vitaSessionIdx: index("client_consents_vita_session_idx").on(table.vitaIntakeSessionId),
+  formVersionIdx: index("client_consents_form_version_idx").on(table.acceptedFormVersion),
+  clientCaseIdx: index("client_consents_client_case_idx").on(table.clientCaseId),
+}));
 
 // Relations for new tables
 export const policyCitationsRelations = relations(policyCitations, ({ one }) => ({
@@ -1830,12 +1854,25 @@ export const insertConsentFormSchema = createInsertSchema(consentForms).omit({
   id: true,
   createdAt: true,
   updatedAt: true,
+  version: true, // Auto-incremented
+}).extend({
+  benefitPrograms: z.array(z.string()).optional(),
+  disclosureScope: z.record(z.boolean()).optional(),
 });
 
 export const insertClientConsentSchema = createInsertSchema(clientConsents).omit({
   id: true,
   consentDate: true,
   createdAt: true,
+}).extend({
+  signatureMetadata: z.object({
+    typedName: z.string(),
+    date: z.string(),
+    ipAddress: z.string().optional(),
+    userAgent: z.string().optional(),
+    method: z.enum(['electronic', 'verbal', 'physical']),
+  }).optional(),
+  benefitProgramsAuthorized: z.array(z.string()).optional(),
 });
 
 export const insertDocumentVerificationSchema = createInsertSchema(documentVerifications).omit({

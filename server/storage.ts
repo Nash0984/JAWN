@@ -355,10 +355,13 @@ export interface IStorage {
   createConsentForm(form: InsertConsentForm): Promise<ConsentForm>;
   getConsentForms(): Promise<ConsentForm[]>;
   getConsentForm(id: string): Promise<ConsentForm | undefined>;
+  getConsentFormByCode(code: string): Promise<ConsentForm | null>;
 
   // Consent Management - Client Consents
   createClientConsent(consent: InsertClientConsent): Promise<ClientConsent>;
+  recordClientConsent(data: InsertClientConsent): Promise<ClientConsent>;
   getClientConsents(clientCaseId?: string): Promise<ClientConsent[]>;
+  getConsentByVitaSession(sessionId: string): Promise<ClientConsent[]>;
 
   // Policy Change Monitoring
   createPolicyChange(change: InsertPolicyChange): Promise<PolicyChange>;
@@ -1551,6 +1554,30 @@ export class DatabaseStorage implements IStorage {
     }
     
     return await query.orderBy(desc(clientConsents.consentDate));
+  }
+
+  async getConsentFormByCode(code: string): Promise<ConsentForm | null> {
+    const [form] = await db
+      .select()
+      .from(consentForms)
+      .where(and(
+        eq(consentForms.formCode, code),
+        eq(consentForms.isActive, true)
+      ));
+    return form || null;
+  }
+
+  async recordClientConsent(data: InsertClientConsent): Promise<ClientConsent> {
+    const [consent] = await db.insert(clientConsents).values(data).returning();
+    return consent;
+  }
+
+  async getConsentByVitaSession(sessionId: string): Promise<ClientConsent[]> {
+    return await db
+      .select()
+      .from(clientConsents)
+      .where(eq(clientConsents.vitaIntakeSessionId, sessionId))
+      .orderBy(desc(clientConsents.consentDate));
   }
 
   // Policy Change Monitoring
