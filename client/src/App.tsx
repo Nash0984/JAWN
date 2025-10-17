@@ -75,6 +75,11 @@ import HouseholdProfiler from "@/pages/HouseholdProfiler";
 import VitaIntake from "@/pages/VitaIntake";
 import VitaDocuments from "@/pages/VitaDocuments";
 import AppointmentsCalendar from "@/pages/AppointmentsCalendar";
+import TaxpayerDashboard from "@/pages/TaxpayerDashboard";
+import TaxpayerDocumentRequests from "@/pages/TaxpayerDocumentRequests";
+import TaxpayerMessaging from "@/pages/TaxpayerMessaging";
+import TaxpayerSignature from "@/pages/TaxpayerSignature";
+import { TaxpayerLayout } from "@/components/TaxpayerLayout";
 import MobileBottomNav from "@/components/MobileBottomNav";
 import { BrandingProvider } from "@/contexts/BrandingContext";
 import { CountyHeader } from "@/components/CountyHeader";
@@ -265,6 +270,44 @@ function Router() {
             {() => (
               <ProtectedRoute requireStaff>
                 <AppointmentsCalendar />
+              </ProtectedRoute>
+            )}
+          </Route>
+          
+          {/* Taxpayer Self-Service Portal - Protected routes for taxpayers */}
+          <Route path="/taxpayer">
+            {() => (
+              <ProtectedRoute>
+                <TaxpayerLayout>
+                  <TaxpayerDashboard />
+                </TaxpayerLayout>
+              </ProtectedRoute>
+            )}
+          </Route>
+          <Route path="/taxpayer/documents">
+            {() => (
+              <ProtectedRoute>
+                <TaxpayerLayout>
+                  <TaxpayerDocumentRequests />
+                </TaxpayerLayout>
+              </ProtectedRoute>
+            )}
+          </Route>
+          <Route path="/taxpayer/messages">
+            {() => (
+              <ProtectedRoute>
+                <TaxpayerLayout>
+                  <TaxpayerMessaging />
+                </TaxpayerLayout>
+              </ProtectedRoute>
+            )}
+          </Route>
+          <Route path="/taxpayer/signature">
+            {() => (
+              <ProtectedRoute>
+                <TaxpayerLayout>
+                  <TaxpayerSignature />
+                </TaxpayerLayout>
               </ProtectedRoute>
             )}
           </Route>

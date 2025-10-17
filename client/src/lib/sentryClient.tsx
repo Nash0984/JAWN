@@ -115,7 +115,7 @@ export function getSentryErrorBoundary() {
     return Sentry.ErrorBoundary;
   }
   // Return a fallback error boundary
-  return ({ children }: { children: React.ReactNode }) => <>{children}</>;
+  return ({ children }: { children: ReactNode }) => <>{children}</>;
 }
 
 /**
