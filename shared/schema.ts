@@ -22,6 +22,8 @@ export const users = pgTable("users", {
   vitaCertificationDate: timestamp("vita_certification_date"), // when certification was earned
   vitaCertificationExpiry: timestamp("vita_certification_expiry"), // expiration date (typically Dec 31 annually)
   vitaCertificationNumber: text("vita_certification_number"), // IRS-issued certification ID
+  // TaxSlayer role tracking (for VITA coordination documentation only - not permission control)
+  taxslayerRole: text("taxslayer_role"), // Administrator, Superuser, Preparer Current Year, Preparer All Years, Interviewer, Reviewer
   isActive: boolean("is_active").default(true).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
