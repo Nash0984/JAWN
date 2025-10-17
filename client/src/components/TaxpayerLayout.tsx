@@ -4,7 +4,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card } from "@/components/ui/card";
 import { FileText, MessageSquare, PenTool, LayoutDashboard } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
-import { NotificationBell } from "@/components/NotificationBell";
+import NotificationBell from "@/components/NotificationBell";
 
 interface TaxpayerLayoutProps {
   children: React.ReactNode;
