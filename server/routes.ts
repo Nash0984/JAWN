@@ -52,6 +52,10 @@ import {
   insertTaxslayerReturnSchema,
   insertAlertRuleSchema,
   insertAppointmentSchema,
+  insertDocumentRequestSchema,
+  insertTaxpayerMessageSchema,
+  insertTaxpayerMessageAttachmentSchema,
+  insertESignatureSchema,
   searchQueries,
   auditLogs,
   ruleChangeLogs,
@@ -8099,6 +8103,309 @@ If the question cannot be answered with the available information, say so clearl
     };
 
     res.json(checklist);
+  }));
+
+  // ============================================================================
+  // TAXPAYER SELF-SERVICE PORTAL - Document Requests, Messages, E-Signatures
+  // ============================================================================
+
+  // Create document request (Navigator creates request for taxpayer)
+  app.post("/api/taxpayer/document-requests", requireAuth, requireStaff, asyncHandler(async (req: Request, res: Response) => {
+    const validated = insertDocumentRequestSchema.parse(req.body);
+    
+    // Verify navigator has access to this VITA session
+    const session = await storage.getVitaIntakeSession(validated.vitaSessionId);
+    if (!session) {
+      return res.status(404).json({ error: "VITA session not found" });
+    }
+
+    // Set requestedBy to current user
+    const documentRequest = await storage.createDocumentRequest({
+      ...validated,
+      requestedBy: req.user!.id,
+    });
+
+    // Send notification to taxpayer
+    await notificationService.sendNotification({
+      userId: session.userId!,
+      type: 'document_request',
+      title: 'New Document Request',
+      message: `Your navigator has requested: ${documentRequest.documentType}`,
+      metadata: { documentRequestId: documentRequest.id, vitaSessionId: session.id },
+    });
+
+    // Audit log
+    await auditService.logAction({
+      userId: req.user!.id,
+      action: 'taxpayer_document_request_created',
+      entityType: 'document_request',
+      entityId: documentRequest.id,
+      metadata: { vitaSessionId: session.id, documentType: documentRequest.documentType },
+    });
+
+    res.status(201).json(documentRequest);
+  }));
+
+  // Get document requests
+  app.get("/api/taxpayer/document-requests", requireAuth, asyncHandler(async (req: Request, res: Response) => {
+    const { vitaSessionId, status, limit } = req.query;
+
+    const filters: any = {};
+    
+    // SECURITY FIX: Client users (taxpayers) MUST provide vitaSessionId to prevent data leakage
+    if (req.user!.role === 'client') {
+      if (!vitaSessionId) {
+        return res.status(400).json({ 
+          error: "Missing required parameter",
+          message: "vitaSessionId is required for taxpayers to view document requests" 
+        });
+      }
+      
+      // Verify user has access to this session
+      const session = await storage.getVitaIntakeSession(vitaSessionId as string);
+      if (!session) {
+        return res.status(404).json({ error: "VITA session not found" });
+      }
+      
+      // Verify ownership - taxpayers can only see their own session's requests
+      if (session.userId !== req.user!.id) {
+        return res.status(403).json({ error: "Access denied to this VITA session" });
+      }
+      
+      filters.vitaSessionId = vitaSessionId as string;
+    } else {
+      // Staff users: allow filtering
+      if (vitaSessionId) {
+        // Verify session exists
+        const session = await storage.getVitaIntakeSession(vitaSessionId as string);
+        if (!session) {
+          return res.status(404).json({ error: "VITA session not found" });
+        }
+        filters.vitaSessionId = vitaSessionId as string;
+      } else {
+        // Staff can filter by their created requests
+        filters.requestedBy = req.user!.id;
+      }
+    }
+    
+    if (status) {
+      filters.status = status as string;
+    }
+    
+    if (limit) {
+      filters.limit = parseInt(limit as string);
+    }
+
+    const requests = await storage.getDocumentRequests(filters);
+    res.json(requests);
+  }));
+
+  // Update document request status
+  app.patch("/api/taxpayer/document-requests/:id", requireAuth, asyncHandler(async (req: Request, res: Response) => {
+    const documentRequest = await storage.getDocumentRequest(req.params.id);
+    if (!documentRequest) {
+      return res.status(404).json({ error: "Document request not found" });
+    }
+
+    // Verify access
+    const session = await storage.getVitaIntakeSession(documentRequest.vitaSessionId);
+    if (!session) {
+      return res.status(404).json({ error: "VITA session not found" });
+    }
+
+    // Taxpayers can only update their own requests, staff can update any in their tenant
+    if (req.user!.role === 'client' && session.userId !== req.user!.id) {
+      return res.status(403).json({ error: "Access denied" });
+    }
+
+    const schema = z.object({
+      status: z.enum(['pending', 'submitted', 'reviewed', 'approved', 'rejected']).optional(),
+      uploadedDocumentId: z.string().optional(),
+      reviewNotes: z.string().optional(),
+      rejectionReason: z.string().optional(),
+    });
+
+    const validated = schema.parse(req.body);
+    const updated = await storage.updateDocumentRequest(req.params.id, validated);
+
+    // Send notifications on status changes
+    if (validated.status) {
+      const notifyUserId = validated.status === 'submitted' ? documentRequest.requestedBy : session.userId;
+      if (notifyUserId) {
+        await notificationService.sendNotification({
+          userId: notifyUserId,
+          type: 'document_request_status_change',
+          title: 'Document Request Updated',
+          message: `Document request status changed to: ${validated.status}`,
+          metadata: { documentRequestId: documentRequest.id, status: validated.status },
+        });
+      }
+    }
+
+    // Audit log
+    await auditService.logAction({
+      userId: req.user!.id,
+      action: 'taxpayer_document_request_updated',
+      entityType: 'document_request',
+      entityId: documentRequest.id,
+      metadata: { changes: validated },
+    });
+
+    res.json(updated);
+  }));
+
+  // Send message (with optional attachments)
+  app.post("/api/taxpayer/messages", requireAuth, asyncHandler(async (req: Request, res: Response) => {
+    const validated = insertTaxpayerMessageSchema.parse(req.body);
+    
+    // Verify user has access to this session
+    const session = await storage.getVitaIntakeSession(validated.vitaSessionId);
+    if (!session) {
+      return res.status(404).json({ error: "VITA session not found" });
+    }
+
+    // Taxpayers can only message their own sessions
+    if (req.user!.role === 'client' && session.userId !== req.user!.id) {
+      return res.status(403).json({ error: "Access denied" });
+    }
+
+    // Set sender info
+    const message = await storage.createTaxpayerMessage({
+      ...validated,
+      senderId: req.user!.id,
+      senderRole: req.user!.role === 'client' ? 'taxpayer' : 'navigator',
+      threadId: validated.threadId || validated.vitaSessionId, // Use vitaSessionId as default threadId
+    });
+
+    // Handle attachments if provided
+    if (req.body.attachmentIds && Array.isArray(req.body.attachmentIds)) {
+      for (const documentId of req.body.attachmentIds) {
+        await storage.createTaxpayerMessageAttachment({
+          messageId: message.id,
+          documentId,
+        });
+      }
+    }
+
+    // Send notification to recipient(s)
+    const recipientId = req.user!.role === 'client' 
+      ? (session.assignedNavigatorId || session.userId) // Notify navigator or session owner
+      : session.userId; // Notify taxpayer
+
+    if (recipientId) {
+      await notificationService.sendNotification({
+        userId: recipientId,
+        type: 'new_message',
+        title: 'New Message',
+        message: validated.subject || 'You have a new message',
+        metadata: { messageId: message.id, vitaSessionId: session.id },
+      });
+    }
+
+    res.status(201).json(message);
+  }));
+
+  // Get message thread
+  app.get("/api/taxpayer/messages/:threadId", requireAuth, asyncHandler(async (req: Request, res: Response) => {
+    const { limit } = req.query;
+    
+    const filters: any = { threadId: req.params.threadId };
+    if (limit) {
+      filters.limit = parseInt(limit as string);
+    }
+
+    const messages = await storage.getTaxpayerMessages(filters);
+    
+    if (messages.length === 0) {
+      return res.json([]);
+    }
+
+    // Verify user has access to this thread (check via first message's session)
+    const session = await storage.getVitaIntakeSession(messages[0].vitaSessionId);
+    if (!session) {
+      return res.status(404).json({ error: "Session not found" });
+    }
+
+    // Taxpayers can only view their own threads
+    if (req.user!.role === 'client' && session.userId !== req.user!.id) {
+      return res.status(403).json({ error: "Access denied" });
+    }
+
+    // Load attachments for each message
+    const messagesWithAttachments = await Promise.all(
+      messages.map(async (msg) => {
+        const attachments = await storage.getTaxpayerMessageAttachments(msg.id);
+        return { ...msg, attachments };
+      })
+    );
+
+    // Mark unread messages as read
+    const unreadMessages = messagesWithAttachments.filter(m => 
+      !m.isRead && m.senderId !== req.user!.id
+    );
+    
+    for (const msg of unreadMessages) {
+      await storage.markTaxpayerMessageAsRead(msg.id);
+    }
+
+    res.json(messagesWithAttachments);
+  }));
+
+  // Create e-signature
+  app.post("/api/taxpayer/esignatures", requireAuth, asyncHandler(async (req: Request, res: Response) => {
+    const validated = insertESignatureSchema.parse(req.body);
+    
+    // Verify user has access to sign this
+    if (validated.vitaSessionId) {
+      const session = await storage.getVitaIntakeSession(validated.vitaSessionId);
+      if (!session) {
+        return res.status(404).json({ error: "VITA session not found" });
+      }
+      
+      // Only session owner can sign
+      if (session.userId !== req.user!.id && req.user!.role === 'client') {
+        return res.status(403).json({ error: "Access denied" });
+      }
+    }
+
+    // Capture ESIGN Act required fields from request
+    const signature = await storage.createESignature({
+      ...validated,
+      signerId: req.user!.id,
+      ipAddress: req.ip || req.headers['x-forwarded-for'] as string || 'unknown',
+      userAgent: req.headers['user-agent'] || 'unknown',
+    });
+
+    // Send notification
+    if (validated.vitaSessionId) {
+      const session = await storage.getVitaIntakeSession(validated.vitaSessionId);
+      if (session?.assignedNavigatorId) {
+        await notificationService.sendNotification({
+          userId: session.assignedNavigatorId,
+          type: 'esignature_captured',
+          title: 'New E-Signature',
+          message: `${validated.signerName} signed ${validated.formName}`,
+          metadata: { eSignatureId: signature.id, formType: validated.formType },
+        });
+      }
+    }
+
+    // Audit log for legal compliance
+    await auditService.logAction({
+      userId: req.user!.id,
+      action: 'esignature_created',
+      entityType: 'esignature',
+      entityId: signature.id,
+      metadata: {
+        formType: validated.formType,
+        formName: validated.formName,
+        ipAddress: signature.ipAddress,
+        userAgent: signature.userAgent,
+        documentHash: validated.documentHash,
+      },
+    });
+
+    res.status(201).json(signature);
   }));
 
   // ============================================================================
