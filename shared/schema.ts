@@ -5438,31 +5438,59 @@ export const vitaDocumentRequests = pgTable("vita_document_requests", {
   category: text("category").notNull(), // W2, 1099_MISC, 1099_NEC, 1099_INT, 1099_DIV, 1099_R, 1095_A, ID_DOCUMENT, SUPPORTING_RECEIPT, OTHER
   categoryLabel: text("category_label").notNull(), // Human-readable name like "W-2 Wage and Tax Statement"
   
-  // Upload status
-  status: text("status").notNull().default("pending"), // pending, uploaded, extracted, verified, rejected
+  // TaxSlayer enhancement: Document organization
+  taxYear: integer("tax_year"), // Tax year this document pertains to
+  householdMember: text("household_member"), // Primary taxpayer, spouse, dependent name
+  batchId: text("batch_id"), // Group related documents from same upload session
+  
+  // Upload status - Enhanced workflow
+  status: text("status").notNull().default("pending"), // pending, uploaded, reviewed, approved, rejected, replaced, included_in_return
+  processingStatus: text("processing_status"), // queued, extracting, validating, complete, failed
   
   // Document reference (if uploaded)
   documentId: varchar("document_id").references(() => documents.id, { onDelete: "set null" }),
   taxDocumentId: varchar("tax_document_id").references(() => taxDocuments.id, { onDelete: "set null" }),
   
+  // TaxSlayer enhancement: Document replacement tracking
+  replacesDocumentId: varchar("replaces_document_id").references((): any => vitaDocumentRequests.id, { onDelete: "set null" }), // Points to previous version
+  replacedByDocumentId: varchar("replaced_by_document_id").references((): any => vitaDocumentRequests.id, { onDelete: "set null" }), // Points to newer version
+  replacementReason: text("replacement_reason"), // poor_quality, incomplete, wrong_document, updated_version
+  
+  // TaxSlayer enhancement: Quality validation metrics
+  qualityValidation: jsonb("quality_validation"), // { imageResolution, fileSize, pageCount, orientation, readability, issues: [] }
+  qualityScore: real("quality_score"), // 0-1 confidence score from Gemini
+  qualityIssues: jsonb("quality_issues").default([]), // Array of quality problems: [{type, severity, description}]
+  isQualityAcceptable: boolean("is_quality_acceptable").default(true), // False if quality check fails
+  
   // Extracted data (from Gemini Vision)
   extractedData: jsonb("extracted_data"), // Structured form fields from tax document
-  qualityScore: real("quality_score"), // 0-1 confidence score from Gemini
   
   // Navigator notes and review
   navigatorNotes: text("navigator_notes"),
   requestedBy: varchar("requested_by").references(() => users.id), // Navigator who requested this document
+  reviewedBy: varchar("reviewed_by").references(() => users.id), // Staff who reviewed the document
+  approvedBy: varchar("approved_by").references(() => users.id), // Staff who approved for tax return
+  
+  // TaxSlayer enhancement: Secure document access
+  secureDownloadExpiry: timestamp("secure_download_expiry"), // When signed URL expires
+  downloadCount: integer("download_count").default(0), // Track how many times downloaded
+  lastDownloadedAt: timestamp("last_downloaded_at"),
+  lastDownloadedBy: varchar("last_downloaded_by").references(() => users.id),
   
   // Timestamps
   uploadedAt: timestamp("uploaded_at"),
   extractedAt: timestamp("extracted_at"),
   verifiedAt: timestamp("verified_at"),
+  reviewedAt: timestamp("reviewed_at"),
+  approvedAt: timestamp("approved_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 }, (table) => ({
   sessionIdIdx: index("vita_doc_requests_session_idx").on(table.vitaSessionId),
   categoryIdx: index("vita_doc_requests_category_idx").on(table.category),
   statusIdx: index("vita_doc_requests_status_idx").on(table.status),
+  batchIdIdx: index("vita_doc_requests_batch_idx").on(table.batchId),
+  taxYearIdx: index("vita_doc_requests_tax_year_idx").on(table.taxYear),
 }));
 
 // VITA Signature Requests - E-signature workflow for Form 8879 and consents
@@ -5617,7 +5645,71 @@ export const insertVitaMessageSchema = createInsertSchema(vitaMessages).omit({
   createdAt: true,
 });
 
+// VITA Document Audit Trail - Track all document access and modifications
+export const vitaDocumentAudit = pgTable("vita_document_audit", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  
+  // Document reference
+  documentRequestId: varchar("document_request_id").references(() => vitaDocumentRequests.id, { onDelete: "cascade" }).notNull(),
+  vitaSessionId: varchar("vita_session_id").references(() => vitaIntakeSessions.id, { onDelete: "cascade" }).notNull(),
+  
+  // Audit action
+  action: text("action").notNull(), // uploaded, downloaded, viewed, replaced, approved, rejected, deleted, modified
+  actionDetails: jsonb("action_details"), // Additional context about the action
+  
+  // User tracking
+  userId: varchar("user_id").references(() => users.id).notNull(),
+  userRole: text("user_role").notNull(), // navigator, caseworker, admin, client
+  userName: text("user_name").notNull(),
+  
+  // Access metadata
+  ipAddress: text("ip_address"),
+  userAgent: text("user_agent"),
+  
+  // GCS integration
+  objectPath: text("object_path"), // GCS path if applicable
+  signedUrlGenerated: boolean("signed_url_generated").default(false), // Whether a signed URL was created
+  signedUrlExpiry: timestamp("signed_url_expiry"), // When the signed URL expires
+  
+  // Change tracking
+  previousStatus: text("previous_status"),
+  newStatus: text("new_status"),
+  changeReason: text("change_reason"),
+  
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+  documentRequestIdx: index("vita_audit_doc_request_idx").on(table.documentRequestId),
+  sessionIdx: index("vita_audit_session_idx").on(table.vitaSessionId),
+  userIdx: index("vita_audit_user_idx").on(table.userId),
+  actionIdx: index("vita_audit_action_idx").on(table.action),
+  createdAtIdx: index("vita_audit_created_idx").on(table.createdAt),
+}));
+
+// Relations
+export const vitaDocumentAuditRelations = relations(vitaDocumentAudit, ({ one }) => ({
+  documentRequest: one(vitaDocumentRequests, {
+    fields: [vitaDocumentAudit.documentRequestId],
+    references: [vitaDocumentRequests.id],
+  }),
+  vitaSession: one(vitaIntakeSessions, {
+    fields: [vitaDocumentAudit.vitaSessionId],
+    references: [vitaIntakeSessions.id],
+  }),
+  user: one(users, {
+    fields: [vitaDocumentAudit.userId],
+    references: [users.id],
+  }),
+}));
+
+export const insertVitaDocumentAuditSchema = createInsertSchema(vitaDocumentAudit).omit({
+  id: true,
+  createdAt: true,
+});
+
 // Types
+export type InsertVitaDocumentAudit = z.infer<typeof insertVitaDocumentAuditSchema>;
+export type VitaDocumentAudit = typeof vitaDocumentAudit.$inferSelect;
+
 export type InsertVitaDocumentRequest = z.infer<typeof insertVitaDocumentRequestSchema>;
 export type VitaDocumentRequest = typeof vitaDocumentRequests.$inferSelect;
 
