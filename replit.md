@@ -2,6 +2,14 @@
 
 The Maryland Universal Financial Navigator is an AI-powered platform that optimizes financial well-being by integrating public benefits eligibility with federal and state tax preparation. It serves as a universal financial command center, utilizing Retrieval-Augmented Generation (RAG), Rules as Code, and the Google Gemini API. The platform offers comprehensive financial optimization through a single conversational interface, supporting six Maryland benefit programs (SNAP, Medicaid, TCA/TANF, OHEP, Tax Credits) and IRS VITA tax assistance. A key innovation is its use of a single household profile for both benefit calculations and tax preparation, combined with AI-driven cross-enrollment intelligence to identify unclaimed benefits. Future plans include full federal and state e-filing capabilities.
 
+# Recent Changes
+
+**October 17, 2025**
+- Implemented comprehensive performance optimizations (server-side caching, database indexing)
+- Built production-ready e-filing infrastructure (PDF/XML generators, queue service, admin dashboard)
+- Completed production deployment hardening (security, monitoring, performance)
+- Documented all production-ready features and deployment requirements
+
 # User Preferences
 
 Preferred communication style: Simple, everyday language.
@@ -84,6 +92,19 @@ Tracks navigator performance and awards achievements based on operational KPIs.
 -   **Testing**: Vitest, @testing-library/react, and supertest.
 -   **Performance Optimization Philosophy**: Cost reduction through smart scheduling and intelligent caching.
 
+## Performance Optimizations Implemented
+
+### Server-Side Caching
+- **Rules Engine Caching**: Maryland SNAP, OHEP, TANF, Medicaid calculations cached using node-cache
+- **PolicyEngine Caching**: API responses cached to reduce external API calls and costs
+- Cache TTL: 15 minutes for calculations, configurable per engine
+
+### Database Indexing
+- Indexed household queries for faster lookups
+- Indexed benefit calculation tables
+- Indexed frequently-accessed columns (household_id, tenant_id, created_at)
+- Composite indexes for common query patterns
+
 ## Maryland Rules-as-Code Architecture
 Maryland Rules-as-Code engines serve as the **PRIMARY determination system**, with PolicyEngine as a **third-party verifier**. This ensures Maryland-specific policy accuracy with independent verification.
 
@@ -135,6 +156,58 @@ All multilingual infrastructure is code-complete and preserved in:
 - Integration: Ready to activate in `server/seedData.ts` when production validation complete
 
 This approach ensures the multilingual version inherits a battle-tested, validated foundation rather than multiplying potential issues across language variants.
+
+## E-Filing Infrastructure
+
+### Production-Ready Components
+- **Form 1040 PDF Generator**: jsPDF-based generator with complete field mapping
+- **Maryland Form 502 PDF Generator**: State tax form with county tax calculations
+- **Form 1040 XML Generator**: IRS MeF schema prototype (requires IRS EFIN for production)
+- **Maryland Form 502 XML Generator**: iFile system prototype (requires Maryland iFile credentials)
+- **E-File Queue Service**: Submission tracking, retry logic, status management
+- **Admin Dashboard**: E-file monitoring at `/admin/efile-monitoring`
+
+### Credential Requirements (See docs/E-FILING_INTEGRATION.md)
+- IRS EFIN required for federal e-filing
+- Maryland iFile credentials required for state e-filing
+- Digital signatures and encryption keys needed
+- Test scenarios documented (10 IRS + 15 Maryland test cases)
+
+### Current Status
+- PDF generation: Production-ready ✓
+- XML generation: Foundational prototypes (requires credentials)
+- E-file transmission: Infrastructure ready (requires IRS/MD onboarding)
+
+# Production Deployment Checklist
+
+### Security
+- ✓ CSRF protection enabled
+- ✓ Rate limiting configured
+- ✓ Helmet security headers
+- ✓ Field-level encryption (AES-256-GCM)
+- ✓ Session security hardened
+
+### Database
+- ✓ PostgreSQL with connection pooling
+- ✓ Performance indexes applied
+- ✓ Migration system (Drizzle ORM)
+
+### Monitoring
+- ✓ Health check endpoints
+- ✓ Metrics collection (monitoring_metrics table)
+- ✓ Error tracking (Sentry integration ready)
+
+### Performance
+- ✓ Server-side caching (node-cache)
+- ✓ PolicyEngine response caching
+- ✓ Database query optimization
+
+### E-Filing (Production Pending)
+- ⏳ IRS EFIN credentials needed
+- ⏳ Maryland iFile onboarding required
+- ⏳ Digital signature configuration
+- ✓ Queue and retry system ready
+- ✓ Admin monitoring dashboard live
 
 # External Dependencies
 
