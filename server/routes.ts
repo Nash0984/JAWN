@@ -6722,11 +6722,12 @@ If the question cannot be answered with the available information, say so clearl
     const session = await storage.getVitaIntakeSession(req.params.id);
     
     if (!session) {
-      throw notFoundError("VITA intake session not found");
+      return res.status(404).json({ error: "Not found" });
     }
     
+    // SECURITY: Return 404 (not 403) to prevent ID enumeration
     if (session.userId !== req.user!.id) {
-      throw authorizationError();
+      return res.status(404).json({ error: "Not found" });
     }
     
     // Decrypt sensitive fields before sending to frontend
@@ -6739,11 +6740,12 @@ If the question cannot be answered with the available information, say so clearl
     const session = await storage.getVitaIntakeSession(req.params.id);
     
     if (!session) {
-      throw notFoundError("VITA intake session not found");
+      return res.status(404).json({ error: "Not found" });
     }
     
+    // SECURITY: Return 404 (not 403) to prevent ID enumeration
     if (session.userId !== req.user!.id) {
-      throw authorizationError();
+      return res.status(404).json({ error: "Not found" });
     }
 
     const validated = insertVitaIntakeSessionSchema.partial().parse(req.body);
@@ -6773,11 +6775,12 @@ If the question cannot be answered with the available information, say so clearl
     const session = await storage.getVitaIntakeSession(req.params.id);
     
     if (!session) {
-      throw notFoundError("VITA intake session not found");
+      return res.status(404).json({ error: "Not found" });
     }
     
+    // SECURITY: Return 404 (not 403) to prevent ID enumeration
     if (session.userId !== req.user!.id) {
-      throw authorizationError();
+      return res.status(404).json({ error: "Not found" });
     }
     
     await storage.deleteVitaIntakeSession(req.params.id);
@@ -6819,11 +6822,12 @@ If the question cannot be answered with the available information, say so clearl
     const session = await storage.getVitaIntakeSession(req.params.sessionId);
     
     if (!session) {
-      throw notFoundError("VITA intake session not found");
+      return res.status(404).json({ error: "Not found" });
     }
     
+    // SECURITY: Return 404 (not 403) to prevent ID enumeration
     if (session.userId !== req.user!.id) {
-      throw authorizationError();
+      return res.status(404).json({ error: "Not found" });
     }
 
     const objectStorageService = new ObjectStorageService();
@@ -6837,11 +6841,12 @@ If the question cannot be answered with the available information, say so clearl
     const session = await storage.getVitaIntakeSession(req.params.sessionId);
     
     if (!session) {
-      throw notFoundError("VITA intake session not found");
+      return res.status(404).json({ error: "Not found" });
     }
     
+    // SECURITY: Return 404 (not 403) to prevent ID enumeration
     if (session.userId !== req.user!.id) {
-      throw authorizationError();
+      return res.status(404).json({ error: "Not found" });
     }
 
     const { filename, originalName, objectPath, fileSize, mimeType, documentType } = req.body;
@@ -6880,11 +6885,12 @@ If the question cannot be answered with the available information, say so clearl
     const session = await storage.getVitaIntakeSession(req.params.sessionId);
     
     if (!session) {
-      throw notFoundError("VITA intake session not found");
+      return res.status(404).json({ error: "Not found" });
     }
     
+    // SECURITY: Return 404 (not 403) to prevent ID enumeration
     if (session.userId !== req.user!.id) {
-      throw authorizationError();
+      return res.status(404).json({ error: "Not found" });
     }
 
     const taxDocs = await storage.getTaxDocuments({
@@ -6899,21 +6905,23 @@ If the question cannot be answered with the available information, say so clearl
     const session = await storage.getVitaIntakeSession(req.params.sessionId);
     
     if (!session) {
-      throw notFoundError("VITA intake session not found");
+      return res.status(404).json({ error: "Not found" });
     }
     
+    // SECURITY: Return 404 (not 403) to prevent ID enumeration
     if (session.userId !== req.user!.id) {
-      throw authorizationError();
+      return res.status(404).json({ error: "Not found" });
     }
 
     const taxDoc = await storage.getTaxDocument(req.params.id);
     
     if (!taxDoc) {
-      throw notFoundError("Tax document not found");
+      return res.status(404).json({ error: "Not found" });
     }
 
+    // SECURITY: Return 404 (not 403) to prevent ID enumeration
     if (taxDoc.vitaSessionId !== req.params.sessionId) {
-      throw authorizationError();
+      return res.status(404).json({ error: "Not found" });
     }
 
     await storage.deleteTaxDocument(req.params.id);
@@ -7096,6 +7104,458 @@ If the question cannot be answered with the available information, say so clearl
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename=taxslayer-guide-${taxReturn.taxYear}-${req.params.id}.pdf`);
     res.send(pdfBuffer);
+  }));
+
+  // ==========================================
+  // VITA Document Upload Portal Routes
+  // ==========================================
+  
+  // Helper function to verify VITA session ownership with tenant isolation
+  // SECURITY: Set throwOnAuthFailure=false for ID-based routes to prevent enumeration attacks
+  async function verifyVitaSessionOwnershipAndTenant(
+    sessionId: string, 
+    userId: string, 
+    userRole: string, 
+    userTenantId: string | null,
+    throwOnAuthFailure: boolean = true
+  ) {
+    const session = await storage.getVitaIntakeSession(sessionId);
+    
+    if (!session) {
+      if (throwOnAuthFailure) {
+        throw notFoundError("VITA intake session not found");
+      }
+      return null;
+    }
+    
+    // Super admins can access all sessions
+    if (userRole === 'super_admin') {
+      return session;
+    }
+    
+    // Tenant isolation check - user must be in same tenant as session
+    if (session.tenantId && userTenantId !== session.tenantId) {
+      if (throwOnAuthFailure) {
+        throw authorizationError("Access denied: cross-tenant access not allowed");
+      }
+      return null;
+    }
+    
+    // Ownership check - user owns session OR is staff/admin in same tenant
+    const isOwner = session.userId === userId;
+    const isAuthorizedStaff = (userRole === 'staff' || userRole === 'navigator' || userRole === 'caseworker' || userRole === 'admin') && 
+                               (session.tenantId === userTenantId);
+    
+    if (!isOwner && !isAuthorizedStaff) {
+      if (throwOnAuthFailure) {
+        throw authorizationError("Access denied: you do not have permission to access this VITA session");
+      }
+      return null;
+    }
+    
+    return session;
+  }
+
+  // Create a document request for a specific category
+  // SECURITY: Allow both taxpayers (to request their own docs) and staff (to request docs for clients)
+  app.post("/api/vita-documents/request", requireAuth, asyncHandler(async (req: Request, res: Response) => {
+    const schema = z.object({
+      vitaSessionId: z.string(),
+      category: z.enum(["W2", "1099_MISC", "1099_NEC", "1099_INT", "1099_DIV", "1099_R", "1095_A", "ID_DOCUMENT", "SUPPORTING_RECEIPT", "OTHER"]),
+      categoryLabel: z.string(),
+      navigatorNotes: z.string().optional(),
+    });
+
+    const validated = schema.parse(req.body);
+
+    // SECURITY FIX: Verify ownership and tenant isolation
+    const session = await verifyVitaSessionOwnershipAndTenant(
+      validated.vitaSessionId, 
+      req.user!.id, 
+      req.user!.role, 
+      req.user!.tenantId
+    );
+
+    const documentRequest = await storage.createVitaDocumentRequest({
+      ...validated,
+      status: "pending",
+      requestedBy: req.user!.id,
+    });
+
+    res.json(documentRequest);
+  }));
+
+  // Get all document requests for a VITA session
+  // SECURITY: Allow taxpayers to view their own document requests and staff to view their tenant's requests
+  app.get("/api/vita-documents/:sessionId", requireAuth, asyncHandler(async (req: Request, res: Response) => {
+    // SECURITY FIX: Verify ownership and tenant isolation
+    const session = await verifyVitaSessionOwnershipAndTenant(
+      req.params.sessionId, 
+      req.user!.id, 
+      req.user!.role, 
+      req.user!.tenantId
+    );
+
+    const category = req.query.category as string | undefined;
+    const status = req.query.status as string | undefined;
+
+    const requests = await storage.getVitaDocumentRequests(req.params.sessionId, { category, status });
+    res.json(requests);
+  }));
+
+  // Upload document for a document request
+  // SECURITY: Allow taxpayers to upload their own documents and staff to upload for clients
+  app.post("/api/vita-documents/:id/upload", requireAuth, asyncHandler(async (req: Request, res: Response) => {
+    const documentRequest = await storage.getVitaDocumentRequest(req.params.id);
+    if (!documentRequest) {
+      return res.status(404).json({ error: "Not found" });
+    }
+
+    // SECURITY FIX: Verify ownership and tenant isolation via the session
+    // Use silent mode (throwOnAuthFailure=false) to prevent ID enumeration attacks
+    const session = await verifyVitaSessionOwnershipAndTenant(
+      documentRequest.vitaSessionId, 
+      req.user!.id, 
+      req.user!.role, 
+      req.user!.tenantId,
+      false
+    );
+    
+    if (!session) {
+      return res.status(404).json({ error: "Not found" });
+    }
+
+    const schema = z.object({
+      filename: z.string(),
+      originalName: z.string(),
+      objectPath: z.string(),
+      fileSize: z.number(),
+      mimeType: z.string(),
+    });
+
+    const validated = schema.parse(req.body);
+
+    const document = await storage.createDocument({
+      ...validated,
+      status: "processing",
+    });
+
+    const updated = await storage.updateVitaDocumentRequest(req.params.id, {
+      documentId: document.id,
+      status: "uploaded",
+      uploadedAt: new Date(),
+    });
+
+    res.json({ documentRequest: updated, document });
+  }));
+
+  // Trigger Gemini Vision extraction for a document request
+  // SECURITY: Staff-only route (navigators trigger extraction)
+  app.post("/api/vita-documents/:id/extract", requireStaff, asyncHandler(async (req: Request, res: Response) => {
+    const documentRequest = await storage.getVitaDocumentRequest(req.params.id);
+    if (!documentRequest) {
+      return res.status(404).json({ error: "Not found" });
+    }
+
+    // SECURITY FIX: Verify staff has access to this session's tenant
+    // Use silent mode (throwOnAuthFailure=false) to prevent ID enumeration attacks
+    const session = await verifyVitaSessionOwnershipAndTenant(
+      documentRequest.vitaSessionId, 
+      req.user!.id, 
+      req.user!.role, 
+      req.user!.tenantId,
+      false
+    );
+    
+    if (!session) {
+      return res.status(404).json({ error: "Not found" });
+    }
+
+    if (!documentRequest.documentId) {
+      throw validationError("No document uploaded for this request");
+    }
+
+    const result = await taxDocExtractor.processAndStoreTaxDocument(
+      documentRequest.documentId,
+      undefined,
+      documentRequest.vitaSessionId
+    );
+
+    const updated = await storage.updateVitaDocumentRequest(req.params.id, {
+      taxDocumentId: result.taxDocument.id,
+      extractedData: result.extractedData,
+      qualityScore: result.taxDocument.geminiConfidence,
+      status: "extracted",
+      extractedAt: new Date(),
+    });
+
+    res.json({
+      documentRequest: updated,
+      extractedData: result.extractedData,
+      requiresManualReview: result.requiresManualReview,
+    });
+  }));
+
+  // Get document checklist progress for a VITA session
+  // SECURITY: Allow taxpayers to view their own checklist and staff to view their tenant's checklists
+  app.get("/api/vita-documents/:sessionId/checklist", requireAuth, asyncHandler(async (req: Request, res: Response) => {
+    // SECURITY FIX: Verify ownership and tenant isolation
+    const session = await verifyVitaSessionOwnershipAndTenant(
+      req.params.sessionId, 
+      req.user!.id, 
+      req.user!.role, 
+      req.user!.tenantId
+    );
+
+    const requests = await storage.getVitaDocumentRequests(req.params.sessionId);
+    
+    const checklist = {
+      totalRequested: requests.length,
+      uploaded: requests.filter(r => r.status === "uploaded" || r.status === "extracted" || r.status === "verified").length,
+      extracted: requests.filter(r => r.status === "extracted" || r.status === "verified").length,
+      verified: requests.filter(r => r.status === "verified").length,
+      pending: requests.filter(r => r.status === "pending").length,
+      rejected: requests.filter(r => r.status === "rejected").length,
+      byCategory: requests.reduce((acc, r) => {
+        if (!acc[r.category]) {
+          acc[r.category] = { total: 0, uploaded: 0, extracted: 0, verified: 0 };
+        }
+        acc[r.category].total++;
+        if (r.status === "uploaded" || r.status === "extracted" || r.status === "verified") acc[r.category].uploaded++;
+        if (r.status === "extracted" || r.status === "verified") acc[r.category].extracted++;
+        if (r.status === "verified") acc[r.category].verified++;
+        return acc;
+      }, {} as Record<string, { total: number; uploaded: number; extracted: number; verified: number }>),
+      requests,
+    };
+
+    res.json(checklist);
+  }));
+
+  // Create e-signature request (Form 8879)
+  // SECURITY: Staff-only route (navigators initiate signature requests)
+  app.post("/api/vita-signatures/request", requireStaff, asyncHandler(async (req: Request, res: Response) => {
+    const schema = z.object({
+      vitaSessionId: z.string(),
+      formType: z.enum(["form_8879", "consent_form", "both"]),
+      formTitle: z.string(),
+      expiresAt: z.string().optional(),
+      webhookUrl: z.string().optional(),
+    });
+
+    const validated = schema.parse(req.body);
+
+    // SECURITY FIX: Verify staff has access to this session's tenant
+    const session = await verifyVitaSessionOwnershipAndTenant(
+      validated.vitaSessionId, 
+      req.user!.id, 
+      req.user!.role, 
+      req.user!.tenantId
+    );
+
+    const expiresAt = validated.expiresAt ? new Date(validated.expiresAt) : new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+
+    const signatureRequest = await storage.createVitaSignatureRequest({
+      vitaSessionId: validated.vitaSessionId,
+      formType: validated.formType,
+      formTitle: validated.formTitle,
+      status: "pending",
+      expiresAt,
+      webhookUrl: validated.webhookUrl,
+      requestedBy: req.user!.id,
+    });
+
+    res.json(signatureRequest);
+  }));
+
+  // Complete signature with audit trail
+  // SECURITY: Allow taxpayers to sign their own forms
+  app.post("/api/vita-signatures/:id/sign", requireAuth, asyncHandler(async (req: Request, res: Response) => {
+    const signatureRequest = await storage.getVitaSignatureRequest(req.params.id);
+    if (!signatureRequest) {
+      return res.status(404).json({ error: "Not found" });
+    }
+
+    // SECURITY FIX: Verify ownership and tenant isolation via the session
+    // Use silent mode (throwOnAuthFailure=false) to prevent ID enumeration attacks
+    const session = await verifyVitaSessionOwnershipAndTenant(
+      signatureRequest.vitaSessionId, 
+      req.user!.id, 
+      req.user!.role, 
+      req.user!.tenantId,
+      false
+    );
+    
+    if (!session) {
+      return res.status(404).json({ error: "Not found" });
+    }
+
+    if (signatureRequest.status === "signed") {
+      throw validationError("This signature request has already been signed");
+    }
+
+    if (signatureRequest.expiresAt && new Date(signatureRequest.expiresAt) < new Date()) {
+      throw validationError("This signature request has expired");
+    }
+
+    const schema = z.object({
+      signatureData: z.object({
+        taxpayerSignature: z.string(),
+        spouseSignature: z.string().optional(),
+        signedFields: z.record(z.any()).optional(),
+      }),
+      geolocation: z.object({
+        latitude: z.number(),
+        longitude: z.number(),
+      }).optional(),
+    });
+
+    const validated = schema.parse(req.body);
+
+    const updated = await storage.updateVitaSignatureRequest(req.params.id, {
+      signatureData: validated.signatureData,
+      ipAddress: req.ip,
+      userAgent: req.get("user-agent"),
+      geolocation: validated.geolocation,
+      signedAt: new Date(),
+      signedBy: req.user!.id,
+      status: "signed",
+    });
+
+    await auditService.logAction({
+      userId: req.user!.id,
+      action: "vita_signature_completed",
+      resourceType: "vita_signature_request",
+      resourceId: req.params.id,
+      details: {
+        vitaSessionId: signatureRequest.vitaSessionId,
+        formType: signatureRequest.formType,
+      },
+      ipAddress: req.ip,
+      userAgent: req.get("user-agent") || "unknown",
+    });
+
+    res.json(updated);
+  }));
+
+  // Send secure message
+  // SECURITY: Allow both taxpayers and staff to send messages (taxpayers to their own sessions)
+  app.post("/api/vita-messages", requireAuth, asyncHandler(async (req: Request, res: Response) => {
+    const schema = z.object({
+      vitaSessionId: z.string(),
+      messageText: z.string().min(1),
+      messageType: z.enum(["standard", "system_notification", "document_request", "document_rejection"]).optional(),
+      relatedDocumentRequestId: z.string().optional(),
+      attachments: z.array(z.object({
+        documentId: z.string(),
+        filename: z.string(),
+        fileSize: z.number(),
+        mimeType: z.string(),
+      })).optional(),
+    });
+
+    const validated = schema.parse(req.body);
+
+    // SECURITY FIX: Verify ownership and tenant isolation
+    const session = await verifyVitaSessionOwnershipAndTenant(
+      validated.vitaSessionId, 
+      req.user!.id, 
+      req.user!.role, 
+      req.user!.tenantId
+    );
+
+    const senderRole = req.user!.role === "navigator" || req.user!.role === "admin" ? "navigator" : "taxpayer";
+
+    const message = await storage.createVitaMessage({
+      vitaSessionId: validated.vitaSessionId,
+      senderId: req.user!.id,
+      senderRole,
+      senderName: req.user!.firstName + " " + req.user!.lastName,
+      messageText: validated.messageText,
+      messageType: validated.messageType || "standard",
+      relatedDocumentRequestId: validated.relatedDocumentRequestId,
+      attachments: validated.attachments || [],
+    });
+
+    res.json(message);
+  }));
+
+  // Get message thread for a VITA session
+  // SECURITY: Allow taxpayers to view their own messages and staff to view their tenant's messages
+  app.get("/api/vita-messages/:sessionId", requireAuth, asyncHandler(async (req: Request, res: Response) => {
+    // SECURITY FIX: Verify ownership and tenant isolation
+    const session = await verifyVitaSessionOwnershipAndTenant(
+      req.params.sessionId, 
+      req.user!.id, 
+      req.user!.role, 
+      req.user!.tenantId
+    );
+
+    const senderRole = req.query.senderRole as string | undefined;
+    const unreadOnly = req.query.unreadOnly === "true";
+
+    const messages = await storage.getVitaMessages(req.params.sessionId, { senderRole, unreadOnly });
+    res.json(messages);
+  }));
+
+  // Mark message as read
+  // SECURITY: Allow taxpayers to mark their own messages as read
+  app.patch("/api/vita-messages/:id/read", requireAuth, asyncHandler(async (req: Request, res: Response) => {
+    const message = await storage.getVitaMessage(req.params.id);
+    if (!message) {
+      return res.status(404).json({ error: "Not found" });
+    }
+
+    // SECURITY FIX: Verify ownership and tenant isolation via the session
+    // Use silent mode (throwOnAuthFailure=false) to prevent ID enumeration attacks
+    const session = await verifyVitaSessionOwnershipAndTenant(
+      message.vitaSessionId, 
+      req.user!.id, 
+      req.user!.role, 
+      req.user!.tenantId,
+      false
+    );
+    
+    if (!session) {
+      return res.status(404).json({ error: "Not found" });
+    }
+
+    await storage.markVitaMessageAsRead(req.params.id);
+    res.json({ success: true });
+  }));
+
+  // Generate digital delivery packet (PDF bundle)
+  // SECURITY: Staff-only route (navigators generate delivery packets)
+  app.post("/api/vita-documents/:sessionId/delivery", requireStaff, asyncHandler(async (req: Request, res: Response) => {
+    // SECURITY FIX: Verify staff has access to this session's tenant
+    const session = await verifyVitaSessionOwnershipAndTenant(
+      req.params.sessionId, 
+      req.user!.id, 
+      req.user!.role, 
+      req.user!.tenantId
+    );
+
+    const schema = z.object({
+      deliveryMethod: z.enum(["email", "physical_pickup", "both"]),
+      emailAddress: z.string().email().optional(),
+    });
+
+    const validated = schema.parse(req.body);
+
+    if (validated.deliveryMethod === "email" || validated.deliveryMethod === "both") {
+      if (!validated.emailAddress) {
+        throw validationError("Email address is required for email delivery");
+      }
+    }
+
+    const taxDocs = await storage.getTaxDocuments({ vitaSessionId: req.params.sessionId });
+    
+    res.json({
+      success: true,
+      deliveryMethod: validated.deliveryMethod,
+      documentsIncluded: taxDocs.length,
+      message: "Digital delivery packet will be generated",
+    });
   }));
 
   // ==========================================

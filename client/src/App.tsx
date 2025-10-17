@@ -72,6 +72,7 @@ import VitaKnowledgeBase from "@/pages/VitaKnowledgeBase";
 import EvaluationFramework from "@/pages/EvaluationFramework";
 import HouseholdProfiler from "@/pages/HouseholdProfiler";
 import VitaIntake from "@/pages/VitaIntake";
+import VitaDocuments from "@/pages/VitaDocuments";
 import MobileBottomNav from "@/components/MobileBottomNav";
 import { BrandingProvider } from "@/contexts/BrandingContext";
 import { CountyHeader } from "@/components/CountyHeader";
@@ -247,6 +248,13 @@ function Router() {
             {() => (
               <ProtectedRoute>
                 <VitaIntake />
+              </ProtectedRoute>
+            )}
+          </Route>
+          <Route path="/vita-documents/:sessionId">
+            {() => (
+              <ProtectedRoute>
+                <VitaDocuments />
               </ProtectedRoute>
             )}
           </Route>
