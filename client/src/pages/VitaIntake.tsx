@@ -61,6 +61,8 @@ import {
 import type { VitaIntakeSession, InsertVitaIntakeSession } from "@shared/schema";
 import { TaxDocumentUploader } from "@/components/TaxDocumentUploader";
 import { VitaProgressIndicator } from "@/components/VitaProgressIndicator";
+import { TaxSlayerDataEntry } from "@/components/TaxSlayerDataEntry";
+import { TaxSlayerComparison } from "@/components/TaxSlayerComparison";
 
 // Step configuration
 const STEPS = [
@@ -413,6 +415,8 @@ export default function VitaIntake() {
   const [reviewMode, setReviewMode] = useState(false);
   const [reviewNotes, setReviewNotes] = useState("");
   const [reviewStatusSelection, setReviewStatusSelection] = useState<"approved" | "needs_correction" | "">("");
+  const [taxslayerDialogOpen, setTaxslayerDialogOpen] = useState(false);
+  const [showTaxslayerComparison, setShowTaxslayerComparison] = useState(false);
   
   // Auto-save state management
   const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
@@ -4826,6 +4830,71 @@ export default function VitaIntake() {
                               </SelectContent>
                             </Select>
                           </div>
+
+                          {/* TaxSlayer Data Entry */}
+                          <div className="space-y-2">
+                            <Label>TaxSlayer Return Data</Label>
+                            <div className="flex gap-2">
+                              <Dialog open={taxslayerDialogOpen} onOpenChange={setTaxslayerDialogOpen}>
+                                <DialogTrigger asChild>
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    className="flex-1"
+                                    data-testid="button-import-taxslayer"
+                                  >
+                                    <Import className="h-4 w-4 mr-2" />
+                                    Import TaxSlayer Data
+                                  </Button>
+                                </DialogTrigger>
+                                <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
+                                  <DialogHeader>
+                                    <DialogTitle>Import TaxSlayer Return Data</DialogTitle>
+                                    <DialogDescription>
+                                      Manually enter tax return data from TaxSlayer Pro
+                                    </DialogDescription>
+                                  </DialogHeader>
+                                  {selectedSessionId && (
+                                    <TaxSlayerDataEntry
+                                      vitaSessionId={selectedSessionId}
+                                      onSuccess={() => {
+                                        setTaxslayerDialogOpen(false);
+                                        setShowTaxslayerComparison(true);
+                                        toast({
+                                          title: "TaxSlayer Data Imported",
+                                          description: "Return data has been successfully imported",
+                                        });
+                                      }}
+                                      onCancel={() => setTaxslayerDialogOpen(false)}
+                                    />
+                                  )}
+                                </DialogContent>
+                              </Dialog>
+
+                              <Button
+                                type="button"
+                                variant="outline"
+                                onClick={() => setShowTaxslayerComparison(!showTaxslayerComparison)}
+                                disabled={!selectedSessionId}
+                                data-testid="button-view-comparison"
+                              >
+                                <Eye className="h-4 w-4 mr-2" />
+                                {showTaxslayerComparison ? "Hide" : "View"} Comparison
+                              </Button>
+                            </div>
+                          </div>
+
+                          {/* TaxSlayer Comparison View */}
+                          {showTaxslayerComparison && selectedSessionId && (
+                            <Card className="mt-4">
+                              <CardHeader>
+                                <CardTitle>TaxSlayer vs System Comparison</CardTitle>
+                              </CardHeader>
+                              <CardContent>
+                                <TaxSlayerComparison vitaSessionId={selectedSessionId} />
+                              </CardContent>
+                            </Card>
+                          )}
 
                           {/* Review Actions */}
                           <div className="flex gap-3 pt-4">

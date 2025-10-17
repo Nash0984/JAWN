@@ -20,6 +20,7 @@ import { kpiTrackingService } from "./services/kpiTracking.service";
 import { achievementSystemService } from "./services/achievementSystem.service";
 import { leaderboardService } from "./services/leaderboard.service";
 import { taxDocExtractor } from "./services/taxDocumentExtraction";
+import { exportToPDF, exportToCSV } from "./services/taxslayerExport";
 import { GoogleGenAI } from "@google/genai";
 import { asyncHandler, validationError, notFoundError, externalServiceError, authorizationError } from "./middleware/errorHandler";
 import { requireAuth, requireStaff, requireAdmin } from "./middleware/auth";
@@ -48,6 +49,7 @@ import {
   insertHouseholdProfileSchema,
   insertVitaIntakeSessionSchema,
   insertTaxDocumentSchema,
+  insertTaxslayerReturnSchema,
   searchQueries,
   auditLogs,
   ruleChangeLogs,
@@ -6890,6 +6892,136 @@ If the question cannot be answered with the available information, say so clearl
 
     await storage.deleteTaxDocument(req.params.id);
     res.json({ success: true });
+  }));
+
+  // ==========================================
+  // TaxSlayer Data Entry Routes
+  // ==========================================
+
+  // Import TaxSlayer return data
+  app.post("/api/taxslayer/import", requireStaff, asyncHandler(async (req: Request, res: Response) => {
+    const validated = insertTaxslayerReturnSchema.parse({
+      ...req.body,
+      importedBy: req.user!.id,
+      importedAt: new Date()
+    });
+
+    // Run validation checks
+    const warnings: string[] = [];
+
+    // Check if federal AGI matches sum of W-2 + 1099 income
+    if (Array.isArray(validated.w2Forms) && Array.isArray(validated.form1099s)) {
+      const w2Total = (validated.w2Forms as any[]).reduce((sum, w2) => sum + (w2.wages || 0), 0);
+      const form1099Total = (validated.form1099s as any[]).reduce((sum, f1099) => sum + (f1099.amount || 0), 0);
+      const totalIncome = w2Total + form1099Total;
+      
+      const agiDifference = Math.abs((validated.federalAGI || 0) - totalIncome);
+      if (agiDifference > 100) {
+        warnings.push(`Federal AGI ($${validated.federalAGI}) differs from sum of W-2/1099 income ($${totalIncome}) by $${agiDifference.toFixed(2)}`);
+      }
+    }
+
+    // Check if refund calculation seems correct
+    const estimatedRefund = (validated.federalWithheld || 0) - (validated.federalTax || 0) + (validated.eitcAmount || 0) + (validated.ctcAmount || 0);
+    const refundDifference = Math.abs((validated.federalRefund || 0) - estimatedRefund);
+    if (refundDifference > 50) {
+      warnings.push(`Federal refund ($${validated.federalRefund}) differs from estimated calculation ($${estimatedRefund.toFixed(2)}) by $${refundDifference.toFixed(2)}`);
+    }
+
+    // Add warnings to data
+    const dataWithWarnings = {
+      ...validated,
+      hasValidationWarnings: warnings.length > 0,
+      validationWarnings: warnings
+    };
+
+    const taxReturn = await storage.createTaxslayerReturn(dataWithWarnings);
+
+    // Log the import action
+    await auditService.logAction({
+      userId: req.user!.id,
+      action: 'taxslayer_import',
+      resourceType: 'taxslayer_return',
+      resourceId: taxReturn.id,
+      details: {
+        vitaSessionId: taxReturn.vitaIntakeSessionId,
+        taxYear: taxReturn.taxYear,
+        warningsCount: warnings.length
+      },
+      ipAddress: req.ip,
+      userAgent: req.get('user-agent') || 'unknown'
+    });
+
+    res.json(taxReturn);
+  }));
+
+  // Get TaxSlayer data for a VITA session
+  app.get("/api/taxslayer/:vitaSessionId", requireStaff, asyncHandler(async (req: Request, res: Response) => {
+    const taxReturn = await storage.getTaxslayerReturnByVitaSession(req.params.vitaSessionId);
+    
+    if (!taxReturn) {
+      return res.json(null);
+    }
+
+    res.json(taxReturn);
+  }));
+
+  // Get TaxSlayer return by ID
+  app.get("/api/taxslayer/return/:id", requireStaff, asyncHandler(async (req: Request, res: Response) => {
+    const taxReturn = await storage.getTaxslayerReturn(req.params.id);
+    
+    if (!taxReturn) {
+      throw notFoundError("TaxSlayer return not found");
+    }
+
+    res.json(taxReturn);
+  }));
+
+  // Update TaxSlayer return
+  app.patch("/api/taxslayer/:id", requireStaff, asyncHandler(async (req: Request, res: Response) => {
+    const taxReturn = await storage.getTaxslayerReturn(req.params.id);
+    
+    if (!taxReturn) {
+      throw notFoundError("TaxSlayer return not found");
+    }
+
+    const validated = insertTaxslayerReturnSchema.partial().parse(req.body);
+    const updated = await storage.updateTaxslayerReturn(req.params.id, validated);
+
+    res.json(updated);
+  }));
+
+  // Generate PDF export
+  app.post("/api/taxslayer/:id/export-pdf", requireStaff, asyncHandler(async (req: Request, res: Response) => {
+    const taxReturn = await storage.getTaxslayerReturn(req.params.id);
+    
+    if (!taxReturn) {
+      throw notFoundError("TaxSlayer return not found");
+    }
+
+    const pdfBuffer = await exportToPDF(req.params.id);
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename=taxslayer-return-${taxReturn.taxYear}-${req.params.id}.pdf`);
+    res.send(pdfBuffer);
+  }));
+
+  // Generate CSV export
+  app.post("/api/taxslayer/:id/export-csv", requireStaff, asyncHandler(async (req: Request, res: Response) => {
+    const taxReturn = await storage.getTaxslayerReturn(req.params.id);
+    
+    if (!taxReturn) {
+      throw notFoundError("TaxSlayer return not found");
+    }
+
+    // Optional: include our system's calculation for comparison
+    const ourCalculation = req.body.ourCalculation;
+
+    const csvContent = await exportToCSV(req.params.id, ourCalculation);
+
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', `attachment; filename=taxslayer-comparison-${taxReturn.taxYear}-${req.params.id}.csv`);
+    res.send(csvContent);
   }));
 
   // ==========================================
