@@ -17,6 +17,7 @@ import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { CheckCircle2, DollarSign, Heart, Baby, Home, Users, Calculator, Info, ArrowRight, Save, Zap } from "lucide-react";
 import { PolicyEngineVerificationBadge } from "@/components/PolicyEngineVerificationBadge";
+import { Helmet } from "react-helmet-async";
 
 const screenerSchema = z.object({
   adults: z.coerce.number().min(1, "At least 1 adult required").max(20),
@@ -180,7 +181,11 @@ export default function BenefitScreener() {
   ].filter(Boolean).length : 0;
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-blue-50 to-white dark:from-gray-900 dark:to-gray-800">
+    <>
+      <Helmet>
+        <title>Benefit Screener - MD Benefits Navigator</title>
+      </Helmet>
+      <div className="min-h-screen bg-gradient-to-b from-blue-50 to-white dark:from-gray-900 dark:to-gray-800">
       <div className="container mx-auto px-4 py-8 max-w-6xl">
         {/* Header */}
         <div className="text-center mb-8">
@@ -669,5 +674,6 @@ export default function BenefitScreener() {
         </Alert>
       </div>
     </div>
+    </>
   );
 }

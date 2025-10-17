@@ -10,6 +10,7 @@ import { Camera, FileText, Upload, CheckCircle2, AlertCircle, Sparkles, List } f
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import PublicPortalNav from "@/components/PublicPortalNav";
+import { Helmet } from "react-helmet-async";
 
 interface DocumentTemplate {
   id: string;
@@ -100,6 +101,9 @@ export default function DocumentChecklist() {
 
   return (
     <>
+      <Helmet>
+        <title>Document Checklist - MD Benefits Navigator</title>
+      </Helmet>
       <PublicPortalNav />
       <div className="container mx-auto px-4 py-8 max-w-6xl">
         <a href="#checklist-content" className="skip-link">

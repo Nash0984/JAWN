@@ -28,6 +28,7 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
+import { Helmet } from "react-helmet-async";
 
 const loginSchema = z.object({
   username: z.string().min(3, "Your username needs to be at least 3 characters"),
@@ -138,7 +139,11 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-white to-gray-50 px-4">
+    <>
+      <Helmet>
+        <title>Login - MD Benefits Navigator</title>
+      </Helmet>
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-white to-gray-50 px-4">
       <Card className="w-full max-w-md border-maryland-red/20" data-testid="card-login">
         <CardHeader className="space-y-1 text-center">
           <div className="mb-4">
@@ -259,5 +264,6 @@ export default function Login() {
         </CardContent>
       </Card>
     </div>
+    </>
   );
 }

@@ -3,6 +3,7 @@ import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { HelmetProvider } from "react-helmet-async";
 import Home from "@/pages/Home";
 import Upload from "@/pages/Upload";
 import Admin from "@/pages/Admin";
@@ -556,20 +557,22 @@ function Router() {
 
 function App() {
   return (
-    <QueryClientProvider client={queryClient}>
-      <TenantProvider>
-        <TenantThemeProvider>
-          <BrandingProvider>
-            <SessionExpiryProvider>
-              <TooltipProvider>
-                <Toaster />
-                <Router />
-              </TooltipProvider>
-            </SessionExpiryProvider>
-          </BrandingProvider>
-        </TenantThemeProvider>
-      </TenantProvider>
-    </QueryClientProvider>
+    <HelmetProvider>
+      <QueryClientProvider client={queryClient}>
+        <TenantProvider>
+          <TenantThemeProvider>
+            <BrandingProvider>
+              <SessionExpiryProvider>
+                <TooltipProvider>
+                  <Toaster />
+                  <Router />
+                </TooltipProvider>
+              </SessionExpiryProvider>
+            </BrandingProvider>
+          </TenantThemeProvider>
+        </TenantProvider>
+      </QueryClientProvider>
+    </HelmetProvider>
   );
 }
 
