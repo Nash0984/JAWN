@@ -10,7 +10,10 @@ import { TaxDocumentExtractionService } from './taxDocumentExtraction';
 import type { 
   W2Data, 
   Form1099MISCData, 
-  Form1099NECData 
+  Form1099NECData,
+  Form1099INTData,
+  Form1099DIVData,
+  Form1099RData
 } from './taxDocumentExtraction';
 
 export interface PayStubExtractionData {
@@ -40,7 +43,7 @@ export interface PayStubExtractionData {
 
 export interface IncomeDocumentExtractionResult {
   documentType: string;
-  data: W2Data | Form1099MISCData | Form1099NECData | PayStubExtractionData | any;
+  data: W2Data | Form1099MISCData | Form1099NECData | Form1099INTData | Form1099DIVData | Form1099RData | PayStubExtractionData | any;
   confidence?: number;
   errors?: string[];
   error?: string;
@@ -149,6 +152,80 @@ export class DocumentExtractionService {
         error: error instanceof Error ? error.message : 'Unknown error'
       };
     }
+  }
+
+  /**
+   * Extract 1099-INT form data (Interest Income)
+   */
+  async extract1099INT(documentId: string): Promise<IncomeDocumentExtractionResult> {
+    try {
+      const result = await this.taxDocExtractor.extract1099INT(documentId);
+      return {
+        documentType: '1099-INT',
+        data: result.data,
+        confidence: result.confidence
+      };
+    } catch (error) {
+      return {
+        documentType: '1099-INT',
+        data: {},
+        errors: [error instanceof Error ? error.message : 'Unknown error'],
+        error: error instanceof Error ? error.message : 'Unknown error'
+      };
+    }
+  }
+
+  /**
+   * Extract 1099-DIV form data (Dividends and Distributions)
+   */
+  async extract1099DIV(documentId: string): Promise<IncomeDocumentExtractionResult> {
+    try {
+      const result = await this.taxDocExtractor.extract1099DIV(documentId);
+      return {
+        documentType: '1099-DIV',
+        data: result.data,
+        confidence: result.confidence
+      };
+    } catch (error) {
+      return {
+        documentType: '1099-DIV',
+        data: {},
+        errors: [error instanceof Error ? error.message : 'Unknown error'],
+        error: error instanceof Error ? error.message : 'Unknown error'
+      };
+    }
+  }
+
+  /**
+   * Extract 1099-R form data (Distributions From Pensions, Annuities, Retirement)
+   */
+  async extract1099R(documentId: string): Promise<IncomeDocumentExtractionResult> {
+    try {
+      const result = await this.taxDocExtractor.extract1099R(documentId);
+      return {
+        documentType: '1099-R',
+        data: result.data,
+        confidence: result.confidence
+      };
+    } catch (error) {
+      return {
+        documentType: '1099-R',
+        data: {},
+        errors: [error instanceof Error ? error.message : 'Unknown error'],
+        error: error instanceof Error ? error.message : 'Unknown error'
+      };
+    }
+  }
+
+  /**
+   * Map extracted tax document data to VITA intake form fields
+   * Delegates to the tax document extractor for mapping logic
+   */
+  mapExtractedDataToVitaIntake(
+    extractedData: W2Data | Form1099MISCData | Form1099NECData | Form1099INTData | Form1099DIVData | Form1099RData,
+    documentType: string
+  ): Partial<any> {
+    return this.taxDocExtractor.mapExtractedDataToVitaIntake(extractedData, documentType);
   }
 
   /**
