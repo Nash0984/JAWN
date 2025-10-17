@@ -210,6 +210,15 @@ import {
   userConsents,
   type UserConsent,
   type InsertUserConsent,
+  vitaDocumentRequests,
+  type VitaDocumentRequest,
+  type InsertVitaDocumentRequest,
+  vitaSignatureRequests,
+  type VitaSignatureRequest,
+  type InsertVitaSignatureRequest,
+  vitaMessages,
+  type VitaMessage,
+  type InsertVitaMessage,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and, ilike, sql, or, isNull, lte, gte, inArray } from "drizzle-orm";
@@ -636,6 +645,31 @@ export interface IStorage {
   getTaxslayerReturns(filters?: { userId?: string; taxYear?: number }): Promise<TaxslayerReturn[]>;
   updateTaxslayerReturn(id: string, updates: Partial<TaxslayerReturn>): Promise<TaxslayerReturn>;
   deleteTaxslayerReturn(id: string): Promise<void>;
+
+  // ============================================================================
+  // VITA Document Upload Portal
+  // ============================================================================
+  
+  // VITA Document Requests
+  createVitaDocumentRequest(request: InsertVitaDocumentRequest): Promise<VitaDocumentRequest>;
+  getVitaDocumentRequest(id: string): Promise<VitaDocumentRequest | undefined>;
+  getVitaDocumentRequests(vitaSessionId: string, filters?: { category?: string; status?: string }): Promise<VitaDocumentRequest[]>;
+  updateVitaDocumentRequest(id: string, updates: Partial<VitaDocumentRequest>): Promise<VitaDocumentRequest>;
+  deleteVitaDocumentRequest(id: string): Promise<void>;
+  
+  // VITA Signature Requests
+  createVitaSignatureRequest(request: InsertVitaSignatureRequest): Promise<VitaSignatureRequest>;
+  getVitaSignatureRequest(id: string): Promise<VitaSignatureRequest | undefined>;
+  getVitaSignatureRequests(vitaSessionId: string, filters?: { formType?: string; status?: string }): Promise<VitaSignatureRequest[]>;
+  updateVitaSignatureRequest(id: string, updates: Partial<VitaSignatureRequest>): Promise<VitaSignatureRequest>;
+  deleteVitaSignatureRequest(id: string): Promise<void>;
+  
+  // VITA Messages
+  createVitaMessage(message: InsertVitaMessage): Promise<VitaMessage>;
+  getVitaMessage(id: string): Promise<VitaMessage | undefined>;
+  getVitaMessages(vitaSessionId: string, filters?: { senderRole?: string; unreadOnly?: boolean }): Promise<VitaMessage[]>;
+  markVitaMessageAsRead(id: string): Promise<void>;
+  deleteVitaMessage(id: string): Promise<void>;
 
   // ============================================================================
   // E-File Monitoring
@@ -3296,6 +3330,134 @@ export class DatabaseStorage implements IStorage {
 
   async deleteTaxslayerReturn(id: string): Promise<void> {
     await db.delete(taxslayerReturns).where(eq(taxslayerReturns.id, id));
+  }
+
+  // ============================================================================
+  // VITA Document Upload Portal - Implementation
+  // ============================================================================
+
+  // VITA Document Requests
+  async createVitaDocumentRequest(request: InsertVitaDocumentRequest): Promise<VitaDocumentRequest> {
+    const [created] = await db.insert(vitaDocumentRequests).values(request).returning();
+    return created;
+  }
+
+  async getVitaDocumentRequest(id: string): Promise<VitaDocumentRequest | undefined> {
+    return await db.query.vitaDocumentRequests.findFirst({
+      where: eq(vitaDocumentRequests.id, id),
+    });
+  }
+
+  async getVitaDocumentRequests(vitaSessionId: string, filters?: { category?: string; status?: string }): Promise<VitaDocumentRequest[]> {
+    const conditions = [eq(vitaDocumentRequests.vitaSessionId, vitaSessionId)];
+
+    if (filters?.category) {
+      conditions.push(eq(vitaDocumentRequests.category, filters.category));
+    }
+
+    if (filters?.status) {
+      conditions.push(eq(vitaDocumentRequests.status, filters.status));
+    }
+
+    return await db.query.vitaDocumentRequests.findMany({
+      where: and(...conditions),
+      orderBy: [desc(vitaDocumentRequests.createdAt)],
+    });
+  }
+
+  async updateVitaDocumentRequest(id: string, updates: Partial<VitaDocumentRequest>): Promise<VitaDocumentRequest> {
+    const [updated] = await db
+      .update(vitaDocumentRequests)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(vitaDocumentRequests.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteVitaDocumentRequest(id: string): Promise<void> {
+    await db.delete(vitaDocumentRequests).where(eq(vitaDocumentRequests.id, id));
+  }
+
+  // VITA Signature Requests
+  async createVitaSignatureRequest(request: InsertVitaSignatureRequest): Promise<VitaSignatureRequest> {
+    const [created] = await db.insert(vitaSignatureRequests).values(request).returning();
+    return created;
+  }
+
+  async getVitaSignatureRequest(id: string): Promise<VitaSignatureRequest | undefined> {
+    return await db.query.vitaSignatureRequests.findFirst({
+      where: eq(vitaSignatureRequests.id, id),
+    });
+  }
+
+  async getVitaSignatureRequests(vitaSessionId: string, filters?: { formType?: string; status?: string }): Promise<VitaSignatureRequest[]> {
+    const conditions = [eq(vitaSignatureRequests.vitaSessionId, vitaSessionId)];
+
+    if (filters?.formType) {
+      conditions.push(eq(vitaSignatureRequests.formType, filters.formType));
+    }
+
+    if (filters?.status) {
+      conditions.push(eq(vitaSignatureRequests.status, filters.status));
+    }
+
+    return await db.query.vitaSignatureRequests.findMany({
+      where: and(...conditions),
+      orderBy: [desc(vitaSignatureRequests.createdAt)],
+    });
+  }
+
+  async updateVitaSignatureRequest(id: string, updates: Partial<VitaSignatureRequest>): Promise<VitaSignatureRequest> {
+    const [updated] = await db
+      .update(vitaSignatureRequests)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(vitaSignatureRequests.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteVitaSignatureRequest(id: string): Promise<void> {
+    await db.delete(vitaSignatureRequests).where(eq(vitaSignatureRequests.id, id));
+  }
+
+  // VITA Messages
+  async createVitaMessage(message: InsertVitaMessage): Promise<VitaMessage> {
+    const [created] = await db.insert(vitaMessages).values(message).returning();
+    return created;
+  }
+
+  async getVitaMessage(id: string): Promise<VitaMessage | undefined> {
+    return await db.query.vitaMessages.findFirst({
+      where: eq(vitaMessages.id, id),
+    });
+  }
+
+  async getVitaMessages(vitaSessionId: string, filters?: { senderRole?: string; unreadOnly?: boolean }): Promise<VitaMessage[]> {
+    const conditions = [eq(vitaMessages.vitaSessionId, vitaSessionId)];
+
+    if (filters?.senderRole) {
+      conditions.push(eq(vitaMessages.senderRole, filters.senderRole));
+    }
+
+    if (filters?.unreadOnly) {
+      conditions.push(isNull(vitaMessages.readAt));
+    }
+
+    return await db.query.vitaMessages.findMany({
+      where: and(...conditions),
+      orderBy: [desc(vitaMessages.createdAt)],
+    });
+  }
+
+  async markVitaMessageAsRead(id: string): Promise<void> {
+    await db
+      .update(vitaMessages)
+      .set({ readAt: new Date() })
+      .where(eq(vitaMessages.id, id));
+  }
+
+  async deleteVitaMessage(id: string): Promise<void> {
+    await db.delete(vitaMessages).where(eq(vitaMessages.id, id));
   }
 
   // ============================================================================

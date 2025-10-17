@@ -5271,3 +5271,220 @@ export const insertUserConsentSchema = createInsertSchema(userConsents).omit({
 
 export type InsertUserConsent = z.infer<typeof insertUserConsentSchema>;
 export type UserConsent = typeof userConsents.$inferSelect;
+
+// ============================================================================
+// VITA DOCUMENT UPLOAD PORTAL - Tax Document Management & E-Signatures
+// ============================================================================
+
+// VITA Document Categories - Tax-specific document types
+export type VitaDocumentCategory = 
+  | "W2" 
+  | "1099_MISC" 
+  | "1099_NEC" 
+  | "1099_INT" 
+  | "1099_DIV" 
+  | "1099_R" 
+  | "1095_A" 
+  | "ID_DOCUMENT" 
+  | "SUPPORTING_RECEIPT" 
+  | "OTHER";
+
+// VITA Document Requests - Track document collection for tax prep
+export const vitaDocumentRequests = pgTable("vita_document_requests", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  
+  // Link to VITA intake session
+  vitaSessionId: varchar("vita_session_id").references(() => vitaIntakeSessions.id, { onDelete: "cascade" }).notNull(),
+  
+  // Document category and metadata
+  category: text("category").notNull(), // W2, 1099_MISC, 1099_NEC, 1099_INT, 1099_DIV, 1099_R, 1095_A, ID_DOCUMENT, SUPPORTING_RECEIPT, OTHER
+  categoryLabel: text("category_label").notNull(), // Human-readable name like "W-2 Wage and Tax Statement"
+  
+  // Upload status
+  status: text("status").notNull().default("pending"), // pending, uploaded, extracted, verified, rejected
+  
+  // Document reference (if uploaded)
+  documentId: varchar("document_id").references(() => documents.id, { onDelete: "set null" }),
+  taxDocumentId: varchar("tax_document_id").references(() => taxDocuments.id, { onDelete: "set null" }),
+  
+  // Extracted data (from Gemini Vision)
+  extractedData: jsonb("extracted_data"), // Structured form fields from tax document
+  qualityScore: real("quality_score"), // 0-1 confidence score from Gemini
+  
+  // Navigator notes and review
+  navigatorNotes: text("navigator_notes"),
+  requestedBy: varchar("requested_by").references(() => users.id), // Navigator who requested this document
+  
+  // Timestamps
+  uploadedAt: timestamp("uploaded_at"),
+  extractedAt: timestamp("extracted_at"),
+  verifiedAt: timestamp("verified_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  sessionIdIdx: index("vita_doc_requests_session_idx").on(table.vitaSessionId),
+  categoryIdx: index("vita_doc_requests_category_idx").on(table.category),
+  statusIdx: index("vita_doc_requests_status_idx").on(table.status),
+}));
+
+// VITA Signature Requests - E-signature workflow for Form 8879 and consents
+export const vitaSignatureRequests = pgTable("vita_signature_requests", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  
+  // Link to VITA intake session
+  vitaSessionId: varchar("vita_session_id").references(() => vitaIntakeSessions.id, { onDelete: "cascade" }).notNull(),
+  
+  // Form type and metadata
+  formType: text("form_type").notNull(), // form_8879, consent_form, both
+  formTitle: text("form_title").notNull(), // "IRS e-file Authorization (Form 8879)"
+  
+  // Signature status
+  status: text("status").notNull().default("pending"), // pending, sent, signed, declined, expired
+  
+  // Signature data (encrypted)
+  signatureData: jsonb("signature_data"), // { taxpayerSignature: string, spouseSignature?: string, signedFields: {} }
+  
+  // Compliance tracking
+  ipAddress: text("ip_address"), // IP address at time of signature
+  userAgent: text("user_agent"), // Browser/device info
+  geolocation: jsonb("geolocation"), // Optional GPS coordinates
+  
+  // Session management
+  expiresAt: timestamp("expires_at"), // Signature request expiry
+  signedAt: timestamp("signed_at"),
+  
+  // Audit trail
+  requestedBy: varchar("requested_by").references(() => users.id).notNull(), // Navigator who requested
+  signedBy: varchar("signed_by").references(() => users.id), // Taxpayer who signed
+  
+  // Webhook integration
+  webhookUrl: text("webhook_url"), // Callback URL for external systems
+  webhookDelivered: boolean("webhook_delivered").default(false),
+  
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  sessionIdIdx: index("vita_sig_requests_session_idx").on(table.vitaSessionId),
+  statusIdx: index("vita_sig_requests_status_idx").on(table.status),
+  expiresAtIdx: index("vita_sig_requests_expires_idx").on(table.expiresAt),
+}));
+
+// VITA Messages - Secure messaging between navigator and taxpayer
+export const vitaMessages = pgTable("vita_messages", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  
+  // Link to VITA intake session
+  vitaSessionId: varchar("vita_session_id").references(() => vitaIntakeSessions.id, { onDelete: "cascade" }).notNull(),
+  
+  // Sender information
+  senderId: varchar("sender_id").references(() => users.id).notNull(),
+  senderRole: text("sender_role").notNull(), // navigator, taxpayer
+  senderName: text("sender_name").notNull(), // Display name for UI
+  
+  // Message content (encrypted)
+  messageText: text("message_text").notNull(),
+  
+  // Attachments (references to documents)
+  attachments: jsonb("attachments").default([]), // [{ documentId, filename, fileSize, mimeType }]
+  
+  // Message metadata
+  messageType: text("message_type").default("standard"), // standard, system_notification, document_request, document_rejection
+  relatedDocumentRequestId: varchar("related_document_request_id").references(() => vitaDocumentRequests.id, { onDelete: "set null" }),
+  
+  // Read tracking
+  readAt: timestamp("read_at"),
+  
+  // Moderation
+  flaggedForReview: boolean("flagged_for_review").default(false),
+  moderatedBy: varchar("moderated_by").references(() => users.id),
+  moderationNotes: text("moderation_notes"),
+  
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+  sessionIdIdx: index("vita_messages_session_idx").on(table.vitaSessionId),
+  senderIdIdx: index("vita_messages_sender_idx").on(table.senderId),
+  createdAtIdx: index("vita_messages_created_idx").on(table.createdAt),
+  readAtIdx: index("vita_messages_read_idx").on(table.readAt),
+}));
+
+// Relations
+export const vitaDocumentRequestsRelations = relations(vitaDocumentRequests, ({ one }) => ({
+  vitaSession: one(vitaIntakeSessions, {
+    fields: [vitaDocumentRequests.vitaSessionId],
+    references: [vitaIntakeSessions.id],
+  }),
+  document: one(documents, {
+    fields: [vitaDocumentRequests.documentId],
+    references: [documents.id],
+  }),
+  taxDocument: one(taxDocuments, {
+    fields: [vitaDocumentRequests.taxDocumentId],
+    references: [taxDocuments.id],
+  }),
+  requester: one(users, {
+    fields: [vitaDocumentRequests.requestedBy],
+    references: [users.id],
+  }),
+}));
+
+export const vitaSignatureRequestsRelations = relations(vitaSignatureRequests, ({ one }) => ({
+  vitaSession: one(vitaIntakeSessions, {
+    fields: [vitaSignatureRequests.vitaSessionId],
+    references: [vitaIntakeSessions.id],
+  }),
+  requester: one(users, {
+    fields: [vitaSignatureRequests.requestedBy],
+    references: [users.id],
+  }),
+  signer: one(users, {
+    fields: [vitaSignatureRequests.signedBy],
+    references: [users.id],
+  }),
+}));
+
+export const vitaMessagesRelations = relations(vitaMessages, ({ one }) => ({
+  vitaSession: one(vitaIntakeSessions, {
+    fields: [vitaMessages.vitaSessionId],
+    references: [vitaIntakeSessions.id],
+  }),
+  sender: one(users, {
+    fields: [vitaMessages.senderId],
+    references: [users.id],
+  }),
+  relatedDocumentRequest: one(vitaDocumentRequests, {
+    fields: [vitaMessages.relatedDocumentRequestId],
+    references: [vitaDocumentRequests.id],
+  }),
+  moderator: one(users, {
+    fields: [vitaMessages.moderatedBy],
+    references: [users.id],
+  }),
+}));
+
+// Insert schemas
+export const insertVitaDocumentRequestSchema = createInsertSchema(vitaDocumentRequests).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertVitaSignatureRequestSchema = createInsertSchema(vitaSignatureRequests).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertVitaMessageSchema = createInsertSchema(vitaMessages).omit({
+  id: true,
+  createdAt: true,
+});
+
+// Types
+export type InsertVitaDocumentRequest = z.infer<typeof insertVitaDocumentRequestSchema>;
+export type VitaDocumentRequest = typeof vitaDocumentRequests.$inferSelect;
+
+export type InsertVitaSignatureRequest = z.infer<typeof insertVitaSignatureRequestSchema>;
+export type VitaSignatureRequest = typeof vitaSignatureRequests.$inferSelect;
+
+export type InsertVitaMessage = z.infer<typeof insertVitaMessageSchema>;
+export type VitaMessage = typeof vitaMessages.$inferSelect;
