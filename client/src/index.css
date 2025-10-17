@@ -188,6 +188,7 @@
 }
 
 /* Mobile Optimization and Accessibility */
+/* Mobile-first breakpoints: 320px-768px mobile, 768px-1024px tablet, 1024px+ desktop */
 @media (max-width: 768px) {
   body {
     font-size: 16px; /* Prevent zoom on iOS */
@@ -208,40 +209,158 @@
     line-height: 1.3;
   }
   
-  /* Larger touch targets for mobile */
-  button, .btn, [role="button"] {
+  /* Larger touch targets for mobile - WCAG AAA 44px minimum */
+  button, .btn, [role="button"], a.btn, input[type="submit"], input[type="button"] {
     min-height: 44px;
     min-width: 44px;
+    padding: 12px 16px;
+  }
+  
+  /* Touch-friendly form inputs */
+  input, select, textarea {
+    min-height: 44px;
+    font-size: 16px; /* Prevent zoom on iOS */
   }
   
   /* Improve readability on small screens */
   p, .text-sm {
     line-height: 1.7;
   }
+  
+  /* Mobile navigation patterns */
+  .mobile-nav {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    padding: 8px;
+    background: var(--background);
+    border-top: 1px solid var(--border);
+    z-index: 50;
+  }
+  
+  /* Responsive tables - Card layout on mobile */
+  .responsive-table {
+    display: block;
+  }
+  
+  .responsive-table thead {
+    display: none;
+  }
+  
+  .responsive-table tr {
+    display: block;
+    margin-bottom: 1rem;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 1rem;
+  }
+  
+  .responsive-table td {
+    display: flex;
+    justify-content: space-between;
+    padding: 0.5rem 0;
+    border-bottom: 1px solid var(--border);
+  }
+  
+  .responsive-table td:last-child {
+    border-bottom: none;
+  }
+  
+  .responsive-table td::before {
+    content: attr(data-label);
+    font-weight: 600;
+    margin-right: 1rem;
+  }
 }
 
-/* Accessibility Features */
-/* Focus indicators for keyboard navigation */
-*:focus {
-  outline: 2px solid hsl(var(--maryland-red));
-  outline-offset: 2px;
+/* Tablet breakpoint */
+@media (min-width: 768px) and (max-width: 1024px) {
+  .container {
+    max-width: 720px;
+  }
+  
+  /* Touch targets still important on tablets */
+  button, .btn, [role="button"] {
+    min-height: 44px;
+  }
 }
 
-/* Skip link for screen readers */
+/* Desktop breakpoint */
+@media (min-width: 1024px) {
+  .container {
+    max-width: 1200px;
+  }
+}
+
+/* Fluid typography - Scales with viewport */
+html {
+  font-size: 16px;
+}
+
+@media (min-width: 320px) {
+  html {
+    font-size: calc(16px + 2 * ((100vw - 320px) / 704));
+  }
+}
+
+@media (min-width: 1024px) {
+  html {
+    font-size: 18px;
+  }
+}
+
+/* Accessibility Features - WCAG AAA Compliance */
+/* Focus indicators for keyboard navigation - Enhanced visibility */
+*:focus-visible {
+  outline: 3px solid hsl(var(--maryland-red));
+  outline-offset: 3px;
+  border-radius: 2px;
+}
+
+/* Ensure focus is always visible, even on elements with custom styling */
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+[tabindex]:focus-visible {
+  outline: 3px solid hsl(var(--maryland-red));
+  outline-offset: 3px;
+}
+
+/* Skip link for screen readers and keyboard users */
 .skip-link {
   position: absolute;
   top: -40px;
   left: 6px;
   background: hsl(var(--maryland-red));
   color: white;
-  padding: 8px;
+  padding: 12px 16px;
   text-decoration: none;
   z-index: 100;
   border-radius: 4px;
+  font-weight: 600;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
 }
 
 .skip-link:focus {
   top: 6px;
+  outline: 3px solid white;
+  outline-offset: 2px;
+}
+
+/* Touch target utilities - Enforce 44px minimum */
+.touch-target {
+  min-height: 44px !important;
+  min-width: 44px !important;
+}
+
+.touch-target-lg {
+  min-height: 56px !important;
+  min-width: 56px !important;
 }
 
 /* High contrast mode support */
