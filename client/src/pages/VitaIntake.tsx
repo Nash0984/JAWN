@@ -64,6 +64,7 @@ import { VitaProgressIndicator } from "@/components/VitaProgressIndicator";
 import { TaxSlayerDataEntry } from "@/components/TaxSlayerDataEntry";
 import { TaxSlayerComparison } from "@/components/TaxSlayerComparison";
 import { VitaTaxPreviewSidebar } from "@/components/VitaTaxPreviewSidebar";
+import { IRSConsentReview } from "@/components/IRSConsentReview";
 
 // Step configuration
 const STEPS = [
@@ -4355,9 +4356,29 @@ export default function VitaIntake() {
                     )}
 
                     {currentStep === 5 && (
+                      <IRSConsentReview
+                        sessionId={selectedSessionId || ''}
+                        clientCaseId={householdProfileId || sessionData?.clientCaseId || ''}
+                        onConsentComplete={() => {
+                          // Update session to mark consent complete
+                          if (selectedSessionId) {
+                            updateSessionMutation.mutate({
+                              id: selectedSessionId,
+                              data: {
+                                status: 'review_needed',
+                                completedAt: new Date().toISOString(),
+                              },
+                            });
+                          }
+                        }}
+                      />
+                    )}
+
+                    {/* TEMPORARY: Keep old Step 5 for reference - to be removed */}
+                    {false && currentStep === 5 && (
                       <div className="space-y-6">
                         {/* Information Review Summary */}
-                        <Card data-testid="summary-personal">
+                        <Card data-testid="summary-personal-old">
                           <CardHeader className="pb-3">
                             <div className="flex items-center gap-2">
                               <FileText className="h-5 w-5 text-primary" />

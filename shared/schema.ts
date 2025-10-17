@@ -1516,6 +1516,7 @@ export const clientConsents = pgTable("client_consents", {
   revokedAt: timestamp("revoked_at"),
   revokedReason: text("revoked_reason"),
   notes: text("notes"),
+  metadata: jsonb("metadata"), // Additional consent metadata (benefitPrograms, userAgent, formVersion, etc.)
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 

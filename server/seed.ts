@@ -9,6 +9,7 @@ import {
   generateTrainingInterventions 
 } from "./services/qcSyntheticData";
 import { seedDemoMetrics } from './seeds/demoMetrics';
+import { seedIRSConsentForm } from './seeds/irsConsentTemplate';
 
 /**
  * Seed initial tenants and their branding
@@ -283,7 +284,10 @@ async function seedTenants() {
     // Seed demo metrics for monitoring dashboard
     await seedDemoMetrics();
     
-    console.log("\n🎉 Tenant, API key, QC Analytics, and Demo Metrics seeding completed successfully!");
+    // Seed IRS Use & Disclosure consent form
+    await seedIRSConsentForm();
+    
+    console.log("\n🎉 Tenant, API key, QC Analytics, Demo Metrics, and IRS Consent Form seeding completed successfully!");
   } catch (error) {
     console.error("❌ Error seeding tenants:", error);
     throw error;

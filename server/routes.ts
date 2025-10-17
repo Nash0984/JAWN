@@ -3449,6 +3449,106 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
     res.json(consent);
   }));
 
+  // GET consent form by code - Used for IRS consent form retrieval
+  app.get("/api/consent/forms/:code", asyncHandler(async (req: Request, res: Response) => {
+    const form = await db.query.consentForms.findFirst({
+      where: and(
+        eq(consentForms.formCode, req.params.code),
+        eq(consentForms.isActive, true)
+      )
+    });
+    
+    if (!form) {
+      return res.status(404).json({ success: false, error: 'Consent form not found' });
+    }
+    
+    res.json({ success: true, data: form });
+  }));
+
+  // Enhanced client consent recording with VITA session linkage and audit trail
+  app.post("/api/consent/client-consents/vita", requireAuth, asyncHandler(async (req: Request, res: Response) => {
+    const { 
+      consentFormId, 
+      sessionId,
+      clientCaseId,
+      benefitPrograms,
+      signatureData,
+      signatureMethod = 'electronic'
+    } = req.body;
+    
+    const ipAddress = req.ip;
+    const userAgent = req.get('user-agent');
+    
+    // Verify that the form exists and is active
+    const form = await db.query.consentForms.findFirst({
+      where: and(
+        eq(consentForms.id, consentFormId),
+        eq(consentForms.isActive, true)
+      )
+    });
+    
+    if (!form) {
+      throw validationError("Consent form not found or inactive");
+    }
+    
+    // Calculate expiration date
+    let expiresAt: Date | null = null;
+    if (form.expirationDays) {
+      expiresAt = new Date(Date.now() + (form.expirationDays * 24 * 60 * 60 * 1000));
+    }
+    
+    // Create consent record with metadata
+    const [consent] = await db.insert(clientConsents).values({
+      clientCaseId,
+      consentFormId,
+      sessionId,
+      consentGiven: true,
+      consentDate: new Date(),
+      signatureMethod,
+      signatureData,
+      ipAddress,
+      expiresAt,
+      metadata: {
+        benefitPrograms: benefitPrograms || [],
+        userAgent,
+        formVersion: form.version,
+        ipAddress,
+        recordedAt: new Date().toISOString()
+      }
+    }).returning();
+    
+    // Create audit log entry
+    await db.insert(auditLogs).values({
+      userId: req.user!.id,
+      action: 'irs_consent_recorded',
+      resourceType: 'client_consent',
+      resourceId: consent.id,
+      metadata: {
+        consentFormCode: form.formCode,
+        sessionId,
+        benefitPrograms,
+        ipAddress,
+        userAgent
+      }
+    });
+    
+    res.json({ success: true, data: consent });
+  }));
+
+  // GET consent status for Vita session
+  app.get("/api/consent/vita-session/:sessionId", requireAuth, asyncHandler(async (req: Request, res: Response) => {
+    const consents = await db.query.clientConsents.findMany({
+      where: eq(clientConsents.sessionId, req.params.sessionId),
+      with: { 
+        consentForm: true,
+        clientCase: true
+      },
+      orderBy: [desc(clientConsents.consentDate)]
+    });
+    
+    res.json({ success: true, data: consents });
+  }));
+
   // ===== RULES EXTRACTION ROUTES =====
   
   // Request validation schemas
