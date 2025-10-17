@@ -123,14 +123,18 @@ export class SmartScheduler {
       },
       {
         name: 'fns_state_options',
-        cronExpression: '0 0 * * 0', // Weekly (monthly exceeds JS setInterval 32-bit limit)
-        description: 'FNS SNAP State Options (weekly check, updated semi-annually)',
+        cronExpression: '0 0 1 * *', // Monthly on 1st (published annually in August)
+        description: 'FNS SNAP State Options (monthly check, published annually in August)',
         enabled: true,
         checkFunction: async () => {
           log('📅 Smart Scheduler: Checking FNS State Options...');
           try {
             const result = await fnsStateOptionsParser.downloadAndParse();
-            log(`✅ FNS State Options check complete: ${result.optionsCreated} options, ${result.marylandStatusCreated} MD statuses`);
+            if (result.optionsCreated > 0 || result.marylandStatusCreated > 0) {
+              log(`✅ FNS State Options updated: ${result.optionsCreated} options, ${result.marylandStatusCreated} MD statuses`);
+            } else {
+              log(`✅ FNS State Options already current (Edition 17)`);
+            }
           } catch (error) {
             log(`❌ FNS State Options check failed: ${error}`);
           }
