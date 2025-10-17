@@ -9,7 +9,7 @@ import {
   generateTrainingInterventions 
 } from "./services/qcSyntheticData";
 import { seedDemoMetrics } from './seeds/demoMetrics';
-import { seedIRSConsentForm } from './seeds/irsConsentTemplate';
+import { seedIRSConsentForm } from './seeds/irsConsentForm';
 
 /**
  * Seed initial tenants and their branding

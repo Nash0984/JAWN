@@ -1,223 +1,229 @@
 import { useState } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
-import { Checkbox } from '@/components/ui/checkbox';
+import { apiRequest, queryClient } from '@/lib/queryClient';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Checkbox } from '@/components/ui/checkbox';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Shield, AlertCircle } from 'lucide-react';
-import { apiRequest, queryClient } from '@/lib/queryClient';
-import { useToast } from '@/hooks/use-toast';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { useToast } from '@/hooks/use-toast';
+import { Shield, CheckCircle2, AlertCircle } from 'lucide-react';
+import ReactMarkdown from 'react-markdown';
 
 interface IRSConsentReviewProps {
-  sessionId: string;
+  vitaSessionId: string;
   clientCaseId: string;
   onConsentComplete: () => void;
 }
 
-export function IRSConsentReview({ sessionId, clientCaseId, onConsentComplete }: IRSConsentReviewProps) {
-  const [snap, setSnap] = useState(false);
-  const [medicaid, setMedicaid] = useState(false);
-  const [tca, setTca] = useState(false);
-  const [ohep, setOhep] = useState(false);
-  const [signatureName, setSignatureName] = useState('');
-  const [agreedToTerms, setAgreedToTerms] = useState(false);
+export function IRSConsentReview({ vitaSessionId, clientCaseId, onConsentComplete }: IRSConsentReviewProps) {
   const { toast } = useToast();
+  const [typedName, setTypedName] = useState('');
+  const [selectedPrograms, setSelectedPrograms] = useState<string[]>([]);
+  const [hasReadForm, setHasReadForm] = useState(false);
+  const [hasAgreed, setHasAgreed] = useState(false);
   
-  // Fetch IRS consent form
-  const { data: formData, isLoading: isLoadingForm, error: formError } = useQuery({
+  // Fetch IRS consent form by code
+  const { data: formData, isLoading: formLoading } = useQuery<any>({
     queryKey: ['/api/consent/forms/irs_use_disclosure'],
   });
   
+  // Check if consent already exists for this session
+  const { data: existingConsent, isLoading: consentLoading } = useQuery<any>({
+    queryKey: ['/api/consent/client-consents/vita-session', vitaSessionId],
+  });
+  
+  const consentForm = formData?.data;
+  const hasExistingConsent = existingConsent?.data && existingConsent.data.length > 0;
+  
+  // Submit consent mutation
   const consentMutation = useMutation({
     mutationFn: async () => {
-      const benefitPrograms = [
-        snap && 'snap',
-        medicaid && 'medicaid',
-        tca && 'tca',
-        ohep && 'ohep'
-      ].filter(Boolean);
-      
-      return await apiRequest('POST', '/api/consent/client-consents/vita', {
-        consentFormId: formData?.data?.id,
-        sessionId,
+      return await apiRequest('POST', '/api/consent/client-consents', {
         clientCaseId,
-        benefitPrograms,
-        signatureData: signatureName,
-        signatureMethod: 'electronic'
+        consentFormId: consentForm.id,
+        vitaIntakeSessionId: vitaSessionId,
+        benefitProgramsAuthorized: selectedPrograms,
+        signatureMetadata: {
+          typedName,
+          date: new Date().toISOString(),
+          method: 'electronic',
+        },
       });
     },
     onSuccess: () => {
       toast({
-        title: "Consent Recorded",
-        description: "IRS authorization successfully recorded",
+        title: 'Consent Recorded',
+        description: 'Your IRS Use & Disclosure authorization has been recorded.',
       });
-      queryClient.invalidateQueries({ queryKey: ['/api/consent/vita-session', sessionId] });
+      queryClient.invalidateQueries({ queryKey: ['/api/consent/client-consents/vita-session'] });
       onConsentComplete();
     },
     onError: (error: any) => {
       toast({
-        title: "Error Recording Consent",
-        description: error.message || "Failed to record consent. Please try again.",
-        variant: "destructive",
+        title: 'Error',
+        description: error.message || 'Failed to record consent',
+        variant: 'destructive',
       });
-    }
+    },
   });
   
-  const canSubmit = agreedToTerms && signatureName.trim().length > 0;
+  const benefitPrograms = [
+    { code: 'snap', label: 'SNAP (Food Assistance)', icon: '🍎' },
+    { code: 'medicaid', label: 'Medicaid (Medical Assistance)', icon: '🏥' },
+    { code: 'tca', label: 'TCA/TANF (Cash Assistance)', icon: '💵' },
+    { code: 'ohep', label: 'OHEP (Energy Assistance)', icon: '⚡' },
+  ];
   
-  if (isLoadingForm) {
+  const toggleProgram = (code: string) => {
+    setSelectedPrograms(prev =>
+      prev.includes(code) ? prev.filter(p => p !== code) : [...prev, code]
+    );
+  };
+  
+  const canSubmit = typedName.trim().length >= 3 && selectedPrograms.length > 0 && hasReadForm && hasAgreed;
+  
+  if (formLoading || consentLoading) {
+    return <div className="text-center py-8">Loading consent form...</div>;
+  }
+  
+  if (!consentForm) {
     return (
-      <div className="flex items-center justify-center p-8" data-testid="loading-consent-form">
-        <div className="text-center space-y-2">
-          <Shield className="h-12 w-12 text-blue-600 mx-auto animate-pulse" />
-          <p className="text-muted-foreground">Loading consent form...</p>
-        </div>
-      </div>
+      <Alert variant="destructive">
+        <AlertCircle className="h-4 w-4" />
+        <AlertDescription>
+          IRS consent form not found. Please contact support.
+        </AlertDescription>
+      </Alert>
     );
   }
   
-  if (formError || !formData?.data) {
+  if (hasExistingConsent) {
     return (
-      <Alert variant="destructive" data-testid="error-consent-form">
-        <AlertCircle className="h-4 w-4" />
+      <Alert>
+        <CheckCircle2 className="h-4 w-4" />
         <AlertDescription>
-          Unable to load IRS consent form. Please contact support.
+          You have already provided IRS Use & Disclosure consent for this tax session.
         </AlertDescription>
       </Alert>
     );
   }
   
   return (
-    <div className="space-y-6" data-testid="irs-consent-review">
-      <div className="flex items-center gap-3">
-        <Shield className="h-6 w-6 text-blue-600" />
-        <div>
-          <h2 className="text-2xl font-bold" data-testid="text-consent-title">IRS Use & Disclosure Authorization</h2>
-          <p className="text-sm text-muted-foreground mt-1">
-            Required to share tax information with benefit programs
-          </p>
-        </div>
-      </div>
-      
-      <Alert>
-        <AlertCircle className="h-4 w-4" />
-        <AlertDescription>
-          This consent allows us to use your tax information to determine benefit eligibility and streamline your applications.
-          Your information is protected and encrypted.
-        </AlertDescription>
-      </Alert>
-      
-      <ScrollArea className="h-[400px] border rounded-lg p-4 bg-muted/50" data-testid="scroll-consent-content">
-        <div className="prose prose-sm max-w-none">
-          <pre className="whitespace-pre-wrap font-sans text-sm leading-relaxed">
-            {formData.data.formContent}
-          </pre>
-        </div>
-      </ScrollArea>
-      
-      <div className="space-y-4">
-        <div className="space-y-3">
-          <Label className="font-semibold text-base">Select Benefit Programs (check all that apply):</Label>
-          <p className="text-sm text-muted-foreground">
-            Choose which programs you authorize us to share your tax information with.
-          </p>
+    <div className="space-y-6">
+      <Card>
+        <CardHeader>
+          <div className="flex items-start gap-3">
+            <Shield className="h-6 w-6 text-blue-600 mt-1" />
+            <div className="flex-1">
+              <CardTitle>{consentForm.formTitle}</CardTitle>
+              <CardDescription>{consentForm.purpose}</CardDescription>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          {/* Form Content */}
+          <ScrollArea className="h-[400px] border rounded-md p-4">
+            <div className="prose prose-sm max-w-none">
+              <ReactMarkdown>
+                {consentForm.formContent}
+              </ReactMarkdown>
+            </div>
+          </ScrollArea>
           
-          <div className="space-y-3 ml-2">
-            <div className="flex items-center gap-2">
-              <Checkbox 
-                id="snap-checkbox"
-                checked={snap} 
-                onCheckedChange={(checked) => setSnap(checked as boolean)} 
-                data-testid="checkbox-snap" 
+          {/* Benefit Program Selection */}
+          <div className="space-y-3">
+            <Label className="text-base font-semibold">Select Benefit Programs to Authorize:</Label>
+            <p className="text-sm text-muted-foreground">
+              Check the programs you want to use your tax information for eligibility determination.
+            </p>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {benefitPrograms.map((program) => (
+                <div
+                  key={program.code}
+                  className="flex items-center space-x-3 border rounded-lg p-3"
+                  data-testid={`checkbox-program-${program.code}`}
+                >
+                  <Checkbox
+                    id={`program-${program.code}`}
+                    checked={selectedPrograms.includes(program.code)}
+                    onCheckedChange={() => toggleProgram(program.code)}
+                  />
+                  <span className="text-lg">{program.icon}</span>
+                  <Label
+                    htmlFor={`program-${program.code}`}
+                    className="cursor-pointer flex-1"
+                  >
+                    {program.label}
+                  </Label>
+                </div>
+              ))}
+            </div>
+          </div>
+          
+          {/* Electronic Signature */}
+          <div className="space-y-3">
+            <Label htmlFor="typed-name" className="text-base font-semibold">
+              Electronic Signature
+            </Label>
+            <p className="text-sm text-muted-foreground">
+              Type your full legal name below to electronically sign this authorization.
+            </p>
+            <Input
+              id="typed-name"
+              placeholder="Type your full legal name"
+              value={typedName}
+              onChange={(e) => setTypedName(e.target.value)}
+              className="text-lg font-serif"
+              data-testid="input-signature"
+            />
+          </div>
+          
+          {/* Acknowledgment Checkboxes */}
+          <div className="space-y-3 border-t pt-4">
+            <div className="flex items-start space-x-3">
+              <Checkbox
+                id="read-form"
+                checked={hasReadForm}
+                onCheckedChange={(checked) => setHasReadForm(checked as boolean)}
+                data-testid="checkbox-read-form"
               />
-              <Label htmlFor="snap-checkbox" className="font-normal cursor-pointer">
-                SNAP (Supplemental Nutrition Assistance Program)
+              <Label htmlFor="read-form" className="cursor-pointer leading-relaxed">
+                I have read and understand the IRS Use & Disclosure Authorization
               </Label>
             </div>
-            <div className="flex items-center gap-2">
-              <Checkbox 
-                id="medicaid-checkbox"
-                checked={medicaid} 
-                onCheckedChange={(checked) => setMedicaid(checked as boolean)} 
-                data-testid="checkbox-medicaid" 
+            <div className="flex items-start space-x-3">
+              <Checkbox
+                id="agree"
+                checked={hasAgreed}
+                onCheckedChange={(checked) => setHasAgreed(checked as boolean)}
+                data-testid="checkbox-agree"
               />
-              <Label htmlFor="medicaid-checkbox" className="font-normal cursor-pointer">
-                Medicaid (Medical Assistance)
-              </Label>
-            </div>
-            <div className="flex items-center gap-2">
-              <Checkbox 
-                id="tca-checkbox"
-                checked={tca} 
-                onCheckedChange={(checked) => setTca(checked as boolean)} 
-                data-testid="checkbox-tca" 
-              />
-              <Label htmlFor="tca-checkbox" className="font-normal cursor-pointer">
-                TCA (Temporary Cash Assistance / TANF)
-              </Label>
-            </div>
-            <div className="flex items-center gap-2">
-              <Checkbox 
-                id="ohep-checkbox"
-                checked={ohep} 
-                onCheckedChange={(checked) => setOhep(checked as boolean)} 
-                data-testid="checkbox-ohep" 
-              />
-              <Label htmlFor="ohep-checkbox" className="font-normal cursor-pointer">
-                OHEP (Office of Home Energy Programs)
+              <Label htmlFor="agree" className="cursor-pointer leading-relaxed">
+                I voluntarily consent to the use of my tax information as described above
               </Label>
             </div>
           </div>
-        </div>
-        
-        <div className="space-y-2">
-          <Label htmlFor="signature" className="font-semibold">
-            Electronic Signature (type your full legal name):
-          </Label>
-          <Input
-            id="signature"
-            value={signatureName}
-            onChange={(e) => setSignatureName(e.target.value)}
-            placeholder="Type your full legal name"
-            data-testid="input-signature"
-            className="max-w-md"
-          />
-          <p className="text-xs text-muted-foreground">
-            By typing your name, you are providing your electronic signature.
+          
+          {/* Submit Button */}
+          <Button
+            onClick={() => consentMutation.mutate()}
+            disabled={!canSubmit || consentMutation.isPending}
+            className="w-full"
+            size="lg"
+            data-testid="button-submit-consent"
+          >
+            {consentMutation.isPending ? 'Recording Consent...' : 'Sign and Submit Authorization'}
+          </Button>
+          
+          {/* Legal Footer */}
+          <p className="text-xs text-center text-muted-foreground">
+            {consentForm.irsPublicationRef} • Version {consentForm.version}
           </p>
-        </div>
-        
-        <div className="flex items-start gap-2 p-4 border rounded-lg bg-muted/30">
-          <Checkbox
-            id="agree-terms"
-            checked={agreedToTerms}
-            onCheckedChange={(checked) => setAgreedToTerms(checked as boolean)}
-            data-testid="checkbox-agree"
-          />
-          <Label htmlFor="agree-terms" className="text-sm font-normal cursor-pointer leading-relaxed">
-            I have read and understand this authorization. I voluntarily consent to the use and disclosure of my tax information as described above.
-          </Label>
-        </div>
-      </div>
-      
-      <div className="flex gap-3">
-        <Button
-          onClick={() => consentMutation.mutate()}
-          disabled={!canSubmit || consentMutation.isPending}
-          className="flex-1"
-          data-testid="button-submit-consent"
-        >
-          {consentMutation.isPending ? 'Recording Consent...' : 'Submit Authorization'}
-        </Button>
-      </div>
-      
-      {!canSubmit && (
-        <p className="text-xs text-muted-foreground text-center" data-testid="text-validation-message">
-          Please sign with your full name and agree to the terms to continue.
-        </p>
-      )}
+        </CardContent>
+      </Card>
     </div>
   );
 }

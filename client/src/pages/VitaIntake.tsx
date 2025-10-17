@@ -4357,16 +4357,16 @@ export default function VitaIntake() {
 
                     {currentStep === 5 && (
                       <IRSConsentReview
-                        sessionId={selectedSessionId || ''}
-                        clientCaseId={householdProfileId || sessionData?.clientCaseId || ''}
+                        vitaSessionId={selectedSessionId || ''}
+                        clientCaseId={selectedSession?.householdProfileId || form.watch("householdProfileId") || ''}
                         onConsentComplete={() => {
                           // Update session to mark consent complete
                           if (selectedSessionId) {
-                            updateSessionMutation.mutate({
+                            updateMutation.mutate({
                               id: selectedSessionId,
                               data: {
                                 status: 'review_needed',
-                                completedAt: new Date().toISOString(),
+                                completedAt: new Date(),
                               },
                             });
                           }
