@@ -222,6 +222,18 @@ import {
   appointments,
   type Appointment,
   type InsertAppointment,
+  documentRequests,
+  type DocumentRequest,
+  type InsertDocumentRequest,
+  taxpayerMessages,
+  type TaxpayerMessage,
+  type InsertTaxpayerMessage,
+  taxpayerMessageAttachments,
+  type TaxpayerMessageAttachment,
+  type InsertTaxpayerMessageAttachment,
+  eSignatures,
+  type ESignature,
+  type InsertESignature,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and, ilike, sql, or, isNull, lte, gte, inArray } from "drizzle-orm";
@@ -821,6 +833,48 @@ export interface IStorage {
   // Webhook Delivery Logs
   createWebhookDeliveryLog(log: InsertWebhookDeliveryLog): Promise<WebhookDeliveryLog>;
   getWebhookDeliveryLogs(webhookId: string, limit?: number): Promise<WebhookDeliveryLog[]>;
+
+  // ============================================================================
+  // Taxpayer Self-Service Portal
+  // ============================================================================
+  
+  // Document Requests
+  createDocumentRequest(request: InsertDocumentRequest): Promise<DocumentRequest>;
+  getDocumentRequests(filters?: { 
+    vitaSessionId?: string; 
+    requestedBy?: string; 
+    status?: string;
+    limit?: number;
+  }): Promise<DocumentRequest[]>;
+  getDocumentRequest(id: string): Promise<DocumentRequest | undefined>;
+  updateDocumentRequest(id: string, updates: Partial<DocumentRequest>): Promise<DocumentRequest>;
+  
+  // Taxpayer Messages
+  createTaxpayerMessage(message: InsertTaxpayerMessage): Promise<TaxpayerMessage>;
+  getTaxpayerMessage(id: string): Promise<TaxpayerMessage | undefined>;
+  getTaxpayerMessages(filters?: { 
+    vitaSessionId?: string; 
+    threadId?: string;
+    senderId?: string;
+    limit?: number;
+  }): Promise<TaxpayerMessage[]>;
+  markTaxpayerMessageAsRead(id: string): Promise<void>;
+  
+  // Taxpayer Message Attachments
+  createTaxpayerMessageAttachment(attachment: InsertTaxpayerMessageAttachment): Promise<TaxpayerMessageAttachment>;
+  getTaxpayerMessageAttachments(messageId: string): Promise<TaxpayerMessageAttachment[]>;
+  
+  // E-Signatures
+  createESignature(signature: InsertESignature): Promise<ESignature>;
+  getESignature(id: string): Promise<ESignature | undefined>;
+  getESignatures(filters?: {
+    vitaSessionId?: string;
+    federalReturnId?: string;
+    signerId?: string;
+    formType?: string;
+    isValid?: boolean;
+  }): Promise<ESignature[]>;
+  invalidateESignature(id: string, reason: string): Promise<ESignature>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -4257,6 +4311,195 @@ export class DatabaseStorage implements IStorage {
       .where(eq(webhookDeliveryLogs.webhookId, webhookId))
       .orderBy(desc(webhookDeliveryLogs.createdAt))
       .limit(limit);
+  }
+
+  // ============================================================================
+  // Taxpayer Self-Service Portal
+  // ============================================================================
+  
+  // Document Requests
+  async createDocumentRequest(request: InsertDocumentRequest): Promise<DocumentRequest> {
+    const [created] = await db.insert(documentRequests).values(request).returning();
+    return created;
+  }
+
+  async getDocumentRequests(filters?: { 
+    vitaSessionId?: string; 
+    requestedBy?: string; 
+    status?: string;
+    limit?: number;
+  }): Promise<DocumentRequest[]> {
+    let query = db.select().from(documentRequests);
+
+    // DEFENSIVE SECURITY: Prevent unfiltered queries that could expose all document requests
+    // At minimum, require either vitaSessionId or requestedBy to scope the query
+    if (!filters?.vitaSessionId && !filters?.requestedBy) {
+      throw new Error(
+        "Security violation: getDocumentRequests() requires at least one scoping filter " +
+        "(vitaSessionId or requestedBy) to prevent multi-tenant data exposure"
+      );
+    }
+
+    const conditions = [];
+    if (filters?.vitaSessionId) {
+      conditions.push(eq(documentRequests.vitaSessionId, filters.vitaSessionId));
+    }
+    if (filters?.requestedBy) {
+      conditions.push(eq(documentRequests.requestedBy, filters.requestedBy));
+    }
+    if (filters?.status) {
+      conditions.push(eq(documentRequests.status, filters.status));
+    }
+
+    if (conditions.length > 0) {
+      query = query.where(and(...conditions)) as any;
+    }
+
+    query = query.orderBy(desc(documentRequests.createdAt)) as any;
+
+    if (filters?.limit) {
+      query = query.limit(filters.limit) as any;
+    }
+
+    return await query;
+  }
+
+  async getDocumentRequest(id: string): Promise<DocumentRequest | undefined> {
+    return await db.query.documentRequests.findFirst({
+      where: eq(documentRequests.id, id),
+    });
+  }
+
+  async updateDocumentRequest(id: string, updates: Partial<DocumentRequest>): Promise<DocumentRequest> {
+    const [updated] = await db
+      .update(documentRequests)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(documentRequests.id, id))
+      .returning();
+    return updated;
+  }
+
+  // Taxpayer Messages
+  async createTaxpayerMessage(message: InsertTaxpayerMessage): Promise<TaxpayerMessage> {
+    const [created] = await db.insert(taxpayerMessages).values(message).returning();
+    return created;
+  }
+
+  async getTaxpayerMessage(id: string): Promise<TaxpayerMessage | undefined> {
+    return await db.query.taxpayerMessages.findFirst({
+      where: eq(taxpayerMessages.id, id),
+    });
+  }
+
+  async getTaxpayerMessages(filters?: { 
+    vitaSessionId?: string; 
+    threadId?: string;
+    senderId?: string;
+    limit?: number;
+  }): Promise<TaxpayerMessage[]> {
+    let query = db.select().from(taxpayerMessages);
+
+    const conditions = [];
+    if (filters?.vitaSessionId) {
+      conditions.push(eq(taxpayerMessages.vitaSessionId, filters.vitaSessionId));
+    }
+    if (filters?.threadId) {
+      conditions.push(eq(taxpayerMessages.threadId, filters.threadId));
+    }
+    if (filters?.senderId) {
+      conditions.push(eq(taxpayerMessages.senderId, filters.senderId));
+    }
+
+    if (conditions.length > 0) {
+      query = query.where(and(...conditions)) as any;
+    }
+
+    query = query.orderBy(desc(taxpayerMessages.createdAt)) as any;
+
+    if (filters?.limit) {
+      query = query.limit(filters.limit) as any;
+    }
+
+    return await query;
+  }
+
+  async markTaxpayerMessageAsRead(id: string): Promise<void> {
+    await db
+      .update(taxpayerMessages)
+      .set({ isRead: true, readAt: new Date() })
+      .where(eq(taxpayerMessages.id, id));
+  }
+
+  // Taxpayer Message Attachments
+  async createTaxpayerMessageAttachment(attachment: InsertTaxpayerMessageAttachment): Promise<TaxpayerMessageAttachment> {
+    const [created] = await db.insert(taxpayerMessageAttachments).values(attachment).returning();
+    return created;
+  }
+
+  async getTaxpayerMessageAttachments(messageId: string): Promise<TaxpayerMessageAttachment[]> {
+    return await db
+      .select()
+      .from(taxpayerMessageAttachments)
+      .where(eq(taxpayerMessageAttachments.messageId, messageId));
+  }
+
+  // E-Signatures
+  async createESignature(signature: InsertESignature): Promise<ESignature> {
+    const [created] = await db.insert(eSignatures).values(signature).returning();
+    return created;
+  }
+
+  async getESignature(id: string): Promise<ESignature | undefined> {
+    return await db.query.eSignatures.findFirst({
+      where: eq(eSignatures.id, id),
+    });
+  }
+
+  async getESignatures(filters?: {
+    vitaSessionId?: string;
+    federalReturnId?: string;
+    signerId?: string;
+    formType?: string;
+    isValid?: boolean;
+  }): Promise<ESignature[]> {
+    let query = db.select().from(eSignatures);
+
+    const conditions = [];
+    if (filters?.vitaSessionId) {
+      conditions.push(eq(eSignatures.vitaSessionId, filters.vitaSessionId));
+    }
+    if (filters?.federalReturnId) {
+      conditions.push(eq(eSignatures.federalReturnId, filters.federalReturnId));
+    }
+    if (filters?.signerId) {
+      conditions.push(eq(eSignatures.signerId, filters.signerId));
+    }
+    if (filters?.formType) {
+      conditions.push(eq(eSignatures.formType, filters.formType));
+    }
+    if (filters?.isValid !== undefined) {
+      conditions.push(eq(eSignatures.isValid, filters.isValid));
+    }
+
+    if (conditions.length > 0) {
+      query = query.where(and(...conditions)) as any;
+    }
+
+    return await query.orderBy(desc(eSignatures.createdAt));
+  }
+
+  async invalidateESignature(id: string, reason: string): Promise<ESignature> {
+    const [updated] = await db
+      .update(eSignatures)
+      .set({ 
+        isValid: false, 
+        invalidatedAt: new Date(),
+        invalidationReason: reason,
+        updatedAt: new Date()
+      })
+      .where(eq(eSignatures.id, id))
+      .returning();
+    return updated;
   }
 }
 
