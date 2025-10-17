@@ -1324,6 +1324,10 @@ export default function VitaIntake() {
   }, [lastSavedAt]);
 
   return (
+    <>
+    <Helmet>
+      <title>VITA Intake - MD Benefits Navigator</title>
+    </Helmet>
     <div className="min-h-screen bg-background p-4 md:p-8">
       <div className="max-w-7xl mx-auto">
         {/* Header */}

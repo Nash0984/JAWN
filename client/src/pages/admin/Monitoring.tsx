@@ -702,5 +702,6 @@ export default function Monitoring() {
         </TabsContent>
       </Tabs>
     </div>
+    </>
   );
 }
