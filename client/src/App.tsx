@@ -30,6 +30,7 @@ import SecurityMonitoring from "@/pages/SecurityMonitoring";
 import AuditLogs from "@/pages/AuditLogs";
 import ApiDocs from "@/pages/ApiDocs";
 import Monitoring from "@/pages/admin/Monitoring";
+import EFileMonitoring from "@/pages/admin/EFileMonitoring";
 import DeveloperPortal from "@/pages/DeveloperPortal";
 import FeedbackManagement from "@/pages/FeedbackManagement";
 import NotificationCenter from "@/pages/NotificationCenter";
@@ -320,6 +321,13 @@ function Router() {
             {() => (
               <ProtectedRoute requireAdmin>
                 <Monitoring />
+              </ProtectedRoute>
+            )}
+          </Route>
+          <Route path="/admin/efile-monitoring">
+            {() => (
+              <ProtectedRoute requireAdmin>
+                <EFileMonitoring />
               </ProtectedRoute>
             )}
           </Route>

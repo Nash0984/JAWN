@@ -57,6 +57,7 @@ const navigationItems: NavItem[] = [
   { title: "Rules Extraction", path: "/admin/rules", icon: FileStack, group: "Admin", roles: ["admin", "super_admin"] },
   { title: "Policy Sources", path: "/admin/sources", icon: FileText, group: "Admin", roles: ["admin", "super_admin"] },
   { title: "AI Monitoring", path: "/admin/ai-monitoring", icon: BarChart3, group: "Admin", roles: ["admin", "super_admin"] },
+  { title: "E-File Monitoring", path: "/admin/efile-monitoring", icon: FileCheck, group: "Admin", roles: ["admin", "super_admin"] },
   { title: "Audit Logs", path: "/admin/audit-logs", icon: ClipboardList, group: "Admin", roles: ["admin", "super_admin"] },
   { title: "API Documentation", path: "/admin/api-docs", icon: FileText, group: "Admin", roles: ["admin", "super_admin"] },
   { title: "Feedback Management", path: "/admin/feedback", icon: MessageSquare, group: "Admin", roles: ["admin", "super_admin"] },

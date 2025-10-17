@@ -1372,6 +1372,105 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
   }));
 
   // ============================================================================
+  // E-FILE MONITORING - Track e-file submissions and statuses
+  // ============================================================================
+
+  // Get E-File metrics for dashboard
+  app.get("/api/admin/efile/metrics", requireAdmin, asyncHandler(async (req: Request, res: Response) => {
+    const metrics = await storage.getEFileMetrics();
+    res.json(metrics);
+  }));
+
+  // Get E-File submissions with filters
+  app.get("/api/admin/efile/submissions", requireAdmin, asyncHandler(async (req: Request, res: Response) => {
+    const { status, startDate, endDate, clientName, taxYear, limit = '50', offset = '0' } = req.query;
+    
+    const filters: any = {
+      limit: parseInt(limit as string),
+      offset: parseInt(offset as string),
+    };
+    
+    if (status) filters.status = status as string;
+    if (startDate) filters.startDate = new Date(startDate as string);
+    if (endDate) filters.endDate = new Date(endDate as string);
+    if (clientName) filters.clientName = clientName as string;
+    if (taxYear) filters.taxYear = parseInt(taxYear as string);
+    
+    const result = await storage.getEFileSubmissions(filters);
+    res.json(result);
+  }));
+
+  // Get detailed E-File submission info
+  app.get("/api/admin/efile/submission/:id", requireAdmin, asyncHandler(async (req: Request, res: Response) => {
+    const { id } = req.params;
+    
+    const details = await storage.getEFileSubmissionDetails(id);
+    
+    if (!details) {
+      return res.status(404).json({
+        error: "Submission not found",
+        message: "The requested e-file submission could not be found.",
+      });
+    }
+    
+    res.json(details);
+  }));
+
+  // Retry failed E-File submission
+  app.post("/api/admin/efile/retry/:id", requireAdmin, asyncHandler(async (req: Request, res: Response) => {
+    const { id } = req.params;
+    const { federalTaxReturns } = await import("@shared/schema");
+    
+    // Get the submission
+    const submission = await db.query.federalTaxReturns.findFirst({
+      where: eq(federalTaxReturns.id, id),
+    });
+    
+    if (!submission) {
+      return res.status(404).json({
+        error: "Submission not found",
+        message: "The requested e-file submission could not be found.",
+      });
+    }
+    
+    // Check if it's in a retryable state
+    if (submission.efileStatus !== 'rejected') {
+      return res.status(400).json({
+        error: "Invalid status",
+        message: "Only rejected submissions can be retried.",
+      });
+    }
+    
+    // Reset to ready status for retry
+    await db
+      .update(federalTaxReturns)
+      .set({
+        efileStatus: 'ready',
+        efileRejectionReason: null,
+        updatedAt: new Date(),
+      })
+      .where(eq(federalTaxReturns.id, id));
+    
+    // Log audit event
+    await auditService.logAction({
+      userId: req.user!.id,
+      action: 'efile_retry',
+      resource: 'federal_tax_return',
+      resourceId: id,
+      details: {
+        previousStatus: submission.efileStatus,
+        newStatus: 'ready',
+      },
+    });
+    
+    res.json({
+      success: true,
+      message: "E-file submission reset to ready status for retry",
+      submissionId: id,
+    });
+  }));
+
+  // ============================================================================
   // COUNTY TAX RATES - Maryland County Tax Rate Management
   // ============================================================================
   
