@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { Helmet } from "react-helmet-async";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient } from "@/lib/queryClient";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -373,7 +374,11 @@ export default function DocumentReviewQueue() {
   };
 
   return (
-    <div className="space-y-6">
+    <>
+      <Helmet>
+        <title>Document Review - MD Benefits Navigator</title>
+      </Helmet>
+      <div className="space-y-6">
       <div className="flex items-start justify-between">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Document Review Queue</h1>
@@ -718,5 +723,6 @@ export default function DocumentReviewQueue() {
         </DialogContent>
       </Dialog>
     </div>
+    </>
   );
 }

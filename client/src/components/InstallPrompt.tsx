@@ -115,6 +115,7 @@ export function InstallPrompt() {
                 className="h-6 w-6 text-primary-foreground hover:bg-primary-foreground/20"
                 onClick={handleDismiss}
                 data-testid="button-close-install"
+                aria-label="Close install prompt"
               >
                 <X className="h-4 w-4" />
               </Button>
@@ -147,6 +148,7 @@ export function InstallPrompt() {
               className="h-6 w-6"
               onClick={handleDismiss}
               data-testid="button-close-install"
+              aria-label="Close install prompt"
             >
               <X className="h-4 w-4" />
             </Button>

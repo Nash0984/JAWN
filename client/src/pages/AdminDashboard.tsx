@@ -1,4 +1,5 @@
 import { Link } from "wouter";
+import { Helmet } from "react-helmet-async";
 import { useAuth } from "@/hooks/useAuth";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -137,7 +138,11 @@ export default function AdminDashboard() {
   ];
 
   return (
-    <div className="container mx-auto px-4 py-8 max-w-6xl">
+    <>
+      <Helmet>
+        <title>Admin Dashboard - MD Benefits Navigator</title>
+      </Helmet>
+      <div className="container mx-auto px-4 py-8 max-w-6xl">
       {/* Welcome Header */}
       <div className="mb-6">
         <h1 className="text-3xl font-bold text-foreground mb-2" data-testid="dashboard-title">
@@ -252,5 +257,6 @@ export default function AdminDashboard() {
         </CardContent>
       </Card>
     </div>
+    </>
   );
 }

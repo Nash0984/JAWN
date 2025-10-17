@@ -4,12 +4,17 @@ import { useLanguage } from "@/hooks/useLanguage";
 import { Camera, FileText, Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Helmet } from "react-helmet-async";
 
 export default function Home() {
   const { t } = useLanguage();
   
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
+    <>
+      <Helmet>
+        <title>Home - MD Benefits Navigator</title>
+      </Helmet>
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
       {/* Hero Section - Conversational Search Priority */}
       <section className="mb-8 sm:mb-12" aria-labelledby="main-heading">
         <div className="text-center mb-6 sm:mb-8">
@@ -50,5 +55,6 @@ export default function Home() {
         </div>
       </section>
     </div>
+    </>
   );
 }

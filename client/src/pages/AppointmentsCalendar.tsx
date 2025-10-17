@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Helmet } from "react-helmet-async";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Calendar } from "@/components/ui/calendar";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -184,7 +185,11 @@ export default function AppointmentsCalendar() {
   };
 
   return (
-    <div className="container mx-auto p-6 space-y-6">
+    <>
+      <Helmet>
+        <title>Appointments - MD Benefits Navigator</title>
+      </Helmet>
+      <div className="container mx-auto p-6 space-y-6">
       <div className="flex justify-between items-center">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">VITA Appointments Calendar</h1>
@@ -467,5 +472,6 @@ export default function AppointmentsCalendar() {
         </DialogContent>
       </Dialog>
     </div>
+    </>
   );
 }

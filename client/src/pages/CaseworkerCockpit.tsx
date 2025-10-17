@@ -1,4 +1,5 @@
 import { useState, Fragment } from "react";
+import { Helmet } from "react-helmet-async";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -152,8 +153,12 @@ export default function CaseworkerCockpit() {
   const improvement = calculateImprovement();
 
   return (
-    <TooltipProvider>
-      <div className="container mx-auto p-6 space-y-6">
+    <>
+      <Helmet>
+        <title>Caseworker Cockpit - MD Benefits Navigator</title>
+      </Helmet>
+      <TooltipProvider>
+        <div className="container mx-auto p-6 space-y-6">
         {/* Header */}
         <div className="space-y-2">
           <h1 className="text-3xl font-bold tracking-tight" data-testid="page-title">
@@ -527,5 +532,6 @@ export default function CaseworkerCockpit() {
         </Dialog>
       </div>
     </TooltipProvider>
+    </>
   );
 }

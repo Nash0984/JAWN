@@ -35,7 +35,7 @@ export default function LanguageSelector({ currentLanguage, onLanguageChange }: 
   return (
     <div className="relative">
       <Select value={currentLanguage} onValueChange={onLanguageChange}>
-        <SelectTrigger className="w-[180px]" data-testid="select-language">
+        <SelectTrigger className="w-[180px]" data-testid="select-language" aria-label="Select language">
           <div className="flex items-center space-x-2">
             <Globe className="h-4 w-4" />
             <span>{currentLang.nativeName}</span>
