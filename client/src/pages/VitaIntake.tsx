@@ -63,6 +63,7 @@ import { TaxDocumentUploader } from "@/components/TaxDocumentUploader";
 import { VitaProgressIndicator } from "@/components/VitaProgressIndicator";
 import { TaxSlayerDataEntry } from "@/components/TaxSlayerDataEntry";
 import { TaxSlayerComparison } from "@/components/TaxSlayerComparison";
+import { VitaTaxPreviewSidebar } from "@/components/VitaTaxPreviewSidebar";
 
 // Step configuration
 const STEPS = [
@@ -420,11 +421,13 @@ export default function VitaIntake() {
   
   // Auto-save state management
   const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
   const [showRestoreDialog, setShowRestoreDialog] = useState(false);
   const [draftToRestore, setDraftToRestore] = useState<any>(null);
   const autoSaveTimerRef = useRef<NodeJS.Timeout | null>(null);
   const statusHideTimerRef = useRef<NodeJS.Timeout | null>(null);
   const lastSavedDataRef = useRef<string>("");
+  const timestampUpdateTimerRef = useRef<NodeJS.Timeout | null>(null);
   
   // LocalStorage key for drafts
   const getDraftKey = (sessionId: string | null) => {
@@ -749,16 +752,17 @@ export default function VitaIntake() {
       const draftKey = getDraftKey(data.id);
       localStorage.removeItem(draftKey);
       
-      // Show saved status (no toast for auto-save)
+      // Show saved status with timestamp
       setSaveStatus("saved");
+      setLastSavedAt(new Date());
       
-      // Hide status after 3 seconds
+      // Hide status after 5 seconds
       if (statusHideTimerRef.current) {
         clearTimeout(statusHideTimerRef.current);
       }
       statusHideTimerRef.current = setTimeout(() => {
         setSaveStatus("idle");
-      }, 3000);
+      }, 5000);
     },
     onError: () => {
       setSaveStatus("error");
@@ -786,16 +790,17 @@ export default function VitaIntake() {
       const draftKey = getDraftKey(data.id);
       localStorage.removeItem(draftKey);
       
-      // Show saved status
+      // Show saved status with timestamp
       setSaveStatus("saved");
+      setLastSavedAt(new Date());
       
-      // Hide status after 3 seconds
+      // Hide status after 5 seconds
       if (statusHideTimerRef.current) {
         clearTimeout(statusHideTimerRef.current);
       }
       statusHideTimerRef.current = setTimeout(() => {
         setSaveStatus("idle");
-      }, 3000);
+      }, 5000);
     },
     onError: () => {
       setSaveStatus("error");
@@ -1291,6 +1296,31 @@ export default function VitaIntake() {
     }
   };
 
+  // Helper function: Format time since last save
+  const formatTimeSince = (date: Date): string => {
+    const seconds = Math.floor((new Date().getTime() - date.getTime()) / 1000);
+    
+    if (seconds < 60) return `${seconds} second${seconds !== 1 ? 's' : ''}`;
+    const minutes = Math.floor(seconds / 60);
+    if (minutes < 60) return `${minutes} minute${minutes !== 1 ? 's' : ''}`;
+    const hours = Math.floor(minutes / 60);
+    if (hours < 24) return `${hours} hour${hours !== 1 ? 's' : ''}`;
+    const days = Math.floor(hours / 24);
+    return `${days} day${days !== 1 ? 's' : ''}`;
+  };
+
+  // Update timestamp display every 10 seconds
+  useEffect(() => {
+    if (!lastSavedAt) return;
+    
+    const timer = setInterval(() => {
+      // Force re-render to update "time ago" display
+      setLastSavedAt(new Date(lastSavedAt));
+    }, 10000); // Update every 10 seconds
+    
+    return () => clearInterval(timer);
+  }, [lastSavedAt]);
+
   return (
     <div className="min-h-screen bg-background p-4 md:p-8">
       <div className="max-w-7xl mx-auto">
@@ -1326,7 +1356,7 @@ export default function VitaIntake() {
           </AlertDialogContent>
         </AlertDialog>
 
-        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
           {/* Session List Sidebar */}
           <Card className="lg:col-span-1">
             <CardHeader>
@@ -1470,6 +1500,13 @@ export default function VitaIntake() {
               className="rounded-lg"
             />
 
+            {/* Tax Preview Sidebar - shown when form has minimum data */}
+            <VitaTaxPreviewSidebar 
+              formData={form.watch()}
+              sessionId={selectedSessionId}
+              className="lg:hidden"
+            />
+
             <Card>
               <CardHeader>
                 <div className="flex items-center justify-between">
@@ -1482,26 +1519,33 @@ export default function VitaIntake() {
                     )}
                   </div>
                   
-                  {/* Auto-save status indicator */}
+                  {/* Auto-save status indicator with timestamp */}
                   {selectedSessionId && (
-                    <div className="flex gap-2">
-                      {saveStatus === "saving" && (
-                        <Badge variant="outline" className="gap-1" data-testid="status-saving">
-                          <Loader2 className="h-3 w-3 animate-spin" />
-                          Saving...
-                        </Badge>
-                      )}
-                      {saveStatus === "saved" && (
-                        <Badge variant="outline" className="gap-1 bg-green-50 text-green-700 border-green-200 dark:bg-green-950 dark:text-green-400" data-testid="status-saved">
-                          <CheckCircle2 className="h-3 w-3" />
-                          Saved ✓
-                        </Badge>
-                      )}
-                      {saveStatus === "error" && (
-                        <Badge variant="outline" className="gap-1 bg-red-50 text-red-700 border-red-200 dark:bg-red-950 dark:text-red-400" data-testid="status-error">
-                          <AlertCircle className="h-3 w-3" />
-                          Save Failed
-                        </Badge>
+                    <div className="flex flex-col items-end gap-1">
+                      <div className="flex gap-2">
+                        {saveStatus === "saving" && (
+                          <Badge variant="outline" className="gap-1" data-testid="status-saving">
+                            <Loader2 className="h-3 w-3 animate-spin" />
+                            Saving...
+                          </Badge>
+                        )}
+                        {saveStatus === "saved" && (
+                          <Badge variant="outline" className="gap-1 bg-green-50 text-green-700 border-green-200 dark:bg-green-950 dark:text-green-400" data-testid="status-saved">
+                            <CheckCircle2 className="h-3 w-3" />
+                            Saved to cloud
+                          </Badge>
+                        )}
+                        {saveStatus === "error" && (
+                          <Badge variant="outline" className="gap-1 bg-red-50 text-red-700 border-red-200 dark:bg-red-950 dark:text-red-400" data-testid="status-error">
+                            <AlertCircle className="h-3 w-3" />
+                            Save Failed
+                          </Badge>
+                        )}
+                      </div>
+                      {lastSavedAt && saveStatus !== "saving" && (
+                        <div className="text-xs text-muted-foreground" data-testid="text-last-saved">
+                          {formatTimeSince(lastSavedAt)} ago
+                        </div>
                       )}
                     </div>
                   )}
@@ -5044,6 +5088,14 @@ export default function VitaIntake() {
               </Form>
             </CardContent>
           </Card>
+          </div>
+
+          {/* Tax Preview Sidebar - Desktop only */}
+          <div className="hidden lg:block lg:col-span-1">
+            <VitaTaxPreviewSidebar 
+              formData={form.watch()}
+              sessionId={selectedSessionId}
+            />
           </div>
         </div>
       </div>

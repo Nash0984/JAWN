@@ -6784,6 +6784,32 @@ If the question cannot be answered with the available information, say so clearl
     res.json({ success: true });
   }));
 
+  // Calculate VITA tax preview
+  app.post("/api/vita-intake/calculate-tax", requireStaff, asyncHandler(async (req: Request, res: Response) => {
+    const schema = z.object({
+      filingStatus: z.enum(["single", "married_joint", "married_separate", "head_of_household"]),
+      taxYear: z.number(),
+      wages: z.number(),
+      otherIncome: z.number(),
+      selfEmploymentIncome: z.number().optional(),
+      businessExpenses: z.number().optional(),
+      numberOfQualifyingChildren: z.number(),
+      dependents: z.number(),
+      qualifiedEducationExpenses: z.number().optional(),
+      numberOfStudents: z.number().optional(),
+      marylandCounty: z.string(),
+      marylandResidentMonths: z.number()
+    });
+
+    const validated = schema.parse(req.body);
+    
+    // Import vitaTaxRulesEngine service
+    const { vitaTaxRulesEngine } = await import("./services/vitaTaxRulesEngine");
+    
+    const taxResult = await vitaTaxRulesEngine.calculateTax(validated);
+    res.json(taxResult);
+  }));
+
   // ==========================================
   // VITA Tax Document Upload Routes
   // ==========================================
