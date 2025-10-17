@@ -10,8 +10,11 @@ import { eq } from "drizzle-orm";
  * Federal Tax Components:
  * - Progressive tax brackets (10%, 12%, 22%, 24%, 32%, 35%, 37%)
  * - Standard Deduction (varies by filing status)
+ * - Schedule C (Business Income) - self-employment income and expenses
+ * - Self-Employment Tax (15.3% on net earnings)
  * - EITC (Earned Income Tax Credit) - major refundable credit for working families
  * - CTC (Child Tax Credit) - $2,000 per qualifying child
+ * - Education Credits (Form 8863) - AOC and Lifetime Learning Credit
  * 
  * Maryland State Tax Components:
  * - Progressive state brackets (2% - 5.75%)
@@ -21,7 +24,9 @@ import { eq } from "drizzle-orm";
  * 
  * Policy References:
  * - IRS Publication 17 (Your Federal Income Tax)
+ * - IRS Publication 334 (Tax Guide for Small Business - Schedule C)
  * - IRS Publication 596 (Earned Income Credit)
+ * - IRS Publication 970 (Tax Benefits for Education)
  * - IRS Publication 972 (Child Tax Credit)
  * - Maryland Form 502 Instructions
  */
@@ -35,9 +40,17 @@ export interface VITATaxInput {
   wages: number; // in cents
   otherIncome: number; // in cents (interest, dividends, etc.)
   
+  // Schedule C - Business Income (self-employment)
+  selfEmploymentIncome?: number; // in cents - gross business income
+  businessExpenses?: number; // in cents - ordinary and necessary business expenses
+  
   // Household
   numberOfQualifyingChildren: number; // for EITC and CTC
   dependents: number; // total dependents
+  
+  // Education Credits (Form 8863)
+  qualifiedEducationExpenses?: number; // in cents - tuition and required fees
+  numberOfStudents?: number; // number of eligible students for AOC
   
   // Maryland-specific
   marylandCounty: string; // e.g., "baltimore_city", "montgomery", "prince_georges"
@@ -48,12 +61,36 @@ export interface VITATaxResult {
   // Federal Tax Calculation
   federalTax: {
     totalIncome: number;
-    adjustedGrossIncome: number; // AGI
+    
+    // Schedule C - Business Income
+    scheduleC?: {
+      grossBusinessIncome: number;
+      businessExpenses: number;
+      netProfit: number; // can be negative (loss)
+    };
+    
+    // Self-Employment Tax
+    selfEmploymentTax?: {
+      netEarnings: number; // 92.35% of net profit
+      seTax: number; // 15.3% of net earnings
+      deductiblePortion: number; // 50% of SE tax (reduces AGI)
+    };
+    
+    adjustedGrossIncome: number; // AGI (after SE tax deduction)
     standardDeduction: number;
     taxableIncome: number;
     incomeTaxBeforeCredits: number;
     eitc: number;
     childTaxCredit: number;
+    
+    // Education Credits (Form 8863)
+    educationCredits?: {
+      americanOpportunityCredit: number; // AOC
+      aocRefundablePortion: number; // 40% refundable, max $1,000
+      lifetimeLearningCredit: number; // LLC (non-refundable)
+      totalEducationCredits: number;
+    };
+    
     totalCredits: number;
     totalFederalTax: number; // negative = refund
   };
@@ -130,46 +167,102 @@ class VITATaxRulesEngine {
     
     breakdown.push(`\n--- FEDERAL TAX CALCULATION ---`);
     
-    // Step 1: Calculate Total Income and AGI
-    const totalIncome = input.wages + input.otherIncome;
-    const adjustedGrossIncome = totalIncome; // Simplified - no above-the-line deductions for basic VITA
+    // Step 1: Calculate Total Income
+    let totalIncome = input.wages + input.otherIncome;
+    let scheduleC: VITATaxResult["federalTax"]["scheduleC"] | undefined;
+    let selfEmploymentTax: VITATaxResult["federalTax"]["selfEmploymentTax"] | undefined;
     
     breakdown.push(`Wages: $${(input.wages / 100).toFixed(2)}`);
     if (input.otherIncome > 0) {
       breakdown.push(`Other Income: $${(input.otherIncome / 100).toFixed(2)}`);
     }
+    
+    // Step 1a: Calculate Schedule C (Business Income) if applicable
+    if (input.selfEmploymentIncome && input.selfEmploymentIncome > 0) {
+      const businessExpenses = input.businessExpenses || 0;
+      const netProfit = input.selfEmploymentIncome - businessExpenses;
+      
+      breakdown.push(`\n--- SCHEDULE C (Business Income) ---`);
+      breakdown.push(`Gross Business Income: $${(input.selfEmploymentIncome / 100).toFixed(2)}`);
+      breakdown.push(`Business Expenses: $${(businessExpenses / 100).toFixed(2)}`);
+      breakdown.push(`Net Profit from Business: $${(netProfit / 100).toFixed(2)}`);
+      citations.push(`IRS Schedule C - Profit or Loss from Business`);
+      citations.push(`IRS Publication 334 - Tax Guide for Small Business`);
+      
+      scheduleC = {
+        grossBusinessIncome: input.selfEmploymentIncome,
+        businessExpenses,
+        netProfit,
+      };
+      
+      // Add net profit to total income
+      totalIncome += netProfit;
+      
+      // Step 1b: Calculate Self-Employment Tax if net profit > 0
+      if (netProfit > 0) {
+        const seResult = await this.calculateSelfEmploymentTax(netProfit);
+        selfEmploymentTax = seResult;
+        
+        breakdown.push(`\n--- SELF-EMPLOYMENT TAX ---`);
+        breakdown.push(`Net Earnings from Self-Employment: $${(seResult.netEarnings / 100).toFixed(2)} (92.35% of net profit)`);
+        breakdown.push(`Self-Employment Tax: $${(seResult.seTax / 100).toFixed(2)} (15.3% of net earnings)`);
+        breakdown.push(`  • Social Security: 12.4%`);
+        breakdown.push(`  • Medicare: 2.9%`);
+        breakdown.push(`Deductible SE Tax (50%): $${(seResult.deductiblePortion / 100).toFixed(2)}`);
+        citations.push(`26 U.S.C. § 1401 - Self-Employment Tax (15.3%)`);
+        citations.push(`IRS Schedule SE - Self-Employment Tax`);
+        citations.push(`IRS Publication 334 - 50% SE tax deduction reduces AGI`);
+      }
+    }
+    
+    breakdown.push(`Total Income: $${(totalIncome / 100).toFixed(2)}`);
+    
+    // Step 2: Calculate AGI (Total Income - Deductible SE Tax)
+    const seTaxDeduction = selfEmploymentTax?.deductiblePortion || 0;
+    const adjustedGrossIncome = totalIncome - seTaxDeduction;
+    
+    if (seTaxDeduction > 0) {
+      breakdown.push(`\nAbove-the-line deductions:`);
+      breakdown.push(`  • Deductible SE Tax: -$${(seTaxDeduction / 100).toFixed(2)}`);
+    }
     breakdown.push(`Adjusted Gross Income (AGI): $${(adjustedGrossIncome / 100).toFixed(2)}`);
     
-    // Step 2: Get Standard Deduction
+    // Step 3: Get Standard Deduction
     const standardDeduction = await this.getStandardDeduction(input.filingStatus, input.taxYear);
-    breakdown.push(`Standard Deduction: $${(standardDeduction / 100).toFixed(2)}`);
+    breakdown.push(`\nStandard Deduction: $${(standardDeduction / 100).toFixed(2)}`);
     citations.push(`IRS Publication 17 - Standard Deduction for ${input.filingStatus}`);
     
-    // Step 3: Calculate Taxable Income
+    // Step 4: Calculate Taxable Income
     const taxableIncome = Math.max(0, adjustedGrossIncome - standardDeduction);
     breakdown.push(`Taxable Income: $${(taxableIncome / 100).toFixed(2)}`);
     
-    // Step 4: Calculate Income Tax using progressive brackets
+    // Step 5: Calculate Income Tax using progressive brackets
     const incomeTaxBeforeCredits = await this.calculateIncomeTax(taxableIncome, input.filingStatus, input.taxYear);
-    breakdown.push(`Income Tax (before credits): $${(incomeTaxBeforeCredits / 100).toFixed(2)}`);
+    breakdown.push(`\nIncome Tax (before credits): $${(incomeTaxBeforeCredits / 100).toFixed(2)}`);
     citations.push(`26 U.S.C. § 1 - Federal Tax Brackets`);
     
-    // Step 5: Calculate EITC (Earned Income Tax Credit)
+    // Add self-employment tax to income tax (SE tax is a separate tax)
+    let totalTaxBeforeCredits = incomeTaxBeforeCredits + (selfEmploymentTax?.seTax || 0);
+    if (selfEmploymentTax?.seTax) {
+      breakdown.push(`Self-Employment Tax: $${(selfEmploymentTax.seTax / 100).toFixed(2)}`);
+      breakdown.push(`Total Tax Before Credits: $${(totalTaxBeforeCredits / 100).toFixed(2)}`);
+    }
+    
+    // Step 6: Calculate EITC (Earned Income Tax Credit)
+    // Earned income includes wages AND net self-employment income
+    const earnedIncome = input.wages + (scheduleC?.netProfit && scheduleC.netProfit > 0 ? scheduleC.netProfit : 0);
     const eitc = await this.calculateEITC(
-      input.wages, // EITC based on earned income
+      earnedIncome,
       adjustedGrossIncome,
       input.filingStatus,
       input.numberOfQualifyingChildren,
       input.taxYear
     );
-    breakdown.push(`Earned Income Tax Credit (EITC): $${(eitc / 100).toFixed(2)}`);
+    breakdown.push(`\nEarned Income Tax Credit (EITC): $${(eitc / 100).toFixed(2)}`);
     citations.push(`26 U.S.C. § 32 - Earned Income Tax Credit`);
     citations.push(`IRS Publication 596 - EITC for ${input.numberOfQualifyingChildren} qualifying children`);
     
-    // Step 6: Calculate Child Tax Credit (CTC)
-    // CTC has two components:
-    // 1. Non-refundable: Can only reduce tax to $0
-    // 2. Refundable (ACTC): Up to $1,700 per child beyond tax liability
+    // Step 7: Calculate Child Tax Credit (CTC)
     const ctcResult = await this.calculateCTC(
       adjustedGrossIncome,
       input.filingStatus,
@@ -178,14 +271,12 @@ class VITATaxRulesEngine {
     );
     
     // Apply non-refundable CTC first (reduces tax liability)
-    const nonRefundableCTC = Math.min(ctcResult.totalCTC, incomeTaxBeforeCredits);
-    const taxAfterNonRefundableCTC = incomeTaxBeforeCredits - nonRefundableCTC;
+    const nonRefundableCTC = Math.min(ctcResult.totalCTC, totalTaxBeforeCredits);
+    const taxAfterNonRefundableCTC = totalTaxBeforeCredits - nonRefundableCTC;
     
-    // Calculate refundable portion (ACTC - Additional Child Tax Credit)
-    // Maximum $1,700 per child, only if non-refundable portion doesn't cover full credit
+    // Calculate refundable portion (ACTC)
     const unusedCTC = ctcResult.totalCTC - nonRefundableCTC;
     const refundableCTC = Math.min(unusedCTC, ctcResult.maxRefundable);
-    
     const childTaxCredit = nonRefundableCTC + refundableCTC;
     
     breakdown.push(`Child Tax Credit (CTC): $${(childTaxCredit / 100).toFixed(2)}`);
@@ -196,21 +287,48 @@ class VITATaxRulesEngine {
     citations.push(`26 U.S.C. § 24 - Child Tax Credit ($2,000 per qualifying child)`);
     citations.push(`26 U.S.C. § 24(h) - Additional Child Tax Credit (refundable up to $1,700/child)`);
     
-    // Step 7: Calculate total credits and final federal tax
-    const totalCredits = eitc + childTaxCredit;
-    const totalFederalTax = taxAfterNonRefundableCTC - (eitc + refundableCTC);
+    // Step 8: Calculate Education Credits (Form 8863) if applicable
+    let educationCredits: VITATaxResult["federalTax"]["educationCredits"] | undefined;
+    if (input.qualifiedEducationExpenses && input.qualifiedEducationExpenses > 0) {
+      educationCredits = await this.calculateEducationCredits(
+        input.qualifiedEducationExpenses,
+        input.numberOfStudents || 0,
+        adjustedGrossIncome,
+        input.filingStatus,
+        input.taxYear,
+        breakdown,
+        citations
+      );
+    }
     
-    breakdown.push(`Total Credits: $${(totalCredits / 100).toFixed(2)}`);
+    // Step 9: Apply education credits
+    let taxAfterAllNonRefundableCredits = taxAfterNonRefundableCTC;
+    const educationNonRefundable = educationCredits ? (educationCredits.americanOpportunityCredit - educationCredits.aocRefundablePortion) + educationCredits.lifetimeLearningCredit : 0;
+    const educationRefundable = educationCredits?.aocRefundablePortion || 0;
+    
+    if (educationNonRefundable > 0) {
+      const appliedEducationCredit = Math.min(educationNonRefundable, taxAfterAllNonRefundableCredits);
+      taxAfterAllNonRefundableCredits -= appliedEducationCredit;
+    }
+    
+    // Step 10: Calculate total credits and final federal tax
+    const totalCredits = eitc + childTaxCredit + (educationCredits?.totalEducationCredits || 0);
+    const totalFederalTax = taxAfterAllNonRefundableCredits - (eitc + refundableCTC + educationRefundable);
+    
+    breakdown.push(`\nTotal Credits: $${(totalCredits / 100).toFixed(2)}`);
     breakdown.push(`Federal Tax (after credits): $${(totalFederalTax / 100).toFixed(2)}`);
     
     return {
       totalIncome,
+      scheduleC,
+      selfEmploymentTax,
       adjustedGrossIncome,
       standardDeduction,
       taxableIncome,
       incomeTaxBeforeCredits,
       eitc,
       childTaxCredit,
+      educationCredits,
       totalCredits,
       totalFederalTax,
     };
@@ -469,6 +587,185 @@ class VITATaxRulesEngine {
     };
     
     return countyRates[county] || { name: "Unknown", rate: 3.20 }; // Default to highest rate
+  }
+  
+  /**
+   * Calculate Self-Employment Tax (Schedule SE)
+   * 
+   * Self-Employment Tax = 15.3% of net earnings
+   * - Social Security: 12.4% (on first $160,200 in 2024)
+   * - Medicare: 2.9% (no wage limit)
+   * 
+   * Net earnings = 92.35% of net profit from Schedule C
+   * Deductible portion = 50% of SE tax (reduces AGI)
+   * 
+   * @param netProfit Net profit from Schedule C (in cents)
+   * @returns SE tax calculation results
+   */
+  private async calculateSelfEmploymentTax(netProfit: number): Promise<{
+    netEarnings: number;
+    seTax: number;
+    deductiblePortion: number;
+  }> {
+    // Net earnings for SE tax = 92.35% of net profit
+    // This accounts for the employer-equivalent portion of SE tax
+    const netEarnings = Math.round(netProfit * 0.9235);
+    
+    // Calculate SE tax: 15.3% on net earnings
+    // Note: In real implementation, would need to check Social Security wage base limit
+    // For VITA simplification, applying full 15.3% rate
+    const seTax = Math.round(netEarnings * 0.153);
+    
+    // Deductible portion is 50% of SE tax
+    const deductiblePortion = Math.round(seTax * 0.50);
+    
+    return {
+      netEarnings,
+      seTax,
+      deductiblePortion,
+    };
+  }
+  
+  /**
+   * Calculate Education Credits (Form 8863)
+   * 
+   * Two credits available (cannot claim both for same student):
+   * 
+   * 1. American Opportunity Credit (AOC):
+   *    - Up to $2,500 per eligible student
+   *    - 100% of first $2,000 + 25% of next $2,000 in qualified expenses
+   *    - 40% refundable (max $1,000 per student)
+   *    - Phase-out: MAGI $80k-$90k (single), $160k-$180k (married joint)
+   * 
+   * 2. Lifetime Learning Credit (LLC):
+   *    - Up to $2,000 per return (not per student)
+   *    - 20% of first $10,000 in qualified expenses
+   *    - Non-refundable only
+   *    - Phase-out: MAGI $80k-$90k (single), $160k-$180k (married joint)
+   * 
+   * @param qualifiedExpenses Total qualified education expenses (in cents)
+   * @param numberOfStudents Number of eligible students for AOC
+   * @param magi Modified AGI (in cents)
+   * @param filingStatus Filing status
+   * @param taxYear Tax year
+   * @param breakdown Breakdown array to append messages
+   * @param citations Citations array to append policy references
+   * @returns Education credits calculation
+   */
+  private async calculateEducationCredits(
+    qualifiedExpenses: number,
+    numberOfStudents: number,
+    magi: number,
+    filingStatus: string,
+    taxYear: number,
+    breakdown: string[],
+    citations: string[]
+  ): Promise<VITATaxResult["federalTax"]["educationCredits"]> {
+    
+    breakdown.push(`\n--- EDUCATION CREDITS (Form 8863) ---`);
+    breakdown.push(`Qualified Education Expenses: $${(qualifiedExpenses / 100).toFixed(2)}`);
+    
+    // Phase-out thresholds (2024)
+    const phaseOutStart = filingStatus === "married_joint" ? 16000000 : 8000000; // $160k/$80k
+    const phaseOutEnd = filingStatus === "married_joint" ? 18000000 : 9000000; // $180k/$90k
+    
+    // Calculate phase-out percentage
+    let phaseOutPercentage = 1.0; // No phase-out by default
+    if (magi > phaseOutStart) {
+      if (magi >= phaseOutEnd) {
+        phaseOutPercentage = 0; // Completely phased out
+        breakdown.push(`Education credits phased out (MAGI exceeds $${(phaseOutEnd / 100).toFixed(0)})`);
+        citations.push(`26 U.S.C. § 25A - Education Credits Phase-out`);
+        
+        return {
+          americanOpportunityCredit: 0,
+          aocRefundablePortion: 0,
+          lifetimeLearningCredit: 0,
+          totalEducationCredits: 0,
+        };
+      } else {
+        // Partial phase-out
+        const phaseOutRange = phaseOutEnd - phaseOutStart;
+        const excessIncome = magi - phaseOutStart;
+        phaseOutPercentage = 1 - (excessIncome / phaseOutRange);
+        breakdown.push(`Phase-out applies: ${((1 - phaseOutPercentage) * 100).toFixed(1)}% reduction`);
+      }
+    }
+    
+    // American Opportunity Credit (AOC) - prefer AOC as it's more valuable
+    let aoc = 0;
+    let aocRefundable = 0;
+    
+    if (numberOfStudents > 0) {
+      // AOC: 100% of first $2,000 + 25% of next $2,000 per student
+      const maxPerStudent = 250000; // $2,500
+      const expensesPerStudent = Math.floor(qualifiedExpenses / numberOfStudents);
+      
+      for (let i = 0; i < numberOfStudents; i++) {
+        const studentExpense = expensesPerStudent;
+        let studentCredit = 0;
+        
+        if (studentExpense <= 200000) {
+          // 100% of first $2,000
+          studentCredit = studentExpense;
+        } else if (studentExpense <= 400000) {
+          // 100% of first $2,000 + 25% of next amount (up to $2,000 more)
+          studentCredit = 200000 + Math.round((studentExpense - 200000) * 0.25);
+        } else {
+          // Max credit: $2,000 + $500 = $2,500
+          studentCredit = 250000;
+        }
+        
+        aoc += studentCredit;
+      }
+      
+      // Apply phase-out
+      aoc = Math.round(aoc * phaseOutPercentage);
+      
+      // 40% of AOC is refundable (max $1,000 per student)
+      aocRefundable = Math.min(
+        Math.round(aoc * 0.40),
+        numberOfStudents * 100000 // $1,000 per student
+      );
+      
+      breakdown.push(`American Opportunity Credit (AOC): $${(aoc / 100).toFixed(2)}`);
+      breakdown.push(`  • ${numberOfStudents} eligible student(s)`);
+      breakdown.push(`  • Refundable portion (40%): $${(aocRefundable / 100).toFixed(2)}`);
+      breakdown.push(`  • Non-refundable portion: $${((aoc - aocRefundable) / 100).toFixed(2)}`);
+      
+      citations.push(`26 U.S.C. § 25A(i) - American Opportunity Credit ($2,500 per student)`);
+      citations.push(`IRS Publication 970 - AOC: 40% refundable, max $1,000 per student`);
+    }
+    
+    // Lifetime Learning Credit (LLC) - calculate as alternative
+    // LLC: 20% of first $10,000 in expenses per return
+    const maxLLCExpense = 1000000; // $10,000
+    const llcExpense = Math.min(qualifiedExpenses, maxLLCExpense);
+    let llc = Math.round(llcExpense * 0.20); // 20% of expenses
+    
+    // Apply phase-out
+    llc = Math.round(llc * phaseOutPercentage);
+    
+    // For VITA purposes, if AOC is available, use AOC; otherwise use LLC
+    // In practice, taxpayer chooses which credit to claim
+    const lifetimeLearningCredit = numberOfStudents > 0 ? 0 : llc;
+    
+    if (lifetimeLearningCredit > 0) {
+      breakdown.push(`Lifetime Learning Credit (LLC): $${(lifetimeLearningCredit / 100).toFixed(2)}`);
+      breakdown.push(`  • 20% of qualified expenses (max $10,000)`);
+      breakdown.push(`  • Non-refundable only`);
+      citations.push(`26 U.S.C. § 25A(d) - Lifetime Learning Credit (20% of first $10,000)`);
+      citations.push(`IRS Publication 970 - LLC is non-refundable`);
+    }
+    
+    const totalEducationCredits = aoc + lifetimeLearningCredit;
+    
+    return {
+      americanOpportunityCredit: aoc,
+      aocRefundablePortion: aocRefundable,
+      lifetimeLearningCredit,
+      totalEducationCredits,
+    };
   }
 }
 
