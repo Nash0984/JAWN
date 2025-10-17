@@ -152,11 +152,19 @@ export class PiiMaskingUtils {
   
   /**
    * Redact sensitive fields from an object (for logging)
+   * Protected against circular references
    */
-  static redactObject<T extends Record<string, any>>(obj: T): T {
+  static redactObject<T extends Record<string, any>>(obj: T, visited: WeakSet<any> = new WeakSet()): T {
     if (!obj || typeof obj !== 'object') {
       return obj;
     }
+    
+    // Prevent circular reference infinite loop
+    if (visited.has(obj)) {
+      return '[CIRCULAR]' as any;
+    }
+    
+    visited.add(obj);
     
     const redacted = { ...obj };
     
@@ -173,10 +181,10 @@ export class PiiMaskingUtils {
       if (typeof redacted[key] === 'object' && redacted[key] !== null) {
         if (Array.isArray(redacted[key])) {
           redacted[key] = redacted[key].map((item: any) =>
-            typeof item === 'object' ? this.redactObject(item) : item
+            typeof item === 'object' ? this.redactObject(item, visited) : item
           );
         } else {
-          redacted[key] = this.redactObject(redacted[key]);
+          redacted[key] = this.redactObject(redacted[key], visited);
         }
       }
       
@@ -228,9 +236,17 @@ export class PiiMaskingUtils {
   
   /**
    * Get list of PII field names found in an object
+   * Protected against circular references
    */
-  static getPIIFields(obj: Record<string, any>): string[] {
+  static getPIIFields(obj: Record<string, any>, visited: WeakSet<any> = new WeakSet()): string[] {
     const piiFields: string[] = [];
+    
+    // Prevent circular reference infinite loop
+    if (visited.has(obj)) {
+      return piiFields;
+    }
+    
+    visited.add(obj);
     
     for (const key in obj) {
       const lowerKey = key.toLowerCase();
@@ -244,7 +260,7 @@ export class PiiMaskingUtils {
       }
       
       if (typeof obj[key] === 'object' && obj[key] !== null) {
-        const nestedFields = this.getPIIFields(obj[key]);
+        const nestedFields = this.getPIIFields(obj[key], visited);
         piiFields.push(...nestedFields.map(f => `${key}.${f}`));
       }
     }
