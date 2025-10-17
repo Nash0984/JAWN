@@ -3675,6 +3675,90 @@ export const taxDocuments = pgTable("tax_documents", {
   verificationStatusIdx: index("tax_documents_verification_idx").on(table.verificationStatus),
 }));
 
+// TaxSlayer Returns - Manual data entry from TaxSlayer Pro (no API)
+export const taxslayerReturns = pgTable("taxslayer_returns", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  
+  // Foreign key to VITA intake session
+  vitaIntakeSessionId: varchar("vita_intake_session_id").references(() => vitaIntakeSessions.id, { onDelete: "cascade" }).notNull(),
+  
+  // Tax year and filing metadata
+  taxYear: integer("tax_year").notNull(),
+  filingStatus: text("filing_status").notNull(), // single, married_joint, married_separate, head_of_household, qualifying_widow
+  preparedDate: date("prepared_date"),
+  
+  // Federal return summary
+  federalAGI: real("federal_agi").default(0),
+  federalTaxableIncome: real("federal_taxable_income").default(0),
+  federalTax: real("federal_tax").default(0),
+  federalWithheld: real("federal_withheld").default(0),
+  federalRefund: real("federal_refund").default(0), // or amount owed (negative)
+  
+  // State return summary (Maryland)
+  stateAGI: real("state_agi").default(0),
+  stateTax: real("state_tax").default(0),
+  stateWithheld: real("state_withheld").default(0),
+  stateRefund: real("state_refund").default(0), // or amount owed (negative)
+  
+  // Tax credits
+  eitcAmount: real("eitc_amount").default(0),
+  ctcAmount: real("ctc_amount").default(0),
+  additionalChildTaxCredit: real("additional_child_tax_credit").default(0),
+  educationCredits: real("education_credits").default(0), // AOTC + LLC combined
+  americanOpportunityCredit: real("american_opportunity_credit").default(0),
+  lifetimeLearningCredit: real("lifetime_learning_credit").default(0),
+  otherCredits: real("other_credits").default(0),
+  
+  // Income documents (JSONB arrays for structured data)
+  // W-2 format: { employer, ein, wages, federalWithheld, stateWithheld, socialSecurityWages, medicareWages }
+  w2Forms: jsonb("w2_forms").default([]),
+  
+  // 1099 format: { type (INT, DIV, MISC, NEC, etc), payer, amount, federalWithheld }
+  form1099s: jsonb("form_1099s").default([]),
+  
+  // Schedule C (self-employment) - if applicable
+  // Format: { businessName, ein, grossReceipts, expenses, netProfit }
+  scheduleC: jsonb("schedule_c"),
+  
+  // Other income/deduction details
+  retirementIncome: real("retirement_income").default(0),
+  socialSecurityIncome: real("social_security_income").default(0),
+  studentLoanInterestPaid: real("student_loan_interest_paid").default(0),
+  mortgageInterestPaid: real("mortgage_interest_paid").default(0),
+  charitableContributions: real("charitable_contributions").default(0),
+  
+  // Validation flags (for data quality)
+  hasValidationWarnings: boolean("has_validation_warnings").default(false),
+  validationWarnings: jsonb("validation_warnings").default([]), // Array of warning messages
+  
+  // Comparison results (vs our system calculation)
+  comparisonStatus: text("comparison_status"), // pending, reviewed, approved, flagged
+  comparisonNotes: text("comparison_notes"),
+  
+  // Notes and metadata
+  notes: text("notes"),
+  
+  // Import audit trail
+  importedAt: timestamp("imported_at").defaultNow().notNull(),
+  importedBy: varchar("imported_by").references(() => users.id).notNull(), // Navigator who entered data
+  
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  vitaSessionIdIdx: index("taxslayer_returns_vita_session_idx").on(table.vitaIntakeSessionId),
+  taxYearIdx: index("taxslayer_returns_tax_year_idx").on(table.taxYear),
+  importedByIdx: index("taxslayer_returns_imported_by_idx").on(table.importedBy),
+}));
+
+export type TaxslayerReturn = typeof taxslayerReturns.$inferSelect;
+export type InsertTaxslayerReturn = typeof taxslayerReturns.$inferInsert;
+
+export const insertTaxslayerReturnSchema = createInsertSchema(taxslayerReturns).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
 // Tax table relations
 export const federalTaxReturnsRelations = relations(federalTaxReturns, ({ one, many }) => ({
   scenario: one(householdScenarios, {
@@ -3719,6 +3803,17 @@ export const taxDocumentsRelations = relations(taxDocuments, ({ one }) => ({
   }),
   verifier: one(users, {
     fields: [taxDocuments.verifiedBy],
+    references: [users.id],
+  }),
+}));
+
+export const taxslayerReturnsRelations = relations(taxslayerReturns, ({ one }) => ({
+  vitaSession: one(vitaIntakeSessions, {
+    fields: [taxslayerReturns.vitaIntakeSessionId],
+    references: [vitaIntakeSessions.id],
+  }),
+  importer: one(users, {
+    fields: [taxslayerReturns.importedBy],
     references: [users.id],
   }),
 }));

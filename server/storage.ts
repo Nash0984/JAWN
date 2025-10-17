@@ -192,6 +192,9 @@ import {
   vitaIntakeSessions,
   type VitaIntakeSession,
   type InsertVitaIntakeSession,
+  taxslayerReturns,
+  type TaxslayerReturn,
+  type InsertTaxslayerReturn,
   auditLogs,
   type AuditLog,
   type InsertAuditLog,
@@ -625,6 +628,14 @@ export interface IStorage {
   getVitaIntakeSessions(userId: string, filters?: { status?: string; clientCaseId?: string; reviewStatus?: string }): Promise<VitaIntakeSession[]>;
   updateVitaIntakeSession(id: string, updates: Partial<VitaIntakeSession>): Promise<VitaIntakeSession>;
   deleteVitaIntakeSession(id: string): Promise<void>;
+  
+  // TaxSlayer Returns
+  createTaxslayerReturn(taxReturn: InsertTaxslayerReturn): Promise<TaxslayerReturn>;
+  getTaxslayerReturn(id: string): Promise<TaxslayerReturn | undefined>;
+  getTaxslayerReturnByVitaSession(vitaSessionId: string): Promise<TaxslayerReturn | undefined>;
+  getTaxslayerReturns(filters?: { userId?: string; taxYear?: number }): Promise<TaxslayerReturn[]>;
+  updateTaxslayerReturn(id: string, updates: Partial<TaxslayerReturn>): Promise<TaxslayerReturn>;
+  deleteTaxslayerReturn(id: string): Promise<void>;
 
   // ============================================================================
   // E-File Monitoring
@@ -3237,6 +3248,54 @@ export class DatabaseStorage implements IStorage {
 
   async deleteVitaIntakeSession(id: string): Promise<void> {
     await db.delete(vitaIntakeSessions).where(eq(vitaIntakeSessions.id, id));
+  }
+
+  // TaxSlayer Returns
+  async createTaxslayerReturn(taxReturn: InsertTaxslayerReturn): Promise<TaxslayerReturn> {
+    const [created] = await db.insert(taxslayerReturns).values(taxReturn).returning();
+    return created;
+  }
+
+  async getTaxslayerReturn(id: string): Promise<TaxslayerReturn | undefined> {
+    return await db.query.taxslayerReturns.findFirst({
+      where: eq(taxslayerReturns.id, id),
+    });
+  }
+
+  async getTaxslayerReturnByVitaSession(vitaSessionId: string): Promise<TaxslayerReturn | undefined> {
+    return await db.query.taxslayerReturns.findFirst({
+      where: eq(taxslayerReturns.vitaIntakeSessionId, vitaSessionId),
+    });
+  }
+
+  async getTaxslayerReturns(filters?: { userId?: string; taxYear?: number }): Promise<TaxslayerReturn[]> {
+    const conditions = [];
+
+    if (filters?.userId) {
+      conditions.push(eq(taxslayerReturns.importedBy, filters.userId));
+    }
+
+    if (filters?.taxYear) {
+      conditions.push(eq(taxslayerReturns.taxYear, filters.taxYear));
+    }
+
+    return await db.query.taxslayerReturns.findMany({
+      where: conditions.length > 0 ? and(...conditions) : undefined,
+      orderBy: [desc(taxslayerReturns.importedAt)],
+    });
+  }
+
+  async updateTaxslayerReturn(id: string, updates: Partial<TaxslayerReturn>): Promise<TaxslayerReturn> {
+    const [updated] = await db
+      .update(taxslayerReturns)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(taxslayerReturns.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteTaxslayerReturn(id: string): Promise<void> {
+    await db.delete(taxslayerReturns).where(eq(taxslayerReturns.id, id));
   }
 
   // ============================================================================
