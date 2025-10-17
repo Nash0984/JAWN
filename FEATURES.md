@@ -6,7 +6,11 @@
 
 **Note:** This document reflects the complete feature inventory discovered through comprehensive production readiness audit (October 2025).
 
-This document provides a comprehensive catalog of all 87 features implemented in the Maryland Universal Benefits-Tax Service Delivery Platform. The platform integrates 6 Maryland benefit programs (SNAP, Medicaid, TANF, OHEP, Tax Credits, SSI) with federal/state tax preparation (VITA), quality control analytics, multi-county deployment, AI-powered assistance, legislative tracking, and infrastructure operations.
+This document provides a comprehensive catalog of all 87 features implemented in the Maryland Universal Benefits-Tax Service Delivery Platform. The platform integrates 5 Maryland benefit programs (SNAP, Medicaid, TANF, OHEP, Tax Credits) with federal/state tax preparation (VITA), quality control analytics, multi-county deployment, AI-powered assistance, legislative tracking, and infrastructure operations.
+
+**Planned for Future Development:**
+- SSI (Supplemental Security Income) standalone benefit program
+- Voice IVR communication channel for omnichannel access
 
 ---
 
