@@ -11,6 +11,7 @@
     "db:push": "drizzle-kit push"
   },
   "dependencies": {
+    "@axe-core/playwright": "^4.10.2",
     "@google-cloud/storage": "^7.17.0",
     "@google/genai": "^1.19.0",
     "@hookform/resolvers": "^3.10.0",
@@ -66,6 +67,7 @@
     "@uppy/xhr-upload": "^5.0.0",
     "@uswds/uswds": "^3.13.0",
     "@vitest/ui": "^3.2.4",
+    "axe-core": "^4.11.0",
     "axios": "^1.12.2",
     "bcryptjs": "^3.0.2",
     "cheerio": "^1.1.2",
@@ -104,6 +106,7 @@
     "passport-local": "^1.0.0",
     "pdf-parse": "^2.1.7",
     "playwright": "^1.56.1",
+    "puppeteer": "^24.25.0",
     "react": "^18.3.1",
     "react-day-picker": "^8.10.1",
     "react-dom": "^18.3.1",
