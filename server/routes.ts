@@ -51,6 +51,7 @@ import {
   insertTaxDocumentSchema,
   insertTaxslayerReturnSchema,
   insertAlertRuleSchema,
+  insertAppointmentSchema,
   searchQueries,
   auditLogs,
   ruleChangeLogs,
@@ -69,7 +70,8 @@ import {
   alertRules,
   alertHistory,
   consentForms,
-  clientConsents
+  clientConsents,
+  appointments
 } from "@shared/schema";
 import { z } from "zod";
 import bcrypt from "bcryptjs";
@@ -7213,6 +7215,371 @@ If the question cannot be answered with the available information, say so clearl
     
     const taxResult = await vitaTaxRulesEngine.calculateTax(validated);
     res.json(taxResult);
+  }));
+
+  // ==========================================
+  // Google Calendar Appointment Routes
+  // ==========================================
+
+  // Create appointment with Google Calendar sync
+  app.post("/api/appointments", requireStaff, asyncHandler(async (req: Request, res: Response) => {
+    const validated = insertAppointmentSchema.parse({
+      ...req.body,
+      createdBy: req.user!.id,
+      tenantId: req.user!.tenantId
+    });
+
+    // CRITICAL: Check for conflicts before creating appointment
+    if (validated.startTime && validated.endTime && req.user!.tenantId) {
+      const conflicts = await storage.getAppointmentConflicts(
+        new Date(validated.startTime),
+        new Date(validated.endTime),
+        req.user!.tenantId,
+        validated.navigatorId
+      );
+
+      if (conflicts.length > 0) {
+        return res.status(409).json({ 
+          error: "Appointment conflict detected",
+          message: `The selected time slot conflicts with ${conflicts.length} existing appointment(s)`,
+          conflicts: conflicts.map(c => ({
+            id: c.id,
+            title: c.title,
+            startTime: c.startTime,
+            endTime: c.endTime,
+            navigatorId: c.navigatorId
+          }))
+        });
+      }
+
+      // Also check Google Calendar availability
+      try {
+        const { checkAvailability } = await import('./services/googleCalendar');
+        const calendarAvailable = await checkAvailability(
+          new Date(validated.startTime),
+          new Date(validated.endTime)
+        );
+
+        if (!calendarAvailable) {
+          return res.status(409).json({ 
+            error: "Calendar conflict detected",
+            message: "The selected time slot conflicts with an existing Google Calendar event. Please choose a different time."
+          });
+        }
+      } catch (error) {
+        console.error('Failed to check Google Calendar availability:', error);
+        // Continue if calendar check fails (don't block appointment creation)
+      }
+    }
+
+    // Create appointment in database
+    const appointment = await storage.createAppointment(validated);
+
+    // Sync to Google Calendar if enabled
+    let calendarSyncError: string | null = null;
+    if (validated.startTime && validated.endTime) {
+      try {
+        const { createCalendarEvent } = await import('./services/googleCalendar');
+        
+        const attendeeEmails: string[] = [];
+        if (validated.clientId) {
+          const client = await storage.getUserById(validated.clientId);
+          if (client?.email) attendeeEmails.push(client.email);
+        }
+        if (validated.navigatorId) {
+          const navigator = await storage.getUserById(validated.navigatorId);
+          if (navigator?.email) attendeeEmails.push(navigator.email);
+        }
+
+        const eventId = await createCalendarEvent({
+          title: validated.title,
+          description: validated.description || '',
+          startTime: new Date(validated.startTime),
+          endTime: new Date(validated.endTime),
+          timeZone: validated.timeZone || 'America/New_York',
+          location: validated.locationDetails || '',
+          attendeeEmails
+        });
+
+        // Update appointment with Google Calendar event ID
+        if (req.user!.tenantId) {
+          await storage.updateAppointment(appointment.id, { googleCalendarEventId: eventId }, req.user!.tenantId);
+          appointment.googleCalendarEventId = eventId;
+        }
+      } catch (error) {
+        console.error('Failed to sync appointment to Google Calendar:', error);
+        calendarSyncError = 'Failed to sync appointment to Google Calendar. The appointment was created in the database but may not appear in your calendar. Please try syncing manually or contact support.';
+        
+        // Log error for monitoring
+        await auditService.logError({
+          message: 'Google Calendar sync failed during appointment creation',
+          statusCode: 500,
+          method: 'POST',
+          path: '/api/appointments',
+          userId: req.user!.id,
+          details: { appointmentId: appointment.id, error }
+        }).catch(console.error);
+      }
+    }
+
+    res.json({ 
+      ...appointment, 
+      calendarSyncWarning: calendarSyncError 
+    });
+  }));
+
+  // Get appointments with optional filters
+  app.get("/api/appointments", requireStaff, asyncHandler(async (req: Request, res: Response) => {
+    const filters: any = {};
+    
+    // CRITICAL: Enforce tenant isolation - users can only see their tenant's appointments
+    filters.tenantId = req.user!.tenantId;
+    
+    if (req.query.status) filters.status = req.query.status;
+    if (req.query.appointmentType) filters.appointmentType = req.query.appointmentType;
+    if (req.query.navigatorId) filters.navigatorId = req.query.navigatorId;
+    if (req.query.clientId) filters.clientId = req.query.clientId;
+    if (req.query.vitaSessionId) filters.vitaSessionId = req.query.vitaSessionId;
+    if (req.query.startDate) filters.startDate = new Date(req.query.startDate as string);
+    if (req.query.endDate) filters.endDate = new Date(req.query.endDate as string);
+
+    const appointments = await storage.getAppointments(filters);
+    res.json(appointments);
+  }));
+
+  // Get single appointment
+  app.get("/api/appointments/:id", requireStaff, asyncHandler(async (req: Request, res: Response) => {
+    // CRITICAL: Enforce tenant isolation - verify appointment belongs to user's tenant
+    if (!req.user!.tenantId) {
+      return res.status(403).json({ error: "Forbidden", message: "No tenant context" });
+    }
+
+    const appointment = await storage.getAppointment(req.params.id, req.user!.tenantId);
+    
+    if (!appointment) {
+      // Return 404 (not 403) to prevent ID enumeration
+      return res.status(404).json({ error: "Not found" });
+    }
+
+    res.json(appointment);
+  }));
+
+  // Update appointment with Google Calendar sync
+  app.patch("/api/appointments/:id", requireStaff, asyncHandler(async (req: Request, res: Response) => {
+    // CRITICAL: Enforce tenant isolation - verify appointment belongs to user's tenant
+    if (!req.user!.tenantId) {
+      return res.status(403).json({ error: "Forbidden", message: "No tenant context" });
+    }
+
+    const appointment = await storage.getAppointment(req.params.id, req.user!.tenantId);
+    
+    if (!appointment) {
+      // Return 404 (not 403) to prevent ID enumeration
+      return res.status(404).json({ error: "Not found" });
+    }
+
+    const validated = insertAppointmentSchema.partial().parse(req.body);
+    const { createdAt, updatedAt, createdBy, ...updateData } = validated as any;
+
+    // CRITICAL: Check for conflicts if time is being changed
+    if ((updateData.startTime || updateData.endTime) && req.user!.tenantId) {
+      const newStartTime = updateData.startTime ? new Date(updateData.startTime) : appointment.startTime;
+      const newEndTime = updateData.endTime ? new Date(updateData.endTime) : appointment.endTime;
+      
+      const conflicts = await storage.getAppointmentConflicts(
+        newStartTime,
+        newEndTime,
+        req.user!.tenantId,
+        updateData.navigatorId || appointment.navigatorId
+      );
+
+      // Filter out the current appointment from conflicts
+      const actualConflicts = conflicts.filter(c => c.id !== appointment.id);
+
+      if (actualConflicts.length > 0) {
+        return res.status(409).json({ 
+          error: "Appointment conflict detected",
+          message: `The updated time slot conflicts with ${actualConflicts.length} existing appointment(s)`,
+          conflicts: actualConflicts.map(c => ({
+            id: c.id,
+            title: c.title,
+            startTime: c.startTime,
+            endTime: c.endTime,
+            navigatorId: c.navigatorId
+          }))
+        });
+      }
+
+      // Also check Google Calendar availability
+      try {
+        const { checkAvailability } = await import('./services/googleCalendar');
+        const calendarAvailable = await checkAvailability(newStartTime, newEndTime);
+
+        if (!calendarAvailable) {
+          return res.status(409).json({ 
+            error: "Calendar conflict detected",
+            message: "The updated time slot conflicts with an existing Google Calendar event. Please choose a different time."
+          });
+        }
+      } catch (error) {
+        console.error('Failed to check Google Calendar availability:', error);
+        // Continue if calendar check fails (don't block appointment update)
+      }
+    }
+
+    // Update appointment in database
+    const updated = await storage.updateAppointment(req.params.id, updateData, req.user!.tenantId);
+
+    // Sync changes to Google Calendar if appointment has Google Calendar event
+    let calendarSyncError: string | null = null;
+    if (appointment.googleCalendarEventId) {
+      try {
+        const { updateCalendarEvent } = await import('./services/googleCalendar');
+        
+        const calendarUpdate: any = {};
+        if (updateData.title) calendarUpdate.title = updateData.title;
+        if (updateData.description !== undefined) calendarUpdate.description = updateData.description;
+        if (updateData.startTime) calendarUpdate.startTime = new Date(updateData.startTime);
+        if (updateData.endTime) calendarUpdate.endTime = new Date(updateData.endTime);
+        if (updateData.timeZone) calendarUpdate.timeZone = updateData.timeZone;
+        if (updateData.locationDetails !== undefined) calendarUpdate.location = updateData.locationDetails;
+
+        await updateCalendarEvent(appointment.googleCalendarEventId, calendarUpdate);
+      } catch (error) {
+        console.error('Failed to sync appointment update to Google Calendar:', error);
+        calendarSyncError = 'Failed to sync appointment changes to Google Calendar. The appointment was updated in the database but calendar may be out of sync. Please try syncing manually or contact support.';
+        
+        // Log error for monitoring
+        await auditService.logError({
+          message: 'Google Calendar sync failed during appointment update',
+          statusCode: 500,
+          method: 'PATCH',
+          path: `/api/appointments/${req.params.id}`,
+          userId: req.user!.id,
+          details: { appointmentId: appointment.id, error }
+        }).catch(console.error);
+      }
+    }
+
+    res.json({ 
+      ...updated, 
+      calendarSyncWarning: calendarSyncError 
+    });
+  }));
+
+  // Cancel appointment with Google Calendar sync
+  app.post("/api/appointments/:id/cancel", requireStaff, asyncHandler(async (req: Request, res: Response) => {
+    // CRITICAL: Enforce tenant isolation - verify appointment belongs to user's tenant
+    if (!req.user!.tenantId) {
+      return res.status(403).json({ error: "Forbidden", message: "No tenant context" });
+    }
+
+    const appointment = await storage.getAppointment(req.params.id, req.user!.tenantId);
+    
+    if (!appointment) {
+      // Return 404 (not 403) to prevent ID enumeration
+      return res.status(404).json({ error: "Not found" });
+    }
+
+    const { cancellationReason } = req.body;
+
+    // Update appointment status
+    const updated = await storage.updateAppointment(req.params.id, {
+      status: 'cancelled',
+      cancellationReason,
+      cancelledAt: new Date(),
+      cancelledBy: req.user!.id
+    }, req.user!.tenantId);
+
+    // Delete from Google Calendar if synced
+    let calendarSyncError: string | null = null;
+    if (appointment.googleCalendarEventId) {
+      try {
+        const { deleteCalendarEvent } = await import('./services/googleCalendar');
+        await deleteCalendarEvent(appointment.googleCalendarEventId);
+      } catch (error) {
+        console.error('Failed to delete appointment from Google Calendar:', error);
+        calendarSyncError = 'Failed to remove appointment from Google Calendar. The appointment was cancelled in the database but may still appear in your calendar. Please remove it manually or contact support.';
+        
+        // Log error for monitoring
+        await auditService.logError({
+          message: 'Google Calendar deletion failed during appointment cancellation',
+          statusCode: 500,
+          method: 'POST',
+          path: `/api/appointments/${req.params.id}/cancel`,
+          userId: req.user!.id,
+          details: { appointmentId: appointment.id, error }
+        }).catch(console.error);
+      }
+    }
+
+    res.json({ 
+      ...updated, 
+      calendarSyncWarning: calendarSyncError 
+    });
+  }));
+
+  // Check availability for time slot
+  app.post("/api/appointments/check-availability", requireStaff, asyncHandler(async (req: Request, res: Response) => {
+    const schema = z.object({
+      startTime: z.string(),
+      endTime: z.string(),
+      navigatorId: z.string().optional()
+    });
+
+    const validated = schema.parse(req.body);
+    const startTime = new Date(validated.startTime);
+    const endTime = new Date(validated.endTime);
+
+    // CRITICAL: Enforce tenant isolation when checking conflicts
+    if (!req.user!.tenantId) {
+      return res.status(403).json({ error: "Forbidden", message: "No tenant context" });
+    }
+
+    // Check database for conflicts
+    const conflicts = await storage.getAppointmentConflicts(
+      startTime,
+      endTime,
+      req.user!.tenantId,
+      validated.navigatorId
+    );
+
+    // Also check Google Calendar if available
+    let calendarAvailable = true;
+    let calendarError: string | null = null;
+    try {
+      const { checkAvailability } = await import('./services/googleCalendar');
+      calendarAvailable = await checkAvailability(startTime, endTime);
+    } catch (error) {
+      console.error('Failed to check Google Calendar availability:', error);
+      calendarError = 'Unable to check Google Calendar availability. Please verify calendar connectivity.';
+      
+      // Log error for monitoring
+      await auditService.logError({
+        message: 'Google Calendar availability check failed',
+        statusCode: 500,
+        method: 'POST',
+        path: '/api/appointments/check-availability',
+        userId: req.user!.id,
+        details: { error }
+      }).catch(console.error);
+    }
+
+    const isAvailable = conflicts.length === 0 && calendarAvailable;
+
+    res.json({ 
+      available: isAvailable,
+      conflicts: conflicts.length,
+      calendarAvailable,
+      calendarError,
+      conflictDetails: conflicts.map(c => ({
+        id: c.id,
+        title: c.title,
+        startTime: c.startTime,
+        endTime: c.endTime,
+        navigatorId: c.navigatorId
+      }))
+    });
   }));
 
   // ==========================================

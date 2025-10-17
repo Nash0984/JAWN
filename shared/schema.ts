@@ -5626,3 +5626,92 @@ export type VitaSignatureRequest = typeof vitaSignatureRequests.$inferSelect;
 
 export type InsertVitaMessage = z.infer<typeof insertVitaMessageSchema>;
 export type VitaMessage = typeof vitaMessages.$inferSelect;
+
+// Google Calendar Appointments for VITA scheduling
+export const appointments = pgTable("appointments", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  // Google Calendar integration
+  googleCalendarEventId: text("google_calendar_event_id").unique(), // Google Calendar event ID for sync
+  // Appointment details
+  title: text("title").notNull(),
+  description: text("description"),
+  appointmentType: text("appointment_type").notNull().default("vita_intake"), // vita_intake, vita_review, benefits_consultation, followup
+  status: text("status").notNull().default("scheduled"), // scheduled, confirmed, completed, cancelled, no_show
+  // Participants
+  navigatorId: varchar("navigator_id").references(() => users.id), // assigned navigator/volunteer
+  clientId: varchar("client_id").references(() => users.id), // client/applicant
+  // Time and duration
+  startTime: timestamp("start_time").notNull(),
+  endTime: timestamp("end_time").notNull(),
+  timeZone: text("time_zone").notNull().default("America/New_York"),
+  duration: integer("duration").notNull().default(60), // minutes
+  // Location
+  locationType: text("location_type").notNull().default("virtual"), // virtual, in_person, phone
+  locationDetails: text("location_details"), // Zoom link, office address, phone number
+  // VITA specific
+  vitaSessionId: varchar("vita_session_id").references(() => vitaIntakeSessions.id),
+  taxYear: integer("tax_year"),
+  preparerCertificationRequired: text("preparer_certification_required"), // basic, advanced, military
+  // Reminders and notifications
+  reminderSent: boolean("reminder_sent").default(false).notNull(),
+  reminderSentAt: timestamp("reminder_sent_at"),
+  confirmationSent: boolean("confirmation_sent").default(false).notNull(),
+  confirmationSentAt: timestamp("confirmation_sent_at"),
+  // Metadata
+  tenantId: varchar("tenant_id").references((): any => tenants.id),
+  metadata: jsonb("metadata"), // Additional appointment metadata
+  notes: text("notes"), // Internal notes for navigator
+  cancellationReason: text("cancellation_reason"),
+  cancelledAt: timestamp("cancelled_at"),
+  cancelledBy: varchar("cancelled_by").references(() => users.id),
+  createdBy: varchar("created_by").references(() => users.id),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  navigatorIdIdx: index("appointments_navigator_id_idx").on(table.navigatorId),
+  clientIdIdx: index("appointments_client_id_idx").on(table.clientId),
+  statusIdx: index("appointments_status_idx").on(table.status),
+  startTimeIdx: index("appointments_start_time_idx").on(table.startTime),
+  appointmentTypeIdx: index("appointments_appointment_type_idx").on(table.appointmentType),
+  vitaSessionIdIdx: index("appointments_vita_session_id_idx").on(table.vitaSessionId),
+  googleCalendarEventIdIdx: index("appointments_google_calendar_event_id_idx").on(table.googleCalendarEventId),
+}));
+
+// Appointment relations
+export const appointmentsRelations = relations(appointments, ({ one }) => ({
+  navigator: one(users, {
+    fields: [appointments.navigatorId],
+    references: [users.id],
+  }),
+  client: one(users, {
+    fields: [appointments.clientId],
+    references: [users.id],
+  }),
+  vitaSession: one(vitaIntakeSessions, {
+    fields: [appointments.vitaSessionId],
+    references: [vitaIntakeSessions.id],
+  }),
+  creator: one(users, {
+    fields: [appointments.createdBy],
+    references: [users.id],
+  }),
+  canceller: one(users, {
+    fields: [appointments.cancelledBy],
+    references: [users.id],
+  }),
+  tenant: one(tenants, {
+    fields: [appointments.tenantId],
+    references: [tenants.id],
+  }),
+}));
+
+// Insert schema
+export const insertAppointmentSchema = createInsertSchema(appointments).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+// Types
+export type InsertAppointment = z.infer<typeof insertAppointmentSchema>;
+export type Appointment = typeof appointments.$inferSelect;

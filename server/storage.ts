@@ -219,6 +219,9 @@ import {
   vitaMessages,
   type VitaMessage,
   type InsertVitaMessage,
+  appointments,
+  type Appointment,
+  type InsertAppointment,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and, ilike, sql, or, isNull, lte, gte, inArray } from "drizzle-orm";
@@ -673,6 +676,27 @@ export interface IStorage {
   getVitaMessages(vitaSessionId: string, filters?: { senderRole?: string; unreadOnly?: boolean }): Promise<VitaMessage[]>;
   markVitaMessageAsRead(id: string): Promise<void>;
   deleteVitaMessage(id: string): Promise<void>;
+
+  // ============================================================================
+  // Google Calendar Appointments
+  // ============================================================================
+  
+  // Appointments
+  createAppointment(appointment: InsertAppointment): Promise<Appointment>;
+  getAppointment(id: string, tenantId: string): Promise<Appointment | undefined>;
+  getAppointments(filters?: { 
+    status?: string; 
+    appointmentType?: string; 
+    navigatorId?: string; 
+    clientId?: string; 
+    vitaSessionId?: string;
+    startDate?: Date;
+    endDate?: Date;
+    tenantId?: string;
+  }): Promise<Appointment[]>;
+  updateAppointment(id: string, updates: Partial<Appointment>, tenantId: string): Promise<Appointment>;
+  deleteAppointment(id: string, tenantId: string): Promise<void>;
+  getAppointmentConflicts(startTime: Date, endTime: Date, tenantId: string, navigatorId?: string): Promise<Appointment[]>;
 
   // ============================================================================
   // E-File Monitoring
@@ -3485,6 +3509,124 @@ export class DatabaseStorage implements IStorage {
 
   async deleteVitaMessage(id: string): Promise<void> {
     await db.delete(vitaMessages).where(eq(vitaMessages.id, id));
+  }
+
+  // ============================================================================
+  // Google Calendar Appointments Implementation
+  // ============================================================================
+
+  async createAppointment(appointment: InsertAppointment): Promise<Appointment> {
+    const [created] = await db.insert(appointments).values(appointment).returning();
+    return created;
+  }
+
+  async getAppointment(id: string, tenantId: string): Promise<Appointment | undefined> {
+    return await db.query.appointments.findFirst({
+      where: and(
+        eq(appointments.id, id),
+        eq(appointments.tenantId, tenantId)
+      ),
+    });
+  }
+
+  async getAppointments(filters?: { 
+    status?: string; 
+    appointmentType?: string; 
+    navigatorId?: string; 
+    clientId?: string; 
+    vitaSessionId?: string;
+    startDate?: Date;
+    endDate?: Date;
+    tenantId?: string;
+  }): Promise<Appointment[]> {
+    const conditions = [];
+
+    // CRITICAL: Tenant filtering for multi-tenant isolation
+    if (filters?.tenantId) {
+      conditions.push(eq(appointments.tenantId, filters.tenantId));
+    }
+
+    if (filters?.status) {
+      conditions.push(eq(appointments.status, filters.status));
+    }
+
+    if (filters?.appointmentType) {
+      conditions.push(eq(appointments.appointmentType, filters.appointmentType));
+    }
+
+    if (filters?.navigatorId) {
+      conditions.push(eq(appointments.navigatorId, filters.navigatorId));
+    }
+
+    if (filters?.clientId) {
+      conditions.push(eq(appointments.clientId, filters.clientId));
+    }
+
+    if (filters?.vitaSessionId) {
+      conditions.push(eq(appointments.vitaSessionId, filters.vitaSessionId));
+    }
+
+    if (filters?.startDate) {
+      conditions.push(gte(appointments.startTime, filters.startDate));
+    }
+
+    if (filters?.endDate) {
+      conditions.push(lte(appointments.endTime, filters.endDate));
+    }
+
+    return await db.query.appointments.findMany({
+      where: conditions.length > 0 ? and(...conditions) : undefined,
+      orderBy: [appointments.startTime],
+    });
+  }
+
+  async updateAppointment(id: string, updates: Partial<Appointment>, tenantId: string): Promise<Appointment> {
+    const [updated] = await db
+      .update(appointments)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(and(
+        eq(appointments.id, id),
+        eq(appointments.tenantId, tenantId)
+      ))
+      .returning();
+    return updated;
+  }
+
+  async deleteAppointment(id: string, tenantId: string): Promise<void> {
+    await db.delete(appointments).where(and(
+      eq(appointments.id, id),
+      eq(appointments.tenantId, tenantId)
+    ));
+  }
+
+  async getAppointmentConflicts(startTime: Date, endTime: Date, tenantId: string, navigatorId?: string): Promise<Appointment[]> {
+    const conditions = [
+      // CRITICAL: Tenant filtering for multi-tenant isolation
+      eq(appointments.tenantId, tenantId),
+      eq(appointments.status, 'scheduled'),
+      or(
+        and(
+          gte(appointments.startTime, startTime),
+          lte(appointments.startTime, endTime)
+        ),
+        and(
+          gte(appointments.endTime, startTime),
+          lte(appointments.endTime, endTime)
+        ),
+        and(
+          lte(appointments.startTime, startTime),
+          gte(appointments.endTime, endTime)
+        )
+      )
+    ];
+
+    if (navigatorId) {
+      conditions.push(eq(appointments.navigatorId, navigatorId));
+    }
+
+    return await db.query.appointments.findMany({
+      where: and(...conditions),
+    });
   }
 
   // ============================================================================
