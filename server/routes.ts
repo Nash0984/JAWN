@@ -5742,7 +5742,7 @@ If the question cannot be answered with the available information, say so clearl
 
   // Generate Form 1040 PDF
   app.post("/api/tax/form1040/generate", requireAuth, asyncHandler(async (req: Request, res: Response) => {
-    const { form1040GeneratorService } = await import("./services/form1040Generator");
+    const { form1040Generator } = await import("./services/form1040Generator");
     
     const schema = z.object({
       taxReturnId: z.string()
@@ -5756,10 +5756,20 @@ If the question cannot be answered with the available information, say so clearl
       return res.status(404).json({ error: "Tax return not found" });
     }
 
+    // Extract data from tax return
+    const form1040Data = taxReturn.form1040Data as any;
+    
     // Generate PDF
-    const pdfBuffer = await form1040GeneratorService.generateForm1040PDF(
-      taxReturn.form1040Data,
-      taxReturn.taxYear
+    const pdfBuffer = await form1040Generator.generateForm1040(
+      form1040Data.personalInfo,
+      form1040Data.taxInput,
+      form1040Data.taxResult,
+      {
+        taxYear: taxReturn.taxYear,
+        preparerName: req.user?.username,
+        preparationDate: new Date(),
+        includeWatermark: true
+      }
     );
 
     res.setHeader('Content-Type', 'application/pdf');
