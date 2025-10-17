@@ -1,3 +1,4 @@
+import { Helmet } from "react-helmet-async";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -122,7 +123,11 @@ export default function Monitoring() {
   }
 
   return (
-    <div className="container mx-auto p-6 space-y-6" data-testid="monitoring-dashboard">
+    <>
+      <Helmet>
+        <title>System Monitoring - MD Benefits Navigator</title>
+      </Helmet>
+      <div className="container mx-auto p-6 space-y-6" data-testid="monitoring-dashboard">
       {/* Header */}
       <div className="flex justify-between items-center">
         <div>
