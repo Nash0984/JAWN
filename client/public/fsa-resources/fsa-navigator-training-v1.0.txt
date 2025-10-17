@@ -1,0 +1,599 @@
+═══════════════════════════════════════════════════════════════════════════════
+FSA NAVIGATOR TRAINING PACKET v1.0
+Maryland VITA Program - Free Self-Assisted Tax Preparation
+Last Updated: October 2025
+═══════════════════════════════════════════════════════════════════════════════
+
+This training packet prepares VITA navigators to support taxpayers using Free
+Self-Assisted (FSA) tax preparation, including workflow overview, TaxSlayer FSA
+interface walkthrough, communication strategies, and case escalation procedures.
+
+═══════════════════════════════════════════════════════════════════════════════
+SECTION 1: FSA PROGRAM OVERVIEW
+═══════════════════════════════════════════════════════════════════════════════
+
+WHAT IS FSA?
+Free Self-Assisted (FSA) tax preparation allows eligible taxpayers to prepare
+their own federal and state returns using free TaxSlayer Pro software, with
+navigator support available remotely or on-site.
+
+KEY DIFFERENCES: Traditional VITA vs FSA
+┌─────────────────────┬──────────────────────────────┬─────────────────────────┐
+│ Aspect              │ Traditional VITA             │ FSA                     │
+├─────────────────────┼──────────────────────────────┼─────────────────────────┤
+│ Who Prepares        │ Volunteer prepares for       │ Taxpayer prepares       │
+│                     │ taxpayer                     │ themselves              │
+├─────────────────────┼──────────────────────────────┼─────────────────────────┤
+│ Navigator Role      │ Preparer                     │ Coach/Reviewer          │
+├─────────────────────┼──────────────────────────────┼─────────────────────────┤
+│ Taxpayer Location   │ Must visit VITA site         │ Anywhere with internet  │
+├─────────────────────┼──────────────────────────────┼─────────────────────────┤
+│ Appointment Needed  │ Yes                          │ No (support optional)   │
+├─────────────────────┼──────────────────────────────┼─────────────────────────┤
+│ Support Method      │ In-person                    │ Phone/video/email       │
+├─────────────────────┼──────────────────────────────┼─────────────────────────┤
+│ Best For            │ Complex returns              │ Simple W-2 only returns │
+└─────────────────────┴──────────────────────────────┴─────────────────────────┘
+
+NAVIGATOR MINDSET SHIFT
+Traditional VITA: "I will prepare your taxes for you"
+FSA Navigator: "I will guide you to prepare your own taxes successfully"
+
+Benefits of FSA:
+✓ Empowers taxpayers to understand their taxes
+✓ Scales VITA services to more people
+✓ Reduces preparer burden on volunteers
+✓ Available 24/7 (support during business hours)
+✓ Taxpayers learn valuable financial literacy
+
+═══════════════════════════════════════════════════════════════════════════════
+SECTION 2: FSA SITE MODELS
+═══════════════════════════════════════════════════════════════════════════════
+
+1. FUSION SITE (Hybrid Model)
+   Description: Offers both in-person VITA and FSA at same location
+   
+   Workflow:
+   - Intake desk screens taxpayers: FSA or in-person?
+   - FSA taxpayers directed to self-service workstations
+   - In-person taxpayers meet with preparers
+   - Navigators assist both FSA users and in-person quality review
+   
+   Staffing: 2+ navigators (1 for FSA, 1+ for in-person prep)
+   
+   Ideal For: High-volume sites, variety of taxpayer skill levels
+
+2. STAND-ALONE FSA SITE
+   Description: FSA-only location, no in-person prep available
+   
+   Workflow:
+   - Taxpayers walk in, check in at desk
+   - Navigator provides quick orientation (5 min)
+   - Taxpayer works independently on FSA workstation
+   - Navigator available on-site for questions
+   - Optional: Navigator reviews return before filing
+   
+   Staffing: 1-2 navigators (roving support)
+   
+   Ideal For: Areas with limited volunteers, tech-savvy populations
+
+3. REMOTE FSA SUPPORT HUB
+   Description: Navigators support off-site taxpayers via phone/video
+   
+   Workflow:
+   - Taxpayers access FSA from home
+   - Call toll-free number or email for help
+   - Navigator provides remote guidance (screen share)
+   - Scheduled appointments for quality review
+   
+   Staffing: 2-3 navigators (call center style)
+   
+   Ideal For: Rural areas, COVID-safe operations, extended hours
+
+NAVIGATOR ROLE IN EACH MODEL
+All models: Coach, answer questions, quality review
+Fusion: Also coordinate between FSA and in-person
+Stand-Alone: Roving assistance, technical troubleshooting
+Remote: Phone/video proficiency, screen sharing expertise
+
+═══════════════════════════════════════════════════════════════════════════════
+SECTION 3: TAXSLAYER FSA INTERFACE WALKTHROUGH
+═══════════════════════════════════════════════════════════════════════════════
+
+ACCESSING TAXSLAYER FSA
+URL Format: https://www.taxslayerpro.com/fsa?sidn=MARYLAND-VITA-2025
+(SIDN = Site Identification Number for tracking)
+
+ACCOUNT CREATION (Taxpayer First-Time User)
+1. Navigate to FSA URL with SIDN
+2. Click "Create Account"
+3. Enter email address and create password (8+ characters)
+4. Verify email (check spam folder if not received)
+5. Log in to start new return
+
+FSA INTERFACE OVERVIEW
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ TOP NAVIGATION BAR                                                          │
+│ - Home (dashboard)                                                          │
+│ - My Return (current tax year)                                              │
+│ - Help (FAQs, live chat if available)                                       │
+│ - Account Settings                                                          │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ LEFT SIDEBAR (Interview Navigation)                                         │
+│ 1. Personal Info (name, SSN, address)                                       │
+│ 2. Filing Status (single, married, etc.)                                    │
+│ 3. Dependents (add children/qualifying relatives)                           │
+│ 4. Income (W-2, 1099, etc.)                                                 │
+│ 5. Deductions (standard vs itemized)                                        │
+│ 6. Credits (EIC, Child Tax Credit, education)                               │
+│ 7. Other Taxes (if applicable)                                              │
+│ 8. Payments (withholding, estimated taxes)                                  │
+│ 9. Refund/Balance Due                                                       │
+│ 10. Review (final check before filing)                                      │
+│ 11. File (e-file federal and state)                                         │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ MAIN CONTENT AREA (Question Interview)                                      │
+│ - Simple yes/no or fill-in-the-blank questions                              │
+│ - Help tooltips (blue "?" icons)                                            │
+│ - Error messages if input invalid (red highlights)                          │
+│ - Progress bar at top showing % complete                                    │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+KEY FEATURES NAVIGATORS SHOULD KNOW
+✓ Auto-Save: TaxSlayer saves progress every few minutes (taxpayer can log out/in)
+✓ Help Tooltips: Hover over "?" for explanations (encourage use!)
+✓ Error Checking: Software highlights missing info in red
+✓ Refund Tracker: Shows estimated refund amount as you go
+✓ Print Options: Can print PDF of return for records
+✓ Prior Year Import: Can import last year's return (if filed with TaxSlayer)
+
+COMMON SCREEN-BY-SCREEN GUIDANCE
+
+STEP 1: PERSONAL INFORMATION
+- Name: Must match Social Security card exactly (including Jr., Sr.)
+- SSN: No dashes, just 9 digits (TaxSlayer auto-formats)
+- Address: Current mailing address (where IRS will send correspondence)
+- Phone: Best contact number (for IRS if needed)
+- Email: Valid email for account recovery
+
+Navigator Tip: Stress importance of accuracy - errors delay refunds!
+
+STEP 2: FILING STATUS
+- Single: Unmarried on Dec 31
+- Married Filing Jointly: Most common for married couples
+- Married Filing Separately: Rare, usually worse tax outcome
+- Head of Household: Unmarried with qualifying dependent + paid >50% home costs
+- Qualifying Surviving Spouse: Widow(er) within 2 years, with dependent
+
+Navigator Tip: Head of Household is often misunderstood. Verify:
+  1. Unmarried on Dec 31 (or living apart from spouse last 6 months)
+  2. Paid over half the home costs (rent, utilities, food)
+  3. Qualifying child lived with them >6 months
+
+STEP 3: DEPENDENTS
+- Full Name and SSN required
+- Relationship: Child, stepchild, sibling, parent, etc.
+- Date of Birth: Determines age-based credits (Child Tax Credit if <17)
+- Months Lived With You: Must be >6 months (or all year for foster)
+- Did Child Provide Own Support?: Usually "No"
+
+Navigator Tip: "Dependent already claimed" error = someone else claimed them
+  Action: Verify who should claim (custodial parent in divorce)
+
+STEP 4: INCOME
+W-2 Wage Income (most common):
+- Click "Add W-2"
+- Enter exactly as shown on form:
+  • Box 1: Wages, tips, other compensation
+  • Box 2: Federal income tax withheld
+  • Boxes 3-6: Social Security and Medicare wages/withholding
+  • Boxes 15-17: State income, tax withheld, locality
+- Repeat for each W-2 (multiple jobs)
+
+1099 Income (if applicable):
+- 1099-INT: Interest income (bank, savings)
+- 1099-DIV: Dividend income (stocks)
+- 1099-MISC: Miscellaneous income (Box 3 = other income)
+- 1099-NEC: Nonemployee compensation (self-employment - FLAG FOR REVIEW!)
+- 1099-G: Unemployment compensation
+- 1099-R: Retirement distributions (pensions, IRA)
+
+Navigator Tip: Self-employment (1099-NEC) = complex, refer to in-person
+
+STEP 5: DEDUCTIONS
+Standard Deduction (90%+ of FSA users):
+- $13,850 (Single)
+- $27,700 (Married Filing Jointly)
+- $20,800 (Head of Household)
+- Automatically selected by software
+
+Itemized Deductions (rarely better for low-income):
+- Mortgage interest (Form 1098)
+- Charitable contributions (receipts required)
+- State/local taxes (SALT, $10k cap)
+- Medical expenses (>7.5% AGI)
+
+Navigator Tip: Software compares standard vs itemized, picks better option
+
+STEP 6: CREDITS
+Earned Income Tax Credit (EIC):
+- Largest credit for low-income workers
+- Requires qualifying child OR age 25-64 (if no child)
+- Software calculates automatically based on income + dependents
+- Audit risk if claimed incorrectly - verify eligibility!
+
+Child Tax Credit (CTC):
+- $2,000 per child under 17
+- Partially refundable ($1,600 Additional Child Tax Credit)
+- Income limits apply (phaseout at $200k/$400k)
+
+Other Dependent Credit:
+- $500 per qualifying dependent (not child, e.g., elderly parent)
+
+Education Credits:
+- American Opportunity Credit: Up to $2,500 (first 4 years college)
+- Lifetime Learning Credit: Up to $2,000 (any education)
+- Requires Form 1098-T (tuition statement)
+
+Child & Dependent Care Credit:
+- Up to $3,000 for one child, $6,000 for two+
+- Daycare, after-school, summer camp costs
+- Must provide childcare provider's name, address, EIN
+
+Navigator Tip: Education credits often missed - ask "Did you pay tuition?"
+
+STEP 7: REFUND OR PAYMENT
+If Refund:
+- Direct Deposit (fastest, 10-21 days): Enter bank routing + account number
+- Paper Check (slower, 4-6 weeks): Sent to mailing address
+
+If Balance Due:
+- Pay Now (bank withdrawal): Authorize IRS to debit account
+- Mail Check: Form 1040-V payment voucher
+- Payment Plan: IRS installment agreement (if large amount)
+
+Navigator Tip: Verify bank account info CAREFULLY (wrong account = lost refund!)
+
+STEP 8: E-FILE
+- Review summary page (errors highlighted)
+- Enter 5-digit Self-Select PIN (any 5 numbers except all zeros)
+- Spouse also enters PIN (if Married Filing Jointly)
+- Click "Submit Return"
+- Confirmation screen: "Accepted by IRS" (save/print confirmation!)
+
+Navigator Tip: Rejection common reasons = SSN mismatch, dependent already claimed
+
+═══════════════════════════════════════════════════════════════════════════════
+SECTION 4: QUALITY REVIEW PROCEDURES FOR SELF-PREPARED RETURNS
+═══════════════════════════════════════════════════════════════════════════════
+
+WHY QUALITY REVIEW MATTERS
+- Taxpayers make mistakes (typos, misunderstood questions)
+- Incorrect returns delay refunds or trigger audits
+- Navigators catch errors BEFORE filing
+- Builds taxpayer confidence
+
+WHEN TO REVIEW
+Recommended: All FSA returns before e-filing
+Required: If taxpayer requests review
+
+REVIEW METHODS
+1. Virtual (Screen Share): Taxpayer shares screen, navigator watches
+2. In-Person: Taxpayer brings printed return to site
+3. Async (Email): Taxpayer emails PDF, navigator reviews offline (less secure)
+
+NAVIGATOR QUALITY REVIEW CHECKLIST
+Use this checklist for every review:
+
+☐ SECTION 1: PERSONAL INFO
+   ☐ Name spelling matches SSN card (middle initial ok to omit)
+   ☐ SSN correct (9 digits, no transpositions)
+   ☐ Address current (impacts refund mail/direct deposit)
+   ☐ Filing status appropriate (verify Head of Household if used)
+
+☐ SECTION 2: DEPENDENTS
+   ☐ All qualifying children listed (check age, residency)
+   ☐ SSN for each dependent correct
+   ☐ Relationship accurate (child, stepchild, etc.)
+   ☐ Months lived with you >6 (or all year)
+   ☐ No dependents over-claimed (divorced parents?)
+
+☐ SECTION 3: INCOME
+   ☐ All W-2s entered (ask: "Any other jobs?")
+   ☐ W-2 amounts match physical form (Box 1, 2, etc.)
+   ☐ 1099 income included (interest, dividends, unemployment)
+   ☐ No self-employment income (if present, refer to in-person)
+
+☐ SECTION 4: DEDUCTIONS & ADJUSTMENTS
+   ☐ Standard deduction used (unless itemizing justified)
+   ☐ Student loan interest entered (if applicable, max $2,500)
+   ☐ IRA/HSA contributions (if made)
+
+☐ SECTION 5: CREDITS
+   ☐ EIC calculated correctly (verify qualifying child requirements)
+   ☐ Child Tax Credit accurate ($2,000 per child <17)
+   ☐ Education credits (if Form 1098-T provided)
+   ☐ Child care credit (if childcare costs documented)
+
+☐ SECTION 6: TAX CALCULATION
+   ☐ Federal withholding matches total of all W-2 Box 2
+   ☐ State withholding correct (W-2 Box 17)
+   ☐ Estimated payments entered (if made)
+
+☐ SECTION 7: REFUND/PAYMENT
+   ☐ Refund amount reasonable (not too high - verify credits)
+   ☐ Direct deposit info correct (routing + account verified)
+   ☐ Bank account in taxpayer's name (or joint with spouse)
+
+REVIEW SCRIPT FOR NAVIGATORS
+"Hi [Name], I'm [Navigator] with Maryland VITA. I'll review your return with you
+to make sure everything looks good before you file. This will take about 15-20
+minutes. Do you have your W-2s and other documents handy?"
+
+[Work through checklist, explaining each section]
+
+"Everything looks great! You're ready to file. Do you have any questions?"
+OR
+"I noticed a few small issues. Let me walk you through the corrections..."
+
+COMMON ERRORS FOUND IN REVIEW
+❌ W-2 Box 1 entered as annual salary (not actual Box 1 amount)
+❌ Dependent SSN transposed (1234 instead of 1243)
+❌ Filing status wrong (single instead of Head of Household)
+❌ Missed Form 1099-INT (interest income)
+❌ Bank account number missing digit
+❌ Claimed EIC without qualifying child
+❌ Forgot to include spouse's W-2 (Married Filing Jointly)
+
+REVIEW OUTCOMES
+✅ APPROVED: No errors, ready to file
+   "Your return looks perfect! You can go ahead and e-file now."
+
+⚠️ CORRECTIONS NEEDED: Minor errors found
+   "I found a few things to fix. Let me show you..."
+   [Guide taxpayer to make corrections, then re-check]
+
+❌ REFER TO IN-PERSON: Too complex for FSA
+   "Your tax situation is a bit more complex than FSA handles. I'd recommend
+   coming in for an in-person appointment. Let me schedule that for you."
+
+DOCUMENTATION
+Log each review:
+- Date/Time
+- Taxpayer first name + last 4 SSN
+- Outcome: Approved / Corrections / Referred
+- Navigator initials
+
+═══════════════════════════════════════════════════════════════════════════════
+SECTION 5: COMMUNICATION SCRIPTS FOR TAXPAYER GUIDANCE
+═══════════════════════════════════════════════════════════════════════════════
+
+SCRIPT 1: FSA ORIENTATION (In-Person or Phone)
+"Welcome to Maryland VITA Free Self-Assisted tax prep! Here's how this works:
+
+1. You'll use TaxSlayer software to prepare your own taxes - it's free!
+2. The software asks simple questions and guides you step-by-step
+3. I'm here to help if you get stuck - just call or raise your hand
+4. When you're done, I can review your return to make sure it's accurate
+5. Then you'll e-file, and your refund should arrive in 10-21 days
+
+Do you have your W-2s and ID? Great! Let's get you started..."
+
+SCRIPT 2: ANSWERING "I DON'T KNOW HOW" CONCERNS
+Taxpayer: "I'm not good with computers. This seems hard."
+
+Navigator: "I completely understand. The good news is TaxSlayer is designed for
+beginners - it asks plain-English questions like 'Did you have a job this year?'
+You just answer yes or no, or type in numbers from your W-2. I'll show you the
+first few screens, and you'll see it's easier than it looks. Plus, I'm right
+here if you need help. Want to give it a try?"
+
+SCRIPT 3: HANDLING FRUSTRATION
+Taxpayer: "This is so confusing! I give up."
+
+Navigator: "Taxes can definitely be frustrating - you're not alone in feeling
+that way. Let's take a breath and tackle this one step at a time. Where did
+you get stuck? [Listen] Ok, that part is tricky. Here's what that question is
+really asking... [Explain simply] Does that make more sense? Let's keep going
+together."
+
+SCRIPT 4: GUIDING WITHOUT DOING
+Taxpayer: "Can you just do this for me?"
+
+Navigator: "I'd love to help, but FSA is designed for you to prepare your own
+taxes so you learn the process. What I CAN do is guide you through each step.
+Think of me as your coach! Right now, you're on the W-2 entry screen. Do you
+see the box that says 'Add W-2'? Click that, and then we'll enter the numbers
+from your form together. You're doing great!"
+
+SCRIPT 5: COMPLEX CASE REFERRAL
+Navigator: "I see you have self-employment income from your side business. That
+requires some special forms that are beyond what FSA handles. I'd recommend
+coming in for a free in-person appointment where a preparer can handle that for
+you. It won't cost anything - still 100% free VITA. Can I schedule you for
+Tuesday at 3pm?"
+
+SCRIPT 6: QUALITY REVIEW FEEDBACK (Approved)
+"I just finished reviewing your return, and everything looks perfect! You did a
+great job entering all your information accurately. Your refund of $2,450 should
+arrive in about 2 weeks if you e-file today. You can track it on the IRS 'Where's
+My Refund' website. Congratulations on completing your taxes!"
+
+SCRIPT 7: QUALITY REVIEW FEEDBACK (Corrections Needed)
+"I reviewed your return and found a couple small things to fix - nothing major!
+First, I noticed your W-2 Box 1 has $28,450, but you entered $28,540. Just a
+typo, easy fix. Second, you have a daughter under 17, so you qualify for the
+Child Tax Credit, but it wasn't claimed. Let me show you where to add that...
+[Guide corrections] Perfect! Now it's ready to file."
+
+SCRIPT 8: POST-FILING FOLLOW-UP
+"Congratulations on filing your taxes! Here's what happens next:
+
+1. IRS will send you an email confirmation (check spam folder)
+2. Your refund should arrive in 10-21 days via direct deposit
+3. You can track it at irs.gov/refunds (have your SSN and refund amount ready)
+4. Save a copy of your return for your records (print or PDF)
+5. If you have questions, call us back at 1-800-MD-TAXES
+
+Great job, and thank you for using Maryland VITA!"
+
+═══════════════════════════════════════════════════════════════════════════════
+SECTION 6: ESCALATION PROCEDURES FOR COMPLEX CASES
+═══════════════════════════════════════════════════════════════════════════════
+
+NOT ALL CASES ARE FSA-APPROPRIATE
+Navigators must recognize when a taxpayer needs in-person VITA instead.
+
+AUTOMATIC REFERRAL SITUATIONS (Do Not Attempt FSA)
+🚩 Self-employment income >$400 (Schedule C required)
+🚩 Rental property income (Schedule E required)
+🚩 Stock sales, capital gains/losses (Schedule D)
+🚩 Itemized deductions (mortgage interest, charity, medical)
+🚩 Foreign income or foreign accounts (FBAR, FATCA)
+🚩 Prior-year issues (IRS notices, audit, identity theft)
+🚩 Multiple states (part-year resident, worked in 2+ states)
+🚩 Business expenses (depreciation, home office)
+🚩 Amended return (Form 1040-X)
+
+ESCALATION TIERS
+
+TIER 1: LEAD NAVIGATOR (On-Site or Available by Phone)
+When to escalate:
+- Complex tax question beyond your knowledge
+- Software glitch or error
+- Taxpayer dispute/complaint
+- Uncertain if case is FSA-appropriate
+
+Example: "I have a taxpayer with unemployment income AND a small 1099-NEC for
+$300. Is that FSA-eligible or should they go in-person?"
+
+Lead Navigator Response: Review situation, make call, provide guidance
+
+TIER 2: SITE COORDINATOR
+When to escalate:
+- System-wide technical failure (internet down, TaxSlayer outage)
+- Taxpayer safety concern (threatening, distressed)
+- Volunteer/staff issue (navigator absent, inadequate staffing)
+- Policy question (can we serve non-Maryland residents?)
+
+Example: "All workstations lost internet - 5 taxpayers waiting. What do we do?"
+
+Coordinator Response: Emergency troubleshooting, reschedule taxpayers, IT support
+
+TIER 3: IRS/TAXSLAYER/MARYLAND VITA SUPPORT
+When to escalate:
+- Critical software bug affecting many taxpayers
+- Suspected fraud or identity theft
+- Legal/compliance question (SIDN usage, data breach)
+- Unresolved technical issue
+
+Example: "TaxSlayer is rejecting all Maryland state e-files with error code 9876."
+
+Support Response: Technical fix, workaround guidance, escalate to vendor
+
+ESCALATION DOCUMENTATION
+When escalating, provide:
+1. Taxpayer situation (no PII, just scenario description)
+2. What you tried already
+3. Why you need help (beyond your knowledge, technical issue, etc.)
+4. Urgency level (immediate, same-day, can wait)
+
+═══════════════════════════════════════════════════════════════════════════════
+SECTION 7: NAVIGATOR SELF-CARE & PROFESSIONAL DEVELOPMENT
+═══════════════════════════════════════════════════════════════════════════════
+
+AVOIDING BURNOUT
+FSA support can be emotionally taxing. Protect yourself:
+
+✓ Take Breaks: 10 minutes every hour, 30 min lunch (don't skip!)
+✓ Set Boundaries: No personal contact info to taxpayers
+✓ Debrief Tough Cases: Talk to lead navigator after stressful interactions
+✓ Rotate Tasks: Mix phone support, in-person, and quality review
+✓ Know Your Limits: It's ok to say "I need help with this" and escalate
+
+WARNING SIGNS YOU NEED A BREAK
+- Feeling irritable with taxpayers
+- Making careless mistakes
+- Dreading your shift
+- Physical exhaustion (headache, back pain)
+
+Action: Tell coordinator, reduce hours, take a day off
+
+CONTINUING EDUCATION
+Stay sharp throughout tax season:
+- Weekly team meetings: Share common issues, learn from each other
+- TaxSlayer webinars: New features, tax law changes
+- IRS VITA updates: Link & Learn, Volunteer Alerts
+- Peer shadowing: Observe experienced navigators
+
+═══════════════════════════════════════════════════════════════════════════════
+APPENDIX: QUICK REFERENCE CARDS
+═══════════════════════════════════════════════════════════════════════════════
+
+W-2 BOX CHEAT SHEET
+Box 1: Wages, tips = What you earned (taxable income)
+Box 2: Federal tax withheld = Amount sent to IRS from paychecks
+Boxes 3/5: Social Security/Medicare wages (usually same as Box 1)
+Boxes 4/6: Social Security/Medicare tax withheld
+Box 15: State (MD)
+Box 16: State wages (usually same as Box 1)
+Box 17: State tax withheld
+
+FILING STATUS DECISION TREE
+Married on Dec 31? → Yes → Married Filing Jointly (or Separately)
+                    → No ↓
+Unmarried + Qualifying Dependent + Paid >50% home? → Yes → Head of Household
+                                                    → No → Single
+
+EARNED INCOME CREDIT (EIC) ELIGIBILITY QUICK CHECK
+Must Have:
+✓ Earned income (W-2 wages, self-employment)
+✓ AGI under limit (varies by # children)
+✓ Valid SSN for self, spouse, qualifying children
+✓ U.S. citizen or resident alien all year
+✓ No foreign income
+✓ Investment income <$10,300
+
+AGI Limits (2024):
+- No children: $17,640 (single), $24,210 (married)
+- 1 child: $46,560 (single), $53,120 (married)
+- 2 children: $52,918 (single), $59,478 (married)
+- 3+ children: $56,838 (single), $63,398 (married)
+
+DIRECT DEPOSIT BANK ACCOUNT VERIFICATION
+Routing Number: 9 digits (bottom left of check, first set of numbers)
+Account Number: Varies (bottom middle of check, second set)
+Account Type: Checking vs Savings (ask taxpayer - most common is checking)
+
+Common Mistakes:
+❌ Using check number instead of account number
+❌ Transposing routing number digits
+❌ Account not in taxpayer's name (must be their own or joint)
+
+═══════════════════════════════════════════════════════════════════════════════
+CERTIFICATION & ACKNOWLEDGMENT
+═══════════════════════════════════════════════════════════════════════════════
+
+I, _________________________ (Navigator Name), have completed the FSA Navigator
+Training and understand my role in supporting taxpayers using Free Self-Assisted
+tax preparation. I commit to:
+
+☐ Guide taxpayers without preparing returns for them
+☐ Provide accurate, patient support via phone, video, and in-person
+☐ Perform quality reviews using the provided checklist
+☐ Escalate complex cases appropriately
+☐ Maintain taxpayer confidentiality and data security
+☐ Represent Maryland VITA professionally
+
+Navigator Signature: _______________________  Date: _______________
+
+Trainer: _______________________  Site: _______________
+
+═══════════════════════════════════════════════════════════════════════════════
+Questions or feedback: marylandvita@coordinator.org
+Version: v1.0 (October 2025)
+═══════════════════════════════════════════════════════════════════════════════

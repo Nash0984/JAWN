@@ -40,6 +40,7 @@ import NoticeExplainer from "@/pages/public/NoticeExplainer";
 import SimplifiedSearch from "@/pages/public/SimplifiedSearch";
 import BenefitScreener from "@/pages/public/BenefitScreener";
 import QuickScreener from "@/pages/public/QuickScreener";
+import FsaLanding from "@/pages/public/FsaLanding";
 import { CommandPalette } from "@/components/CommandPalette";
 import { PolicyChanges } from "@/pages/PolicyChanges";
 import { ComplianceAdmin } from "@/pages/ComplianceAdmin";
@@ -118,6 +119,7 @@ function Router() {
           <Route path="/public/search" component={SimplifiedSearch} />
           <Route path="/screener" component={BenefitScreener} />
           <Route path="/public/quick-screener" component={QuickScreener} />
+          <Route path="/public/fsa" component={FsaLanding} />
           
           {/* Legal Pages - Public access (no login required) */}
           <Route path="/legal" component={LegalHub} />
