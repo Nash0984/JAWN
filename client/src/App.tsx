@@ -74,6 +74,7 @@ import EvaluationFramework from "@/pages/EvaluationFramework";
 import HouseholdProfiler from "@/pages/HouseholdProfiler";
 import VitaIntake from "@/pages/VitaIntake";
 import VitaDocuments from "@/pages/VitaDocuments";
+import AppointmentsCalendar from "@/pages/AppointmentsCalendar";
 import MobileBottomNav from "@/components/MobileBottomNav";
 import { BrandingProvider } from "@/contexts/BrandingContext";
 import { CountyHeader } from "@/components/CountyHeader";
@@ -257,6 +258,13 @@ function Router() {
             {() => (
               <ProtectedRoute>
                 <VitaDocuments />
+              </ProtectedRoute>
+            )}
+          </Route>
+          <Route path="/appointments">
+            {() => (
+              <ProtectedRoute requireStaff>
+                <AppointmentsCalendar />
               </ProtectedRoute>
             )}
           </Route>
