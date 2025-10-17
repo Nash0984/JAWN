@@ -34,12 +34,20 @@ export interface ScheduleConfig {
 export class SmartScheduler {
   private intervals: Map<string, NodeJS.Timeout> = new Map();
   private readonly DEFAULT_CONGRESS = 119;
+  private configsCache: ScheduleConfig[] | null = null;
   
   /**
    * Get source-specific schedules with realistic check intervals
+   * Loads DB overrides for enabled/cronExpression on first call
    */
-  getScheduleConfigs(): ScheduleConfig[] {
-    return [
+  async getScheduleConfigs(): Promise<ScheduleConfig[]> {
+    // Return cached configs if already loaded
+    if (this.configsCache) {
+      return this.configsCache;
+    }
+
+    // Hard-coded default configurations
+    const defaultConfigs: ScheduleConfig[] = [
       {
         name: 'ecfr',
         cronExpression: '0 0 * * 0', // Weekly on Sunday at midnight
@@ -141,6 +149,37 @@ export class SmartScheduler {
         },
       },
     ];
+
+    // Load overrides from database
+    try {
+      const { db } = await import('../db');
+      const { schedulerConfigs } = await import('@shared/schema');
+      
+      const dbConfigs = await db.select().from(schedulerConfigs);
+      
+      // Merge DB overrides with defaults
+      const mergedConfigs = defaultConfigs.map(defaultConfig => {
+        const dbOverride = dbConfigs.find(dc => dc.sourceName === defaultConfig.name);
+        
+        if (dbOverride) {
+          log(`📊 Loading scheduler override for ${defaultConfig.name}: enabled=${dbOverride.isEnabled}, cron=${dbOverride.cronExpression}`);
+          return {
+            ...defaultConfig,
+            enabled: dbOverride.isEnabled,
+            cronExpression: dbOverride.cronExpression,
+          };
+        }
+        
+        return defaultConfig;
+      });
+      
+      this.configsCache = mergedConfigs;
+      return mergedConfigs;
+    } catch (error) {
+      log(`⚠️  Failed to load scheduler configs from DB, using defaults: ${error}`);
+      this.configsCache = defaultConfigs;
+      return defaultConfigs;
+    }
   }
 
   /**
@@ -215,7 +254,7 @@ export class SmartScheduler {
     log('\n📅 Starting Smart Scheduler with source-specific intervals...');
     log('════════════════════════════════════════════════════════════');
     
-    const configs = this.getScheduleConfigs();
+    const configs = await this.getScheduleConfigs();
     const inSession = this.isCongressInSession();
     const mdInSession = this.isMarylandLegislatureInSession();
     
@@ -287,7 +326,7 @@ export class SmartScheduler {
    * Manually trigger a specific source check
    */
   async triggerCheck(sourceName: string): Promise<void> {
-    const configs = this.getScheduleConfigs();
+    const configs = await this.getScheduleConfigs();
     const config = configs.find(c => c.name === sourceName);
     
     if (!config) {
@@ -301,7 +340,7 @@ export class SmartScheduler {
   /**
    * Get current schedule status
    */
-  getStatus(): {
+  async getStatus(): Promise<{
     schedules: Array<{
       name: string;
       description: string;
@@ -311,8 +350,8 @@ export class SmartScheduler {
     }>;
     activeCount: number;
     pausedCount: number;
-  } {
-    const configs = this.getScheduleConfigs();
+  }> {
+    const configs = await this.getScheduleConfigs();
     
     return {
       schedules: configs.map(c => ({
@@ -325,6 +364,131 @@ export class SmartScheduler {
       activeCount: this.intervals.size,
       pausedCount: configs.filter(c => !c.enabled).length,
     };
+  }
+
+  /**
+   * Toggle schedule on/off
+   */
+  async toggleSchedule(sourceName: string, enabled: boolean): Promise<void> {
+    // Save to database first
+    await this.saveConfig(sourceName, { isEnabled: enabled });
+    
+    // Invalidate cache to reload with new settings
+    this.configsCache = null;
+    const configs = await this.getScheduleConfigs();
+    const config = configs.find(c => c.name === sourceName);
+    
+    if (!config) {
+      throw new Error(`Unknown source: ${sourceName}`);
+    }
+    
+    if (enabled) {
+      // Start the schedule
+      const intervalMs = this.cronToMs(config.cronExpression);
+      const interval = setInterval(async () => {
+        try {
+          await config.checkFunction();
+        } catch (error) {
+          log(`❌ Scheduled check failed for ${sourceName}: ${error}`);
+        }
+      }, intervalMs);
+      
+      this.intervals.set(sourceName, interval);
+      log(`✅ Enabled schedule for ${sourceName}`);
+    } else {
+      // Stop the schedule
+      const interval = this.intervals.get(sourceName);
+      if (interval) {
+        clearInterval(interval);
+        this.intervals.delete(sourceName);
+        log(`⏸️  Disabled schedule for ${sourceName}`);
+      }
+    }
+  }
+
+  /**
+   * Update schedule frequency
+   */
+  async updateFrequency(sourceName: string, cronExpression: string): Promise<void> {
+    // Validate cron expression can be converted
+    try {
+      this.cronToMs(cronExpression);
+    } catch (error) {
+      throw new Error(`Invalid cron expression: ${cronExpression}`);
+    }
+    
+    // Save to database first
+    await this.saveConfig(sourceName, { cronExpression });
+    
+    // Invalidate cache to reload with new settings
+    this.configsCache = null;
+    const configs = await this.getScheduleConfigs();
+    const config = configs.find(c => c.name === sourceName);
+    
+    if (!config) {
+      throw new Error(`Unknown source: ${sourceName}`);
+    }
+    
+    // Restart the schedule with new frequency if enabled
+    if (config.enabled) {
+      const interval = this.intervals.get(sourceName);
+      if (interval) {
+        clearInterval(interval);
+      }
+      
+      const intervalMs = this.cronToMs(cronExpression);
+      const newInterval = setInterval(async () => {
+        try {
+          await config.checkFunction();
+        } catch (error) {
+          log(`❌ Scheduled check failed for ${sourceName}: ${error}`);
+        }
+      }, intervalMs);
+      
+      this.intervals.set(sourceName, newInterval);
+      log(`🔄 Updated frequency for ${sourceName} to ${cronExpression}`);
+    }
+  }
+
+  /**
+   * Save configuration to database
+   */
+  private async saveConfig(sourceName: string, updates: any): Promise<void> {
+    const { db } = await import('../db');
+    const { schedulerConfigs } = await import('@shared/schema');
+    const { eq } = await import('drizzle-orm');
+    
+    // Check if config exists
+    const existing = await db.select()
+      .from(schedulerConfigs)
+      .where(eq(schedulerConfigs.sourceName, sourceName))
+      .limit(1);
+    
+    if (existing.length > 0) {
+      // Update existing
+      await db.update(schedulerConfigs)
+        .set({
+          ...updates,
+          updatedAt: new Date(),
+        })
+        .where(eq(schedulerConfigs.sourceName, sourceName));
+      log(`💾 Updated scheduler config for ${sourceName}`);
+    } else {
+      // Create new - must get default config to populate initial values
+      const configs = await this.getScheduleConfigs();
+      const config = configs.find(c => c.name === sourceName);
+      if (config) {
+        await db.insert(schedulerConfigs).values({
+          sourceName: config.name,
+          displayName: config.description.split(' (')[0], // Extract display name
+          description: config.description,
+          isEnabled: config.enabled,
+          cronExpression: config.cronExpression,
+          ...updates,
+        });
+        log(`💾 Created scheduler config for ${sourceName}`);
+      }
+    }
   }
 }
 
