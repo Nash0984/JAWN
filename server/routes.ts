@@ -6,7 +6,7 @@ import { ragService } from "./services/ragService";
 import { documentProcessor } from "./services/documentProcessor";
 import { documentIngestionService } from "./services/documentIngestion";
 import { automatedIngestionService } from "./services/automatedIngestion";
-import { ObjectStorageService } from "./objectStorage";
+import { ObjectStorageService, objectStorageClient, parseObjectPath } from "./objectStorage";
 import { rulesEngine } from "./services/rulesEngine";
 import { rulesAsCodeService } from "./services/rulesAsCodeService";
 import { hybridService } from "./services/hybridService";
@@ -8099,6 +8099,417 @@ If the question cannot be answered with the available information, say so clearl
     };
 
     res.json(checklist);
+  }));
+
+  // ============================================================================
+  // TAXSLAYER-ENHANCED DOCUMENT MANAGEMENT ROUTES
+  // ============================================================================
+
+  // Simple file upload endpoint (used by VitaDocuments.tsx)
+  app.post("/api/upload", requireAuth, upload.single("file"), asyncHandler(async (req: Request, res: Response) => {
+    if (!req.file) {
+      throw validationError("No file uploaded");
+    }
+
+    const objectStorageService = new ObjectStorageService();
+    
+    // Generate unique filename
+    const timestamp = Date.now();
+    const filename = `${timestamp}_${req.file.originalname}`;
+    const objectPath = `${objectStorageService.getPrivateObjectDir()}/uploads/${filename}`;
+
+    // Upload to GCS
+    const { bucketName, objectName } = parseObjectPath(objectPath);
+    const bucket = objectStorageClient.bucket(bucketName);
+    const file = bucket.file(objectName);
+    
+    await file.save(req.file.buffer, {
+      contentType: req.file.mimetype,
+      metadata: {
+        originalName: req.file.originalname,
+        uploadedBy: req.user!.id,
+      },
+    });
+
+    res.json({
+      filename,
+      path: objectPath,
+      size: req.file.size,
+      mimeType: req.file.mimetype,
+    });
+  }));
+
+  // Batch document upload for multiple files at once
+  app.post("/api/vita-documents/batch-upload", requireAuth, upload.array("files", 10), asyncHandler(async (req: Request, res: Response) => {
+    const files = req.files as Express.Multer.File[];
+    if (!files || files.length === 0) {
+      throw validationError("No files uploaded");
+    }
+
+    const schema = z.object({
+      vitaSessionId: z.string(),
+      taxYear: z.number().optional(),
+      householdMember: z.string().optional(),
+      batchId: z.string(),
+    });
+
+    const validated = schema.parse(req.body);
+
+    // Verify session access
+    await verifyVitaSessionOwnershipAndTenant(
+      validated.vitaSessionId,
+      req.user!.id,
+      req.user!.role,
+      req.user!.tenantId
+    );
+
+    const { documentQualityValidator } = await import("./services/documentQualityValidator");
+    const { documentAuditService } = await import("./services/documentAuditService");
+    const objectStorageService = new ObjectStorageService();
+
+    const results = [];
+
+    for (const file of files) {
+      // Validate quality
+      const qualityResult = await documentQualityValidator.validateDocument(
+        file.buffer,
+        file.mimetype,
+        file.originalname
+      );
+
+      // Upload to GCS
+      const timestamp = Date.now();
+      const filename = `${timestamp}_${file.originalname}`;
+      const objectPath = `${objectStorageService.getPrivateObjectDir()}/uploads/${filename}`;
+
+      const { bucketName, objectName } = parseObjectPath(objectPath);
+      const bucket = objectStorageClient.bucket(bucketName);
+      const gcsFile = bucket.file(objectName);
+      
+      await gcsFile.save(file.buffer, {
+        contentType: file.mimetype,
+        metadata: {
+          originalName: file.originalname,
+          uploadedBy: req.user!.id,
+          batchId: validated.batchId,
+        },
+      });
+
+      // Create document record
+      const document = await storage.createDocument({
+        filename,
+        originalName: file.originalname,
+        objectPath,
+        fileSize: file.size,
+        mimeType: file.mimetype,
+        status: qualityResult.isAcceptable ? "uploaded" : "failed",
+        uploadedBy: req.user!.id,
+        qualityScore: qualityResult.qualityScore,
+      });
+
+      // Determine category from filename (basic heuristic)
+      let category = "OTHER";
+      const lowerFilename = file.originalname.toLowerCase();
+      if (lowerFilename.includes("w-2") || lowerFilename.includes("w2")) category = "W2";
+      else if (lowerFilename.includes("1099")) category = "1099_MISC";
+      else if (lowerFilename.includes("id") || lowerFilename.includes("license")) category = "ID_DOCUMENT";
+
+      // Create document request
+      const documentRequest = await storage.createVitaDocumentRequest({
+        vitaSessionId: validated.vitaSessionId,
+        category,
+        categoryLabel: category,
+        taxYear: validated.taxYear,
+        householdMember: validated.householdMember,
+        batchId: validated.batchId,
+        documentId: document.id,
+        status: qualityResult.isAcceptable ? "uploaded" : "rejected",
+        processingStatus: "complete",
+        qualityScore: qualityResult.qualityScore,
+        qualityValidation: qualityResult.validation,
+        qualityIssues: qualityResult.issues,
+        isQualityAcceptable: qualityResult.isAcceptable,
+        uploadedAt: new Date(),
+        requestedBy: req.user!.id,
+      });
+
+      // Log audit trail
+      await documentAuditService.logAction({
+        documentRequestId: documentRequest.id,
+        vitaSessionId: validated.vitaSessionId,
+        action: "uploaded",
+        userId: req.user!.id,
+        userRole: req.user!.role,
+        userName: req.user!.fullName || req.user!.username,
+        actionDetails: { batchId: validated.batchId, qualityScore: qualityResult.qualityScore },
+        ipAddress: req.ip,
+        userAgent: req.get("user-agent"),
+        objectPath,
+      });
+
+      results.push({
+        documentRequest,
+        document,
+        qualityResult,
+      });
+    }
+
+    res.json({ results, batchId: validated.batchId });
+  }));
+
+  // Replace a document with a better quality version
+  app.post("/api/vita-documents/:id/replace", requireAuth, upload.single("file"), asyncHandler(async (req: Request, res: Response) => {
+    const documentRequest = await storage.getVitaDocumentRequest(req.params.id);
+    if (!documentRequest) {
+      throw notFoundError("Document request not found");
+    }
+
+    // Verify session access
+    await verifyVitaSessionOwnershipAndTenant(
+      documentRequest.vitaSessionId,
+      req.user!.id,
+      req.user!.role,
+      req.user!.tenantId,
+      false
+    );
+
+    if (!req.file) {
+      throw validationError("No file uploaded");
+    }
+
+    const schema = z.object({
+      reason: z.enum(["poor_quality", "incomplete", "wrong_document", "updated_version"]),
+    });
+
+    const validated = schema.parse(req.body);
+
+    const { documentQualityValidator } = await import("./services/documentQualityValidator");
+    const { documentAuditService } = await import("./services/documentAuditService");
+    const objectStorageService = new ObjectStorageService();
+
+    // Validate quality
+    const qualityResult = await documentQualityValidator.validateDocument(
+      req.file.buffer,
+      req.file.mimetype,
+      req.file.originalname
+    );
+
+    // Upload new version to GCS
+    const timestamp = Date.now();
+    const filename = `${timestamp}_${req.file.originalname}`;
+    const objectPath = `${objectStorageService.getPrivateObjectDir()}/uploads/${filename}`;
+
+    const { bucketName, objectName } = parseObjectPath(objectPath);
+    const bucket = objectStorageClient.bucket(bucketName);
+    const gcsFile = bucket.file(objectName);
+    
+    await gcsFile.save(req.file.buffer, {
+      contentType: req.file.mimetype,
+      metadata: {
+        originalName: req.file.originalname,
+        uploadedBy: req.user!.id,
+        replacesDocumentId: req.params.id,
+      },
+    });
+
+    // Create new document
+    const newDocument = await storage.createDocument({
+      filename,
+      originalName: req.file.originalname,
+      objectPath,
+      fileSize: req.file.size,
+      mimeType: req.file.mimetype,
+      status: qualityResult.isAcceptable ? "uploaded" : "failed",
+      uploadedBy: req.user!.id,
+      qualityScore: qualityResult.qualityScore,
+    });
+
+    // Create new document request that replaces the old one
+    const newDocumentRequest = await storage.createVitaDocumentRequest({
+      vitaSessionId: documentRequest.vitaSessionId,
+      category: documentRequest.category,
+      categoryLabel: documentRequest.categoryLabel,
+      taxYear: documentRequest.taxYear,
+      householdMember: documentRequest.householdMember,
+      batchId: documentRequest.batchId,
+      documentId: newDocument.id,
+      replacesDocumentId: req.params.id,
+      replacementReason: validated.reason,
+      status: qualityResult.isAcceptable ? "uploaded" : "rejected",
+      processingStatus: "complete",
+      qualityScore: qualityResult.qualityScore,
+      qualityValidation: qualityResult.validation,
+      qualityIssues: qualityResult.issues,
+      isQualityAcceptable: qualityResult.isAcceptable,
+      uploadedAt: new Date(),
+      requestedBy: req.user!.id,
+    });
+
+    // Update old document request to mark it as replaced
+    await storage.updateVitaDocumentRequest(req.params.id, {
+      status: "replaced",
+      replacedByDocumentId: newDocumentRequest.id,
+    });
+
+    // Log audit trail
+    await documentAuditService.logAction({
+      documentRequestId: newDocumentRequest.id,
+      vitaSessionId: documentRequest.vitaSessionId,
+      action: "replaced",
+      userId: req.user!.id,
+      userRole: req.user!.role,
+      userName: req.user!.fullName || req.user!.username,
+      actionDetails: { replacesDocumentId: req.params.id, reason: validated.reason },
+      ipAddress: req.ip,
+      userAgent: req.get("user-agent"),
+      objectPath,
+      previousStatus: documentRequest.status,
+      newStatus: "replaced",
+      changeReason: validated.reason,
+    });
+
+    res.json({ documentRequest: newDocumentRequest, document: newDocument, qualityResult });
+  }));
+
+  // Generate secure time-limited download URL
+  app.post("/api/vita-documents/:id/secure-download", requireAuth, asyncHandler(async (req: Request, res: Response) => {
+    const documentRequest = await storage.getVitaDocumentRequest(req.params.id);
+    if (!documentRequest) {
+      throw notFoundError("Document request not found");
+    }
+
+    // Verify session access
+    await verifyVitaSessionOwnershipAndTenant(
+      documentRequest.vitaSessionId,
+      req.user!.id,
+      req.user!.role,
+      req.user!.tenantId,
+      false
+    );
+
+    if (!documentRequest.documentId) {
+      throw validationError("No document uploaded for this request");
+    }
+
+    const document = await storage.getDocument(documentRequest.documentId);
+    if (!document || !document.objectPath) {
+      throw notFoundError("Document file not found");
+    }
+
+    const objectStorageService = new ObjectStorageService();
+    const { documentAuditService } = await import("./services/documentAuditService");
+
+    // Generate signed URL (valid for 1 hour)
+    const { signedUrl, expiresAt } = await objectStorageService.generateSecureDownloadUrl(
+      document.objectPath,
+      60
+    );
+
+    // Update download tracking
+    await storage.updateVitaDocumentRequest(req.params.id, {
+      downloadCount: (documentRequest.downloadCount || 0) + 1,
+      lastDownloadedAt: new Date(),
+      lastDownloadedBy: req.user!.id,
+      secureDownloadExpiry: expiresAt,
+    });
+
+    // Log audit trail
+    await documentAuditService.logAction({
+      documentRequestId: req.params.id,
+      vitaSessionId: documentRequest.vitaSessionId,
+      action: "downloaded",
+      userId: req.user!.id,
+      userRole: req.user!.role,
+      userName: req.user!.fullName || req.user!.username,
+      ipAddress: req.ip,
+      userAgent: req.get("user-agent"),
+      objectPath: document.objectPath,
+      signedUrlGenerated: true,
+      signedUrlExpiry: expiresAt,
+    });
+
+    res.json({ signedUrl, expiresAt });
+  }));
+
+  // Get document audit trail
+  app.get("/api/vita-documents/:id/audit", requireStaff, asyncHandler(async (req: Request, res: Response) => {
+    const documentRequest = await storage.getVitaDocumentRequest(req.params.id);
+    if (!documentRequest) {
+      throw notFoundError("Document request not found");
+    }
+
+    // Verify session access
+    await verifyVitaSessionOwnershipAndTenant(
+      documentRequest.vitaSessionId,
+      req.user!.id,
+      req.user!.role,
+      req.user!.tenantId,
+      false
+    );
+
+    const { documentAuditService } = await import("./services/documentAuditService");
+    
+    const auditTrail = await documentAuditService.getDocumentAuditTrail(req.params.id);
+    const stats = await documentAuditService.getDocumentStats(req.params.id);
+
+    res.json({ auditTrail, stats });
+  }));
+
+  // Update document status (approve, reject, review)
+  app.patch("/api/vita-documents/:id/status", requireStaff, asyncHandler(async (req: Request, res: Response) => {
+    const documentRequest = await storage.getVitaDocumentRequest(req.params.id);
+    if (!documentRequest) {
+      throw notFoundError("Document request not found");
+    }
+
+    // Verify session access
+    await verifyVitaSessionOwnershipAndTenant(
+      documentRequest.vitaSessionId,
+      req.user!.id,
+      req.user!.role,
+      req.user!.tenantId,
+      false
+    );
+
+    const schema = z.object({
+      status: z.enum(["reviewed", "approved", "rejected", "included_in_return"]),
+      notes: z.string().optional(),
+    });
+
+    const validated = schema.parse(req.body);
+    const { documentAuditService } = await import("./services/documentAuditService");
+
+    const updates: Partial<any> = {
+      status: validated.status,
+      navigatorNotes: validated.notes || documentRequest.navigatorNotes,
+    };
+
+    if (validated.status === "reviewed") {
+      updates.reviewedAt = new Date();
+      updates.reviewedBy = req.user!.id;
+    } else if (validated.status === "approved") {
+      updates.approvedAt = new Date();
+      updates.approvedBy = req.user!.id;
+    }
+
+    const updated = await storage.updateVitaDocumentRequest(req.params.id, updates);
+
+    // Log audit trail
+    await documentAuditService.logAction({
+      documentRequestId: req.params.id,
+      vitaSessionId: documentRequest.vitaSessionId,
+      action: validated.status === "approved" ? "approved" : validated.status === "rejected" ? "rejected" : "modified",
+      userId: req.user!.id,
+      userRole: req.user!.role,
+      userName: req.user!.fullName || req.user!.username,
+      ipAddress: req.ip,
+      userAgent: req.get("user-agent"),
+      previousStatus: documentRequest.status,
+      newStatus: validated.status,
+      changeReason: validated.notes,
+    });
+
+    res.json(updated);
   }));
 
   // Create e-signature request (Form 8879)

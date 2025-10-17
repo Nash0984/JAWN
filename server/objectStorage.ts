@@ -237,9 +237,51 @@ export class ObjectStorageService {
       requestedPermission: requestedPermission ?? ObjectPermission.READ,
     });
   }
+
+  // Generate a time-limited signed URL for secure document downloads
+  async generateSecureDownloadUrl(
+    objectPath: string,
+    expiryMinutes: number = 60
+  ): Promise<{ signedUrl: string; expiresAt: Date }> {
+    const { bucketName, objectName } = parseObjectPath(objectPath);
+    const expiresAt = new Date(Date.now() + expiryMinutes * 60 * 1000);
+    
+    const signedUrl = await signObjectURL({
+      bucketName,
+      objectName,
+      method: "GET",
+      ttlSec: expiryMinutes * 60,
+    });
+
+    return {
+      signedUrl,
+      expiresAt,
+    };
+  }
+
+  // Generate signed URL for uploading a document
+  async generateSecureUploadUrl(
+    objectPath: string,
+    expiryMinutes: number = 15
+  ): Promise<{ signedUrl: string; expiresAt: Date }> {
+    const { bucketName, objectName } = parseObjectPath(objectPath);
+    const expiresAt = new Date(Date.now() + expiryMinutes * 60 * 1000);
+    
+    const signedUrl = await signObjectURL({
+      bucketName,
+      objectName,
+      method: "PUT",
+      ttlSec: expiryMinutes * 60,
+    });
+
+    return {
+      signedUrl,
+      expiresAt,
+    };
+  }
 }
 
-function parseObjectPath(path: string): {
+export function parseObjectPath(path: string): {
   bucketName: string;
   objectName: string;
 } {

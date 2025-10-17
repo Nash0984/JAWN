@@ -29,7 +29,11 @@ import {
   Paperclip,
   Eye,
   Loader2,
-  ChevronRight
+  ChevronRight,
+  RefreshCcw,
+  History,
+  Shield,
+  TrendingUp
 } from "lucide-react";
 
 interface DocumentCategory {
@@ -61,6 +65,10 @@ export default function VitaDocuments() {
   const [uploadingFile, setUploadingFile] = useState(false);
   const [messageText, setMessageText] = useState("");
   const [showSignatureDialog, setShowSignatureDialog] = useState(false);
+  const [showBatchUploadDialog, setShowBatchUploadDialog] = useState(false);
+  const [batchFiles, setBatchFiles] = useState<File[]>([]);
+  const [uploadingBatch, setUploadingBatch] = useState(false);
+  const [showAuditTrail, setShowAuditTrail] = useState<string | null>(null);
   
   // Check if user is staff (can trigger extraction and create signature requests)
   const isStaff = user?.role === 'staff' || user?.role === 'navigator' || user?.role === 'caseworker' || user?.role === 'admin';
@@ -158,6 +166,89 @@ export default function VitaDocuments() {
     onError: () => {
       setUploadingFile(false);
       toast({ title: "Upload failed", description: "Please try again", variant: "destructive" });
+    },
+  });
+
+  // Batch upload mutation
+  const batchUploadMutation = useMutation({
+    mutationFn: async (files: File[]) => {
+      setUploadingBatch(true);
+      const formData = new FormData();
+      files.forEach(file => formData.append("files", file));
+      formData.append("vitaSessionId", sessionId!);
+      formData.append("batchId", `batch_${Date.now()}`);
+
+      const response = await fetch("/api/vita-documents/batch-upload", {
+        method: "POST",
+        body: formData,
+      });
+
+      if (!response.ok) throw new Error("Batch upload failed");
+      return await response.json();
+    },
+    onSuccess: (data) => {
+      setUploadingBatch(false);
+      setBatchFiles([]);
+      setShowBatchUploadDialog(false);
+      queryClient.invalidateQueries({ queryKey: ["/api/vita-documents", sessionId] });
+      queryClient.invalidateQueries({ queryKey: ["/api/vita-documents", sessionId, "checklist"] });
+      
+      const acceptedCount = data.results.filter((r: any) => r.qualityResult.isAcceptable).length;
+      const rejectedCount = data.results.length - acceptedCount;
+      
+      toast({
+        title: "Batch upload complete",
+        description: `${acceptedCount} documents uploaded successfully. ${rejectedCount > 0 ? `${rejectedCount} failed quality checks.` : ""}`,
+      });
+    },
+    onError: () => {
+      setUploadingBatch(false);
+      toast({ title: "Batch upload failed", description: "Please try again", variant: "destructive" });
+    },
+  });
+
+  // Replace document mutation
+  const replaceDocumentMutation = useMutation({
+    mutationFn: async ({ requestId, file, reason }: { requestId: string; file: File; reason: string }) => {
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("reason", reason);
+
+      const response = await fetch(`/api/vita-documents/${requestId}/replace`, {
+        method: "POST",
+        body: formData,
+      });
+
+      if (!response.ok) throw new Error("Document replacement failed");
+      return await response.json();
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/vita-documents", sessionId] });
+      queryClient.invalidateQueries({ queryKey: ["/api/vita-documents", sessionId, "checklist"] });
+      
+      toast({
+        title: "Document replaced",
+        description: data.qualityResult.isAcceptable
+          ? "New document uploaded successfully"
+          : "Warning: New document failed quality checks",
+        variant: data.qualityResult.isAcceptable ? "default" : "destructive",
+      });
+    },
+  });
+
+  // Secure download mutation
+  const secureDownloadMutation = useMutation({
+    mutationFn: async (requestId: string) => {
+      const res = await apiRequest("POST", `/api/vita-documents/${requestId}/secure-download`, {});
+      return await res.json();
+    },
+    onSuccess: (data) => {
+      window.open(data.signedUrl, "_blank");
+      const expiryTime = new Date(data.expiresAt).toLocaleTimeString();
+      toast({
+        title: "Secure download link generated",
+        description: `Link expires at ${expiryTime}`,
+      });
     },
   });
 
@@ -309,6 +400,79 @@ export default function VitaDocuments() {
 
         {/* Documents Tab */}
         <TabsContent value="documents" className="space-y-4">
+          <div className="flex justify-between items-center mb-4">
+            <h2 className="text-xl font-semibold">Document Categories</h2>
+            <Dialog open={showBatchUploadDialog} onOpenChange={setShowBatchUploadDialog}>
+              <DialogTrigger asChild>
+                <Button variant="outline" data-testid="button-batch-upload">
+                  <Upload className="h-4 w-4 mr-2" />
+                  Batch Upload
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="max-w-2xl" data-testid="dialog-batch-upload">
+                <DialogHeader>
+                  <DialogTitle>Batch Document Upload</DialogTitle>
+                  <DialogDescription>
+                    Upload multiple documents at once. All files will be automatically checked for quality.
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="space-y-4">
+                  <Input
+                    type="file"
+                    multiple
+                    accept="image/*,.pdf"
+                    onChange={(e) => setBatchFiles(Array.from(e.target.files || []))}
+                    disabled={uploadingBatch}
+                    data-testid="input-batch-files"
+                  />
+                  {batchFiles.length > 0 && (
+                    <div className="border rounded-lg p-4 space-y-2">
+                      <p className="font-semibold">Selected Files ({batchFiles.length}):</p>
+                      <div className="max-h-48 overflow-y-auto space-y-1">
+                        {batchFiles.map((file, index) => (
+                          <div key={index} className="flex items-center gap-2 text-sm">
+                            <FileText className="h-4 w-4" />
+                            <span>{file.name}</span>
+                            <span className="text-muted-foreground">({(file.size / 1024).toFixed(1)} KB)</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  <div className="flex gap-2">
+                    <Button
+                      onClick={() => batchUploadMutation.mutate(batchFiles)}
+                      disabled={batchFiles.length === 0 || uploadingBatch}
+                      data-testid="button-confirm-batch-upload"
+                    >
+                      {uploadingBatch ? (
+                        <>
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                          Uploading...
+                        </>
+                      ) : (
+                        <>
+                          <Upload className="h-4 w-4 mr-2" />
+                          Upload {batchFiles.length} Files
+                        </>
+                      )}
+                    </Button>
+                    <Button
+                      variant="outline"
+                      onClick={() => {
+                        setBatchFiles([]);
+                        setShowBatchUploadDialog(false);
+                      }}
+                      disabled={uploadingBatch}
+                      data-testid="button-cancel-batch-upload"
+                    >
+                      Cancel
+                    </Button>
+                  </div>
+                </div>
+              </DialogContent>
+            </Dialog>
+          </div>
           <div className="grid gap-4">
             {DOCUMENT_CATEGORIES.map((category) => {
               const request = (documentRequests as any[]).find((r: any) => r.category === category.id);
@@ -364,17 +528,119 @@ export default function VitaDocuments() {
                         )}
                       </div>
                     ) : (
-                      <div className="space-y-2">
-                        <div className="flex items-center gap-2 text-sm text-muted-foreground" data-testid={`text-upload-info-${category.id}`}>
-                          <CheckCircle2 className="h-4 w-4 text-green-500" />
-                          Uploaded {request.uploadedAt && `on ${new Date(request.uploadedAt).toLocaleDateString()}`}
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2 text-sm text-muted-foreground" data-testid={`text-upload-info-${category.id}`}>
+                            <CheckCircle2 className="h-4 w-4 text-green-500" />
+                            Uploaded {request.uploadedAt && `on ${new Date(request.uploadedAt).toLocaleDateString()}`}
+                          </div>
+                          {request.qualityScore !== null && request.qualityScore !== undefined && (
+                            <div className="flex items-center gap-2" data-testid={`quality-score-${category.id}`}>
+                              <TrendingUp className="h-4 w-4 text-primary" />
+                              <span className={`text-sm font-semibold ${request.qualityScore >= 80 ? 'text-green-600' : request.qualityScore >= 60 ? 'text-yellow-600' : 'text-red-600'}`}>
+                                {request.qualityScore}% Quality
+                              </span>
+                            </div>
+                          )}
                         </div>
-                        {request.extractedData && (
-                          <Button variant="outline" size="sm" data-testid={`button-view-data-${category.id}`}>
-                            <Eye className="h-4 w-4 mr-2" />
-                            View Extracted Data
-                          </Button>
+                        
+                        {request.qualityIssues && request.qualityIssues.length > 0 && (
+                          <div className="bg-yellow-50 border border-yellow-200 rounded p-2">
+                            <div className="flex items-start gap-2 text-sm">
+                              <AlertCircle className="h-4 w-4 text-yellow-600 mt-0.5" />
+                              <div>
+                                <p className="font-semibold text-yellow-800">Quality Issues:</p>
+                                <ul className="list-disc list-inside text-yellow-700">
+                                  {request.qualityIssues.map((issue: string, idx: number) => (
+                                    <li key={idx}>{issue}</li>
+                                  ))}
+                                </ul>
+                              </div>
+                            </div>
+                          </div>
                         )}
+
+                        <div className="flex flex-wrap gap-2">
+                          {request.extractedData && (
+                            <Button variant="outline" size="sm" data-testid={`button-view-data-${category.id}`}>
+                              <Eye className="h-4 w-4 mr-2" />
+                              View Extracted Data
+                            </Button>
+                          )}
+                          
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => secureDownloadMutation.mutate(request.id)}
+                            disabled={secureDownloadMutation.isPending}
+                            data-testid={`button-download-${category.id}`}
+                          >
+                            <Shield className="h-4 w-4 mr-2" />
+                            Secure Download
+                          </Button>
+                          
+                          <Dialog>
+                            <DialogTrigger asChild>
+                              <Button variant="outline" size="sm" data-testid={`button-replace-${category.id}`}>
+                                <RefreshCcw className="h-4 w-4 mr-2" />
+                                Replace
+                              </Button>
+                            </DialogTrigger>
+                            <DialogContent data-testid={`dialog-replace-${category.id}`}>
+                              <DialogHeader>
+                                <DialogTitle>Replace Document</DialogTitle>
+                                <DialogDescription>
+                                  Upload a better quality version or corrected document
+                                </DialogDescription>
+                              </DialogHeader>
+                              <div className="space-y-4">
+                                <Input
+                                  type="file"
+                                  accept="image/*,.pdf"
+                                  onChange={(e) => {
+                                    const file = e.target.files?.[0];
+                                    if (file) {
+                                      replaceDocumentMutation.mutate({
+                                        requestId: request.id,
+                                        file,
+                                        reason: "updated_version",
+                                      });
+                                    }
+                                  }}
+                                  data-testid={`input-replace-${category.id}`}
+                                />
+                                <p className="text-sm text-muted-foreground">
+                                  The previous version will be archived and this new version will replace it.
+                                </p>
+                              </div>
+                            </DialogContent>
+                          </Dialog>
+                          
+                          {isStaff && (
+                            <Dialog>
+                              <DialogTrigger asChild>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => setShowAuditTrail(request.id)}
+                                  data-testid={`button-audit-${category.id}`}
+                                >
+                                  <History className="h-4 w-4 mr-2" />
+                                  Audit Trail
+                                </Button>
+                              </DialogTrigger>
+                              <DialogContent className="max-w-3xl" data-testid={`dialog-audit-${category.id}`}>
+                                <DialogHeader>
+                                  <DialogTitle>Document Audit Trail</DialogTitle>
+                                  <DialogDescription>
+                                    Complete history of document access and modifications
+                                  </DialogDescription>
+                                </DialogHeader>
+                                <DocumentAuditTrail requestId={request.id} />
+                              </DialogContent>
+                            </Dialog>
+                          )}
+                        </div>
                       </div>
                     )}
                   </CardContent>
@@ -545,6 +811,93 @@ export default function VitaDocuments() {
           </div>
         </DialogContent>
       </Dialog>
+    </div>
+  );
+}
+
+function DocumentAuditTrail({ requestId }: { requestId: string }) {
+  const { data: auditData, isLoading } = useQuery({
+    queryKey: ["/api/vita-documents", requestId, "audit"],
+    enabled: !!requestId,
+  });
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center p-8">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  const auditTrail = (auditData as any)?.auditTrail || [];
+  const stats = (auditData as any)?.stats || {};
+
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-3 gap-4">
+        <div className="bg-muted rounded-lg p-3 text-center">
+          <div className="text-2xl font-bold">{stats.totalActions || 0}</div>
+          <div className="text-xs text-muted-foreground">Total Actions</div>
+        </div>
+        <div className="bg-muted rounded-lg p-3 text-center">
+          <div className="text-2xl font-bold">{stats.downloadCount || 0}</div>
+          <div className="text-xs text-muted-foreground">Downloads</div>
+        </div>
+        <div className="bg-muted rounded-lg p-3 text-center">
+          <div className="text-2xl font-bold">{stats.uniqueUsers || 0}</div>
+          <div className="text-xs text-muted-foreground">Unique Users</div>
+        </div>
+      </div>
+
+      <Separator />
+
+      <ScrollArea className="h-[400px]">
+        <div className="space-y-3">
+          {auditTrail.length === 0 ? (
+            <div className="text-center text-muted-foreground py-8">
+              No audit trail records found
+            </div>
+          ) : (
+            auditTrail.map((record: any) => (
+              <div key={record.id} className="border rounded-lg p-3 space-y-2">
+                <div className="flex items-start justify-between">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <Badge variant="outline">{record.action}</Badge>
+                      <span className="text-sm font-semibold">{record.userName}</span>
+                    </div>
+                    <div className="text-xs text-muted-foreground">
+                      {record.userRole} • {new Date(record.timestamp).toLocaleString()}
+                    </div>
+                  </div>
+                  {record.signedUrlGenerated && (
+                    <Shield className="h-4 w-4 text-primary" />
+                  )}
+                </div>
+                
+                {record.previousStatus && record.newStatus && (
+                  <div className="text-sm">
+                    Status changed: <span className="font-mono">{record.previousStatus}</span> → <span className="font-mono">{record.newStatus}</span>
+                  </div>
+                )}
+                
+                {record.changeReason && (
+                  <div className="text-sm text-muted-foreground">
+                    Reason: {record.changeReason}
+                  </div>
+                )}
+                
+                <div className="text-xs text-muted-foreground flex items-center gap-2">
+                  <span>IP: {record.ipAddress || "N/A"}</span>
+                  {record.signedUrlExpiry && (
+                    <span>• Expires: {new Date(record.signedUrlExpiry).toLocaleTimeString()}</span>
+                  )}
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      </ScrollArea>
     </div>
   );
 }
