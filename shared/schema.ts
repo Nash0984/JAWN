@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, timestamp, jsonb, integer, boolean, uuid, real, index, date } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, timestamp, jsonb, integer, boolean, uuid, real, index, uniqueIndex, date } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
@@ -3799,6 +3799,196 @@ export const insertTaxslayerReturnSchema = createInsertSchema(taxslayerReturns).
   updatedAt: true,
 });
 
+// Taxpayer Self-Service Portal Tables
+
+// Document Requests - Navigator requests specific documents from taxpayer
+export const documentRequests = pgTable("document_requests", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  
+  // Link to VITA session
+  vitaSessionId: varchar("vita_session_id").references(() => vitaIntakeSessions.id, { onDelete: "cascade" }).notNull(),
+  
+  // Requested by (Navigator)
+  requestedBy: varchar("requested_by").references(() => users.id).notNull(),
+  
+  // Document details
+  documentType: text("document_type").notNull(), // w2, 1099-misc, proof_of_income, etc.
+  documentName: text("document_name").notNull(), // Display name for taxpayer
+  description: text("description"), // What specifically is needed and why
+  dueDate: timestamp("due_date"), // When navigator needs this by
+  
+  // Status tracking
+  status: text("status").default("pending").notNull(), // pending, fulfilled, cancelled
+  fulfilledAt: timestamp("fulfilled_at"),
+  
+  // Taxpayer response
+  uploadedDocumentId: varchar("uploaded_document_id").references(() => documents.id), // Link to uploaded document
+  taxpayerNotes: text("taxpayer_notes"), // Message from taxpayer when uploading
+  
+  // Priority and visibility
+  priority: text("priority").default("normal"), // low, normal, high, urgent
+  isVisible: boolean("is_visible").default(true), // Can be hidden after resolution
+  
+  // Audit trail
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  vitaSessionIdIdx: index("document_requests_vita_session_idx").on(table.vitaSessionId),
+  requestedByIdx: index("document_requests_requested_by_idx").on(table.requestedBy),
+  statusIdx: index("document_requests_status_idx").on(table.status),
+  dueDateIdx: index("document_requests_due_date_idx").on(table.dueDate),
+}));
+
+export type DocumentRequest = typeof documentRequests.$inferSelect;
+export type InsertDocumentRequest = typeof documentRequests.$inferInsert;
+
+export const insertDocumentRequestSchema = createInsertSchema(documentRequests).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+// Messages - Secure communication between navigator and taxpayer
+export const taxpayerMessages = pgTable("taxpayer_messages", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  
+  // Link to VITA session
+  vitaSessionId: varchar("vita_session_id").references(() => vitaIntakeSessions.id, { onDelete: "cascade" }).notNull(),
+  
+  // Message sender
+  senderId: varchar("sender_id").references(() => users.id).notNull(),
+  senderRole: text("sender_role").notNull(), // navigator, taxpayer
+  
+  // Message content
+  subject: text("subject"), // Optional subject line
+  message: text("message").notNull(), // Message body (encrypted if contains PII)
+  
+  // Threading
+  parentMessageId: varchar("parent_message_id").references(() => taxpayerMessages.id), // For replies
+  threadId: varchar("thread_id"), // Group related messages
+  
+  // Status
+  isRead: boolean("is_read").default(false),
+  readAt: timestamp("read_at"),
+  
+  // Visibility and priority
+  priority: text("priority").default("normal"), // low, normal, high, urgent
+  isSystemMessage: boolean("is_system_message").default(false), // Auto-generated messages
+  
+  // Audit trail
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  vitaSessionIdIdx: index("taxpayer_messages_vita_session_idx").on(table.vitaSessionId),
+  senderIdIdx: index("taxpayer_messages_sender_idx").on(table.senderId),
+  threadIdIdx: index("taxpayer_messages_thread_idx").on(table.threadId),
+  isReadIdx: index("taxpayer_messages_is_read_idx").on(table.isRead),
+  createdAtIdx: index("taxpayer_messages_created_at_idx").on(table.createdAt),
+}));
+
+// Message Attachments - Join table for message attachments (many-to-many)
+export const taxpayerMessageAttachments = pgTable("taxpayer_message_attachments", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  
+  // Foreign keys
+  messageId: varchar("message_id").references(() => taxpayerMessages.id, { onDelete: "cascade" }).notNull(),
+  documentId: varchar("document_id").references(() => documents.id, { onDelete: "cascade" }).notNull(),
+  
+  // Metadata
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+  messageIdIdx: index("taxpayer_message_attachments_message_idx").on(table.messageId),
+  documentIdIdx: index("taxpayer_message_attachments_document_idx").on(table.documentId),
+  // Unique constraint to prevent duplicate attachments
+  uniqueMessageDocument: uniqueIndex("taxpayer_message_attachments_unique").on(table.messageId, table.documentId),
+}));
+
+export type TaxpayerMessage = typeof taxpayerMessages.$inferSelect;
+export type InsertTaxpayerMessage = typeof taxpayerMessages.$inferInsert;
+
+export const insertTaxpayerMessageSchema = createInsertSchema(taxpayerMessages).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type TaxpayerMessageAttachment = typeof taxpayerMessageAttachments.$inferSelect;
+export type InsertTaxpayerMessageAttachment = typeof taxpayerMessageAttachments.$inferInsert;
+
+export const insertTaxpayerMessageAttachmentSchema = createInsertSchema(taxpayerMessageAttachments).omit({
+  id: true,
+  createdAt: true,
+});
+
+// E-Signatures - Legal compliance for IRS forms and consent
+export const eSignatures = pgTable("e_signatures", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  
+  // Link to VITA session or federal tax return
+  vitaSessionId: varchar("vita_session_id").references(() => vitaIntakeSessions.id, { onDelete: "cascade" }),
+  federalReturnId: varchar("federal_return_id").references(() => federalTaxReturns.id, { onDelete: "cascade" }),
+  
+  // Signer information
+  signerId: varchar("signer_id").references(() => users.id).notNull(),
+  signerName: text("signer_name").notNull(), // Full legal name as typed/signed
+  signerRole: text("signer_role").notNull(), // taxpayer, spouse, preparer, quality_reviewer
+  
+  // Form information
+  formType: text("form_type").notNull(), // irs_consent_8879, form_1040, form_13614c, quality_review, etc.
+  formName: text("form_name").notNull(), // Display name (e.g., "IRS Publication 4299 Consent")
+  formYear: integer("form_year"), // Tax year if applicable
+  
+  // Signature data
+  signatureType: text("signature_type").notNull(), // typed, drawn, uploaded
+  signatureData: text("signature_data").notNull(), // Base64 encoded image or typed text
+  
+  // Legal compliance fields (ESIGN Act requirements)
+  ipAddress: text("ip_address").notNull(), // IP address at time of signing
+  userAgent: text("user_agent").notNull(), // Browser/device info
+  geolocation: jsonb("geolocation"), // Optional GPS coordinates if available
+  
+  // Consent and disclosures
+  disclosureAccepted: boolean("disclosure_accepted").default(true).notNull(), // Must be true
+  disclosureText: text("disclosure_text").notNull(), // Full disclosure shown to signer
+  consentTimestamp: timestamp("consent_timestamp").defaultNow().notNull(), // When they consented
+  
+  // Verification
+  verificationMethod: text("verification_method"), // email, sms, knowledge_based, in_person
+  isVerified: boolean("is_verified").default(false),
+  verifiedAt: timestamp("verified_at"),
+  verifiedBy: varchar("verified_by").references(() => users.id), // Navigator who witnessed signature
+  
+  // Document attachment and integrity
+  signedDocumentId: varchar("signed_document_id").references(() => documents.id), // PDF with signature
+  documentHash: text("document_hash").notNull(), // SHA-256 hash of signed document for tamper detection (required for legal validity)
+  
+  // Audit trail and legal validity
+  isValid: boolean("is_valid").default(true), // Can be invalidated if fraud suspected
+  invalidatedAt: timestamp("invalidated_at"),
+  invalidationReason: text("invalidation_reason"),
+  
+  // Metadata
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  vitaSessionIdIdx: index("e_signatures_vita_session_idx").on(table.vitaSessionId),
+  federalReturnIdIdx: index("e_signatures_federal_return_idx").on(table.federalReturnId),
+  signerIdIdx: index("e_signatures_signer_idx").on(table.signerId),
+  formTypeIdx: index("e_signatures_form_type_idx").on(table.formType),
+  isValidIdx: index("e_signatures_is_valid_idx").on(table.isValid),
+  consentTimestampIdx: index("e_signatures_consent_timestamp_idx").on(table.consentTimestamp),
+}));
+
+export type ESignature = typeof eSignatures.$inferSelect;
+export type InsertESignature = typeof eSignatures.$inferInsert;
+
+export const insertESignatureSchema = createInsertSchema(eSignatures).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
 // Tax table relations
 export const federalTaxReturnsRelations = relations(federalTaxReturns, ({ one, many }) => ({
   scenario: one(householdScenarios, {
@@ -3855,6 +4045,71 @@ export const taxslayerReturnsRelations = relations(taxslayerReturns, ({ one }) =
   importer: one(users, {
     fields: [taxslayerReturns.importedBy],
     references: [users.id],
+  }),
+}));
+
+export const documentRequestsRelations = relations(documentRequests, ({ one }) => ({
+  vitaSession: one(vitaIntakeSessions, {
+    fields: [documentRequests.vitaSessionId],
+    references: [vitaIntakeSessions.id],
+  }),
+  requestor: one(users, {
+    fields: [documentRequests.requestedBy],
+    references: [users.id],
+  }),
+  uploadedDocument: one(documents, {
+    fields: [documentRequests.uploadedDocumentId],
+    references: [documents.id],
+  }),
+}));
+
+export const taxpayerMessagesRelations = relations(taxpayerMessages, ({ one, many }) => ({
+  vitaSession: one(vitaIntakeSessions, {
+    fields: [taxpayerMessages.vitaSessionId],
+    references: [vitaIntakeSessions.id],
+  }),
+  sender: one(users, {
+    fields: [taxpayerMessages.senderId],
+    references: [users.id],
+  }),
+  parentMessage: one(taxpayerMessages, {
+    fields: [taxpayerMessages.parentMessageId],
+    references: [taxpayerMessages.id],
+  }),
+  attachments: many(taxpayerMessageAttachments),
+}));
+
+export const taxpayerMessageAttachmentsRelations = relations(taxpayerMessageAttachments, ({ one }) => ({
+  message: one(taxpayerMessages, {
+    fields: [taxpayerMessageAttachments.messageId],
+    references: [taxpayerMessages.id],
+  }),
+  document: one(documents, {
+    fields: [taxpayerMessageAttachments.documentId],
+    references: [documents.id],
+  }),
+}));
+
+export const eSignaturesRelations = relations(eSignatures, ({ one }) => ({
+  vitaSession: one(vitaIntakeSessions, {
+    fields: [eSignatures.vitaSessionId],
+    references: [vitaIntakeSessions.id],
+  }),
+  federalReturn: one(federalTaxReturns, {
+    fields: [eSignatures.federalReturnId],
+    references: [federalTaxReturns.id],
+  }),
+  signer: one(users, {
+    fields: [eSignatures.signerId],
+    references: [users.id],
+  }),
+  verifier: one(users, {
+    fields: [eSignatures.verifiedBy],
+    references: [users.id],
+  }),
+  signedDocument: one(documents, {
+    fields: [eSignatures.signedDocumentId],
+    references: [documents.id],
   }),
 }));
 
