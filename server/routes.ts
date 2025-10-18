@@ -87,6 +87,7 @@ import {
 } from "./middleware/fileUploadSecurity";
 import { passwordSecurityService } from "./services/passwordSecurity.service";
 import { decryptVitaIntake } from "./utils/encryptedFields";
+import { demoDataService } from "./services/demoDataService";
 
 // Configure secure file uploaders for different use cases
 const documentUpload = createSecureUploader('documents', {
@@ -10527,6 +10528,112 @@ If the question cannot be answered with the available information, say so clearl
     const logs = await storage.getWebhookDeliveryLogs(id, Number(limit));
     
     res.json(logs);
+  }));
+
+  // ============================================================================
+  // DEMO DATA ENDPOINTS - For Maryland Universal Benefits-Tax Navigator Showcase
+  // ============================================================================
+
+  // Get all demo households
+  app.get('/api/demo/households', asyncHandler(async (_req: Request, res: Response) => {
+    await demoDataService.loadDemoData();
+    const households = demoDataService.getAllHouseholds();
+    res.json(households);
+  }));
+
+  // Get demo household by ID
+  app.get('/api/demo/households/:id', asyncHandler(async (req: Request, res: Response) => {
+    await demoDataService.loadDemoData();
+    const household = demoDataService.getHouseholdById(req.params.id);
+    if (!household) {
+      throw notFoundError('Household not found');
+    }
+    res.json(household);
+  }));
+
+  // Get demo benefit calculations
+  app.get('/api/demo/benefit-calculations', asyncHandler(async (req: Request, res: Response) => {
+    await demoDataService.loadDemoData();
+    const { householdId, program } = req.query;
+    const calculations = demoDataService.getBenefitCalculations(
+      householdId as string,
+      program as string
+    );
+    res.json(calculations);
+  }));
+
+  // Get demo tax returns
+  app.get('/api/demo/tax-returns', asyncHandler(async (req: Request, res: Response) => {
+    await demoDataService.loadDemoData();
+    const { householdId, taxYear } = req.query;
+    const returns = demoDataService.getTaxReturns(
+      householdId as string,
+      taxYear ? parseInt(taxYear as string) : undefined
+    );
+    res.json(returns);
+  }));
+
+  // Get demo documents
+  app.get('/api/demo/documents', asyncHandler(async (req: Request, res: Response) => {
+    await demoDataService.loadDemoData();
+    const { householdId } = req.query;
+    const documents = demoDataService.getDocuments(householdId as string);
+    res.json(documents);
+  }));
+
+  // Get demo AI conversations
+  app.get('/api/demo/ai-conversations', asyncHandler(async (req: Request, res: Response) => {
+    await demoDataService.loadDemoData();
+    const { feature, language } = req.query;
+    const conversations = demoDataService.getAIConversations(
+      feature as string,
+      language as 'en' | 'es'
+    );
+    res.json(conversations);
+  }));
+
+  // Get demo AI conversation by ID
+  app.get('/api/demo/ai-conversations/:id', asyncHandler(async (req: Request, res: Response) => {
+    await demoDataService.loadDemoData();
+    const conversation = demoDataService.getAIConversationById(req.params.id);
+    if (!conversation) {
+      throw notFoundError('Conversation not found');
+    }
+    res.json(conversation);
+  }));
+
+  // Get demo appointments
+  app.get('/api/demo/appointments', asyncHandler(async (req: Request, res: Response) => {
+    await demoDataService.loadDemoData();
+    const { householdId } = req.query;
+    const appointments = demoDataService.getAppointments(householdId as string);
+    res.json(appointments);
+  }));
+
+  // Get demo policy sources
+  app.get('/api/demo/policy-sources', asyncHandler(async (req: Request, res: Response) => {
+    await demoDataService.loadDemoData();
+    const { program, type } = req.query;
+    const sources = demoDataService.getPolicySources(
+      program as string,
+      type as string
+    );
+    res.json(sources);
+  }));
+
+  // Get demo users
+  app.get('/api/demo/users', asyncHandler(async (req: Request, res: Response) => {
+    await demoDataService.loadDemoData();
+    const { role } = req.query;
+    const users = demoDataService.getUsers(role as string);
+    res.json(users);
+  }));
+
+  // Get demo metrics
+  app.get('/api/demo/metrics', asyncHandler(async (_req: Request, res: Response) => {
+    await demoDataService.loadDemoData();
+    const metrics = demoDataService.getMetrics();
+    res.json(metrics);
   }));
 
   const httpServer = createServer(app);
