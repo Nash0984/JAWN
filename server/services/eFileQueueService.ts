@@ -2,8 +2,8 @@ import { db } from '../db';
 import { storage } from '../storage';
 import { federalTaxReturns, marylandTaxReturns } from '@shared/schema';
 import type { FederalTaxReturn, MarylandTaxReturn } from '@shared/schema';
-import { Form1040XmlGenerator } from './form1040XmlGenerator';
-import { Form502XmlGenerator } from './form502XmlGenerator';
+import { Form1040XmlGenerator, Form1040XmlOptions } from './form1040XmlGenerator';
+import { Form502XmlGenerator, Form502XmlOptions } from './form502XmlGenerator';
 import { eq, desc, and, or } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 
@@ -150,6 +150,12 @@ export class EFileQueueService {
 
         // Extract tax result (calculate totalIncome from AGI or form data)
         const totalIncome = form1040Data?.calculations?.totalIncome || federalReturn.adjustedGrossIncome || 0;
+        const refundAmount = federalReturn.refundAmount || 0;
+        
+        // Fix amount owed calculation
+        const amountOwed = refundAmount < 0 ? Math.abs(refundAmount) : 0;
+        const refund = refundAmount > 0 ? refundAmount : 0;
+        
         const taxResult = {
           totalIncome,
           adjustedGrossIncome: federalReturn.adjustedGrossIncome || 0,
@@ -162,18 +168,25 @@ export class EFileQueueService {
             itemizedDeductions: form1040Data?.deductions?.itemizedDeductions || {}
           },
           credits: form1040Data?.credits || {},
-          refundAmount: federalReturn.refundAmount || 0,
-          amountOwed: Math.abs(Math.min(federalReturn.refundAmount || 0, 0)),
-          effectiveTaxRate: form1040Data?.calculations?.effectiveTaxRate || 0
+          refundAmount: refund,
+          amountOwed: amountOwed,
+          effectiveTaxRate: form1040Data?.calculations?.effectiveTaxRate || 0,
+          // Add payment details
+          federalWithholding: form1040Data?.payments?.federalWithholding || federalReturn.wageWithholding || 0,
+          estimatedTaxPayments: form1040Data?.payments?.estimatedTaxPayments || federalReturn.estimatedTaxPayments || 0
         };
 
-        // Generate XML
+        // Generate XML with preparer information
+        const preparerInfo = form1040Data?.preparerInfo || {};
         form1040Xml = await this.form1040Generator.generateForm1040XML(
           personalInfo,
           taxInput,
           taxResult,
           {
             taxYear: federalReturn.taxYear,
+            preparerName: preparerInfo.name,
+            preparerPTIN: preparerInfo.ptin,
+            preparerEIN: preparerInfo.ein,
             softwareId: 'MD-BENEFITS-PLATFORM',
             softwareVersion: '1.0'
           }
@@ -206,7 +219,12 @@ export class EFileQueueService {
             state: form1040Data?.address?.state || '',
             zipCode: form1040Data?.address?.zipCode || '',
             county: form502Data?.countyName || marylandReturn.countyCode || '',
-            marylandResident: form502Data?.marylandResident ?? true
+            countyCode: marylandReturn.countyCode || '',
+            cityCode: form502Data?.cityCode || '',
+            marylandResident: form502Data?.marylandResident ?? true,
+            fullYearResident: form502Data?.fullYearResident ?? true,
+            partYearResident: form502Data?.partYearResident ?? false,
+            dependents: form1040Data?.dependents || []
           };
 
           const taxInput = {
@@ -229,6 +247,12 @@ export class EFileQueueService {
           };
 
           const totalIncome = form1040Data?.calculations?.totalIncome || federalReturn.adjustedGrossIncome || 0;
+          const federalRefundAmount = federalReturn.refundAmount || 0;
+          
+          // Fix amount owed calculation for federal
+          const federalAmountOwed = federalRefundAmount < 0 ? Math.abs(federalRefundAmount) : 0;
+          const federalRefund = federalRefundAmount > 0 ? federalRefundAmount : 0;
+          
           const federalTaxResult = {
             totalIncome,
             adjustedGrossIncome: federalReturn.adjustedGrossIncome || 0,
@@ -241,32 +265,57 @@ export class EFileQueueService {
               itemizedDeductions: form1040Data?.deductions?.itemizedDeductions || {}
             },
             credits: form1040Data?.credits || {},
-            refundAmount: federalReturn.refundAmount || 0,
-            amountOwed: Math.abs(Math.min(federalReturn.refundAmount || 0, 0)),
-            effectiveTaxRate: form1040Data?.calculations?.effectiveTaxRate || 0
+            refundAmount: federalRefund,
+            amountOwed: federalAmountOwed,
+            effectiveTaxRate: form1040Data?.calculations?.effectiveTaxRate || 0,
+            // Add payment details
+            federalWithholding: form1040Data?.payments?.federalWithholding || federalReturn.wageWithholding || 0,
+            estimatedTaxPayments: form1040Data?.payments?.estimatedTaxPayments || federalReturn.estimatedTaxPayments || 0
           };
 
+          // Extract Maryland tax result with all credits
+          const stateRefundAmount = marylandReturn.stateRefund || 0;
+          const stateAmountOwed = stateRefundAmount < 0 ? Math.abs(stateRefundAmount) : 0;
+          const stateRefund = stateRefundAmount > 0 ? stateRefundAmount : 0;
+          
           const marylandTaxResult = {
             marylandAGI: marylandReturn.marylandAGI || 0,
-            marylandTaxableIncome: form502Data?.taxableIncome || 0,
+            marylandTaxableIncome: marylandReturn.marylandTaxableIncome || form502Data?.taxableIncome || 0,
             stateTax: marylandReturn.marylandTax || 0,
             countyTax: marylandReturn.countyTax || 0,
             totalMarylandTax: (marylandReturn.marylandTax || 0) + (marylandReturn.countyTax || 0),
-            marylandEITC: form502Data?.credits?.eitc || 0,
-            povertyLevelCredit: form502Data?.credits?.povertyLevel || 0,
-            stateRefund: marylandReturn.stateRefund || 0,
-            stateAmountOwed: Math.abs(Math.min(marylandReturn.stateRefund || 0, 0)),
+            // Add Maryland-specific credit schedules
+            marylandEITC: form502Data?.credits?.eitc || marylandReturn.marylandEITC || 0,
+            povertyLevelCredit: form502Data?.credits?.povertyLevel || marylandReturn.povertyLevelCredit || 0,
+            propertyTaxCredit: form502Data?.credits?.propertyTax || 0,
+            rentersCredit: form502Data?.credits?.renters || 0,
+            stateRefund: stateRefund,
+            stateAmountOwed: stateAmountOwed,
             effectiveStateRate: form502Data?.effectiveStateRate || 0,
             effectiveCountyRate: form502Data?.effectiveCountyRate || 0
           };
 
+          // Extract Maryland-specific input with actual values
           const marylandInput = {
             countyCode: marylandReturn.countyCode || '',
+            cityCode: form502Data?.cityCode || '',
             localTaxRate: form502Data?.localTaxRate || 0,
             childcareExpenses: form502Data?.childcareExpenses || 0,
-            studentLoanInterest: form502Data?.studentLoanInterest || 0
+            studentLoanInterest: form502Data?.studentLoanInterest || 0,
+            // Add withholding lines
+            marylandWithholding: form502Data?.marylandWithholding || marylandReturn.marylandWithholding || 0,
+            // Maryland additions/subtractions
+            stateTaxRefund: form502Data?.stateTaxRefund || 0,
+            socialSecurityBenefits: form1040Data?.income?.socialSecurityBenefits || 0,
+            railroadRetirement: form502Data?.railroadRetirement || 0,
+            pensionIncome: form502Data?.pensionIncome || 0,
+            // Credits
+            propertyTaxPaid: form502Data?.propertyTaxPaid || 0,
+            rentPaid: form502Data?.rentPaid || 0
           };
 
+          // Add preparer information to Form 502
+          const preparerInfo = form1040Data?.preparerInfo || {};
           form502Xml = await this.form502Generator.generateForm502XML(
             personalInfo,
             taxInput,
@@ -275,6 +324,9 @@ export class EFileQueueService {
             marylandInput,
             {
               taxYear: federalReturn.taxYear,
+              preparerName: preparerInfo.name,
+              preparerPTIN: preparerInfo.ptin,
+              preparerEIN: preparerInfo.ein,
               softwareId: 'MD-BENEFITS-PLATFORM',
               softwareVersion: '1.0'
             }
@@ -573,6 +625,8 @@ export class EFileQueueService {
     }
     if (!form1040Data?.address?.zipCode) {
       errors.push({ field: 'address.zipCode', message: 'ZIP code is required', severity: 'error' });
+    } else if (!this.isValidZipCode(form1040Data.address.zipCode)) {
+      errors.push({ field: 'address.zipCode', message: 'Invalid ZIP code format (must be XXXXX or XXXXX-XXXX)', severity: 'error' });
     }
 
     // 5. Income validation (at least some income should be reported)
@@ -642,65 +696,260 @@ export class EFileQueueService {
   }
 
   /**
-   * PLACEHOLDER: Generate Form 1040 XML for IRS e-filing
+   * Generate Form 1040 XML for IRS e-filing using Form1040XmlGenerator
    * 
-   * Note: This is a simplified placeholder. Actual XML generation requires:
-   * - Complete Form1040PersonalInfo structure with all required fields
-   * - Complete TaxHouseholdInput with taxpayer, spouse, dependents
-   * - Complete TaxCalculationResult from PolicyEngine
-   * 
-   * For now, this service focuses on queue management workflow.
-   * Full XML generation will be implemented when complete tax form data is available.
+   * Extracts data from FederalTaxReturn and generates IRS MeF-compliant XML
    */
   private async generateForm1040XML(federalReturn: FederalTaxReturn): Promise<string> {
-    // Placeholder XML structure
-    const xml = `<?xml version="1.0" encoding="UTF-8"?>
-<!-- Form 1040 XML Placeholder -->
-<Return xmlns="http://www.irs.gov/efile">
-  <ReturnId>${federalReturn.id}</ReturnId>
-  <TaxYear>${federalReturn.taxYear}</TaxYear>
-  <FilingStatus>${federalReturn.filingStatus}</FilingStatus>
-  <AGI>${federalReturn.adjustedGrossIncome ?? 0}</AGI>
-  <TaxableIncome>${federalReturn.taxableIncome ?? 0}</TaxableIncome>
-  <TotalTax>${federalReturn.totalTax ?? 0}</TotalTax>
-  <RefundAmount>${federalReturn.refundAmount ?? 0}</RefundAmount>
-  <Note>This is a placeholder XML. Full implementation requires complete form data structure.</Note>
-</Return>`;
+    const form1040Data = federalReturn.form1040Data as any;
+    
+    if (!form1040Data) {
+      throw new Error('Form 1040 data is missing from federal tax return');
+    }
+    
+    // Extract personal info for XML generator
+    const personalInfo = {
+      taxpayerFirstName: form1040Data?.taxpayerInfo?.firstName || '',
+      taxpayerLastName: form1040Data?.taxpayerInfo?.lastName || '',
+      taxpayerSSN: form1040Data?.taxpayerInfo?.ssn || '',
+      spouseFirstName: form1040Data?.spouseInfo?.firstName,
+      spouseLastName: form1040Data?.spouseInfo?.lastName,
+      spouseSSN: form1040Data?.spouseInfo?.ssn,
+      streetAddress: form1040Data?.address?.street || '',
+      aptNumber: form1040Data?.address?.apt,
+      city: form1040Data?.address?.city || '',
+      state: form1040Data?.address?.state || '',
+      zipCode: form1040Data?.address?.zipCode || '',
+      dependents: form1040Data?.dependents || [],
+      virtualCurrency: form1040Data?.virtualCurrency || false,
+      taxpayerPresidentialFund: form1040Data?.taxpayerPresidentialFund,
+      spousePresidentialFund: form1040Data?.spousePresidentialFund
+    };
 
-    return xml;
+    // Extract tax input
+    const taxInput = {
+      taxYear: federalReturn.taxYear,
+      filingStatus: (federalReturn.filingStatus || 'single') as 'single' | 'married_joint' | 'married_separate' | 'head_of_household' | 'qualifying_widow',
+      stateCode: 'MD',
+      taxpayer: {
+        age: form1040Data?.taxpayerInfo?.age || 40,
+        isBlind: form1040Data?.taxpayerInfo?.isBlind,
+        isDisabled: form1040Data?.taxpayerInfo?.isDisabled
+      },
+      spouse: form1040Data?.spouseInfo ? {
+        age: form1040Data.spouseInfo.age || 40,
+        isBlind: form1040Data.spouseInfo.isBlind,
+        isDisabled: form1040Data.spouseInfo.isDisabled
+      } : undefined,
+      w2Income: form1040Data?.income?.w2Income,
+      interestIncome: form1040Data?.income?.interest,
+      dividendIncome: form1040Data?.income?.dividends,
+      iraDistributions: form1040Data?.income?.iraDistributions,
+      pensionDistributions: form1040Data?.income?.pensionDistributions,
+      socialSecurityBenefits: form1040Data?.income?.socialSecurityBenefits,
+      capitalGains: form1040Data?.income?.capitalGains,
+      unemploymentCompensation: form1040Data?.income?.unemploymentCompensation,
+      selfEmploymentIncome: form1040Data?.income?.selfEmploymentIncome,
+      standardDeduction: form1040Data?.deductions?.standardDeduction,
+      itemizedDeductions: form1040Data?.deductions?.itemizedDeductions
+    };
+
+    // Extract tax result with proper amount owed calculation
+    const totalIncome = form1040Data?.calculations?.totalIncome || federalReturn.adjustedGrossIncome || 0;
+    const refundAmount = federalReturn.refundAmount || 0;
+    
+    // Fix amount owed calculation
+    const amountOwed = refundAmount < 0 ? Math.abs(refundAmount) : 0;
+    const refund = refundAmount > 0 ? refundAmount : 0;
+    
+    const taxResult = {
+      totalIncome,
+      adjustedGrossIncome: federalReturn.adjustedGrossIncome || 0,
+      taxableIncome: federalReturn.taxableIncome || 0,
+      totalTax: federalReturn.totalTax || 0,
+      taxableSocialSecurity: form1040Data?.calculations?.taxableSocialSecurity || 0,
+      deductionBreakdown: {
+        usedStandardDeduction: form1040Data?.deductions?.usedStandardDeduction || true,
+        standardDeductionAmount: form1040Data?.deductions?.standardDeductionAmount || 0,
+        itemizedDeductions: form1040Data?.deductions?.itemizedDeductions || {}
+      },
+      credits: form1040Data?.credits || {},
+      refundAmount: refund,
+      amountOwed: amountOwed,
+      effectiveTaxRate: form1040Data?.calculations?.effectiveTaxRate || 0,
+      // Add payment details
+      federalWithholding: form1040Data?.payments?.federalWithholding || federalReturn.wageWithholding || 0,
+      estimatedTaxPayments: form1040Data?.payments?.estimatedTaxPayments || federalReturn.estimatedTaxPayments || 0
+    };
+
+    // Generate XML using Form1040XmlGenerator with preparer info
+    const preparerInfo = form1040Data?.preparerInfo || {};
+    const options: Form1040XmlOptions = {
+      taxYear: federalReturn.taxYear,
+      preparerName: preparerInfo.name,
+      preparerPTIN: preparerInfo.ptin,
+      preparerEIN: preparerInfo.ein,
+      softwareId: 'MD-BENEFITS-PLATFORM',
+      softwareVersion: '1.0'
+    };
+
+    return await this.form1040Generator.generateForm1040XML(
+      personalInfo,
+      taxInput,
+      taxResult,
+      options
+    );
   }
 
   /**
-   * PLACEHOLDER: Generate Maryland Form 502 XML for state e-filing
+   * Generate Maryland Form 502 XML for state e-filing using Form502XmlGenerator
    * 
-   * Note: This is a simplified placeholder. Actual XML generation requires:
-   * - Complete Form502PersonalInfo with county and Maryland residency info
-   * - Complete Maryland-specific input data
-   * - County-specific tax calculations
-   * 
-   * For now, this service focuses on queue management workflow.
-   * Full XML generation will be implemented when complete tax form data is available.
+   * Extracts data from FederalTaxReturn and MarylandTaxReturn and generates Maryland iFile-compliant XML
    */
   private async generateForm502XML(
     federalReturn: FederalTaxReturn,
     marylandReturn: MarylandTaxReturn
   ): Promise<string> {
-    // Placeholder XML structure
-    const xml = `<?xml version="1.0" encoding="UTF-8"?>
-<!-- Maryland Form 502 XML Placeholder -->
-<MarylandReturn xmlns="http://www.marylandtaxes.gov/ifile">
-  <ReturnId>${marylandReturn.id}</ReturnId>
-  <FederalReturnId>${federalReturn.id}</FederalReturnId>
-  <TaxYear>${federalReturn.taxYear}</TaxYear>
-  <CountyCode>${marylandReturn.countyCode}</CountyCode>
-  <MarylandAGI>${marylandReturn.marylandAGI ?? 0}</MarylandAGI>
-  <MarylandTax>${marylandReturn.marylandTax ?? 0}</MarylandTax>
-  <CountyTax>${marylandReturn.countyTax ?? 0}</CountyTax>
-  <StateRefund>${marylandReturn.stateRefund ?? 0}</StateRefund>
-  <Note>This is a placeholder XML. Full implementation requires complete form data structure.</Note>
-</MarylandReturn>`;
+    const form1040Data = federalReturn.form1040Data as any;
+    const form502Data = marylandReturn.form502Data as any;
 
-    return xml;
+    if (!form1040Data) {
+      throw new Error('Form 1040 data is missing from federal tax return');
+    }
+    if (!form502Data) {
+      throw new Error('Form 502 data is missing from Maryland tax return');
+    }
+
+    // Extract personal info for Maryland with complete residency info
+    const personalInfo = {
+      taxpayerFirstName: form1040Data?.taxpayerInfo?.firstName || '',
+      taxpayerLastName: form1040Data?.taxpayerInfo?.lastName || '',
+      taxpayerSSN: form1040Data?.taxpayerInfo?.ssn || '',
+      spouseFirstName: form1040Data?.spouseInfo?.firstName,
+      spouseLastName: form1040Data?.spouseInfo?.lastName,
+      spouseSSN: form1040Data?.spouseInfo?.ssn,
+      streetAddress: form1040Data?.address?.street || '',
+      aptNumber: form1040Data?.address?.apt,
+      city: form1040Data?.address?.city || '',
+      state: form1040Data?.address?.state || '',
+      zipCode: form1040Data?.address?.zipCode || '',
+      county: form502Data?.countyName || marylandReturn.countyCode || '',
+      countyCode: marylandReturn.countyCode || '',
+      cityCode: form502Data?.cityCode || '',
+      marylandResident: form502Data?.marylandResident ?? true,
+      fullYearResident: form502Data?.fullYearResident ?? true,
+      partYearResident: form502Data?.partYearResident ?? false,
+      dependents: form1040Data?.dependents || []
+    };
+
+    // Extract tax input
+    const taxInput = {
+      taxYear: federalReturn.taxYear,
+      filingStatus: (federalReturn.filingStatus || 'single') as 'single' | 'married_joint' | 'married_separate' | 'head_of_household' | 'qualifying_widow',
+      stateCode: 'MD',
+      taxpayer: {
+        age: form1040Data?.taxpayerInfo?.age || 40,
+        isBlind: form1040Data?.taxpayerInfo?.isBlind,
+        isDisabled: form1040Data?.taxpayerInfo?.isDisabled
+      },
+      spouse: form1040Data?.spouseInfo ? {
+        age: form1040Data.spouseInfo.age || 40,
+        isBlind: form1040Data.spouseInfo.isBlind,
+        isDisabled: form1040Data.spouseInfo.isDisabled
+      } : undefined,
+      w2Income: form1040Data?.income?.w2Income,
+      interestIncome: form1040Data?.income?.interest,
+      dividendIncome: form1040Data?.income?.dividends
+    };
+
+    // Extract federal tax result with proper amount owed calculation
+    const totalIncome = form1040Data?.calculations?.totalIncome || federalReturn.adjustedGrossIncome || 0;
+    const federalRefundAmount = federalReturn.refundAmount || 0;
+    
+    // Fix amount owed calculation for federal
+    const federalAmountOwed = federalRefundAmount < 0 ? Math.abs(federalRefundAmount) : 0;
+    const federalRefund = federalRefundAmount > 0 ? federalRefundAmount : 0;
+    
+    const federalTaxResult = {
+      totalIncome,
+      adjustedGrossIncome: federalReturn.adjustedGrossIncome || 0,
+      taxableIncome: federalReturn.taxableIncome || 0,
+      totalTax: federalReturn.totalTax || 0,
+      taxableSocialSecurity: form1040Data?.calculations?.taxableSocialSecurity || 0,
+      deductionBreakdown: {
+        usedStandardDeduction: form1040Data?.deductions?.usedStandardDeduction || true,
+        standardDeductionAmount: form1040Data?.deductions?.standardDeductionAmount || 0,
+        itemizedDeductions: form1040Data?.deductions?.itemizedDeductions || {}
+      },
+      credits: form1040Data?.credits || {},
+      refundAmount: federalRefund,
+      amountOwed: federalAmountOwed,
+      effectiveTaxRate: form1040Data?.calculations?.effectiveTaxRate || 0,
+      // Add payment details
+      federalWithholding: form1040Data?.payments?.federalWithholding || federalReturn.wageWithholding || 0,
+      estimatedTaxPayments: form1040Data?.payments?.estimatedTaxPayments || federalReturn.estimatedTaxPayments || 0
+    };
+
+    // Extract Maryland tax result with all credits and proper amount owed calculation
+    const stateRefundAmount = marylandReturn.stateRefund || 0;
+    const stateAmountOwed = stateRefundAmount < 0 ? Math.abs(stateRefundAmount) : 0;
+    const stateRefund = stateRefundAmount > 0 ? stateRefundAmount : 0;
+    
+    const marylandTaxResult = {
+      marylandAGI: marylandReturn.marylandAGI || 0,
+      marylandTaxableIncome: marylandReturn.marylandTaxableIncome || form502Data?.taxableIncome || 0,
+      stateTax: marylandReturn.marylandTax || 0,
+      countyTax: marylandReturn.countyTax || 0,
+      totalMarylandTax: (marylandReturn.marylandTax || 0) + (marylandReturn.countyTax || 0),
+      // Add Maryland-specific credit schedules
+      marylandEITC: form502Data?.credits?.eitc || marylandReturn.marylandEITC || 0,
+      povertyLevelCredit: form502Data?.credits?.povertyLevel || marylandReturn.povertyLevelCredit || 0,
+      propertyTaxCredit: form502Data?.credits?.propertyTax || 0,
+      rentersCredit: form502Data?.credits?.renters || 0,
+      stateRefund: stateRefund,
+      stateAmountOwed: stateAmountOwed,
+      effectiveStateRate: form502Data?.effectiveStateRate || 0,
+      effectiveCountyRate: form502Data?.effectiveCountyRate || 0
+    };
+
+    // Extract Maryland-specific input with actual values
+    const marylandInput = {
+      countyCode: marylandReturn.countyCode || '',
+      cityCode: form502Data?.cityCode || '',
+      localTaxRate: form502Data?.localTaxRate || 0,
+      childcareExpenses: form502Data?.childcareExpenses || 0,
+      studentLoanInterest: form502Data?.studentLoanInterest || 0,
+      // Add withholding lines
+      marylandWithholding: form502Data?.marylandWithholding || marylandReturn.marylandWithholding || 0,
+      // Maryland additions/subtractions
+      stateTaxRefund: form502Data?.stateTaxRefund || 0,
+      socialSecurityBenefits: form1040Data?.income?.socialSecurityBenefits || 0,
+      railroadRetirement: form502Data?.railroadRetirement || 0,
+      pensionIncome: form502Data?.pensionIncome || 0,
+      // Credits
+      propertyTaxPaid: form502Data?.propertyTaxPaid || 0,
+      rentPaid: form502Data?.rentPaid || 0
+    };
+
+    // Generate XML using Form502XmlGenerator with preparer info
+    const preparerInfo = form1040Data?.preparerInfo || {};
+    const options: Form502XmlOptions = {
+      taxYear: federalReturn.taxYear,
+      preparerName: preparerInfo.name,
+      preparerPTIN: preparerInfo.ptin,
+      preparerEIN: preparerInfo.ein,
+      softwareId: 'MD-BENEFITS-PLATFORM',
+      softwareVersion: '1.0'
+    };
+
+    return await this.form502Generator.generateForm502XML(
+      personalInfo,
+      taxInput,
+      federalTaxResult,
+      marylandTaxResult,
+      marylandInput,
+      options
+    );
   }
 
   /**
@@ -794,6 +1043,15 @@ export class EFileQueueService {
     if (!ssn) return false;
     const ssnPattern = /^\d{3}-\d{2}-\d{4}$/;
     return ssnPattern.test(ssn);
+  }
+
+  /**
+   * Validate and format ZIP code (XXXXX or XXXXX-XXXX)
+   */
+  private isValidZipCode(zipCode: string): boolean {
+    if (!zipCode) return false;
+    const zipPattern = /^\d{5}(-\d{4})?$/;
+    return zipPattern.test(zipCode);
   }
 }
 
