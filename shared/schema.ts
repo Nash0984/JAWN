@@ -6158,6 +6158,126 @@ export type InsertAppointment = z.infer<typeof insertAppointmentSchema>;
 export type Appointment = typeof appointments.$inferSelect;
 
 // ============================================================================
+// DOCUMENT CROSS-VALIDATION ENGINE
+// ============================================================================
+
+// Document Validation Results - Overall validation status for a VITA session
+export const documentValidationResults = pgTable("document_validation_results", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  vitaIntakeSessionId: varchar("vita_intake_session_id").references(() => vitaIntakeSessions.id, { onDelete: "cascade" }).notNull(),
+  validatedAt: timestamp("validated_at").defaultNow().notNull(),
+  overallStatus: varchar("overall_status").notNull(), // 'passed', 'warnings', 'errors'
+  totalChecks: integer("total_checks").notNull().default(0),
+  errorsFound: integer("errors_found").notNull().default(0),
+  warningsFound: integer("warnings_found").notNull().default(0),
+  summary: jsonb("summary"), // High-level validation summary: { ruleTypes: string[] }
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+  vitaSessionIdx: index("validation_results_vita_session_idx").on(table.vitaIntakeSessionId),
+  overallStatusIdx: index("validation_results_status_idx").on(table.overallStatus),
+  validatedAtIdx: index("validation_results_validated_at_idx").on(table.validatedAt),
+}));
+
+// Document Discrepancies - Individual cross-validation issues
+export const documentDiscrepancies = pgTable("document_discrepancies", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  validationResultId: varchar("validation_result_id").references(() => documentValidationResults.id, { onDelete: "cascade" }).notNull(),
+  documentId1: varchar("document_id_1").references(() => documents.id), // First document in comparison
+  documentId2: varchar("document_id_2").references(() => documents.id), // Second document (if applicable)
+  taxDocumentId1: varchar("tax_document_id_1").references(() => taxDocuments.id), // For tax-specific documents
+  taxDocumentId2: varchar("tax_document_id_2").references(() => taxDocuments.id), // For tax-specific documents
+  fieldKey: varchar("field_key").notNull(), // e.g., 'employer_name', 'ssn', 'total_wages'
+  expectedValue: text("expected_value"),
+  actualValue: text("actual_value"),
+  severity: varchar("severity").notNull(), // 'error', 'warning', 'info'
+  rationale: text("rationale"), // Explanation of why this is a discrepancy
+  ruleType: varchar("rule_type"), // e.g., 'W2_PAYSTUB_WAGES', 'W2_SSN_CONSISTENCY'
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+  validationResultIdx: index("discrepancies_validation_result_idx").on(table.validationResultId),
+  severityIdx: index("discrepancies_severity_idx").on(table.severity),
+  ruleTypeIdx: index("discrepancies_rule_type_idx").on(table.ruleType),
+  documentId1Idx: index("discrepancies_document_id1_idx").on(table.documentId1),
+}));
+
+// Relations
+export const documentValidationResultsRelations = relations(documentValidationResults, ({ one, many }) => ({
+  vitaIntakeSession: one(vitaIntakeSessions, {
+    fields: [documentValidationResults.vitaIntakeSessionId],
+    references: [vitaIntakeSessions.id],
+  }),
+  discrepancies: many(documentDiscrepancies),
+}));
+
+export const documentDiscrepanciesRelations = relations(documentDiscrepancies, ({ one }) => ({
+  validationResult: one(documentValidationResults, {
+    fields: [documentDiscrepancies.validationResultId],
+    references: [documentValidationResults.id],
+  }),
+  document1: one(documents, {
+    fields: [documentDiscrepancies.documentId1],
+    references: [documents.id],
+  }),
+  document2: one(documents, {
+    fields: [documentDiscrepancies.documentId2],
+    references: [documents.id],
+  }),
+  taxDocument1: one(taxDocuments, {
+    fields: [documentDiscrepancies.taxDocumentId1],
+    references: [taxDocuments.id],
+  }),
+  taxDocument2: one(taxDocuments, {
+    fields: [documentDiscrepancies.taxDocumentId2],
+    references: [taxDocuments.id],
+  }),
+}));
+
+// Types
+export type DocumentValidationResult = typeof documentValidationResults.$inferSelect;
+export type InsertDocumentValidationResult = typeof documentValidationResults.$inferInsert;
+export type DocumentDiscrepancy = typeof documentDiscrepancies.$inferSelect;
+export type InsertDocumentDiscrepancy = typeof documentDiscrepancies.$inferInsert;
+
+// Insert schemas
+export const insertDocumentValidationResultSchema = createInsertSchema(documentValidationResults).omit({
+  id: true,
+  createdAt: true,
+  validatedAt: true,
+});
+
+export const insertDocumentDiscrepancySchema = createInsertSchema(documentDiscrepancies).omit({
+  id: true,
+  createdAt: true,
+});
+
+// Zod schemas for cross-validation results
+export const discrepancySchema = z.object({
+  fieldKey: z.string(),
+  expectedValue: z.string().optional(),
+  actualValue: z.string().optional(),
+  severity: z.enum(['error', 'warning', 'info']),
+  rationale: z.string(),
+  ruleType: z.string(),
+  documentId1: z.string().optional(),
+  documentId2: z.string().optional(),
+  taxDocumentId1: z.string().optional(),
+  taxDocumentId2: z.string().optional(),
+});
+
+export const crossValidationResultSchema = z.object({
+  status: z.enum(['completed', 'skipped', 'failed']),
+  validationResultId: z.string().optional(),
+  errorsFound: z.number().optional(),
+  warningsFound: z.number().optional(),
+  overallStatus: z.enum(['passed', 'warnings', 'errors']).optional(),
+  reason: z.string().optional(),
+  error: z.string().optional(),
+});
+
+export type Discrepancy = z.infer<typeof discrepancySchema>;
+export type CrossValidationResult = z.infer<typeof crossValidationResultSchema>;
+
+// ============================================================================
 // DOCUMENT QUALITY ANALYZER SCHEMAS
 // ============================================================================
 
