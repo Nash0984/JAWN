@@ -12,7 +12,7 @@ import { Switch } from "@/components/ui/switch";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Plus, Search, RefreshCw, Settings as SettingsIcon } from "lucide-react";
-import { useNavigate } from "wouter";
+import { useLocation } from "wouter";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { SyncJobReviewTable } from "@/components/admin/SyncJobReviewTable";
@@ -22,7 +22,7 @@ import { ContentAnalyticsDashboard } from "@/components/admin/ContentAnalyticsDa
 import type { ContentSyncJob, DynamicNotificationTemplate, GeneratedNotification } from "@shared/schema";
 
 export default function AdminContentDashboard() {
-  const [, navigate] = useNavigate();
+  const [, navigate] = useLocation();
   const { toast } = useToast();
   const [activeTab, setActiveTab] = useState("sync-jobs");
   const [jobStatusFilter, setJobStatusFilter] = useState<string>("all");
