@@ -11,7 +11,7 @@ export const users = pgTable("users", {
   email: text("email"),
   fullName: text("full_name"),
   phone: text("phone"),
-  role: text("role").notNull().default("client"), // client, navigator, caseworker, admin, super_admin
+  role: text("role").notNull().default("client"), // client, navigator, caseworker, admin, super_admin, translator, reviewer
   // Multi-tenant isolation
   tenantId: varchar("tenant_id").references((): any => tenants.id), // References tenant for data isolation
   // Maryland DHS staff fields
