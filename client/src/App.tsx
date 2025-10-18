@@ -90,6 +90,7 @@ import { TenantProvider } from "@/contexts/TenantContext";
 import { TenantThemeProvider } from "@/components/TenantThemeProvider";
 import Footer from "@/components/Footer";
 import Demo from "@/pages/Demo";
+import APIExplorer from "@/pages/APIExplorer";
 
 function Router() {
   const [location] = useLocation();
@@ -123,6 +124,9 @@ function Router() {
           
           {/* Demo Dashboard - Public access (no login required) */}
           <Route path="/demo" component={Demo} />
+          
+          {/* API Explorer - Public access (no login required) */}
+          <Route path="/api-explorer" component={APIExplorer} />
           
           {/* Public Portal - No login required */}
           <Route path="/public/documents" component={DocumentChecklist} />
