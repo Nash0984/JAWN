@@ -7171,3 +7171,383 @@ export type FaqArticle = typeof faqArticles.$inferSelect;
 
 export type InsertFaqReview = z.infer<typeof insertFaqReviewSchema>;
 export type FaqReview = typeof faqReviews.$inferSelect;
+
+// ============================================================================
+// LIVING POLICY MANUAL & DYNAMIC NOTIFICATION SYSTEM
+// Transforms 25 golden policy sources into browseable ebook-style manual
+// Auto-updates official forms/notices when Rules as Code changes
+// ============================================================================
+
+// Policy Manual Chapters - Top-level organization of policy sources
+export const policyManualChapters = pgTable("policy_manual_chapters", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  chapterNumber: integer("chapter_number").notNull().unique(),
+  title: text("title").notNull(), // e.g., "Chapter 1: SNAP Eligibility and Benefits"
+  program: text("program").notNull(), // SNAP, Medicaid, TANF, OHEP, Tax, VITA
+  description: text("description"), // Chapter overview
+  sortOrder: integer("sort_order").notNull(),
+  isActive: boolean("is_active").default(true).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  programIdx: index("policy_manual_chapters_program_idx").on(table.program),
+  chapterNumberIdx: index("policy_manual_chapters_number_idx").on(table.chapterNumber),
+}));
+
+// Policy Manual Sections - Sections within chapters, derived from policy sources
+export const policyManualSections = pgTable("policy_manual_sections", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  chapterId: varchar("chapter_id").references(() => policyManualChapters.id, { onDelete: "cascade" }).notNull(),
+  sectionNumber: text("section_number").notNull(), // e.g., "1.1", "1.2.3"
+  title: text("title").notNull(),
+  content: text("content").notNull(), // Full markdown/HTML content
+  policySourceId: varchar("policy_source_id").references(() => policySources.id), // Link to golden source
+  
+  // Citation tracking
+  legalCitation: text("legal_citation"), // e.g., "7 CFR § 273.9"
+  effectiveDate: timestamp("effective_date"),
+  sourceUrl: text("source_url"),
+  
+  // Content metadata
+  keywords: text("keywords").array(), // For search
+  relatedSectionIds: text("related_section_ids").array(), // Cross-references
+  rulesAsCodeReference: text("rules_as_code_reference"), // Link to RaC implementation file
+  
+  // Page numbering for ebook-style display
+  pageNumber: integer("page_number"),
+  pageNumberEnd: integer("page_number_end"), // If section spans multiple pages
+  
+  sortOrder: integer("sort_order").notNull(),
+  isActive: boolean("is_active").default(true).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  chapterIdx: index("policy_manual_sections_chapter_idx").on(table.chapterId),
+  policySourceIdx: index("policy_manual_sections_source_idx").on(table.policySourceId),
+  pageNumberIdx: index("policy_manual_sections_page_idx").on(table.pageNumber),
+}));
+
+// Policy Glossary Terms - Centralized definitions across all programs
+export const policyGlossaryTerms = pgTable("policy_glossary_terms", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  term: text("term").notNull().unique(),
+  definition: text("definition").notNull(),
+  program: text("program"), // If term is program-specific, null = universal
+  legalCitation: text("legal_citation"), // Source regulation
+  relatedTerms: text("related_terms").array(), // IDs of related glossary terms
+  acronym: text("acronym"), // e.g., "SNAP" for Supplemental Nutrition Assistance Program
+  examples: text("examples").array(), // Usage examples
+  category: text("category"), // eligibility, income, deduction, benefit, etc.
+  sortOrder: integer("sort_order").default(0),
+  isActive: boolean("is_active").default(true).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  termIdx: index("policy_glossary_terms_term_idx").on(table.term),
+  programIdx: index("policy_glossary_terms_program_idx").on(table.program),
+  categoryIdx: index("policy_glossary_terms_category_idx").on(table.category),
+}));
+
+// Dynamic Notification Templates - Auto-updating official notices
+export const dynamicNotificationTemplates = pgTable("dynamic_notification_templates", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  templateCode: text("template_code").notNull().unique(), // e.g., "SNAP_APPROVAL", "TANF_DENIAL"
+  templateName: text("template_name").notNull(),
+  program: text("program").notNull(), // SNAP, Medicaid, TANF, OHEP, Tax, VITA
+  noticeType: text("notice_type").notNull(), // approval, denial, renewal, change, reminder, etc.
+  
+  // Content structure - each component can pull from RaC
+  headerContent: text("header_content"), // Static header text
+  bodyTemplate: text("body_template").notNull(), // Template with {{variables}}
+  footerContent: text("footer_content"), // Static footer text
+  
+  // Dynamic content rules - maps to RaC data
+  contentRules: jsonb("content_rules").notNull(), // JSON mapping of variables to RaC sources
+  // Example: {"benefitAmount": {"source": "rulesEngine.calculateSNAPBenefit", "params": ["householdSize", "income"]}}
+  
+  // Compliance & legal
+  requiredDisclosures: text("required_disclosures").array(), // Legal disclaimers
+  appealRightsTemplate: text("appeal_rights_template"), // Standard appeal language
+  legalCitations: text("legal_citations").array(), // Policy sources cited
+  
+  // Versioning - track changes when RaC updates
+  version: integer("version").notNull().default(1),
+  effectiveDate: timestamp("effective_date").notNull(),
+  expirationDate: timestamp("expiration_date"),
+  
+  // Channels
+  deliveryChannels: text("delivery_channels").array().notNull(), // email, sms, mail, portal
+  
+  isActive: boolean("is_active").default(true).notNull(),
+  createdBy: varchar("created_by").references(() => users.id),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  programIdx: index("dynamic_notification_templates_program_idx").on(table.program),
+  templateCodeIdx: index("dynamic_notification_templates_code_idx").on(table.templateCode),
+  noticeTypeIdx: index("dynamic_notification_templates_type_idx").on(table.noticeType),
+}));
+
+// Form Component Library - Modular building blocks for official documents
+export const formComponents = pgTable("form_components", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  componentCode: text("component_code").notNull().unique(), // e.g., "ELIGIBILITY_SECTION", "BENEFIT_CALC"
+  componentName: text("component_name").notNull(),
+  componentType: text("component_type").notNull(), // header, section, table, calculation, signature, footer
+  program: text("program"), // If program-specific, null = universal
+  
+  // Content
+  templateContent: text("template_content").notNull(), // HTML/Markdown template
+  contentRules: jsonb("content_rules"), // Maps variables to RaC sources
+  
+  // Styling & formatting
+  cssClasses: text("css_classes"), // CSS for rendering
+  printFormatting: jsonb("print_formatting"), // Page breaks, margins, etc.
+  
+  // Reusability
+  tags: text("tags").array(), // eligibility, income, deduction, benefit, appeal
+  usageCount: integer("usage_count").default(0), // Track popularity
+  
+  isActive: boolean("is_active").default(true).notNull(),
+  createdBy: varchar("created_by").references(() => users.id),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  componentCodeIdx: index("form_components_code_idx").on(table.componentCode),
+  componentTypeIdx: index("form_components_type_idx").on(table.componentType),
+  programIdx: index("form_components_program_idx").on(table.program),
+}));
+
+// Content Rules Mapping - Links RaC changes to affected content
+export const contentRulesMapping = pgTable("content_rules_mapping", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  rulesEngineTable: text("rules_engine_table").notNull(), // e.g., "snap_income_limits", "tax_brackets"
+  rulesEngineField: text("rules_engine_field"), // Specific field, null = entire table
+  
+  // Affected content
+  affectedContentType: text("affected_content_type").notNull(), // notification_template, form_component, glossary_term, manual_section
+  affectedContentId: varchar("affected_content_id").notNull(), // ID of affected item
+  
+  // Mapping details
+  mappingPath: text("mapping_path").notNull(), // JSON path to specific content variable
+  transformFunction: text("transform_function"), // Optional: how to format RaC data for display
+  
+  // Auto-update behavior
+  autoRegenerate: boolean("auto_regenerate").default(true).notNull(), // Auto-update or require review
+  requiresApproval: boolean("requires_approval").default(false), // Admin must approve before publishing
+  
+  // Tracking
+  lastSyncedAt: timestamp("last_synced_at"),
+  syncStatus: text("sync_status").default("synced"), // synced, pending, failed, requires_review
+  
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  rulesEngineTableIdx: index("content_rules_mapping_table_idx").on(table.rulesEngineTable),
+  affectedContentIdx: index("content_rules_mapping_content_idx").on(table.affectedContentType, table.affectedContentId),
+  syncStatusIdx: index("content_rules_mapping_sync_idx").on(table.syncStatus),
+}));
+
+// Generated Notifications - Audit trail of all auto-generated notices
+export const generatedNotifications = pgTable("generated_notifications", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  templateId: varchar("template_id").references(() => dynamicNotificationTemplates.id).notNull(),
+  recipientId: varchar("recipient_id").references(() => users.id),
+  householdId: varchar("household_id").references(() => householdProfiles.id),
+  
+  // Generated content
+  generatedContent: text("generated_content").notNull(), // Final rendered content
+  generatedFormat: text("generated_format").notNull(), // html, pdf, txt
+  
+  // Data used for generation
+  contextData: jsonb("context_data").notNull(), // All variables used in template
+  racVersion: text("rac_version"), // Version of RaC rules used
+  policySourceVersions: jsonb("policy_source_versions"), // Versions of policy sources
+  
+  // Delivery
+  deliveryChannel: text("delivery_channel").notNull(), // email, sms, mail, portal
+  deliveryStatus: text("delivery_status").default("pending"), // pending, sent, delivered, failed
+  sentAt: timestamp("sent_at"),
+  deliveredAt: timestamp("delivered_at"),
+  
+  // Audit trail
+  generatedBy: varchar("generated_by").references(() => users.id),
+  generatedAt: timestamp("generated_at").defaultNow().notNull(),
+  approvedBy: varchar("approved_by").references(() => users.id),
+  approvedAt: timestamp("approved_at"),
+  
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+  templateIdx: index("generated_notifications_template_idx").on(table.templateId),
+  recipientIdx: index("generated_notifications_recipient_idx").on(table.recipientId),
+  householdIdx: index("generated_notifications_household_idx").on(table.householdId),
+  deliveryStatusIdx: index("generated_notifications_delivery_idx").on(table.deliveryStatus),
+}));
+
+// Policy Manual Version History - Track changes to manual content
+export const policyManualVersions = pgTable("policy_manual_versions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  sectionId: varchar("section_id").references(() => policyManualSections.id, { onDelete: "cascade" }).notNull(),
+  versionNumber: integer("version_number").notNull(),
+  
+  // Change tracking
+  changeType: text("change_type").notNull(), // content_update, citation_correction, formatting, new_section
+  changeSummary: text("change_summary").notNull(),
+  changedBy: varchar("changed_by").references(() => users.id),
+  changeReason: text("change_reason"), // Link to policy change or RaC update
+  
+  // Content snapshot
+  previousContent: text("previous_content"),
+  newContent: text("new_content").notNull(),
+  
+  // Effective dates
+  effectiveDate: timestamp("effective_date").notNull(),
+  publishedAt: timestamp("published_at"),
+  
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+  sectionIdx: index("policy_manual_versions_section_idx").on(table.sectionId),
+  effectiveDateIdx: index("policy_manual_versions_effective_idx").on(table.effectiveDate),
+}));
+
+// Relations
+export const policyManualChaptersRelations = relations(policyManualChapters, ({ many }) => ({
+  sections: many(policyManualSections),
+}));
+
+export const policyManualSectionsRelations = relations(policyManualSections, ({ one, many }) => ({
+  chapter: one(policyManualChapters, {
+    fields: [policyManualSections.chapterId],
+    references: [policyManualChapters.id],
+  }),
+  policySource: one(policySources, {
+    fields: [policyManualSections.policySourceId],
+    references: [policySources.id],
+  }),
+  versions: many(policyManualVersions),
+}));
+
+export const policyGlossaryTermsRelations = relations(policyGlossaryTerms, ({ many }) => ({
+  // Could add usage tracking here if needed
+}));
+
+export const dynamicNotificationTemplatesRelations = relations(dynamicNotificationTemplates, ({ one, many }) => ({
+  creator: one(users, {
+    fields: [dynamicNotificationTemplates.createdBy],
+    references: [users.id],
+  }),
+  generatedNotifications: many(generatedNotifications),
+}));
+
+export const formComponentsRelations = relations(formComponents, ({ one }) => ({
+  creator: one(users, {
+    fields: [formComponents.createdBy],
+    references: [users.id],
+  }),
+}));
+
+export const generatedNotificationsRelations = relations(generatedNotifications, ({ one }) => ({
+  template: one(dynamicNotificationTemplates, {
+    fields: [generatedNotifications.templateId],
+    references: [dynamicNotificationTemplates.id],
+  }),
+  recipient: one(users, {
+    fields: [generatedNotifications.recipientId],
+    references: [users.id],
+  }),
+  household: one(householdProfiles, {
+    fields: [generatedNotifications.householdId],
+    references: [householdProfiles.id],
+  }),
+  generator: one(users, {
+    fields: [generatedNotifications.generatedBy],
+    references: [users.id],
+  }),
+  approver: one(users, {
+    fields: [generatedNotifications.approvedBy],
+    references: [users.id],
+  }),
+}));
+
+export const policyManualVersionsRelations = relations(policyManualVersions, ({ one }) => ({
+  section: one(policyManualSections, {
+    fields: [policyManualVersions.sectionId],
+    references: [policyManualSections.id],
+  }),
+  changedByUser: one(users, {
+    fields: [policyManualVersions.changedBy],
+    references: [users.id],
+  }),
+}));
+
+// Insert schemas
+export const insertPolicyManualChapterSchema = createInsertSchema(policyManualChapters).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertPolicyManualSectionSchema = createInsertSchema(policyManualSections).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertPolicyGlossaryTermSchema = createInsertSchema(policyGlossaryTerms).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertDynamicNotificationTemplateSchema = createInsertSchema(dynamicNotificationTemplates).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertFormComponentSchema = createInsertSchema(formComponents).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertContentRulesMappingSchema = createInsertSchema(contentRulesMapping).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertGeneratedNotificationSchema = createInsertSchema(generatedNotifications).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertPolicyManualVersionSchema = createInsertSchema(policyManualVersions).omit({
+  id: true,
+  createdAt: true,
+});
+
+// Types
+export type InsertPolicyManualChapter = z.infer<typeof insertPolicyManualChapterSchema>;
+export type PolicyManualChapter = typeof policyManualChapters.$inferSelect;
+
+export type InsertPolicyManualSection = z.infer<typeof insertPolicyManualSectionSchema>;
+export type PolicyManualSection = typeof policyManualSections.$inferSelect;
+
+export type InsertPolicyGlossaryTerm = z.infer<typeof insertPolicyGlossaryTermSchema>;
+export type PolicyGlossaryTerm = typeof policyGlossaryTerms.$inferSelect;
+
+export type InsertDynamicNotificationTemplate = z.infer<typeof insertDynamicNotificationTemplateSchema>;
+export type DynamicNotificationTemplate = typeof dynamicNotificationTemplates.$inferSelect;
+
+export type InsertFormComponent = z.infer<typeof insertFormComponentSchema>;
+export type FormComponent = typeof formComponents.$inferSelect;
+
+export type InsertContentRulesMapping = z.infer<typeof insertContentRulesMappingSchema>;
+export type ContentRulesMapping = typeof contentRulesMapping.$inferSelect;
+
+export type InsertGeneratedNotification = z.infer<typeof insertGeneratedNotificationSchema>;
+export type GeneratedNotification = typeof generatedNotifications.$inferSelect;
+
+export type InsertPolicyManualVersion = z.infer<typeof insertPolicyManualVersionSchema>;
+export type PolicyManualVersion = typeof policyManualVersions.$inferSelect;

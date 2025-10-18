@@ -45,7 +45,7 @@ export default function Navigation() {
     { name: "My QC Cockpit", href: "/caseworker/cockpit", icon: Activity, roles: ["caseworker", "admin", "super_admin"] },
     { name: "QC Command Center", href: "/supervisor/cockpit", icon: LayoutDashboard, roles: ["admin", "super_admin"] },
     { name: "Productivity Analytics", href: "/productivity", icon: TrendingUp, roles: ["navigator", "caseworker", "admin", "super_admin"] },
-    { name: "Policy Manual", href: "/manual", icon: BookOpen, roles: ["client", "navigator", "caseworker", "admin", "super_admin"] },
+    { name: "Policy Manual", href: "/policy-manual", icon: BookOpen, roles: ["client", "navigator", "caseworker", "admin", "super_admin"] },
     { name: "Translation Management", href: "/translations", icon: Languages, roles: ["translator", "reviewer", "admin", "super_admin"] },
     { name: "FAQ", href: "/faq", icon: HelpCircle, roles: ["public", "client", "navigator", "caseworker", "admin", "super_admin"] },
     { name: "Suggestions", href: "/suggestions", icon: Star, roles: ["client", "navigator", "caseworker", "admin", "super_admin"] },
