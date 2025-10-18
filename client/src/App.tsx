@@ -93,6 +93,11 @@ import Footer from "@/components/Footer";
 import Demo from "@/pages/Demo";
 import APIExplorer from "@/pages/APIExplorer";
 import TranslationDashboard from "@/pages/TranslationDashboard";
+import FeedbackDashboard from "@/pages/FeedbackDashboard";
+import FeedbackDetailView from "@/pages/FeedbackDetailView";
+import SuggestionVotingList from "@/pages/SuggestionVotingList";
+import FAQDashboard from "@/pages/FAQDashboard";
+import FAQPublicView from "@/pages/FAQPublicView";
 
 function Router() {
   const [location] = useLocation();
@@ -137,6 +142,9 @@ function Router() {
           <Route path="/screener" component={BenefitScreener} />
           <Route path="/public/quick-screener" component={QuickScreener} />
           <Route path="/public/fsa" component={FsaLanding} />
+          
+          {/* FAQ - Public access (no login required) */}
+          <Route path="/faq" component={FAQPublicView} />
           
           {/* Legal Pages - Public access (no login required) */}
           <Route path="/legal" component={LegalHub} />
