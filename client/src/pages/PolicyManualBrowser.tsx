@@ -21,10 +21,14 @@ import {
   ExternalLink,
   Code,
   FileText,
-  BookOpen
+  BookOpen,
+  Filter,
+  History
 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import { Helmet } from "react-helmet-async";
+import AdvancedSearchPanel from "@/components/policy/AdvancedSearchPanel";
+import VersionHistoryTimeline from "@/components/policy/VersionHistoryTimeline";
 
 interface Chapter {
   id: string;
@@ -78,6 +82,8 @@ export default function PolicyManualBrowser() {
   const [searchActive, setSearchActive] = useState(false);
   const [fontSize, setFontSize] = useState(16);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const [advancedSearchOpen, setAdvancedSearchOpen] = useState(false);
+  const [versionHistoryOpen, setVersionHistoryOpen] = useState(false);
 
   const { data: chapters, isLoading: chaptersLoading } = useQuery<Chapter[]>({
     queryKey: ['/api/policy-manual/chapters'],
@@ -360,6 +366,30 @@ export default function PolicyManualBrowser() {
             </div>
 
             <div className="flex items-center gap-2">
+              <Sheet open={advancedSearchOpen} onOpenChange={setAdvancedSearchOpen}>
+                <SheetTrigger asChild>
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    className="gap-2"
+                    data-testid="button-advanced-search"
+                  >
+                    <Filter className="h-4 w-4" />
+                    <span className="hidden sm:inline">Advanced Search</span>
+                  </Button>
+                </SheetTrigger>
+                <SheetContent side="right" className="w-full sm:w-[500px] p-0">
+                  <AdvancedSearchPanel 
+                    onSelectSection={(sectionId) => {
+                      setSelectedSectionId(sectionId);
+                      setAdvancedSearchOpen(false);
+                    }} 
+                  />
+                </SheetContent>
+              </Sheet>
+              
+              <Separator orientation="vertical" className="h-6" />
+              
               <Button
                 variant="ghost"
                 size="sm"
@@ -465,8 +495,8 @@ export default function PolicyManualBrowser() {
                 ) : selectedSection ? (
                   <Card>
                     <CardHeader>
-                      <div className="flex items-start justify-between">
-                        <div className="space-y-1">
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="space-y-1 flex-1">
                           <div className="flex items-center gap-2">
                             <Badge variant="outline">{selectedSection.program}</Badge>
                             {selectedSection.pageNumber && (
@@ -485,6 +515,26 @@ export default function PolicyManualBrowser() {
                             {selectedSection.chapterTitle}
                           </p>
                         </div>
+                        <Sheet open={versionHistoryOpen} onOpenChange={setVersionHistoryOpen}>
+                          <SheetTrigger asChild>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="shrink-0"
+                              data-testid="button-version-history"
+                            >
+                              <History className="h-4 w-4 mr-2" />
+                              History
+                            </Button>
+                          </SheetTrigger>
+                          <SheetContent side="right" className="w-full sm:w-[500px] p-0">
+                            <VersionHistoryTimeline
+                              sectionId={selectedSection.id}
+                              sectionTitle={`${selectedSection.sectionNumber} ${selectedSection.title}`}
+                              currentContent={selectedSection.content}
+                            />
+                          </SheetContent>
+                        </Sheet>
                       </div>
                     </CardHeader>
                     <CardContent>

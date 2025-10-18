@@ -99,6 +99,8 @@ import SuggestionVotingList from "@/pages/SuggestionVotingList";
 import FAQDashboard from "@/pages/FAQDashboard";
 import FAQPublicView from "@/pages/FAQPublicView";
 import PolicyManualBrowser from "@/pages/PolicyManualBrowser";
+import FormBuilderPage from "@/pages/FormBuilderPage";
+import AdminContentDashboard from "@/pages/AdminContentDashboard";
 
 function Router() {
   const [location] = useLocation();
@@ -577,6 +579,20 @@ function Router() {
             {() => (
               <ProtectedRoute requireAdmin>
                 <WebhookManagement />
+              </ProtectedRoute>
+            )}
+          </Route>
+          <Route path="/admin/content-dashboard">
+            {() => (
+              <ProtectedRoute requireAdmin>
+                <AdminContentDashboard />
+              </ProtectedRoute>
+            )}
+          </Route>
+          <Route path="/form-builder">
+            {() => (
+              <ProtectedRoute requireAdmin>
+                <FormBuilderPage />
               </ProtectedRoute>
             )}
           </Route>

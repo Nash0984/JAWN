@@ -330,6 +330,31 @@ app.use("/api/", (req, res, next) => {
   }
 
   // ============================================================================
+  // RULES-TO-CONTENT SYNC - Auto-detect RaC changes every hour
+  // ============================================================================
+  let racSyncInterval: NodeJS.Timeout | null = null;
+  
+  try {
+    const cron = await import("node-cron");
+    const { rulesContentSyncService } = await import("./services/rulesContentSyncService");
+    
+    // Run RaC change detection every hour (at minute 0)
+    cron.default.schedule('0 * * * *', async () => {
+      console.log('🔄 Running RaC change detection...');
+      try {
+        const jobs = await rulesContentSyncService.detectRacChanges();
+        console.log(`📊 Found ${jobs.length} content items affected by RaC changes`);
+      } catch (error) {
+        console.error("❌ Error detecting RaC changes:", error);
+      }
+    });
+    
+    console.log("🔄 RaC change detection scheduled (runs every hour)");
+  } catch (error) {
+    console.error("❌ Failed to start RaC sync scheduler:", error);
+  }
+
+  // ============================================================================
   // GRACEFUL SHUTDOWN HANDLING - Clean up resources on SIGTERM/SIGINT
   // ============================================================================
   const gracefulShutdown = async (signal: string) => {

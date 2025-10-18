@@ -63,6 +63,7 @@ import {
   insertFeedbackAssignmentSchema,
   insertFaqCandidateSchema,
   insertFaqArticleSchema,
+  insertFormComponentSchema,
   searchQueries,
   auditLogs,
   ruleChangeLogs,
@@ -86,7 +87,9 @@ import {
   alertHistory,
   consentForms,
   clientConsents,
-  appointments
+  appointments,
+  formComponents,
+  dynamicNotificationTemplates
 } from "@shared/schema";
 import { z } from "zod";
 import bcrypt from "bcryptjs";
@@ -105,6 +108,7 @@ import { feedbackService } from "./services/feedbackService";
 import { faqService } from "./services/faqService";
 import { feedbackMetricsService } from "./services/feedbackMetricsService";
 import { dynamicNotificationService } from "./services/dynamicNotificationService";
+import { rulesContentSyncService } from "./services/rulesContentSyncService";
 
 // Configure secure file uploaders for different use cases
 const documentUpload = createSecureUploader('documents', {
@@ -11566,9 +11570,9 @@ If the question cannot be answered with the available information, say so clearl
     res.json(section);
   }));
   
-  // Full-text search across manual content
+  // Enhanced full-text search across manual content with advanced filters
   app.get('/api/policy-manual/search', asyncHandler(async (req: Request, res: Response) => {
-    const { q } = req.query;
+    const { q, mode = 'keyword', programs, dateFrom, dateTo, hasRaC } = req.query;
     
     if (!q || typeof q !== 'string' || q.trim().length < 2) {
       throw validationError('Search query must be at least 2 characters');
@@ -11577,7 +11581,20 @@ If the question cannot be answered with the available information, say so clearl
     const { policyManualSections, policyManualChapters } = await import("@shared/schema");
     const searchTerm = `%${q.trim()}%`;
     
-    const results = await db
+    // Synonym expansion for semantic search
+    const BENEFIT_SYNONYMS: Record<string, string[]> = {
+      income: ['earnings', 'wages', 'compensation', 'salary', 'revenue'],
+      benefits: ['assistance', 'aid', 'support', 'allotment'],
+      household: ['family', 'dwelling', 'residence'],
+      deduction: ['expense', 'cost', 'reduction'],
+      asset: ['resource', 'property', 'wealth'],
+      limit: ['maximum', 'threshold', 'cap', 'ceiling'],
+      eligible: ['qualify', 'qualifies', 'qualified', 'eligibility'],
+      apply: ['application', 'applying', 'applies', 'applicant'],
+    };
+    
+    // Build base query
+    let query = db
       .select({
         id: policyManualSections.id,
         chapterId: policyManualSections.chapterId,
@@ -11587,25 +11604,216 @@ If the question cannot be answered with the available information, say so clearl
         pageNumber: policyManualSections.pageNumber,
         pageNumberEnd: policyManualSections.pageNumberEnd,
         legalCitation: policyManualSections.legalCitation,
+        rulesAsCodeReference: policyManualSections.rulesAsCodeReference,
+        sourceUrl: policyManualSections.sourceUrl,
+        effectiveDate: policyManualSections.effectiveDate,
         chapterTitle: policyManualChapters.title,
         chapterNumber: policyManualChapters.chapterNumber,
         program: policyManualChapters.program,
       })
       .from(policyManualSections)
-      .leftJoin(policyManualChapters, eq(policyManualSections.chapterId, policyManualChapters.id))
-      .where(
-        and(
-          eq(policyManualSections.isActive, true),
-          or(
-            ilike(policyManualSections.title, searchTerm),
-            ilike(policyManualSections.content, searchTerm),
-            ilike(policyManualSections.keywords, searchTerm)
-          )
-        )
-      )
+      .leftJoin(policyManualChapters, eq(policyManualSections.chapterId, policyManualChapters.id));
+    
+    // Build WHERE conditions
+    const conditions = [eq(policyManualSections.isActive, true)];
+    
+    // Mode-specific search conditions
+    if (mode === 'citation') {
+      // Citation search - search in legalCitation and sourceUrl
+      conditions.push(
+        or(
+          ilike(policyManualSections.legalCitation, searchTerm),
+          ilike(policyManualSections.sourceUrl, searchTerm)
+        )!
+      );
+    } else if (mode === 'semantic') {
+      // Semantic search with synonym expansion
+      const words = q.trim().toLowerCase().split(/\s+/);
+      const expandedTerms: any[] = [];
+      
+      words.forEach(word => {
+        // Add original word
+        expandedTerms.push(ilike(policyManualSections.title, `%${word}%`));
+        expandedTerms.push(ilike(policyManualSections.content, `%${word}%`));
+        expandedTerms.push(ilike(policyManualSections.keywords, `%${word}%`));
+        
+        // Add synonyms if available
+        if (BENEFIT_SYNONYMS[word]) {
+          BENEFIT_SYNONYMS[word].forEach(synonym => {
+            expandedTerms.push(ilike(policyManualSections.title, `%${synonym}%`));
+            expandedTerms.push(ilike(policyManualSections.content, `%${synonym}%`));
+            expandedTerms.push(ilike(policyManualSections.keywords, `%${synonym}%`));
+          });
+        }
+      });
+      
+      conditions.push(or(...expandedTerms)!);
+    } else {
+      // Default keyword search
+      conditions.push(
+        or(
+          ilike(policyManualSections.title, searchTerm),
+          ilike(policyManualSections.content, searchTerm),
+          ilike(policyManualSections.keywords, searchTerm)
+        )!
+      );
+    }
+    
+    // Program filter
+    if (programs && typeof programs === 'string') {
+      const programList = programs.split(',').map(p => p.trim());
+      if (programList.length > 0) {
+        const programConditions = programList.map(program => 
+          eq(policyManualChapters.program, program)
+        );
+        conditions.push(or(...programConditions)!);
+      }
+    }
+    
+    // Date range filter
+    if (dateFrom && typeof dateFrom === 'string') {
+      conditions.push(gte(policyManualSections.effectiveDate, new Date(dateFrom)));
+    }
+    if (dateTo && typeof dateTo === 'string') {
+      conditions.push(lte(policyManualSections.effectiveDate, new Date(dateTo)));
+    }
+    
+    // RaC filter
+    if (hasRaC === 'true') {
+      conditions.push(sql`${policyManualSections.rulesAsCodeReference} IS NOT NULL`);
+    }
+    
+    // Execute query with all conditions
+    const results = await query
+      .where(and(...conditions))
       .limit(50);
     
     res.json(results);
+  }));
+  
+  // Get all unique legal citations grouped by type
+  app.get('/api/policy-manual/citations', asyncHandler(async (req: Request, res: Response) => {
+    const { policyManualSections } = await import("@shared/schema");
+    
+    const sections = await db
+      .select({
+        legalCitation: policyManualSections.legalCitation,
+      })
+      .from(policyManualSections)
+      .where(
+        and(
+          eq(policyManualSections.isActive, true),
+          sql`${policyManualSections.legalCitation} IS NOT NULL`
+        )
+      );
+    
+    // Group citations by type
+    const citationGroups = {
+      cfr: [] as string[],
+      comar: [] as string[],
+      usc: [] as string[],
+      irsPub: [] as string[],
+      other: [] as string[],
+    };
+    
+    const uniqueCitations = new Set<string>();
+    
+    sections.forEach(section => {
+      if (section.legalCitation) {
+        const citations = section.legalCitation.split(/[;,]/).map(c => c.trim());
+        citations.forEach(citation => {
+          if (citation && !uniqueCitations.has(citation)) {
+            uniqueCitations.add(citation);
+            
+            const upperCitation = citation.toUpperCase();
+            if (upperCitation.includes('CFR')) {
+              citationGroups.cfr.push(citation);
+            } else if (upperCitation.includes('COMAR')) {
+              citationGroups.comar.push(citation);
+            } else if (upperCitation.includes('USC') || upperCitation.includes('U.S.C')) {
+              citationGroups.usc.push(citation);
+            } else if (upperCitation.includes('IRS') || upperCitation.includes('PUB')) {
+              citationGroups.irsPub.push(citation);
+            } else {
+              citationGroups.other.push(citation);
+            }
+          }
+        });
+      }
+    });
+    
+    // Sort each group
+    Object.keys(citationGroups).forEach(key => {
+      citationGroups[key as keyof typeof citationGroups].sort();
+    });
+    
+    res.json(citationGroups);
+  }));
+  
+  // Get available filter values for advanced search
+  app.get('/api/policy-manual/filters', asyncHandler(async (req: Request, res: Response) => {
+    const { policyManualSections, policyManualChapters } = await import("@shared/schema");
+    
+    // Get unique programs
+    const programsData = await db
+      .selectDistinct({ program: policyManualChapters.program })
+      .from(policyManualChapters)
+      .where(eq(policyManualChapters.isActive, true))
+      .orderBy(policyManualChapters.program);
+    
+    const programs = programsData.map(p => p.program).filter(Boolean);
+    
+    // Get effective date range for years
+    const dateRange = await db
+      .select({
+        minDate: sql<Date>`MIN(${policyManualSections.effectiveDate})`,
+        maxDate: sql<Date>`MAX(${policyManualSections.effectiveDate})`,
+      })
+      .from(policyManualSections)
+      .where(
+        and(
+          eq(policyManualSections.isActive, true),
+          sql`${policyManualSections.effectiveDate} IS NOT NULL`
+        )
+      );
+    
+    const years: number[] = [];
+    if (dateRange[0]?.minDate && dateRange[0]?.maxDate) {
+      const minYear = new Date(dateRange[0].minDate).getFullYear();
+      const maxYear = new Date(dateRange[0].maxDate).getFullYear();
+      for (let year = minYear; year <= maxYear; year++) {
+        years.push(year);
+      }
+    }
+    
+    // Count sections with RaC
+    const racCounts = await db
+      .select({
+        hasRaC: sql<boolean>`${policyManualSections.rulesAsCodeReference} IS NOT NULL`,
+        count: count(),
+      })
+      .from(policyManualSections)
+      .where(eq(policyManualSections.isActive, true))
+      .groupBy(sql`${policyManualSections.rulesAsCodeReference} IS NOT NULL`);
+    
+    const racStats = {
+      withRaC: 0,
+      withoutRaC: 0,
+    };
+    
+    racCounts.forEach(row => {
+      if (row.hasRaC) {
+        racStats.withRaC = Number(row.count);
+      } else {
+        racStats.withoutRaC = Number(row.count);
+      }
+    });
+    
+    res.json({
+      programs,
+      years,
+      racStats,
+    });
   }));
   
   // Get all glossary terms
@@ -11632,7 +11840,68 @@ If the question cannot be answered with the available information, say so clearl
     res.json(terms);
   }));
   
-  // Get specific glossary term definition
+  // Autocomplete glossary terms for search-as-you-type (MUST come before /:term route)
+  app.get('/api/policy-manual/glossary/autocomplete', asyncHandler(async (req: Request, res: Response) => {
+    const { q } = req.query;
+    const { policyGlossaryTerms } = await import("@shared/schema");
+    
+    if (!q || typeof q !== 'string') {
+      return res.json([]);
+    }
+    
+    if (q.length < 2) {
+      return res.json([]);
+    }
+    
+    const searchTerm = `%${q}%`;
+    
+    const terms = await db
+      .select({
+        id: policyGlossaryTerms.id,
+        term: policyGlossaryTerms.term,
+        definition_preview: sql<string>`LEFT(${policyGlossaryTerms.definition}, 100)`,
+        program: policyGlossaryTerms.program,
+        acronym: policyGlossaryTerms.acronym,
+      })
+      .from(policyGlossaryTerms)
+      .where(
+        and(
+          eq(policyGlossaryTerms.isActive, true),
+          or(
+            ilike(policyGlossaryTerms.term, searchTerm),
+            ilike(policyGlossaryTerms.acronym, searchTerm),
+            ilike(policyGlossaryTerms.definition, searchTerm)
+          )
+        )
+      )
+      .orderBy(policyGlossaryTerms.term)
+      .limit(10);
+    
+    res.json(terms);
+  }));
+  
+  // Get glossary term by ID for tooltip lookups (MUST come before /:term route)
+  app.get('/api/policy-manual/glossary/id/:id', asyncHandler(async (req: Request, res: Response) => {
+    const { policyGlossaryTerms } = await import("@shared/schema");
+    
+    const [term] = await db
+      .select()
+      .from(policyGlossaryTerms)
+      .where(
+        and(
+          eq(policyGlossaryTerms.id, req.params.id),
+          eq(policyGlossaryTerms.isActive, true)
+        )
+      );
+    
+    if (!term) {
+      throw notFoundError('Glossary term not found');
+    }
+    
+    res.json(term);
+  }));
+  
+  // Get specific glossary term definition by name (generic route - MUST come last)
   app.get('/api/policy-manual/glossary/:term', asyncHandler(async (req: Request, res: Response) => {
     const { policyGlossaryTerms } = await import("@shared/schema");
     
@@ -11651,6 +11920,218 @@ If the question cannot be answered with the available information, say so clearl
     }
     
     res.json(term);
+  }));
+
+  // ============================================================================
+  // POLICY MANUAL VERSION COMPARISON API - Track content evolution over time
+  // ============================================================================
+  
+  // Get version history for a specific manual section
+  app.get('/api/policy-manual/sections/:id/versions', asyncHandler(async (req: Request, res: Response) => {
+    const { policyManualVersions, users } = await import("@shared/schema");
+    
+    const versions = await db
+      .select({
+        id: policyManualVersions.id,
+        sectionId: policyManualVersions.sectionId,
+        versionNumber: policyManualVersions.versionNumber,
+        changeSummary: policyManualVersions.changeSummary,
+        effectiveDate: policyManualVersions.effectiveDate,
+        createdAt: policyManualVersions.createdAt,
+        changedByUser: {
+          id: users.id,
+          username: users.username,
+          fullName: users.fullName,
+        },
+      })
+      .from(policyManualVersions)
+      .leftJoin(users, eq(policyManualVersions.changedBy, users.id))
+      .where(eq(policyManualVersions.sectionId, req.params.id))
+      .orderBy(desc(policyManualVersions.createdAt));
+    
+    res.json(versions);
+  }));
+  
+  // Get detailed diff for a specific version
+  app.get('/api/policy-manual/versions/:versionId/diff', asyncHandler(async (req: Request, res: Response) => {
+    const { policyManualVersions } = await import("@shared/schema");
+    const { generateDiff } = await import("../utils/diffGenerator");
+    
+    const [version] = await db
+      .select()
+      .from(policyManualVersions)
+      .where(eq(policyManualVersions.id, req.params.versionId));
+    
+    if (!version) {
+      throw notFoundError('Version not found');
+    }
+    
+    // Generate diff if not already cached
+    let diffLines = version.diffContent as any;
+    if (!diffLines && version.previousContent && version.newContent) {
+      diffLines = generateDiff(version.previousContent, version.newContent);
+    }
+    
+    res.json({
+      versionId: version.id,
+      sectionId: version.sectionId,
+      oldContent: version.previousContent || '',
+      newContent: version.newContent || '',
+      diffLines: diffLines || [],
+      metadata: {
+        versionNumber: version.versionNumber,
+        changeSummary: version.changeSummary,
+        effectiveDate: version.effectiveDate,
+        changeType: version.changeType,
+      },
+    });
+  }));
+  
+  // Create a new version when manual section is updated (admin only)
+  app.post('/api/policy-manual/versions', requireAdmin, asyncHandler(async (req: Request, res: Response) => {
+    const { policyManualVersions, policyManualSections } = await import("@shared/schema");
+    const { generateDiff } = await import("../utils/diffGenerator");
+    
+    const schema = z.object({
+      sectionId: z.string(),
+      changeSummary: z.string(),
+      effectiveDate: z.string().or(z.date()),
+      changeType: z.string().optional(),
+    });
+    
+    const data = schema.parse(req.body);
+    const userId = req.user?.id;
+    
+    if (!userId) {
+      throw authorizationError('User not authenticated');
+    }
+    
+    // Get current section content
+    const [section] = await db
+      .select()
+      .from(policyManualSections)
+      .where(eq(policyManualSections.id, data.sectionId));
+    
+    if (!section) {
+      throw notFoundError('Section not found');
+    }
+    
+    // Get previous version to track old content
+    const [previousVersion] = await db
+      .select()
+      .from(policyManualVersions)
+      .where(eq(policyManualVersions.sectionId, data.sectionId))
+      .orderBy(desc(policyManualVersions.versionNumber))
+      .limit(1);
+    
+    const nextVersionNumber = previousVersion ? previousVersion.versionNumber + 1 : 1;
+    const oldContent = previousVersion?.newContent || '';
+    const newContent = section.content;
+    
+    // Generate diff
+    const diffContent = generateDiff(oldContent, newContent);
+    
+    // Create new version
+    const [newVersion] = await db
+      .insert(policyManualVersions)
+      .values({
+        sectionId: data.sectionId,
+        versionNumber: nextVersionNumber,
+        changeSummary: data.changeSummary,
+        changeType: data.changeType || 'content_update',
+        changedBy: userId,
+        previousContent: oldContent,
+        newContent,
+        diffContent,
+        effectiveDate: new Date(data.effectiveDate),
+      })
+      .returning();
+    
+    res.json(newVersion);
+  }));
+  
+  // Get version history for a notification template
+  app.get('/api/notifications/templates/:id/versions', asyncHandler(async (req: Request, res: Response) => {
+    const { templateVersions, users } = await import("@shared/schema");
+    
+    const versions = await db
+      .select({
+        id: templateVersions.id,
+        templateId: templateVersions.templateId,
+        versionNumber: templateVersions.versionNumber,
+        changesSummary: templateVersions.changesSummary,
+        effectiveDate: templateVersions.effectiveDate,
+        createdAt: templateVersions.createdAt,
+        updatedByUser: {
+          id: users.id,
+          username: users.username,
+          fullName: users.fullName,
+        },
+      })
+      .from(templateVersions)
+      .leftJoin(users, eq(templateVersions.updatedBy, users.id))
+      .where(eq(templateVersions.templateId, req.params.id))
+      .orderBy(desc(templateVersions.createdAt));
+    
+    res.json(versions);
+  }));
+  
+  // Compare two template versions side-by-side
+  app.get('/api/notifications/templates/:id/compare', asyncHandler(async (req: Request, res: Response) => {
+    const { templateVersions } = await import("@shared/schema");
+    const { generateDiff, generateJsonDiff } = await import("../utils/diffGenerator");
+    
+    const { version1, version2 } = req.query;
+    
+    if (!version1 || !version2) {
+      throw validationError('Both version1 and version2 query parameters are required');
+    }
+    
+    const [v1, v2] = await Promise.all([
+      db.select().from(templateVersions).where(eq(templateVersions.id, version1 as string)).limit(1),
+      db.select().from(templateVersions).where(eq(templateVersions.id, version2 as string)).limit(1),
+    ]);
+    
+    if (!v1[0] || !v2[0]) {
+      throw notFoundError('One or both versions not found');
+    }
+    
+    if (v1[0].templateId !== v2[0].templateId) {
+      throw validationError('Versions must be from the same template');
+    }
+    
+    // Generate diffs
+    const contentDiff = generateDiff(
+      v1[0].newContentTemplate || '',
+      v2[0].newContentTemplate || ''
+    );
+    
+    const rulesDiff = generateJsonDiff(
+      v1[0].newContentRules || {},
+      v2[0].newContentRules || {}
+    );
+    
+    res.json({
+      templateId: v1[0].templateId,
+      v1: {
+        id: v1[0].id,
+        versionNumber: v1[0].versionNumber,
+        content: v1[0].newContentTemplate,
+        rules: v1[0].newContentRules,
+        effectiveDate: v1[0].effectiveDate,
+      },
+      v2: {
+        id: v2[0].id,
+        versionNumber: v2[0].versionNumber,
+        content: v2[0].newContentTemplate,
+        rules: v2[0].newContentRules,
+        effectiveDate: v2[0].effectiveDate,
+      },
+      diff: {
+        content: contentDiff,
+        rules: rulesDiff,
+      },
+    });
   }));
 
   // ============================================================================
@@ -11760,6 +12241,554 @@ If the question cannot be answered with the available information, say so clearl
   app.post('/api/notifications/generated/:id/mark-delivered', requireStaff, asyncHandler(async (req: Request, res: Response) => {
     await dynamicNotificationService.markAsDelivered(req.params.id);
     res.json({ success: true, message: 'Notification marked as delivered' });
+  }));
+
+  // ============================================================================
+  // CONTENT SYNC JOBS API - Rules-to-Content Pipeline
+  // Auto-detection of RaC changes and content regeneration
+  // ============================================================================
+
+  // GET /api/content-sync/jobs - Get sync jobs with optional filters
+  app.get('/api/content-sync/jobs', requireAdmin, asyncHandler(async (req: Request, res: Response) => {
+    const { status, program, contentType } = req.query;
+
+    const jobs = await rulesContentSyncService.getPendingSyncJobs({
+      status: status as string | undefined,
+      program: program as string | undefined,
+      contentType: contentType as string | undefined,
+    });
+
+    res.json(jobs);
+  }));
+
+  // GET /api/content-sync/jobs/:id - Get specific job details
+  app.get('/api/content-sync/jobs/:id', requireAdmin, asyncHandler(async (req: Request, res: Response) => {
+    const { contentSyncJobs } = await import("@shared/schema");
+    
+    const job = await db.query.contentSyncJobs.findFirst({
+      where: eq(contentSyncJobs.id, req.params.id),
+    });
+
+    if (!job) {
+      throw notFoundError('Content sync job not found');
+    }
+
+    res.json(job);
+  }));
+
+  // POST /api/content-sync/trigger - Manually trigger RaC change detection
+  app.post('/api/content-sync/trigger', requireAdmin, asyncHandler(async (req: Request, res: Response) => {
+    console.log('🔄 Manual RaC change detection triggered by admin');
+    
+    const jobs = await rulesContentSyncService.detectRacChanges();
+
+    res.json({
+      success: true,
+      message: `RaC change detection completed. Found ${jobs.length} affected content items.`,
+      jobsCreated: jobs.length,
+      jobs,
+    });
+  }));
+
+  // PATCH /api/content-sync/jobs/:id/review - Approve or reject a sync job
+  app.patch('/api/content-sync/jobs/:id/review', requireAdmin, asyncHandler(async (req: Request, res: Response) => {
+    const schema = z.object({
+      action: z.enum(['approve', 'reject']),
+      notes: z.string().optional(),
+    });
+
+    const data = schema.parse(req.body);
+    const userId = req.user?.id;
+
+    if (!userId) {
+      throw authorizationError('User not authenticated');
+    }
+
+    await rulesContentSyncService.reviewSyncJob(
+      req.params.id,
+      data.action,
+      userId,
+      data.notes
+    );
+
+    res.json({
+      success: true,
+      message: `Sync job ${data.action}ed successfully`,
+      action: data.action,
+    });
+  }));
+
+  // POST /api/content-sync/jobs/:id/apply - Apply approved changes to live content
+  app.post('/api/content-sync/jobs/:id/apply', requireAdmin, asyncHandler(async (req: Request, res: Response) => {
+    await rulesContentSyncService.applySyncJob(req.params.id);
+
+    res.json({
+      success: true,
+      message: 'Sync job applied successfully. Content updated.',
+    });
+  }));
+
+  // GET /api/admin/content-analytics - Get aggregated content dashboard metrics
+  app.get('/api/admin/content-analytics', requireAdmin, asyncHandler(async (req: Request, res: Response) => {
+    const { contentSyncJobs, dynamicNotificationTemplates, generatedNotifications } = await import("@shared/schema");
+    
+    // Sync job metrics
+    const [syncMetrics] = await db
+      .select({
+        pendingCount: sql<number>`COUNT(*) FILTER (WHERE ${contentSyncJobs.status} = 'pending')::int`,
+        approvedCount: sql<number>`COUNT(*) FILTER (WHERE ${contentSyncJobs.status} = 'approved')::int`,
+        rejectedCount: sql<number>`COUNT(*) FILTER (WHERE ${contentSyncJobs.status} = 'rejected')::int`,
+        failedCount: sql<number>`COUNT(*) FILTER (WHERE ${contentSyncJobs.status} = 'failed')::int`,
+        autoRegenCount: sql<number>`COUNT(*) FILTER (WHERE ${contentSyncJobs.autoRegenerate} = true)::int`,
+        totalJobs: sql<number>`COUNT(*)::int`,
+      })
+      .from(contentSyncJobs);
+
+    // Calculate auto-regeneration rate
+    const autoRegenRate = syncMetrics.totalJobs > 0 
+      ? (syncMetrics.autoRegenCount / syncMetrics.totalJobs) * 100 
+      : 0;
+
+    // Template usage - Top 5 most used templates
+    const topTemplates = await db
+      .select({
+        id: dynamicNotificationTemplates.id,
+        templateCode: dynamicNotificationTemplates.templateCode,
+        templateName: dynamicNotificationTemplates.templateName,
+        program: dynamicNotificationTemplates.program,
+        usageCount: sql<number>`COUNT(${generatedNotifications.id})::int`,
+      })
+      .from(dynamicNotificationTemplates)
+      .leftJoin(generatedNotifications, eq(generatedNotifications.templateId, dynamicNotificationTemplates.id))
+      .groupBy(dynamicNotificationTemplates.id)
+      .orderBy(desc(sql`COUNT(${generatedNotifications.id})`))
+      .limit(5);
+
+    // Template distribution by program
+    const templatesByProgram = await db
+      .select({
+        program: dynamicNotificationTemplates.program,
+        count: sql<number>`COUNT(*)::int`,
+      })
+      .from(dynamicNotificationTemplates)
+      .where(eq(dynamicNotificationTemplates.isActive, true))
+      .groupBy(dynamicNotificationTemplates.program);
+
+    // Generation trends - Last 30 days
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+    const generationTrends = await db
+      .select({
+        date: sql<string>`DATE(${generatedNotifications.generatedAt})`,
+        count: sql<number>`COUNT(*)::int`,
+      })
+      .from(generatedNotifications)
+      .where(sql`${generatedNotifications.generatedAt} >= ${thirtyDaysAgo}`)
+      .groupBy(sql`DATE(${generatedNotifications.generatedAt})`)
+      .orderBy(sql`DATE(${generatedNotifications.generatedAt})`);
+
+    // Total notifications generated
+    const [notificationStats] = await db
+      .select({
+        totalGenerated: sql<number>`COUNT(*)::int`,
+        sentCount: sql<number>`COUNT(*) FILTER (WHERE ${generatedNotifications.deliveryStatus} = 'sent')::int`,
+        deliveredCount: sql<number>`COUNT(*) FILTER (WHERE ${generatedNotifications.deliveryStatus} = 'delivered')::int`,
+        failedCount: sql<number>`COUNT(*) FILTER (WHERE ${generatedNotifications.deliveryStatus} = 'failed')::int`,
+      })
+      .from(generatedNotifications);
+
+    // Average review time (for approved/rejected jobs)
+    const [reviewTimeMetrics] = await db
+      .select({
+        avgReviewTime: sql<number>`AVG(EXTRACT(EPOCH FROM (${contentSyncJobs.reviewedAt} - ${contentSyncJobs.queuedAt})))::real`,
+      })
+      .from(contentSyncJobs)
+      .where(sql`${contentSyncJobs.reviewedAt} IS NOT NULL`);
+
+    res.json({
+      syncMetrics: {
+        pending: syncMetrics.pendingCount,
+        approved: syncMetrics.approvedCount,
+        rejected: syncMetrics.rejectedCount,
+        failed: syncMetrics.failedCount,
+        total: syncMetrics.totalJobs,
+        autoRegenRate: Math.round(autoRegenRate * 10) / 10, // Round to 1 decimal
+        avgReviewTimeSeconds: reviewTimeMetrics.avgReviewTime || 0,
+      },
+      templateMetrics: {
+        topTemplates,
+        byProgram: templatesByProgram,
+        totalActive: templatesByProgram.reduce((sum, p) => sum + p.count, 0),
+      },
+      generationMetrics: {
+        trends: generationTrends,
+        total: notificationStats.totalGenerated,
+        sent: notificationStats.sentCount,
+        delivered: notificationStats.deliveredCount,
+        failed: notificationStats.failedCount,
+      },
+    });
+  }));
+
+  // GET /api/notifications/templates/:id/usage - Get all generated notifications for a template
+  app.get('/api/notifications/templates/:id/usage', requireAdmin, asyncHandler(async (req: Request, res: Response) => {
+    const { generatedNotifications, users, householdProfiles } = await import("@shared/schema");
+    
+    const usage = await db.query.generatedNotifications.findMany({
+      where: eq(generatedNotifications.templateId, req.params.id),
+      with: {
+        recipient: {
+          columns: {
+            id: true,
+            username: true,
+            fullName: true,
+            email: true,
+          },
+        },
+        household: {
+          columns: {
+            id: true,
+            householdSize: true,
+          },
+        },
+      },
+      orderBy: [desc(generatedNotifications.generatedAt)],
+      limit: 100, // Limit to recent 100 generations
+    });
+
+    res.json(usage);
+  }));
+
+  // GET /api/content-sync/settings - Get current content sync settings
+  app.get('/api/content-sync/settings', requireAdmin, asyncHandler(async (req: Request, res: Response) => {
+    const { contentSyncSettings } = await import("@shared/schema");
+    
+    // Get the most recent settings (there should only be one row)
+    const [settings] = await db
+      .select()
+      .from(contentSyncSettings)
+      .orderBy(desc(contentSyncSettings.updatedAt))
+      .limit(1);
+
+    // Return default settings if none exist
+    if (!settings) {
+      res.json({
+        id: null,
+        defaultAutoRegenerate: false,
+        syncDetectionCron: '0 * * * *', // Hourly
+        requiredReviewerRoles: ['admin'],
+        notificationChannels: ['in_app'],
+        updatedBy: null,
+        updatedAt: null,
+        createdAt: null,
+      });
+      return;
+    }
+
+    res.json(settings);
+  }));
+
+  // POST /api/content-sync/settings - Save content sync configuration
+  app.post('/api/content-sync/settings', requireAdmin, asyncHandler(async (req: Request, res: Response) => {
+    const { contentSyncSettings, insertContentSyncSettingsSchema } = await import("@shared/schema");
+    
+    const schema = z.object({
+      defaultAutoRegenerate: z.boolean(),
+      syncDetectionCron: z.string(),
+      requiredReviewerRoles: z.array(z.string()),
+      notificationChannels: z.array(z.string()),
+    });
+
+    const data = schema.parse(req.body);
+    const userId = req.user?.id;
+
+    if (!userId) {
+      throw authorizationError('User not authenticated');
+    }
+
+    // Check if settings already exist
+    const [existing] = await db
+      .select()
+      .from(contentSyncSettings)
+      .orderBy(desc(contentSyncSettings.updatedAt))
+      .limit(1);
+
+    let settings;
+    if (existing) {
+      // Update existing settings
+      [settings] = await db
+        .update(contentSyncSettings)
+        .set({
+          ...data,
+          updatedBy: userId,
+          updatedAt: new Date(),
+        })
+        .where(eq(contentSyncSettings.id, existing.id))
+        .returning();
+    } else {
+      // Create new settings
+      [settings] = await db
+        .insert(contentSyncSettings)
+        .values({
+          ...data,
+          updatedBy: userId,
+        })
+        .returning();
+    }
+
+    res.json({
+      success: true,
+      message: 'Content sync settings saved successfully',
+      settings,
+    });
+  }));
+
+  // ============================================================================
+  // FORM BUILDER API - Modular form component assembly
+  // ============================================================================
+  
+  // GET /api/form-builder/components - Get all form components grouped by type
+  app.get('/api/form-builder/components', asyncHandler(async (req: Request, res: Response) => {
+    const { program } = req.query;
+
+    let query = db.select().from(formComponents).where(eq(formComponents.isActive, true));
+
+    const components = await query;
+
+    // Filter by program if specified
+    let filteredComponents = components;
+    if (program) {
+      filteredComponents = components.filter(c => 
+        !c.program || c.program === program || c.programCodes?.includes(program as string)
+      );
+    }
+
+    // Group by component type
+    const grouped = filteredComponents.reduce((acc, component) => {
+      const type = component.componentType || 'other';
+      if (!acc[type]) {
+        acc[type] = [];
+      }
+      acc[type].push(component);
+      return acc;
+    }, {} as Record<string, typeof components>);
+
+    res.json(grouped);
+  }));
+
+  // GET /api/form-builder/components/:id - Get single component with full details
+  app.get('/api/form-builder/components/:id', asyncHandler(async (req: Request, res: Response) => {
+    const [component] = await db
+      .select()
+      .from(formComponents)
+      .where(
+        and(
+          eq(formComponents.id, req.params.id),
+          eq(formComponents.isActive, true)
+        )
+      );
+
+    if (!component) {
+      throw notFoundError('Component not found');
+    }
+
+    res.json(component);
+  }));
+
+  // POST /api/form-builder/components - Create new form component (Admin only)
+  app.post('/api/form-builder/components', requireAdmin, asyncHandler(async (req: Request, res: Response) => {
+    const data = insertFormComponentSchema.parse(req.body);
+    
+    const userId = req.user?.id;
+    if (!userId) {
+      throw authorizationError('User not authenticated');
+    }
+
+    const [component] = await db
+      .insert(formComponents)
+      .values({
+        ...data,
+        createdBy: userId,
+      })
+      .returning();
+
+    res.status(201).json(component);
+  }));
+
+  // PATCH /api/form-builder/components/:id - Update existing component (Admin only)
+  app.patch('/api/form-builder/components/:id', requireAdmin, asyncHandler(async (req: Request, res: Response) => {
+    const data = insertFormComponentSchema.partial().parse(req.body);
+
+    const [existing] = await db
+      .select()
+      .from(formComponents)
+      .where(eq(formComponents.id, req.params.id));
+
+    if (!existing) {
+      throw notFoundError('Component not found');
+    }
+
+    const [updated] = await db
+      .update(formComponents)
+      .set({
+        ...data,
+        updatedAt: new Date(),
+      })
+      .where(eq(formComponents.id, req.params.id))
+      .returning();
+
+    res.json(updated);
+  }));
+
+  // POST /api/form-builder/preview - Preview a form built from components
+  app.post('/api/form-builder/preview', asyncHandler(async (req: Request, res: Response) => {
+    const schema = z.object({
+      componentIds: z.array(z.string()),
+      contextData: z.record(z.any()).optional(),
+    });
+
+    const { componentIds, contextData = {} } = schema.parse(req.body);
+
+    // Fetch all components
+    const components = await db
+      .select()
+      .from(formComponents)
+      .where(
+        and(
+          sql`${formComponents.id} = ANY(${componentIds})`,
+          eq(formComponents.isActive, true)
+        )
+      );
+
+    if (components.length === 0) {
+      return res.json({
+        generatedContent: '',
+        resolvedData: {},
+        componentIds: [],
+      });
+    }
+
+    // Sort components in the order they were requested
+    const sortedComponents = componentIds
+      .map(id => components.find(c => c.id === id))
+      .filter(Boolean);
+
+    // Resolve content rules for each component and render
+    let fullContent = '';
+    const allResolvedData: Record<string, any> = {};
+
+    for (const component of sortedComponents) {
+      if (!component) continue;
+
+      // Resolve content rules if present
+      if (component.contentRules) {
+        const resolvedData = await dynamicNotificationService.resolveContentRules(
+          component.contentRules as Record<string, any>,
+          contextData
+        );
+        Object.assign(allResolvedData, resolvedData);
+
+        // Render template with resolved data
+        const rendered = dynamicNotificationService.renderTemplate(
+          component.templateContent,
+          resolvedData
+        );
+        fullContent += rendered + '\n\n';
+      } else {
+        // No content rules, just use template as-is
+        fullContent += component.templateContent + '\n\n';
+      }
+    }
+
+    res.json({
+      generatedContent: fullContent.trim(),
+      resolvedData: allResolvedData,
+      componentIds,
+    });
+  }));
+
+  // POST /api/form-builder/save-template - Save assembled form as notification template (Admin only)
+  app.post('/api/form-builder/save-template', requireAdmin, asyncHandler(async (req: Request, res: Response) => {
+    const schema = z.object({
+      templateCode: z.string(),
+      templateName: z.string(),
+      componentIds: z.array(z.string()),
+      program: z.string(),
+      noticeType: z.string().optional().default('custom'),
+      description: z.string().optional(),
+      contentRules: z.record(z.any()).optional(),
+      requiredDisclosures: z.array(z.string()).optional(),
+      legalCitations: z.array(z.string()).optional(),
+      appealRightsTemplate: z.string().optional(),
+      deliveryChannels: z.array(z.enum(['email', 'sms', 'mail', 'portal'])).optional(),
+    });
+
+    const data = schema.parse(req.body);
+    const userId = req.user?.id;
+
+    if (!userId) {
+      throw authorizationError('User not authenticated');
+    }
+
+    // Fetch components to build the template
+    const components = await db
+      .select()
+      .from(formComponents)
+      .where(
+        and(
+          sql`${formComponents.id} = ANY(${data.componentIds})`,
+          eq(formComponents.isActive, true)
+        )
+      );
+
+    // Sort components in the order they were requested
+    const sortedComponents = data.componentIds
+      .map(id => components.find(c => c.id === id))
+      .filter(Boolean);
+
+    // Build body template from components
+    let bodyTemplate = '';
+    const mergedContentRules = data.contentRules || {};
+
+    for (const component of sortedComponents) {
+      if (!component) continue;
+      bodyTemplate += component.templateContent + '\n\n';
+      
+      // Merge content rules
+      if (component.contentRules) {
+        Object.assign(mergedContentRules, component.contentRules);
+      }
+
+      // Increment usage count
+      await db
+        .update(formComponents)
+        .set({
+          usageCount: sql`${formComponents.usageCount} + 1`,
+        })
+        .where(eq(formComponents.id, component.id));
+    }
+
+    // Create notification template
+    const [template] = await db
+      .insert(dynamicNotificationTemplates)
+      .values({
+        templateCode: data.templateCode,
+        templateName: data.templateName,
+        program: data.program,
+        noticeType: data.noticeType,
+        bodyTemplate: bodyTemplate.trim(),
+        contentRules: mergedContentRules,
+        requiredDisclosures: data.requiredDisclosures || [],
+        legalCitations: data.legalCitations || [],
+        appealRightsTemplate: data.appealRightsTemplate,
+        deliveryChannels: data.deliveryChannels || ['portal'],
+        isActive: true,
+        createdBy: userId,
+      })
+      .returning();
+
+    res.status(201).json(template);
   }));
 
   const httpServer = createServer(app);

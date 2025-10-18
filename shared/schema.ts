@@ -7348,6 +7348,48 @@ export const contentRulesMapping = pgTable("content_rules_mapping", {
   syncStatusIdx: index("content_rules_mapping_sync_idx").on(table.syncStatus),
 }));
 
+// Content Sync Jobs - Tracks RaC changes and content regeneration
+export const contentSyncJobs = pgTable("content_sync_jobs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  contentType: text("content_type").notNull(), // notification_template, policy_manual_section, form_component
+  contentId: varchar("content_id").notNull(), // ID of affected content
+  racTableName: varchar("rac_table_name").notNull(), // Which RaC table changed
+  racFieldName: varchar("rac_field_name"), // Which field changed (null = multiple fields)
+  
+  // Change tracking
+  oldValue: jsonb("old_value"), // Previous value
+  newValue: jsonb("new_value"), // New value
+  
+  // Mapping reference
+  affectedMappingId: varchar("affected_mapping_id").references(() => contentRulesMapping.id),
+  
+  // Regeneration
+  regeneratedContent: text("regenerated_content"), // New content if regenerated
+  status: text("status").notNull().default("pending"), // pending, generated, approved, rejected, failed
+  autoRegenerate: boolean("auto_regenerate").default(false).notNull(), // Copied from mapping
+  
+  // Timestamps
+  queuedAt: timestamp("queued_at").defaultNow().notNull(),
+  processedAt: timestamp("processed_at"),
+  
+  // Review
+  reviewedBy: varchar("reviewed_by").references(() => users.id),
+  reviewedAt: timestamp("reviewed_at"),
+  reviewNotes: text("review_notes"),
+  
+  // Error tracking
+  error: text("error"), // Error message if failed
+  
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  statusIdx: index("content_sync_jobs_status_idx").on(table.status),
+  contentTypeIdx: index("content_sync_jobs_content_type_idx").on(table.contentType),
+  racTableIdx: index("content_sync_jobs_rac_table_idx").on(table.racTableName),
+  queuedAtIdx: index("content_sync_jobs_queued_at_idx").on(table.queuedAt),
+  mappingIdx: index("content_sync_jobs_mapping_idx").on(table.affectedMappingId),
+}));
+
 // Generated Notifications - Audit trail of all auto-generated notices
 export const generatedNotifications = pgTable("generated_notifications", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -7399,6 +7441,7 @@ export const policyManualVersions = pgTable("policy_manual_versions", {
   // Content snapshot
   previousContent: text("previous_content"),
   newContent: text("new_content").notNull(),
+  diffContent: jsonb("diff_content"), // Structured diff output for UI rendering
   
   // Effective dates
   effectiveDate: timestamp("effective_date").notNull(),
@@ -7408,6 +7451,32 @@ export const policyManualVersions = pgTable("policy_manual_versions", {
 }, (table) => ({
   sectionIdx: index("policy_manual_versions_section_idx").on(table.sectionId),
   effectiveDateIdx: index("policy_manual_versions_effective_idx").on(table.effectiveDate),
+}));
+
+// Template Version History - Track changes to notification templates
+export const templateVersions = pgTable("template_versions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  templateId: varchar("template_id").references(() => dynamicNotificationTemplates.id, { onDelete: "cascade" }).notNull(),
+  versionNumber: varchar("version_number").notNull(),
+  
+  // Change tracking
+  changesSummary: text("changes_summary").notNull(),
+  updatedBy: varchar("updated_by").references(() => users.id),
+  
+  // Content snapshots
+  oldContentTemplate: text("old_content_template"),
+  newContentTemplate: text("new_content_template").notNull(),
+  oldContentRules: jsonb("old_content_rules"),
+  newContentRules: jsonb("new_content_rules").notNull(),
+  diffSummary: jsonb("diff_summary"), // Structured diff for template and rules
+  
+  // Effective dates
+  effectiveDate: timestamp("effective_date").notNull(),
+  
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+  templateIdx: index("template_versions_template_idx").on(table.templateId),
+  effectiveDateIdx: index("template_versions_effective_idx").on(table.effectiveDate),
 }));
 
 // Relations
@@ -7517,12 +7586,24 @@ export const insertContentRulesMappingSchema = createInsertSchema(contentRulesMa
   updatedAt: true,
 });
 
+export const insertContentSyncJobSchema = createInsertSchema(contentSyncJobs).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+  queuedAt: true,
+});
+
 export const insertGeneratedNotificationSchema = createInsertSchema(generatedNotifications).omit({
   id: true,
   createdAt: true,
 });
 
 export const insertPolicyManualVersionSchema = createInsertSchema(policyManualVersions).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertTemplateVersionSchema = createInsertSchema(templateVersions).omit({
   id: true,
   createdAt: true,
 });
@@ -7546,8 +7627,47 @@ export type FormComponent = typeof formComponents.$inferSelect;
 export type InsertContentRulesMapping = z.infer<typeof insertContentRulesMappingSchema>;
 export type ContentRulesMapping = typeof contentRulesMapping.$inferSelect;
 
+export type InsertContentSyncJob = z.infer<typeof insertContentSyncJobSchema>;
+export type ContentSyncJob = typeof contentSyncJobs.$inferSelect;
+
 export type InsertGeneratedNotification = z.infer<typeof insertGeneratedNotificationSchema>;
 export type GeneratedNotification = typeof generatedNotifications.$inferSelect;
 
 export type InsertPolicyManualVersion = z.infer<typeof insertPolicyManualVersionSchema>;
 export type PolicyManualVersion = typeof policyManualVersions.$inferSelect;
+
+export type InsertTemplateVersion = z.infer<typeof insertTemplateVersionSchema>;
+export type TemplateVersion = typeof templateVersions.$inferSelect;
+
+// ============================================================================
+// CONTENT SYNC SETTINGS - Admin Configuration for Content Synchronization
+// ============================================================================
+
+export const contentSyncSettings = pgTable("content_sync_settings", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  defaultAutoRegenerate: boolean("default_auto_regenerate").default(false).notNull(),
+  syncDetectionCron: varchar("sync_detection_cron").default("0 * * * *").notNull(), // hourly by default
+  requiredReviewerRoles: text("required_reviewer_roles").array().default([]).notNull(), // ['admin', 'supervisor']
+  notificationChannels: text("notification_channels").array().default(['in_app']).notNull(), // email, sms, in_app
+  updatedBy: varchar("updated_by").references(() => users.id),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+// Relations
+export const contentSyncSettingsRelations = relations(contentSyncSettings, ({ one }) => ({
+  updatedByUser: one(users, {
+    fields: [contentSyncSettings.updatedBy],
+    references: [users.id],
+  }),
+}));
+
+// Insert schema
+export const insertContentSyncSettingsSchema = createInsertSchema(contentSyncSettings).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type InsertContentSyncSettings = z.infer<typeof insertContentSyncSettingsSchema>;
+export type ContentSyncSettings = typeof contentSyncSettings.$inferSelect;
