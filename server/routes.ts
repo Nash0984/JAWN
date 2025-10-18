@@ -11485,6 +11485,173 @@ If the question cannot be answered with the available information, say so clearl
     res.json(article);
   }));
 
+  // ============================================================================
+  // POLICY MANUAL BROWSER API - Ebook-style policy manual interface
+  // ============================================================================
+  
+  // Get all chapters with section counts
+  app.get('/api/policy-manual/chapters', asyncHandler(async (req: Request, res: Response) => {
+    const { policyManualChapters, policyManualSections } = await import("@shared/schema");
+    
+    const chapters = await db
+      .select({
+        id: policyManualChapters.id,
+        chapterNumber: policyManualChapters.chapterNumber,
+        title: policyManualChapters.title,
+        program: policyManualChapters.program,
+        description: policyManualChapters.description,
+        sortOrder: policyManualChapters.sortOrder,
+        sectionCount: count(policyManualSections.id),
+      })
+      .from(policyManualChapters)
+      .leftJoin(policyManualSections, eq(policyManualChapters.id, policyManualSections.chapterId))
+      .where(eq(policyManualChapters.isActive, true))
+      .groupBy(policyManualChapters.id)
+      .orderBy(policyManualChapters.sortOrder);
+    
+    res.json(chapters);
+  }));
+  
+  // Get sections for a specific chapter
+  app.get('/api/policy-manual/chapters/:id/sections', asyncHandler(async (req: Request, res: Response) => {
+    const { policyManualSections } = await import("@shared/schema");
+    
+    const sections = await db
+      .select()
+      .from(policyManualSections)
+      .where(and(
+        eq(policyManualSections.chapterId, req.params.id),
+        eq(policyManualSections.isActive, true)
+      ))
+      .orderBy(policyManualSections.sortOrder);
+    
+    res.json(sections);
+  }));
+  
+  // Get single section with full content
+  app.get('/api/policy-manual/sections/:id', asyncHandler(async (req: Request, res: Response) => {
+    const { policyManualSections, policyManualChapters, policySources } = await import("@shared/schema");
+    
+    const [section] = await db
+      .select({
+        id: policyManualSections.id,
+        chapterId: policyManualSections.chapterId,
+        sectionNumber: policyManualSections.sectionNumber,
+        title: policyManualSections.title,
+        content: policyManualSections.content,
+        pageNumber: policyManualSections.pageNumber,
+        pageNumberEnd: policyManualSections.pageNumberEnd,
+        legalCitation: policyManualSections.legalCitation,
+        rulesAsCodeReference: policyManualSections.rulesAsCodeReference,
+        sourceUrl: policyManualSections.sourceUrl,
+        keywords: policyManualSections.keywords,
+        crossReferences: policyManualSections.crossReferences,
+        sortOrder: policyManualSections.sortOrder,
+        chapterTitle: policyManualChapters.title,
+        chapterNumber: policyManualChapters.chapterNumber,
+        program: policyManualChapters.program,
+        sourceId: policyManualSections.policySourceId,
+        sourceName: policySources.name,
+      })
+      .from(policyManualSections)
+      .leftJoin(policyManualChapters, eq(policyManualSections.chapterId, policyManualChapters.id))
+      .leftJoin(policySources, eq(policyManualSections.policySourceId, policySources.id))
+      .where(eq(policyManualSections.id, req.params.id));
+    
+    if (!section) {
+      throw notFoundError('Policy manual section not found');
+    }
+    
+    res.json(section);
+  }));
+  
+  // Full-text search across manual content
+  app.get('/api/policy-manual/search', asyncHandler(async (req: Request, res: Response) => {
+    const { q } = req.query;
+    
+    if (!q || typeof q !== 'string' || q.trim().length < 2) {
+      throw validationError('Search query must be at least 2 characters');
+    }
+    
+    const { policyManualSections, policyManualChapters } = await import("@shared/schema");
+    const searchTerm = `%${q.trim()}%`;
+    
+    const results = await db
+      .select({
+        id: policyManualSections.id,
+        chapterId: policyManualSections.chapterId,
+        sectionNumber: policyManualSections.sectionNumber,
+        title: policyManualSections.title,
+        content: policyManualSections.content,
+        pageNumber: policyManualSections.pageNumber,
+        pageNumberEnd: policyManualSections.pageNumberEnd,
+        legalCitation: policyManualSections.legalCitation,
+        chapterTitle: policyManualChapters.title,
+        chapterNumber: policyManualChapters.chapterNumber,
+        program: policyManualChapters.program,
+      })
+      .from(policyManualSections)
+      .leftJoin(policyManualChapters, eq(policyManualSections.chapterId, policyManualChapters.id))
+      .where(
+        and(
+          eq(policyManualSections.isActive, true),
+          or(
+            ilike(policyManualSections.title, searchTerm),
+            ilike(policyManualSections.content, searchTerm),
+            ilike(policyManualSections.keywords, searchTerm)
+          )
+        )
+      )
+      .limit(50);
+    
+    res.json(results);
+  }));
+  
+  // Get all glossary terms
+  app.get('/api/policy-manual/glossary', asyncHandler(async (req: Request, res: Response) => {
+    const { program } = req.query;
+    const { policyGlossaryTerms } = await import("@shared/schema");
+    
+    const query = db
+      .select()
+      .from(policyGlossaryTerms)
+      .where(eq(policyGlossaryTerms.isActive, true))
+      .orderBy(policyGlossaryTerms.sortOrder, policyGlossaryTerms.term);
+    
+    if (program && typeof program === 'string') {
+      query.where(
+        or(
+          eq(policyGlossaryTerms.program, program),
+          sql`${policyGlossaryTerms.program} IS NULL`
+        )
+      );
+    }
+    
+    const terms = await query;
+    res.json(terms);
+  }));
+  
+  // Get specific glossary term definition
+  app.get('/api/policy-manual/glossary/:term', asyncHandler(async (req: Request, res: Response) => {
+    const { policyGlossaryTerms } = await import("@shared/schema");
+    
+    const [term] = await db
+      .select()
+      .from(policyGlossaryTerms)
+      .where(
+        and(
+          ilike(policyGlossaryTerms.term, req.params.term),
+          eq(policyGlossaryTerms.isActive, true)
+        )
+      );
+    
+    if (!term) {
+      throw notFoundError('Glossary term not found');
+    }
+    
+    res.json(term);
+  }));
+
   const httpServer = createServer(app);
   
   // Initialize WebSocket service for real-time notifications
