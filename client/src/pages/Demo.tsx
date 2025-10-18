@@ -24,6 +24,7 @@ import {
   ExternalLink,
 } from "lucide-react";
 import { FEATURE_CATALOG, FEATURE_CATEGORIES, AI_POWERED_FEATURES, getFeaturesByCategory } from "@shared/featureMetadata";
+import { API_ENDPOINTS } from "@shared/apiEndpoints";
 import { FeatureCard } from "@/components/demo/FeatureCard";
 import { CategoryGrid } from "@/components/demo/CategoryGrid";
 import { AIConversationViewer } from "@/components/demo/AIConversationViewer";
@@ -67,7 +68,7 @@ export default function Demo() {
         <title>Demo Dashboard - Maryland Universal Benefits-Tax Navigator</title>
         <meta
           name="description"
-          content="Interactive showcase of 93 features across the Maryland Universal Benefits-Tax Navigator platform. Explore AI capabilities, system architecture, and real-time performance metrics."
+          content="Interactive showcase of 99 features across the Maryland Universal Benefits-Tax Navigator platform. Explore AI capabilities, system architecture, and real-time performance metrics."
         />
       </Helmet>
 
@@ -86,25 +87,25 @@ export default function Demo() {
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 max-w-4xl mx-auto">
             <Card data-testid="stat-features">
               <CardHeader className="pb-3">
-                <CardTitle className="text-3xl font-bold text-primary">93</CardTitle>
+                <CardTitle className="text-3xl font-bold text-primary">{FEATURE_CATALOG.length}</CardTitle>
                 <CardDescription>Features</CardDescription>
               </CardHeader>
             </Card>
             <Card data-testid="stat-tables">
               <CardHeader className="pb-3">
-                <CardTitle className="text-3xl font-bold text-primary">131</CardTitle>
+                <CardTitle className="text-3xl font-bold text-primary">136</CardTitle>
                 <CardDescription>Database Tables</CardDescription>
               </CardHeader>
             </Card>
             <Card data-testid="stat-endpoints">
               <CardHeader className="pb-3">
-                <CardTitle className="text-3xl font-bold text-primary">367</CardTitle>
+                <CardTitle className="text-3xl font-bold text-primary">{API_ENDPOINTS.length}</CardTitle>
                 <CardDescription>API Endpoints</CardDescription>
               </CardHeader>
             </Card>
             <Card data-testid="stat-services">
               <CardHeader className="pb-3">
-                <CardTitle className="text-3xl font-bold text-primary">94</CardTitle>
+                <CardTitle className="text-3xl font-bold text-primary">140+</CardTitle>
                 <CardDescription>Services</CardDescription>
               </CardHeader>
             </Card>
@@ -243,7 +244,7 @@ export default function Demo() {
                         API Explorer
                       </CardTitle>
                       <CardDescription>
-                        Interactive documentation for all 367 API endpoints
+                        Interactive documentation for all {API_ENDPOINTS.length} API endpoints
                       </CardDescription>
                     </CardHeader>
                   </Card>
