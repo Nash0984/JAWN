@@ -28,7 +28,8 @@ export const API_CATEGORIES = [
   'Gamification & Leaderboards',
   'Compliance & Audit',
   'Demo Data',
-  'Webhooks & API Keys'
+  'Webhooks & API Keys',
+  'Policy Manual & Notifications'
 ];
 
 export const API_ENDPOINTS: APIEndpoint[] = [
@@ -3641,5 +3642,454 @@ export const API_ENDPOINTS: APIEndpoint[] = [
       reactivated: true,
       status: 'active'
     }
+  },
+
+  // ============================================================================
+  // POLICY MANUAL & NOTIFICATIONS (41 endpoints)
+  // ============================================================================
+  // Living Policy Manual - Chapter & Section Management (6)
+  {
+    id: 'policy-manual-1',
+    method: 'GET',
+    path: '/api/policy-manual/chapters',
+    category: 'Policy Manual & Notifications',
+    description: 'Get all policy manual chapters (6 programs: SNAP, Medicaid, TANF, OHEP, Tax, VITA)',
+    requiresAuth: false,
+    responseExample: [{ id: 'ch1', chapterNumber: 1, title: 'SNAP (Food Supplement Program)', program: 'SNAP' }]
+  },
+  {
+    id: 'policy-manual-2',
+    method: 'GET',
+    path: '/api/policy-manual/chapters/:id/sections',
+    category: 'Policy Manual & Notifications',
+    description: 'Get all sections for a specific chapter with pagination',
+    requiresAuth: false,
+    queryParams: [{ name: 'page', type: 'number', required: false, description: 'Page number' }],
+    responseExample: [{ id: 's1', sectionNumber: '1.1', sectionTitle: 'Eligibility Overview', pageNumber: 1 }]
+  },
+  {
+    id: 'policy-manual-3',
+    method: 'GET',
+    path: '/api/policy-manual/sections/:id',
+    category: 'Policy Manual & Notifications',
+    description: 'Get full section details with content, citations, and RaC references',
+    requiresAuth: false,
+    responseExample: { id: 's1', sectionTitle: 'Income Limits', content: 'Full markdown content...', legalCitation: '7 CFR §273.9' }
+  },
+  {
+    id: 'policy-manual-4',
+    method: 'GET',
+    path: '/api/policy-manual/search',
+    category: 'Policy Manual & Notifications',
+    description: 'Advanced search with keyword, citation, and semantic modes',
+    requiresAuth: false,
+    queryParams: [
+      { name: 'q', type: 'string', required: true, description: 'Search query' },
+      { name: 'mode', type: 'string', required: false, description: 'Search mode: keyword, citation, semantic' },
+      { name: 'programs', type: 'string', required: false, description: 'Comma-separated program codes' },
+      { name: 'hasRaC', type: 'boolean', required: false, description: 'Filter by RaC availability' }
+    ],
+    responseExample: [{ id: 's1', sectionTitle: 'Income Calculation', snippet: 'Gross income includes...' }]
+  },
+  {
+    id: 'policy-manual-5',
+    method: 'GET',
+    path: '/api/policy-manual/citations',
+    category: 'Policy Manual & Notifications',
+    description: 'Get all unique legal citations grouped by type (CFR, COMAR, USC, IRS)',
+    requiresAuth: false,
+    responseExample: { cfr: ['7 CFR §273.9'], comar: ['COMAR 07.03.17'], usc: [], irsPub: ['IRS Pub 4012'] }
+  },
+  {
+    id: 'policy-manual-6',
+    method: 'GET',
+    path: '/api/policy-manual/filters',
+    category: 'Policy Manual & Notifications',
+    description: 'Get available filter options (programs, years, RaC statistics)',
+    requiresAuth: false,
+    responseExample: { programs: ['SNAP', 'Medicaid'], years: [2024, 2025], racStats: { withRaC: 45, withoutRaC: 12 } }
+  },
+
+  // Glossary Service (4)
+  {
+    id: 'policy-manual-7',
+    method: 'GET',
+    path: '/api/policy-manual/glossary',
+    category: 'Policy Manual & Notifications',
+    description: 'Get all glossary terms with definitions and citations',
+    requiresAuth: false,
+    responseExample: [{ id: 'g1', term: 'Gross Income', definition: 'Total household income before deductions', program: null }]
+  },
+  {
+    id: 'policy-manual-8',
+    method: 'GET',
+    path: '/api/policy-manual/glossary/:term',
+    category: 'Policy Manual & Notifications',
+    description: 'Get definition for specific term',
+    requiresAuth: false,
+    responseExample: { term: 'MAGI', definition: 'Modified Adjusted Gross Income', legalCitation: '42 CFR §435.603' }
+  },
+  {
+    id: 'policy-manual-9',
+    method: 'GET',
+    path: '/api/policy-manual/glossary/autocomplete',
+    category: 'Policy Manual & Notifications',
+    description: 'Autocomplete search for glossary terms',
+    requiresAuth: false,
+    queryParams: [{ name: 'q', type: 'string', required: true, description: 'Search prefix' }],
+    responseExample: [{ term: 'Gross Income', acronym: null }, { term: 'MAGI', acronym: 'Modified Adjusted Gross Income' }]
+  },
+  {
+    id: 'policy-manual-10',
+    method: 'POST',
+    path: '/api/policy-manual/glossary',
+    category: 'Policy Manual & Notifications',
+    description: 'Create new glossary term (admin only)',
+    requiresAuth: true,
+    requiredRole: ['admin'],
+    requestBody: { term: 'Net Income', definition: 'Gross income minus allowable deductions', program: 'SNAP' },
+    responseExample: { id: 'g2', created: true }
+  },
+
+  // Version History & Comparison (5)
+  {
+    id: 'policy-manual-11',
+    method: 'GET',
+    path: '/api/policy-manual/sections/:id/versions',
+    category: 'Policy Manual & Notifications',
+    description: 'Get version history for a section',
+    requiresAuth: false,
+    responseExample: [{ id: 'v1', versionNumber: '1.2', changesSummary: 'Updated income limits for FY 2025', effectiveDate: '2024-10-01' }]
+  },
+  {
+    id: 'policy-manual-12',
+    method: 'GET',
+    path: '/api/policy-manual/versions/:versionId/diff',
+    category: 'Policy Manual & Notifications',
+    description: 'Get detailed diff for a specific version',
+    requiresAuth: false,
+    responseExample: { versionId: 'v1', oldContent: 'old text', newContent: 'new text', diffLines: [] }
+  },
+  {
+    id: 'policy-manual-13',
+    method: 'POST',
+    path: '/api/policy-manual/versions',
+    category: 'Policy Manual & Notifications',
+    description: 'Create new version when section is updated (admin only)',
+    requiresAuth: true,
+    requiredRole: ['admin'],
+    requestBody: { sectionId: 's1', changesSummary: 'Updated limits', effectiveDate: '2025-01-01' },
+    responseExample: { id: 'v2', created: true }
+  },
+  {
+    id: 'policy-manual-14',
+    method: 'GET',
+    path: '/api/notifications/templates/:id/versions',
+    category: 'Policy Manual & Notifications',
+    description: 'Get version history for notification template',
+    requiresAuth: true,
+    requiredRole: ['admin'],
+    responseExample: [{ id: 'tv1', versionNumber: '2.0', changesSummary: 'Updated income threshold' }]
+  },
+  {
+    id: 'policy-manual-15',
+    method: 'GET',
+    path: '/api/notifications/templates/:id/compare',
+    category: 'Policy Manual & Notifications',
+    description: 'Compare two template versions',
+    requiresAuth: true,
+    requiredRole: ['admin'],
+    queryParams: [
+      { name: 'version1', type: 'string', required: true, description: 'First version ID' },
+      { name: 'version2', type: 'string', required: true, description: 'Second version ID' }
+    ],
+    responseExample: { templateId: 't1', v1Content: 'old template', v2Content: 'new template', diffSummary: {} }
+  },
+
+  // Dynamic Notification Templates (5)
+  {
+    id: 'policy-manual-16',
+    method: 'GET',
+    path: '/api/notifications/templates',
+    category: 'Policy Manual & Notifications',
+    description: 'Get all notification templates',
+    requiresAuth: true,
+    requiredRole: ['staff', 'admin'],
+    responseExample: [{ id: 't1', templateCode: 'SNAP_APPROVAL', templateName: 'SNAP Benefit Approval Notice', program: 'SNAP' }]
+  },
+  {
+    id: 'policy-manual-17',
+    method: 'GET',
+    path: '/api/notifications/templates/:id',
+    category: 'Policy Manual & Notifications',
+    description: 'Get specific template with content rules',
+    requiresAuth: true,
+    requiredRole: ['staff', 'admin'],
+    responseExample: { id: 't1', contentTemplate: 'Your benefit: {{benefitAmount}}', contentRules: {} }
+  },
+  {
+    id: 'policy-manual-18',
+    method: 'POST',
+    path: '/api/notifications/preview',
+    category: 'Policy Manual & Notifications',
+    description: 'Preview notification with live data resolution from Rules as Code',
+    requiresAuth: true,
+    requestBody: { templateId: 't1', householdId: 123, contextData: {} },
+    responseExample: { generatedContent: 'Your SNAP benefit amount is $450', usedRulesVersion: 'v2.1' }
+  },
+  {
+    id: 'policy-manual-19',
+    method: 'POST',
+    path: '/api/notifications/generate',
+    category: 'Policy Manual & Notifications',
+    description: 'Generate and save official notification',
+    requiresAuth: true,
+    requiredRole: ['staff', 'admin'],
+    requestBody: { templateId: 't1', householdId: 123, deliveryChannel: 'email' },
+    responseExample: { id: 'n1', generated: true, deliveryStatus: 'pending' }
+  },
+  {
+    id: 'policy-manual-20',
+    method: 'GET',
+    path: '/api/notifications/templates/:id/usage',
+    category: 'Policy Manual & Notifications',
+    description: 'Get usage history for template',
+    requiresAuth: true,
+    requiredRole: ['admin'],
+    responseExample: [{ notificationId: 'n1', recipient: 'John Doe', sentAt: '2025-10-18T10:00:00Z' }]
+  },
+
+  // Form Builder (6)
+  {
+    id: 'policy-manual-21',
+    method: 'GET',
+    path: '/api/form-components',
+    category: 'Policy Manual & Notifications',
+    description: 'Get all reusable form components for document builder',
+    requiresAuth: true,
+    requiredRole: ['staff', 'admin'],
+    responseExample: [{ id: 'c1', componentCode: 'HEADER_SNAP', componentName: 'SNAP Notice Header', componentType: 'header' }]
+  },
+  {
+    id: 'policy-manual-22',
+    method: 'POST',
+    path: '/api/form-components',
+    category: 'Policy Manual & Notifications',
+    description: 'Create new form component',
+    requiresAuth: true,
+    requiredRole: ['admin'],
+    requestBody: { componentCode: 'FOOTER_STD', componentName: 'Standard Footer', contentTemplate: 'Footer text...' },
+    responseExample: { id: 'c2', created: true }
+  },
+  {
+    id: 'policy-manual-23',
+    method: 'PUT',
+    path: '/api/form-components/:id',
+    category: 'Policy Manual & Notifications',
+    description: 'Update form component',
+    requiresAuth: true,
+    requiredRole: ['admin'],
+    requestBody: { contentTemplate: 'Updated text...' },
+    responseExample: { id: 'c1', updated: true }
+  },
+  {
+    id: 'policy-manual-24',
+    method: 'DELETE',
+    path: '/api/form-components/:id',
+    category: 'Policy Manual & Notifications',
+    description: 'Delete form component',
+    requiresAuth: true,
+    requiredRole: ['admin'],
+    responseExample: { deleted: true }
+  },
+  {
+    id: 'policy-manual-25',
+    method: 'POST',
+    path: '/api/form-components/:id/duplicate',
+    category: 'Policy Manual & Notifications',
+    description: 'Duplicate existing component',
+    requiresAuth: true,
+    requiredRole: ['admin'],
+    responseExample: { id: 'c3', duplicated: true }
+  },
+  {
+    id: 'policy-manual-26',
+    method: 'GET',
+    path: '/api/form-components/:id/preview',
+    category: 'Policy Manual & Notifications',
+    description: 'Preview component with sample data',
+    requiresAuth: true,
+    requiredRole: ['staff', 'admin'],
+    responseExample: { renderedContent: 'Preview of component...' }
+  },
+
+  // Rules-to-Content Sync Pipeline (9)
+  {
+    id: 'policy-manual-27',
+    method: 'GET',
+    path: '/api/content-sync/jobs',
+    category: 'Policy Manual & Notifications',
+    description: 'Get content sync jobs requiring review',
+    requiresAuth: true,
+    requiredRole: ['admin'],
+    queryParams: [{ name: 'status', type: 'string', required: false, description: 'Filter by status: pending, approved, rejected' }],
+    responseExample: [{ id: 'j1', contentType: 'template', racChange: 'grossIncomeLimit: $1,580 → $1,650', status: 'pending' }]
+  },
+  {
+    id: 'policy-manual-28',
+    method: 'GET',
+    path: '/api/content-sync/jobs/:id',
+    category: 'Policy Manual & Notifications',
+    description: 'Get specific sync job details',
+    requiresAuth: true,
+    requiredRole: ['admin'],
+    responseExample: { id: 'j1', oldValue: '$1,580', newValue: '$1,650', affectedContent: 'SNAP_APPROVAL template' }
+  },
+  {
+    id: 'policy-manual-29',
+    method: 'PATCH',
+    path: '/api/content-sync/jobs/:id/review',
+    category: 'Policy Manual & Notifications',
+    description: 'Approve or reject sync job',
+    requiresAuth: true,
+    requiredRole: ['admin'],
+    requestBody: { action: 'approve', notes: 'Verified with policy team' },
+    responseExample: { id: 'j1', status: 'approved', reviewedBy: 1 }
+  },
+  {
+    id: 'policy-manual-30',
+    method: 'POST',
+    path: '/api/content-sync/jobs/:id/apply',
+    category: 'Policy Manual & Notifications',
+    description: 'Apply approved changes to live content',
+    requiresAuth: true,
+    requiredRole: ['admin'],
+    responseExample: { applied: true, updatedAt: '2025-10-18T12:00:00Z' }
+  },
+  {
+    id: 'policy-manual-31',
+    method: 'GET',
+    path: '/api/content-sync/settings',
+    category: 'Policy Manual & Notifications',
+    description: 'Get content sync configuration',
+    requiresAuth: true,
+    requiredRole: ['admin'],
+    responseExample: { defaultAutoRegenerate: false, syncDetectionCron: '0 * * * *', notificationChannels: ['email'] }
+  },
+  {
+    id: 'policy-manual-32',
+    method: 'POST',
+    path: '/api/content-sync/settings',
+    category: 'Policy Manual & Notifications',
+    description: 'Update content sync settings',
+    requiresAuth: true,
+    requiredRole: ['admin'],
+    requestBody: { defaultAutoRegenerate: true, syncDetectionCron: '0 */2 * * *' },
+    responseExample: { updated: true }
+  },
+  {
+    id: 'policy-manual-33',
+    method: 'POST',
+    path: '/api/content-sync/trigger',
+    category: 'Policy Manual & Notifications',
+    description: 'Manually trigger RaC change detection',
+    requiresAuth: true,
+    requiredRole: ['admin'],
+    responseExample: { triggered: true, jobsCreated: 3 }
+  },
+  {
+    id: 'policy-manual-34',
+    method: 'GET',
+    path: '/api/content-rules-mapping',
+    category: 'Policy Manual & Notifications',
+    description: 'Get all RaC-to-content mappings',
+    requiresAuth: true,
+    requiredRole: ['admin'],
+    responseExample: [{ id: 'm1', rulesEngineTable: 'snap_income_limits', affectedContentId: 't1', autoRegenerate: true }]
+  },
+  {
+    id: 'policy-manual-35',
+    method: 'POST',
+    path: '/api/content-rules-mapping',
+    category: 'Policy Manual & Notifications',
+    description: 'Create new RaC-to-content mapping',
+    requiresAuth: true,
+    requiredRole: ['admin'],
+    requestBody: { rulesEngineTable: 'medicaid_fpl', rulesEngineField: 'fplThreshold', affectedContentId: 't2' },
+    responseExample: { id: 'm2', created: true }
+  },
+
+  // Admin Content Dashboard Analytics (6)
+  {
+    id: 'policy-manual-36',
+    method: 'GET',
+    path: '/api/admin/content-analytics',
+    category: 'Policy Manual & Notifications',
+    description: 'Get comprehensive content sync and template analytics',
+    requiresAuth: true,
+    requiredRole: ['admin'],
+    responseExample: {
+      pendingJobsCount: 5,
+      autoRegenRate: 0.75,
+      topTemplates: [{ templateCode: 'SNAP_APPROVAL', usageCount: 1250 }],
+      generationTrends: []
+    }
+  },
+  {
+    id: 'policy-manual-37',
+    method: 'GET',
+    path: '/api/notifications/generated',
+    category: 'Policy Manual & Notifications',
+    description: 'Get all generated notifications with delivery status',
+    requiresAuth: true,
+    requiredRole: ['staff', 'admin'],
+    queryParams: [
+      { name: 'templateId', type: 'string', required: false, description: 'Filter by template' },
+      { name: 'status', type: 'string', required: false, description: 'Filter by delivery status' }
+    ],
+    responseExample: [{ id: 'n1', templateCode: 'SNAP_APPROVAL', recipientId: 123, deliveryStatus: 'delivered' }]
+  },
+  {
+    id: 'policy-manual-38',
+    method: 'POST',
+    path: '/api/notifications/templates',
+    category: 'Policy Manual & Notifications',
+    description: 'Create new notification template',
+    requiresAuth: true,
+    requiredRole: ['admin'],
+    requestBody: { templateCode: 'SNAP_DENIAL', templateName: 'SNAP Denial Notice', program: 'SNAP', contentTemplate: 'Template text...' },
+    responseExample: { id: 't3', created: true }
+  },
+  {
+    id: 'policy-manual-39',
+    method: 'PUT',
+    path: '/api/notifications/templates/:id',
+    category: 'Policy Manual & Notifications',
+    description: 'Update notification template',
+    requiresAuth: true,
+    requiredRole: ['admin'],
+    requestBody: { contentTemplate: 'Updated template...' },
+    responseExample: { id: 't1', updated: true }
+  },
+  {
+    id: 'policy-manual-40',
+    method: 'PATCH',
+    path: '/api/notifications/templates/:id/status',
+    category: 'Policy Manual & Notifications',
+    description: 'Toggle template active/inactive status',
+    requiresAuth: true,
+    requiredRole: ['admin'],
+    requestBody: { status: 'inactive' },
+    responseExample: { id: 't1', status: 'inactive' }
+  },
+  {
+    id: 'policy-manual-41',
+    method: 'DELETE',
+    path: '/api/notifications/templates/:id',
+    category: 'Policy Manual & Notifications',
+    description: 'Delete notification template',
+    requiresAuth: true,
+    requiredRole: ['admin'],
+    responseExample: { deleted: true }
   }
 ];
