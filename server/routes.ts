@@ -16,6 +16,7 @@ import { documentVerificationService } from "./services/documentVerificationServ
 import { textGenerationService } from "./services/textGenerationService";
 import { notificationService } from "./services/notification.service";
 import { cacheService, CACHE_KEYS, invalidateRulesCache, generateHouseholdHash } from "./services/cacheService";
+import { enhancedCacheService, getGlobalCacheMetrics } from "./services/enhancedCacheService";
 import { kpiTrackingService } from "./services/kpiTracking.service";
 import { achievementSystemService } from "./services/achievementSystem.service";
 import { leaderboardService } from "./services/leaderboard.service";
@@ -1391,11 +1392,20 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
   app.get("/api/admin/cache/stats", requireAdmin, asyncHandler(async (req: Request, res: Response) => {
     const { cacheMetrics } = await import("./services/cacheMetrics");
     
-    const metrics = cacheMetrics.getAggregatedMetrics();
+    // Get both old and new metrics
+    const oldMetrics = cacheMetrics.getAggregatedMetrics();
+    const enhancedMetrics = getGlobalCacheMetrics();
     
     res.json({
       success: true,
-      ...metrics,
+      // Enhanced metrics with actual hit rate tracking
+      enhanced: {
+        ...enhancedMetrics,
+        targetHitRate: 70,
+        isAchievingTarget: enhancedMetrics.overall.overallHitRate >= 70,
+      },
+      // Legacy metrics for backward compatibility
+      legacy: oldMetrics,
     });
   }));
 
