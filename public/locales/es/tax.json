@@ -1,0 +1,61 @@
+{
+  "preparation": {
+    "title": "Preparación de Impuestos",
+    "subtitle": "Asistencia Fiscal Gratuita de VITA",
+    "start": "Iniciar Declaración de Impuestos",
+    "continue": "Continuar Declaración",
+    "review": "Revisar Declaración",
+    "file": "Presentar Declaración"
+  },
+  "intake": {
+    "title": "Entrevista de Admisión Fiscal",
+    "personal_info": "Información Personal",
+    "income": "Información de Ingresos",
+    "deductions": "Deducciones y Créditos",
+    "review": "Revisar y Firmar"
+  },
+  "documents": {
+    "title": "Documentos Fiscales",
+    "w2": "W-2 (Declaración de Salarios)",
+    "1099": "Formularios 1099",
+    "1095": "Seguro de Salud (1095)",
+    "receipts": "Recibos y Registros",
+    "prior_year": "Declaración del Año Anterior"
+  },
+  "forms": {
+    "form_1040": "Formulario 1040 (Federal)",
+    "form_502": "Formulario 502 (Estado de Maryland)",
+    "schedule_c": "Anexo C (Trabajo por Cuenta Propia)",
+    "schedule_eic": "Anexo EIC (Crédito por Ingreso del Trabajo)"
+  },
+  "status": {
+    "draft": "Borrador",
+    "ready_to_file": "Listo para Presentar",
+    "filed": "Presentado",
+    "accepted": "Aceptado",
+    "rejected": "Rechazado",
+    "amended": "Enmendado"
+  },
+  "refund": {
+    "estimated": "Reembolso Estimado",
+    "federal": "Reembolso Federal",
+    "state": "Reembolso Estatal",
+    "total": "Reembolso Total",
+    "direct_deposit": "Depósito Directo",
+    "paper_check": "Cheque en Papel"
+  },
+  "credits": {
+    "eitc": "Crédito Tributario por Ingreso del Trabajo",
+    "ctc": "Crédito Tributario por Hijos",
+    "actc": "Crédito Tributario Adicional por Hijos",
+    "education": "Créditos Educativos",
+    "retirement": "Crédito por Ahorros para la Jubilación"
+  },
+  "vita": {
+    "title": "Programa VITA",
+    "description": "Ayuda fiscal gratuita para contribuyentes calificados",
+    "requirements": "Requisitos de Elegibilidad",
+    "schedule": "Programar Cita",
+    "locations": "Sitios VITA"
+  }
+}

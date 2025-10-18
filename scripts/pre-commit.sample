@@ -1,0 +1,33 @@
+#!/bin/sh
+#
+# Pre-commit hook for Platform Statistics Verification
+#
+# To enable this hook:
+#   cp scripts/pre-commit.sample .git/hooks/pre-commit
+#   chmod +x .git/hooks/pre-commit
+#
+# To bypass this hook (not recommended):
+#   git commit --no-verify
+#
+
+echo "🔍 Running platform statistics verification..."
+echo ""
+
+# Run the verification script
+tsx scripts/verify-stats.ts
+
+# Capture exit code
+RESULT=$?
+
+if [ $RESULT -ne 0 ]; then
+  echo ""
+  echo "❌ Statistics verification failed!"
+  echo "Please update documentation to match actual platform metrics."
+  echo ""
+  echo "To bypass this check (not recommended): git commit --no-verify"
+  exit 1
+fi
+
+echo ""
+echo "✅ Statistics verification passed!"
+exit 0
