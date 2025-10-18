@@ -18,7 +18,7 @@ The backend uses Express.js with TypeScript and PostgreSQL via Drizzle ORM on Ne
 ### Core Platform Features
 -   **Navigator Workspace**: Client management and export.
 -   **Financial Opportunity Radar**: Real-time cross-program eligibility and dynamic benefit calculations.
--   **Feedback Collection System**: Gathers user feedback on AI responses.
+-   **General Feedback System**: Comprehensive platform-wide feedback collection with AI-powered FAQ generation (Gemini API), suggestion voting with role-weighted tallies, sentiment analysis, admin dashboards, and automatic FAQ updates from high-value suggestions. Includes 18 API routes, 6 React components, and 13 database tables.
 -   **Adaptive Intake Copilot**: Conversational AI assistant for application guidance.
 -   **PolicyEngine Integration**: Accurate multi-benefit calculations.
 -   **Anonymous Benefit Screener**: Public eligibility check tool.
@@ -34,6 +34,7 @@ The backend uses Express.js with TypeScript and PostgreSQL via Drizzle ORM on Ne
 -   **Spanish Translation System**: Full bilingual support (English/Spanish) using i18next with 7 translation namespaces covering UI, benefits, tax, navigation, forms, errors, and demo content. Includes language switcher component, automatic detection, and localStorage persistence for Maryland's Latino population.
 -   **Statistics Verification System**: Automated verification script (`verify-stats.ts`) dynamically validates platform metrics (99 features, 136 tables, 218 endpoints, 95 services) across Demo, API Explorer, and documentation to ensure accuracy. Includes pre-commit hook template.
 -   **Caseworker Productivity Dashboard**: Comprehensive analytics tracking applications completed, benefits secured, success rates, response times, document quality, and cross-enrollment discoveries with exportable CSV reports and visual charts.
+-   **Translation Management System**: Professional 3-role translation workflow (translators, reviewers, admins) with side-by-side comparison interface, quality scoring, approval/rejection workflow, locale-specific filtering, version history tracking, and progress analytics. Supports platform-wide bilingual content management across 10 database tables.
 
 ### E-Filing Infrastructure
 Production-ready components include Form 1040 and Maryland Form 502 PDF generators. XML generators for both federal and state forms are prototyped. An E-File Queue Service for submission tracking and an Admin Dashboard for monitoring are in place, pending IRS EFIN and Maryland iFile credentials for full production.
@@ -42,7 +43,7 @@ Production-ready components include Form 1040 and Maryland Form 502 PDF generato
 -   **Data Management**: PostgreSQL for core data, Google Cloud Storage for files.
 -   **Authentication & Authorization**: Basic user authentication with roles, object-level security, and CSRF protection.
 -   **Production Security Hardening**: Field-level encryption (AES-256-GCM), secure file uploads, strong password enforcement, enhanced session security, CORS hardening, security headers, XSS sanitization, SQL injection protection, and a Security Monitoring Dashboard.
--   **Production Readiness & Hardening**: Health check endpoints, role-based rate limiting, DoS protection, database connection pooling, and graceful shutdown.
+-   **Production Readiness & Hardening**: Health check endpoints, role-based rate limiting with IPv6 normalization, DoS protection, database connection pooling, graceful shutdown, and self-healing document resilience (exponential backoff, circuit breaker, smart retry with jitter, timeout management, comprehensive error tracking).
 -   **Unified Household Profiler**: Single profile for benefits and tax workflows.
 -   **Performance Optimization**: Server-side caching (Rules Engine, PolicyEngine API responses), extensive database indexing (135+ indexes).
 -   **Maryland Rules-as-Code Architecture**: Maryland rules engines are the primary determination system, with PolicyEngine serving as a third-party verifier. This includes SNAP, OHEP, TANF, Medicaid, and VITA Tax rules engines, integrated via a hybrid service layer and rules engine adapter.
