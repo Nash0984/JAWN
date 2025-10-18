@@ -52,6 +52,16 @@ export default function Footer() {
             <h3 className="font-semibold mb-4" data-testid="text-footer-resources">Resources</h3>
             <ul className="space-y-2 text-sm">
               <li>
+                <Link href="/demo" className="text-muted-foreground hover:text-foreground transition-colors" data-testid="link-footer-demo">
+                  Demo Showcase
+                </Link>
+              </li>
+              <li>
+                <Link href="/api-explorer" className="text-muted-foreground hover:text-foreground transition-colors" data-testid="link-footer-api-explorer">
+                  API Explorer
+                </Link>
+              </li>
+              <li>
                 <Link href="/legal" className="text-muted-foreground hover:text-foreground transition-colors" data-testid="link-footer-legal-hub">
                   Legal Hub
                 </Link>
