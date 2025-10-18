@@ -183,11 +183,16 @@ app.get("/api/health", async (req, res) => {
     // Check database connectivity
     await db.execute(sql`SELECT 1`);
     
+    // Get connection pool statistics
+    const { getPoolStats } = await import("./db");
+    const poolStats = await getPoolStats();
+    
     res.json({
       status: "healthy",
       timestamp: new Date().toISOString(),
       uptime: process.uptime(),
       database: "connected",
+      poolStats: poolStats, // Include connection pool statistics
       environment: process.env.NODE_ENV || "development",
     });
   } catch (error) {
@@ -374,9 +379,9 @@ app.use("/api/", (req, res, next) => {
         });
       });
 
-      // Close database connections
-      // Note: Drizzle with neon doesn't require explicit close, but we log it
-      console.log("✅ Database connections closed");
+      // Close database connection pool properly
+      const { closePool } = await import("./db");
+      await closePool();
 
       // Stop Smart Scheduler if running
       try {
