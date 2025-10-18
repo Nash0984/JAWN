@@ -2,7 +2,7 @@
 
 **Joint Access Welfare Network (JAWN)** - Maryland Universal Benefits-Tax Service Delivery Platform
 
-Last Updated: October 15, 2025
+Last Updated: October 17, 2025
 
 ---
 
@@ -302,6 +302,6 @@ Last Updated: October 15, 2025
 ---
 
 **Document Maintained By**: JAWN Development Team  
-**Last Review**: October 15, 2025  
+**Last Review**: October 17, 2025  
 **Next Review**: Monthly or upon major policy changes  
 **Version**: 1.0.0
