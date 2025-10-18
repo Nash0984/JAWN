@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Link, useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
-import { File, Search, FileText, HelpCircle, Menu, User, Calculator, BookOpen, FileCheck, Users, Shield, LogOut, LogIn, UserPlus, Settings, Globe, Activity, LayoutDashboard, TrendingUp } from "lucide-react";
+import { File, Search, FileText, HelpCircle, Menu, User, Calculator, BookOpen, FileCheck, Users, Shield, LogOut, LogIn, UserPlus, Settings, Globe, Activity, LayoutDashboard, TrendingUp, Languages } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { useTranslation } from "react-i18next";
 import { LanguageSwitcher } from "./LanguageSwitcher";
@@ -46,6 +46,7 @@ export default function Navigation() {
     { name: "QC Command Center", href: "/supervisor/cockpit", icon: LayoutDashboard, roles: ["admin", "super_admin"] },
     { name: "Productivity Analytics", href: "/productivity", icon: TrendingUp, roles: ["navigator", "caseworker", "admin", "super_admin"] },
     { name: "Policy Manual", href: "/manual", icon: BookOpen, roles: ["client", "navigator", "caseworker", "admin", "super_admin"] },
+    { name: "Translation Management", href: "/translations", icon: Languages, roles: ["translator", "reviewer", "admin", "super_admin"] },
     { name: "Admin Panel", href: "/admin", icon: Settings, roles: ["admin", "super_admin"] },
     { name: t("nav.help"), href: "/help", icon: HelpCircle, roles: ["public", "client", "navigator", "caseworker", "admin", "super_admin"] },
   ];

@@ -92,6 +92,7 @@ import { TenantThemeProvider } from "@/components/TenantThemeProvider";
 import Footer from "@/components/Footer";
 import Demo from "@/pages/Demo";
 import APIExplorer from "@/pages/APIExplorer";
+import TranslationDashboard from "@/pages/TranslationDashboard";
 
 function Router() {
   const [location] = useLocation();
@@ -287,6 +288,13 @@ function Router() {
             {() => (
               <ProtectedRoute requireStaff>
                 <AppointmentsCalendar />
+              </ProtectedRoute>
+            )}
+          </Route>
+          <Route path="/translations">
+            {() => (
+              <ProtectedRoute>
+                <TranslationDashboard />
               </ProtectedRoute>
             )}
           </Route>

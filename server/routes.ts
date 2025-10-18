@@ -88,6 +88,8 @@ import {
 import { passwordSecurityService } from "./services/passwordSecurity.service";
 import { decryptVitaIntake } from "./utils/encryptedFields";
 import { demoDataService } from "./services/demoDataService";
+import { translationService } from "./services/translationService";
+import { requireTranslationAccess, requireAssignmentOrAdmin } from "./middleware/translationPermissions";
 
 // Configure secure file uploaders for different use cases
 const documentUpload = createSecureUploader('documents', {
@@ -10929,6 +10931,183 @@ If the question cannot be answered with the available information, say so clearl
         totalDiscrepancies: discrepancies.length
       }
     });
+  }));
+
+  // ============================================================================
+  // TRANSLATION MANAGEMENT ROUTES - For i18n content management
+  // ============================================================================
+  
+  // Get all active locales
+  app.get('/api/locales', asyncHandler(async (req: Request, res: Response) => {
+    const locales = await db.query.translationLocales.findMany({
+      where: eq(translationLocales.isActive, true)
+    });
+    res.json(locales);
+  }));
+
+  // Get paginated translations with filters
+  app.get('/api/translations', requireAuth, requireTranslationAccess, asyncHandler(async (req: Request, res: Response) => {
+    const filters = {
+      namespace: req.query.namespace as string,
+      targetLocaleId: req.query.targetLocaleId as string,
+      status: req.query.status as string,
+      assignedTo: req.query.assignedTo as string,
+      search: req.query.search as string,
+      page: parseInt(req.query.page as string) || 1,
+      limit: parseInt(req.query.limit as string) || 20,
+    };
+    
+    const result = await translationService.getTranslations(filters, req.user!.id);
+    res.json(result);
+  }));
+
+  // Get translation detail with versions and suggestions
+  app.get('/api/translations/:id', requireAuth, requireTranslationAccess, asyncHandler(async (req: Request, res: Response) => {
+    const { id } = req.params;
+    const { targetLocaleId } = req.query;
+    const detail = await translationService.getTranslationDetail(id, targetLocaleId as string);
+    if (!detail) {
+      throw notFoundError('Translation not found');
+    }
+    res.json(detail);
+  }));
+
+  // Create new translation version
+  app.post('/api/translations/:id/versions', requireAuth, requireTranslationAccess, asyncHandler(async (req: Request, res: Response) => {
+    const { id } = req.params;
+    const hasAccess = await requireAssignmentOrAdmin(id, req.user!.id, 'translator');
+    if (!hasAccess) {
+      return res.status(403).json({ error: "Not assigned to this translation" });
+    }
+    
+    const { targetLocaleId, translatedText } = req.body;
+    const version = await translationService.createVersion(
+      id,
+      targetLocaleId,
+      translatedText,
+      req.user!.id
+    );
+    res.status(201).json(version);
+  }));
+
+  // Update draft version
+  app.patch('/api/translations/versions/:versionId', requireAuth, requireTranslationAccess, asyncHandler(async (req: Request, res: Response) => {
+    const { versionId } = req.params;
+    const { translatedText } = req.body;
+    const updated = await translationService.updateVersion(versionId, translatedText);
+    res.json(updated);
+  }));
+
+  // Submit version for review
+  app.post('/api/translations/versions/:versionId/submit', requireAuth, requireTranslationAccess, asyncHandler(async (req: Request, res: Response) => {
+    const { versionId } = req.params;
+    const updated = await translationService.submitForReview(versionId);
+    res.json(updated);
+  }));
+
+  // Approve version
+  app.post('/api/translations/versions/:versionId/approve', requireAuth, requireTranslationAccess, asyncHandler(async (req: Request, res: Response) => {
+    const { versionId } = req.params;
+    // Requires reviewer role
+    if (req.user!.role !== 'reviewer' && req.user!.role !== 'admin' && req.user!.role !== 'super_admin') {
+      return res.status(403).json({ error: "Requires reviewer role" });
+    }
+    
+    const { reviewerNotes } = req.body;
+    const approved = await translationService.approveVersion(
+      versionId,
+      req.user!.id,
+      reviewerNotes
+    );
+    res.json(approved);
+  }));
+
+  // Reject version
+  app.post('/api/translations/versions/:versionId/reject', requireAuth, requireTranslationAccess, asyncHandler(async (req: Request, res: Response) => {
+    const { versionId } = req.params;
+    // Requires reviewer role
+    if (req.user!.role !== 'reviewer' && req.user!.role !== 'admin' && req.user!.role !== 'super_admin') {
+      return res.status(403).json({ error: "Requires reviewer role" });
+    }
+    
+    const { reviewerNotes } = req.body;
+    if (!reviewerNotes) {
+      return res.status(400).json({ error: "Reviewer notes are required for rejection" });
+    }
+    
+    const rejected = await translationService.rejectVersion(
+      versionId,
+      req.user!.id,
+      reviewerNotes
+    );
+    res.json(rejected);
+  }));
+
+  // Rollback to previous version
+  app.post('/api/translations/:id/rollback', requireAuth, requireAdmin, asyncHandler(async (req: Request, res: Response) => {
+    const { id } = req.params;
+    const { targetLocaleId, targetVersionId } = req.body;
+    const result = await translationService.rollbackVersion(
+      id,
+      targetLocaleId,
+      targetVersionId,
+      req.user!.id
+    );
+    res.json(result);
+  }));
+
+  // Get suggestions for a translation key
+  app.get('/api/translations/:id/suggestions', requireAuth, requireTranslationAccess, asyncHandler(async (req: Request, res: Response) => {
+    const { id } = req.params;
+    const { targetLocaleId } = req.query;
+    const suggestions = await translationService.getSuggestions(id, targetLocaleId as string);
+    res.json(suggestions);
+  }));
+
+  // Promote suggestion to official version
+  app.post('/api/translations/suggestions/:suggestionId/promote', requireAuth, requireTranslationAccess, asyncHandler(async (req: Request, res: Response) => {
+    const { suggestionId } = req.params;
+    // Requires reviewer role
+    if (req.user!.role !== 'reviewer' && req.user!.role !== 'admin' && req.user!.role !== 'super_admin') {
+      return res.status(403).json({ error: "Requires reviewer role" });
+    }
+    
+    const version = await translationService.promoteSuggestion(suggestionId, req.user!.id);
+    res.json(version);
+  }));
+
+  // Get user's assignments
+  app.get('/api/translations/assignments', requireAuth, requireTranslationAccess, asyncHandler(async (req: Request, res: Response) => {
+    const assignments = await translationService.getAssignments(req.user!.id);
+    res.json(assignments);
+  }));
+
+  // Create assignment
+  app.post('/api/translations/assignments', requireAuth, requireAdmin, asyncHandler(async (req: Request, res: Response) => {
+    const { keyId, targetLocaleId, userId, role } = req.body;
+    if (!keyId || !targetLocaleId || !userId || !role) {
+      return res.status(400).json({ error: "Missing required fields" });
+    }
+    
+    const assignment = await translationService.createAssignment(
+      keyId,
+      targetLocaleId,
+      userId,
+      role,
+      req.user!.id
+    );
+    res.json(assignment);
+  }));
+
+  // Export translations
+  app.post('/api/translations/export', requireAuth, requireAdmin, asyncHandler(async (req: Request, res: Response) => {
+    const { targetLocaleId, namespaces } = req.body;
+    if (!targetLocaleId) {
+      return res.status(400).json({ error: "targetLocaleId is required" });
+    }
+    
+    const exportData = await translationService.exportTranslations(targetLocaleId, namespaces);
+    res.json(exportData);
   }));
 
   // ============================================================================
