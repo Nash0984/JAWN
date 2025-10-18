@@ -1765,6 +1765,87 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
   }));
 
   // ============================================================================
+  // RESILIENCE MONITORING - Circuit Breaker and Retry Metrics
+  // ============================================================================
+
+  // GET /api/admin/resilience/metrics - View circuit breaker states and retry stats
+  app.get('/api/admin/resilience/metrics', requireAdmin, asyncHandler(async (req: Request, res: Response) => {
+    const { resilienceMetricsService } = await import('./services/resilience/resilienceMetrics');
+    const { getAllCircuitBreakers } = await import('./services/resilience/resilientRequest');
+    
+    const { endpoint } = req.query;
+    
+    // Get metrics from metrics service
+    const metrics = resilienceMetricsService.getMetrics(endpoint as string | undefined);
+    
+    // Enhance with current circuit breaker states
+    const circuitBreakers = getAllCircuitBreakers();
+    const enhancedMetrics = metrics.map(m => {
+      const cb = circuitBreakers.get(m.endpointName);
+      return {
+        ...m,
+        circuitBreakerMetrics: cb?.getMetrics()
+      };
+    });
+    
+    res.json({
+      success: true,
+      metrics: enhancedMetrics,
+      summary: resilienceMetricsService.getSummary()
+    });
+  }));
+
+  // POST /api/admin/resilience/:endpoint/reset - Reset circuit breaker
+  app.post('/api/admin/resilience/:endpoint/reset', requireAdmin, asyncHandler(async (req: Request, res: Response) => {
+    const { resetCircuitBreaker } = await import('./services/resilience/resilientRequest');
+    const { endpoint } = req.params;
+    
+    const wasReset = resetCircuitBreaker(endpoint);
+    
+    if (!wasReset) {
+      return res.status(404).json({
+        success: false,
+        error: 'Circuit breaker not found',
+        message: `No circuit breaker found for endpoint: ${endpoint}`
+      });
+    }
+    
+    // Log audit event
+    await auditService.logAction({
+      userId: req.user!.id,
+      action: 'circuit_breaker_reset',
+      resource: 'resilience',
+      resourceId: endpoint,
+      details: {
+        endpoint,
+        timestamp: new Date()
+      }
+    });
+    
+    res.json({
+      success: true,
+      message: `Circuit breaker reset for endpoint: ${endpoint}`
+    });
+  }));
+
+  // GET /api/admin/resilience/circuit-states - Get all circuit breaker states
+  app.get('/api/admin/resilience/circuit-states', requireAdmin, asyncHandler(async (req: Request, res: Response) => {
+    const { getAllCircuitBreakers } = await import('./services/resilience/resilientRequest');
+    
+    const circuitBreakers = getAllCircuitBreakers();
+    const states = Array.from(circuitBreakers.entries()).map(([name, cb]) => ({
+      endpointName: name,
+      state: cb.getState(),
+      metrics: cb.getMetrics()
+    }));
+    
+    res.json({
+      success: true,
+      circuitBreakers: states
+    });
+  }));
+
+  // ============================================================================
   // COUNTY TAX RATES - Maryland County Tax Rate Management
   // ============================================================================
   

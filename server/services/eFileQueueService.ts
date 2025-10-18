@@ -961,6 +961,17 @@ export class EFileQueueService {
    * - IRS MeF production credentials
    * - Digital signature/authentication
    * - IRS-approved transmission software
+   * 
+   * RESILIENCE: When implementing actual IRS transmission, wrap the API call with:
+   * import { resilientRequest } from './resilience/resilientRequest';
+   * import { EFILE_PROFILE } from './resilience/profiles';
+   * 
+   * const result = await resilientRequest(
+   *   () => this.actualIrsApiCall(xmlData),
+   *   EFILE_PROFILE
+   *   // No fallback - e-filing must succeed or fail explicitly
+   * );
+   * return result.data;
    */
   private async transmitToIRS(
     xmlData: string,
