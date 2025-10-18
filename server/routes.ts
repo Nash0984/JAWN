@@ -10763,6 +10763,94 @@ If the question cannot be answered with the available information, say so clearl
   }));
 
   // ============================================================================
+  // CROSS-VALIDATION ENDPOINTS - Document Consistency Checking
+  // ============================================================================
+
+  // Get validation results and discrepancies for a VITA session
+  app.get('/api/vita-sessions/:id/validation', requireAuth, asyncHandler(async (req: Request, res: Response) => {
+    const { id } = req.params;
+    
+    // Get the latest validation result for this VITA session
+    const validationResult = await storage.getDocumentValidationResultByVitaSession(id);
+    
+    if (!validationResult) {
+      return res.json({
+        status: 'not_validated',
+        message: 'No validation has been performed for this VITA session yet'
+      });
+    }
+    
+    // Get all discrepancies for this validation result
+    const discrepancies = await storage.getDocumentDiscrepanciesByValidation(validationResult.id);
+    
+    res.json({
+      validationResult,
+      discrepancies,
+      summary: {
+        overallStatus: validationResult.overallStatus,
+        totalChecks: validationResult.totalChecks,
+        errorsFound: validationResult.errorsFound,
+        warningsFound: validationResult.warningsFound,
+        validatedAt: validationResult.validatedAt,
+        discrepancyCount: discrepancies.length
+      }
+    });
+  }));
+
+  // Trigger re-validation for a VITA session
+  app.post('/api/vita-sessions/:id/revalidate', requireAuth, asyncHandler(async (req: Request, res: Response) => {
+    const { id } = req.params;
+    
+    // Verify the VITA session exists
+    const vitaSession = await storage.getVitaIntakeSession(id);
+    if (!vitaSession) {
+      throw notFoundError('VITA intake session not found');
+    }
+    
+    // Import and trigger cross-validation service
+    const { crossValidationService } = await import('./services/crossValidationService');
+    
+    console.log(`[API] Manual re-validation triggered for VITA session ${id}`);
+    
+    // Run validation synchronously to return results immediately
+    const result = await crossValidationService.validateVitaSession(id);
+    
+    if (result.status === 'skipped') {
+      return res.json({
+        status: 'skipped',
+        message: result.reason || 'Validation was skipped',
+        details: result
+      });
+    }
+    
+    if (result.status === 'failed') {
+      return res.status(500).json({
+        status: 'failed',
+        message: 'Validation failed',
+        error: result.error
+      });
+    }
+    
+    // Fetch the complete validation results
+    const validationResult = await storage.getDocumentValidationResultByVitaSession(id);
+    const discrepancies = validationResult 
+      ? await storage.getDocumentDiscrepanciesByValidation(validationResult.id)
+      : [];
+    
+    res.json({
+      status: 'completed',
+      validationResult,
+      discrepancies,
+      summary: {
+        overallStatus: result.overallStatus,
+        errorsFound: result.errorsFound,
+        warningsFound: result.warningsFound,
+        totalDiscrepancies: discrepancies.length
+      }
+    });
+  }));
+
+  // ============================================================================
   // DEMO DATA ENDPOINTS - For Maryland Universal Benefits-Tax Navigator Showcase
   // ============================================================================
 
