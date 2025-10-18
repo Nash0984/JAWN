@@ -573,6 +573,36 @@ function Router() {
             )}
           </Route>
           
+          {/* Feedback System */}
+          <Route path="/suggestions">
+            {() => (
+              <ProtectedRoute>
+                <SuggestionVotingList />
+              </ProtectedRoute>
+            )}
+          </Route>
+          <Route path="/feedback/:id">
+            {() => (
+              <ProtectedRoute>
+                <FeedbackDetailView />
+              </ProtectedRoute>
+            )}
+          </Route>
+          <Route path="/feedback">
+            {() => (
+              <ProtectedRoute requireStaff>
+                <FeedbackDashboard />
+              </ProtectedRoute>
+            )}
+          </Route>
+          <Route path="/faq/admin">
+            {() => (
+              <ProtectedRoute requireAdmin>
+                <FAQDashboard />
+              </ProtectedRoute>
+            )}
+          </Route>
+          
           {/* 404 fallback */}
           <Route component={NotFound} />
         </Switch>
