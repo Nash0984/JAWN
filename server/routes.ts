@@ -835,6 +835,66 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
     }
   });
 
+  // Get document quality analysis
+  app.get("/api/documents/:id/quality", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const document = await storage.getDocument(req.params.id);
+      if (!document) {
+        return res.status(404).json({ error: "Document not found" });
+      }
+
+      const history = await storage.getDocumentQualityHistory(req.params.id);
+
+      res.json({
+        score: document.qualityScore,
+        metrics: document.qualityMetrics,
+        issues: document.qualityFlags,
+        suggestions: document.qualitySuggestions,
+        analyzedAt: document.analyzedAt,
+        history,
+      });
+    } catch (error) {
+      console.error("Error fetching document quality:", error);
+      res.status(500).json({ error: "Failed to fetch document quality" });
+    }
+  });
+
+  // Trigger document quality re-analysis
+  app.post("/api/documents/:id/reanalyze", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const document = await storage.getDocument(req.params.id);
+      if (!document) {
+        return res.status(404).json({ error: "Document not found" });
+      }
+
+      const { DocumentQualityAnalyzerService } = await import("./services/documentQualityAnalyzerService");
+      const qualityAnalyzer = new DocumentQualityAnalyzerService();
+      
+      const result = await qualityAnalyzer.analyzeDocument(req.params.id);
+
+      await storage.updateDocumentQuality(req.params.id, {
+        qualityScore: result.overallScore,
+        qualityMetrics: result.metrics,
+        qualityFlags: result.issues,
+        qualitySuggestions: result.suggestions,
+        analyzedAt: new Date(),
+      });
+
+      await storage.createDocumentQualityEvent({
+        documentId: req.params.id,
+        qualityScore: result.overallScore,
+        metrics: result.metrics,
+        issues: result.issues,
+        analyzedAt: new Date(),
+      });
+
+      res.json(result);
+    } catch (error) {
+      console.error("Error reanalyzing document quality:", error);
+      res.status(500).json({ error: "Failed to reanalyze document quality" });
+    }
+  });
+
   // Policy Sources Management
   app.get("/api/policy-sources", requireAdmin, async (req: Request, res: Response) => {
     try {

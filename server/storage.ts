@@ -3,6 +3,7 @@ import {
   documents,
   documentChunks,
   documentVersions,
+  documentQualityEvents,
   benefitPrograms,
   documentTypes,
   policySources,
@@ -31,6 +32,8 @@ import {
   type InsertDocumentChunk,
   type DocumentVersion,
   type InsertDocumentVersion,
+  type DocumentQualityEvent,
+  type InsertDocumentQualityEvent,
   type BenefitProgram,
   type InsertBenefitProgram,
   type DocumentType,
@@ -299,6 +302,17 @@ export interface IStorage {
   getActiveDocumentVersion(documentId: string): Promise<DocumentVersion | null>;
   updateDocumentVersion(id: string, updates: Partial<DocumentVersion>): Promise<DocumentVersion>;
   deactivateDocumentVersions(documentId: string): Promise<void>;
+
+  // Document Quality Analysis
+  updateDocumentQuality(documentId: string, qualityData: {
+    qualityScore: number;
+    qualityMetrics: any;
+    qualityFlags: any;
+    qualitySuggestions: any;
+    analyzedAt: Date;
+  }): Promise<Document>;
+  createDocumentQualityEvent(event: InsertDocumentQualityEvent): Promise<DocumentQualityEvent>;
+  getDocumentQualityHistory(documentId: string): Promise<DocumentQualityEvent[]>;
 
   // Rules as Code - SNAP Income Limits
   createSnapIncomeLimit(limit: InsertSnapIncomeLimit): Promise<SnapIncomeLimit>;
@@ -1248,6 +1262,44 @@ export class DatabaseStorage implements IStorage {
       .update(documentVersions)
       .set({ isActive: false })
       .where(eq(documentVersions.documentId, documentId));
+  }
+
+  // Document Quality Analysis
+  async updateDocumentQuality(documentId: string, qualityData: {
+    qualityScore: number;
+    qualityMetrics: any;
+    qualityFlags: any;
+    qualitySuggestions: any;
+    analyzedAt: Date;
+  }): Promise<Document> {
+    const [document] = await db
+      .update(documents)
+      .set({
+        qualityScore: qualityData.qualityScore,
+        qualityMetrics: qualityData.qualityMetrics,
+        qualityFlags: qualityData.qualityFlags,
+        qualitySuggestions: qualityData.qualitySuggestions,
+        analyzedAt: qualityData.analyzedAt,
+      })
+      .where(eq(documents.id, documentId))
+      .returning();
+    return document;
+  }
+
+  async createDocumentQualityEvent(event: InsertDocumentQualityEvent): Promise<DocumentQualityEvent> {
+    const [qualityEvent] = await db
+      .insert(documentQualityEvents)
+      .values(event)
+      .returning();
+    return qualityEvent;
+  }
+
+  async getDocumentQualityHistory(documentId: string): Promise<DocumentQualityEvent[]> {
+    return await db
+      .select()
+      .from(documentQualityEvents)
+      .where(eq(documentQualityEvents.documentId, documentId))
+      .orderBy(desc(documentQualityEvents.analyzedAt));
   }
 
   // Rules as Code - SNAP Income Limits
