@@ -104,6 +104,7 @@ export const standardRateLimiter: RateLimitRequestHandler = rateLimit({
   },
   standardHeaders: true, // Return rate limit info in RateLimit-* headers
   legacyHeaders: false, // Disable X-RateLimit-* headers
+  validate: false, // Disable validation - we handle IPv6 normalization in keyGenerator
   // Use user ID or IP for rate limiting
   keyGenerator: (req: Request) => {
     const user = (req as any).user;
@@ -142,6 +143,7 @@ export const authRateLimiter: RateLimitRequestHandler = rateLimit({
     message: 'Too many login attempts. Please try again later.',
     retryAfter: 900 // 15 minutes in seconds
   },
+  validate: false, // Disable validation - we handle IPv6 normalization in keyGenerator
   keyGenerator: (req: Request) => `auth:${normalizeIpForKey(req.ip)}`,
   handler: (req, res) => {
     console.warn(`⚠️  Auth rate limit exceeded from IP: ${req.ip}`);
@@ -171,6 +173,7 @@ export const aiRateLimiter: RateLimitRequestHandler = rateLimit({
     message: 'AI request limit exceeded. Please wait before trying again.',
     retryAfter: 60
   },
+  validate: false, // Disable validation - we handle IPv6 normalization in keyGenerator
   keyGenerator: (req: Request) => {
     const user = (req as any).user;
     return user ? `ai:user:${user.id}` : `ai:ip:${normalizeIpForKey(req.ip)}`;
@@ -194,6 +197,7 @@ export const uploadRateLimiter: RateLimitRequestHandler = rateLimit({
     message: 'Upload limit exceeded for this hour. Please try again later.',
     retryAfter: 3600
   },
+  validate: false, // Disable validation - we handle IPv6 normalization in keyGenerator
   keyGenerator: (req: Request) => {
     const user = (req as any).user;
     return user ? `upload:user:${user.id}` : `upload:ip:${normalizeIpForKey(req.ip)}`;
