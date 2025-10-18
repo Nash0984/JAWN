@@ -55,8 +55,42 @@ class DocumentProcessor {
         message: "Assessing document quality",
       });
 
-      // Step 1: Quality Assessment
-      const qualityAssessment = await this.assessDocumentQuality(documentId);
+      // Step 1: Detailed Quality Analysis (BEFORE enhancement)
+      const { DocumentQualityAnalyzerService } = await import("./documentQualityAnalyzerService");
+      const qualityAnalyzer = new DocumentQualityAnalyzerService();
+      
+      console.log(`[DocumentProcessor] Running detailed quality analysis for document ${documentId}`);
+      const detailedQualityResult = await qualityAnalyzer.analyzeDocument(documentId);
+      
+      // Persist quality metrics to database
+      await storage.updateDocumentQuality(documentId, {
+        qualityScore: detailedQualityResult.overallScore ?? detailedQualityResult.qualityScore,
+        qualityMetrics: detailedQualityResult.metrics,
+        qualityFlags: detailedQualityResult.issues,
+        qualitySuggestions: detailedQualityResult.suggestions,
+        analyzedAt: new Date(),
+      });
+      
+      await storage.createDocumentQualityEvent({
+        documentId,
+        qualityScore: detailedQualityResult.overallScore ?? detailedQualityResult.qualityScore,
+        metrics: detailedQualityResult.metrics,
+        issues: detailedQualityResult.issues,
+        analyzedAt: new Date(),
+      });
+      
+      console.log(`[DocumentProcessor] Quality analysis completed for document ${documentId}, score: ${detailedQualityResult.qualityScore}`);
+      
+      // Step 1.5: Auto-Enhancement (pass quality metrics directly)
+      const { AutoEnhancementService } = await import("./autoEnhancementService");
+      const autoEnhancer = new AutoEnhancementService();
+      
+      console.log(`[DocumentProcessor] Running auto-enhancement for document ${documentId}`);
+      const enhancementResult = await autoEnhancer.enhanceDocument(documentId, detailedQualityResult);
+      
+      console.log(`[DocumentProcessor] Enhancement result: ${enhancementResult.status}`, 
+        enhancementResult.improvement ? `(improvement: +${enhancementResult.improvement.toFixed(3)})` : ''
+      );
       
       await this.updateProcessingStatus(documentId, {
         stage: "ocr",
@@ -65,36 +99,13 @@ class DocumentProcessor {
         completedSteps: ["quality_check"],
       });
 
-      // Step 2: OCR Processing
-      const extractedText = await this.performOCR(documentId);
+      // Step 2: OCR Processing (using enhanced version if available)
+      const document = await storage.getDocument(documentId);
+      const ocrDocumentId = enhancementResult.status === 'completed' && document?.enhancedObjectPath
+        ? documentId // Use same ID, enhanced version is now in the document record
+        : documentId;
       
-      // Step 2.5: Detailed Quality Analysis (after OCR) - run in background
-      const { DocumentQualityAnalyzerService } = await import("./documentQualityAnalyzerService");
-      const qualityAnalyzer = new DocumentQualityAnalyzerService();
-      
-      // Don't await - let quality analysis run in background without blocking upload
-      qualityAnalyzer.analyzeDocument(documentId).then(async (detailedQualityResult) => {
-        // Store quality analysis results
-        await storage.updateDocumentQuality(documentId, {
-          qualityScore: detailedQualityResult.overallScore,
-          qualityMetrics: detailedQualityResult.metrics,
-          qualityFlags: detailedQualityResult.issues,
-          qualitySuggestions: detailedQualityResult.suggestions,
-          analyzedAt: new Date(),
-        });
-        
-        await storage.createDocumentQualityEvent({
-          documentId,
-          qualityScore: detailedQualityResult.overallScore,
-          metrics: detailedQualityResult.metrics,
-          issues: detailedQualityResult.issues,
-          analyzedAt: new Date(),
-        });
-        
-        console.log(`[Quality Analyzer] Background analysis completed for document ${documentId}`);
-      }).catch(err => {
-        console.error('[Quality Analyzer] Background analysis failed:', err);
-      });
+      const extractedText = await this.performOCR(ocrDocumentId);
       
       await this.updateProcessingStatus(documentId, {
         stage: "classification",
@@ -137,11 +148,11 @@ class DocumentProcessor {
       await storage.updateDocument(documentId, {
         status: "processed",
         processingStatus: this.processingJobs.get(documentId),
-        qualityScore: qualityAssessment.qualityScore,
-        ocrAccuracy: qualityAssessment.ocrAccuracy,
+        qualityScore: detailedQualityResult.qualityScore,
+        ocrAccuracy: detailedQualityResult.metrics.ocrConfidence ?? 0.9,
         metadata: {
           classification,
-          qualityAssessment,
+          qualityAssessment: detailedQualityResult,
           chunksCount: chunks.length,
         },
       });
@@ -279,8 +290,12 @@ class DocumentProcessor {
         throw new Error("Document not found");
       }
 
+      // Use enhanced version for OCR if available (better quality = better OCR)
+      const ocrPath = document.enhancedObjectPath || document.objectPath;
+      console.log(`[DocumentProcessor] Using ${document.enhancedObjectPath ? 'enhanced' : 'original'} version for OCR: ${ocrPath}`);
+
       // In a real implementation, this would:
-      // 1. Download file from object storage
+      // 1. Download file from object storage using ocrPath
       // 2. Use OCR services (Tesseract, AWS Textract, Google Document AI)
       // 3. Handle different file formats (PDF, images)
       // 4. Apply post-processing and error correction
