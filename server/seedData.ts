@@ -543,7 +543,8 @@ export async function initializeSystemData() {
     await seedQCData();
     await seedDhsForms();
     await seedNotificationTemplates();
-    await seedPolicyManual();
+    // TODO: Fix policy_manual_chapters table schema before enabling
+    // await seedPolicyManual();
     
     console.log('✓ System data initialization complete');
   } catch (error) {
