@@ -97,8 +97,12 @@ export const documents = pgTable("documents", {
   tenantId: varchar("tenant_id").references((): any => tenants.id), // Multi-tenant isolation
   status: text("status").notNull().default("uploaded"), // uploaded, processing, processed, failed
   processingStatus: jsonb("processing_status"), // detailed processing info
-  qualityScore: real("quality_score"), // 0-1 quality assessment
+  qualityScore: real("quality_score"), // 0-1 overall weighted quality score
   ocrAccuracy: real("ocr_accuracy"), // 0-1 OCR accuracy
+  qualityMetrics: jsonb("quality_metrics"), // per-page blur, OCR confidence, completeness, format scores
+  qualityFlags: jsonb("quality_flags"), // array of issue objects with severity (error/warning/info)
+  qualitySuggestions: jsonb("quality_suggestions"), // actionable correction messages for users
+  analyzedAt: timestamp("analyzed_at"), // when quality analysis was performed
   metadata: jsonb("metadata"), // extracted metadata
   // Audit trail fields for golden source documents
   sourceUrl: text("source_url"), // original URL where document was downloaded from
@@ -175,6 +179,21 @@ export const documentVersions = pgTable("document_versions", {
   isActive: boolean("is_active").default(true).notNull(), // Current active version
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
+
+// Document Quality Events - Historical tracking of quality analysis
+export const documentQualityEvents = pgTable("document_quality_events", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  documentId: varchar("document_id").references(() => documents.id, { onDelete: "cascade" }).notNull(),
+  qualityScore: real("quality_score").notNull(), // 0-1 overall weighted score
+  metrics: jsonb("metrics").notNull(), // { blur: 0.8, ocrConfidence: 0.9, completeness: true, format: true }
+  issues: jsonb("issues"), // severity-tiered issue objects: [{ severity: 'error', type: 'blur', message: '...', page: 1 }]
+  suggestions: jsonb("suggestions"), // actionable correction messages: ['Retake photo with better lighting']
+  analyzedAt: timestamp("analyzed_at").defaultNow().notNull(),
+}, (table) => ({
+  documentIdIdx: index("quality_events_document_id_idx").on(table.documentId),
+  analyzedAtIdx: index("quality_events_analyzed_at_idx").on(table.analyzedAt),
+  qualityScoreIdx: index("quality_events_quality_score_idx").on(table.qualityScore),
+}));
 
 // RAG search results for transparency and caching
 export const searchResults = pgTable("search_results", {
@@ -278,6 +297,13 @@ export const trainingJobsRelations = relations(trainingJobs, ({ one }) => ({
 export const documentVersionsRelations = relations(documentVersions, ({ one }) => ({
   document: one(documents, {
     fields: [documentVersions.documentId],
+    references: [documents.id],
+  }),
+}));
+
+export const documentQualityEventsRelations = relations(documentQualityEvents, ({ one }) => ({
+  document: one(documents, {
+    fields: [documentQualityEvents.documentId],
     references: [documents.id],
   }),
 }));
@@ -1719,6 +1745,11 @@ export const insertDocumentVersionSchema = createInsertSchema(documentVersions).
   createdAt: true,
 });
 
+export const insertDocumentQualityEventSchema = createInsertSchema(documentQualityEvents).omit({
+  id: true,
+  analyzedAt: true,
+});
+
 export const insertSearchResultSchema = createInsertSchema(searchResults).omit({
   id: true,
   createdAt: true,
@@ -1751,6 +1782,9 @@ export type TrainingJob = typeof trainingJobs.$inferSelect;
 
 export type InsertDocumentVersion = z.infer<typeof insertDocumentVersionSchema>;
 export type DocumentVersion = typeof documentVersions.$inferSelect;
+
+export type InsertDocumentQualityEvent = z.infer<typeof insertDocumentQualityEventSchema>;
+export type DocumentQualityEvent = typeof documentQualityEvents.$inferSelect;
 
 export type InsertSearchResult = z.infer<typeof insertSearchResultSchema>;
 export type SearchResult = typeof searchResults.$inferSelect;
@@ -6062,3 +6096,41 @@ export const insertAppointmentSchema = createInsertSchema(appointments).omit({
 // Types
 export type InsertAppointment = z.infer<typeof insertAppointmentSchema>;
 export type Appointment = typeof appointments.$inferSelect;
+
+// ============================================================================
+// DOCUMENT QUALITY ANALYZER SCHEMAS
+// ============================================================================
+
+export const qualityIssueSchema = z.object({
+  severity: z.enum(['error', 'warning', 'info']),
+  type: z.enum(['blur', 'ocr_confidence', 'completeness', 'format', 'other']),
+  message: z.string(),
+  page: z.number().optional(),
+  details: z.any().optional(),
+});
+
+export const qualityMetricsSchema = z.object({
+  blur: z.number().min(0).max(1).optional(), // 0-1 score (higher = sharper)
+  ocrConfidence: z.number().min(0).max(1).optional(), // 0-1 score (higher = more confident)
+  completeness: z.boolean().optional(), // all required pages present
+  format: z.boolean().optional(), // file is readable
+  pageCount: z.number().optional(),
+  perPageMetrics: z.array(z.object({
+    page: z.number(),
+    blur: z.number().min(0).max(1).optional(),
+    ocrConfidence: z.number().min(0).max(1).optional(),
+  })).optional(),
+});
+
+export const qualityAnalysisResultSchema = z.object({
+  documentId: z.string(),
+  qualityScore: z.number().min(0).max(1), // 0-1 overall weighted score
+  metrics: qualityMetricsSchema,
+  issues: z.array(qualityIssueSchema),
+  suggestions: z.array(z.string()),
+  analyzedAt: z.date(),
+});
+
+export type QualityIssue = z.infer<typeof qualityIssueSchema>;
+export type QualityMetrics = z.infer<typeof qualityMetricsSchema>;
+export type QualityAnalysisResult = z.infer<typeof qualityAnalysisResultSchema>;

@@ -68,6 +68,34 @@ class DocumentProcessor {
       // Step 2: OCR Processing
       const extractedText = await this.performOCR(documentId);
       
+      // Step 2.5: Detailed Quality Analysis (after OCR) - run in background
+      const { DocumentQualityAnalyzerService } = await import("./documentQualityAnalyzerService");
+      const qualityAnalyzer = new DocumentQualityAnalyzerService();
+      
+      // Don't await - let quality analysis run in background without blocking upload
+      qualityAnalyzer.analyzeDocument(documentId).then(async (detailedQualityResult) => {
+        // Store quality analysis results
+        await storage.updateDocumentQuality(documentId, {
+          qualityScore: detailedQualityResult.overallScore,
+          qualityMetrics: detailedQualityResult.metrics,
+          qualityFlags: detailedQualityResult.issues,
+          qualitySuggestions: detailedQualityResult.suggestions,
+          analyzedAt: new Date(),
+        });
+        
+        await storage.createDocumentQualityEvent({
+          documentId,
+          qualityScore: detailedQualityResult.overallScore,
+          metrics: detailedQualityResult.metrics,
+          issues: detailedQualityResult.issues,
+          analyzedAt: new Date(),
+        });
+        
+        console.log(`[Quality Analyzer] Background analysis completed for document ${documentId}`);
+      }).catch(err => {
+        console.error('[Quality Analyzer] Background analysis failed:', err);
+      });
+      
       await this.updateProcessingStatus(documentId, {
         stage: "classification",
         progress: 0.4,
