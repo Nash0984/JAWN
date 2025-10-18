@@ -1,7 +1,7 @@
 # JAWN Maryland Universal Benefits-Tax Navigator - Master Documentation Index
 
 **LAST_UPDATED:** 2025-10-18T21:15:00Z  
-**Platform Version:** 3.0  
+**Platform Version:** 2.0  
 **Documentation Status:** ✅ Fully Consolidated & Current  
 **Production Readiness:** 92/100 (A Grade)
 
@@ -16,7 +16,7 @@ This master index provides complete navigation for all documentation across the 
 | **Features** | 105 | `featureMetadata.ts` |
 | **API Endpoints** | 469 | `grep -E "app\.(get\|post\|put\|patch\|delete)" routes.ts` |
 | **Database Tables** | 173 | `grep "pgTable(" schema.ts` |
-| **Frontend Pages** | 85 | Component count in `/client/src/pages` |
+| **Frontend Pages** | 73 | Component count in `/client/src/pages` |
 | **Backend Services** | 94 | Service file count in `/server/services` |
 | **Test Coverage** | 65% | Vitest + Playwright tests |
 | **WCAG Compliance** | 91.7% | axe-core automated testing |
