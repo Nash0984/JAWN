@@ -4,6 +4,8 @@ import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { File, Search, FileText, HelpCircle, Menu, User, Calculator, BookOpen, FileCheck, Users, Shield, LogOut, LogIn, UserPlus, Settings, Globe, Activity, LayoutDashboard } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { useTranslation } from "react-i18next";
+import { LanguageSwitcher } from "./LanguageSwitcher";
 import LanguageSelector from "./LanguageSelector";
 import NotificationBell from "./NotificationBell";
 import { MarylandFlag } from "./MarylandFlag";
