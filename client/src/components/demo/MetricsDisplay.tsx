@@ -13,26 +13,26 @@ export function MetricsDisplay({ metrics }: MetricsDisplayProps) {
   const apiResponseData = [
     {
       name: 'P50',
-      'Eligibility': metrics.platformPerformance.apiResponseTimes.byEndpoint['/api/eligibility/radar']?.p50 || 0,
-      'PolicyEngine': metrics.platformPerformance.apiResponseTimes.byEndpoint['/api/policyengine/calculate']?.p50 || 0,
-      'RAG Search': metrics.platformPerformance.apiResponseTimes.byEndpoint['/api/rag/search']?.p50 || 0,
+      'SNAP Eligibility': metrics.platformPerformance.apiResponseTimes.byEndpoint['/api/eligibility/snap']?.p50 || 0,
+      'Tax Calculation': metrics.platformPerformance.apiResponseTimes.byEndpoint['/api/tax/calculate']?.p50 || 0,
+      'Document Upload': metrics.platformPerformance.apiResponseTimes.byEndpoint['/api/documents/upload']?.p50 || 0,
     },
     {
       name: 'P95',
-      'Eligibility': metrics.platformPerformance.apiResponseTimes.byEndpoint['/api/eligibility/radar']?.p95 || 0,
-      'PolicyEngine': metrics.platformPerformance.apiResponseTimes.byEndpoint['/api/policyengine/calculate']?.p95 || 0,
-      'RAG Search': metrics.platformPerformance.apiResponseTimes.byEndpoint['/api/rag/search']?.p95 || 0,
+      'SNAP Eligibility': metrics.platformPerformance.apiResponseTimes.byEndpoint['/api/eligibility/snap']?.p95 || 0,
+      'Tax Calculation': metrics.platformPerformance.apiResponseTimes.byEndpoint['/api/tax/calculate']?.p95 || 0,
+      'Document Upload': metrics.platformPerformance.apiResponseTimes.byEndpoint['/api/documents/upload']?.p95 || 0,
     },
     {
       name: 'P99',
-      'Eligibility': metrics.platformPerformance.apiResponseTimes.byEndpoint['/api/eligibility/radar']?.p99 || 0,
-      'PolicyEngine': metrics.platformPerformance.apiResponseTimes.byEndpoint['/api/policyengine/calculate']?.p99 || 0,
-      'RAG Search': metrics.platformPerformance.apiResponseTimes.byEndpoint['/api/rag/search']?.p99 || 0,
+      'SNAP Eligibility': metrics.platformPerformance.apiResponseTimes.byEndpoint['/api/eligibility/snap']?.p99 || 0,
+      'Tax Calculation': metrics.platformPerformance.apiResponseTimes.byEndpoint['/api/tax/calculate']?.p99 || 0,
+      'Document Upload': metrics.platformPerformance.apiResponseTimes.byEndpoint['/api/documents/upload']?.p99 || 0,
     },
   ];
 
-  const cacheHitData = Object.entries(metrics.platformPerformance.cacheHitRates.byCache).map(([name, data]) => ({
-    name: name.replace('Cache', ''),
+  const cacheHitData = Object.entries(metrics.platformPerformance.cacheHitRates.byCache || {}).map(([name, data]) => ({
+    name: name.replace('Cache', '').replace(/([A-Z])/g, ' $1').trim(),
     value: data.hitRate,
     hits: data.hits,
     misses: data.misses,
@@ -101,9 +101,9 @@ export function MetricsDisplay({ metrics }: MetricsDisplayProps) {
               <YAxis />
               <Tooltip />
               <Legend />
-              <Bar dataKey="Eligibility" fill="#10b981" />
-              <Bar dataKey="PolicyEngine" fill="#3b82f6" />
-              <Bar dataKey="RAG Search" fill="#f59e0b" />
+              <Bar dataKey="SNAP Eligibility" fill="#10b981" />
+              <Bar dataKey="Tax Calculation" fill="#3b82f6" />
+              <Bar dataKey="Document Upload" fill="#f59e0b" />
             </BarChart>
           </ResponsiveContainer>
         </CardContent>
