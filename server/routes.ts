@@ -64,6 +64,8 @@ import {
   insertFaqCandidateSchema,
   insertFaqArticleSchema,
   insertFormComponentSchema,
+  insertContentRulesMappingSchema,
+  insertDynamicNotificationTemplateSchema,
   searchQueries,
   auditLogs,
   ruleChangeLogs,
@@ -89,7 +91,8 @@ import {
   clientConsents,
   appointments,
   formComponents,
-  dynamicNotificationTemplates
+  dynamicNotificationTemplates,
+  contentRulesMapping
 } from "@shared/schema";
 import { z } from "zod";
 import bcrypt from "bcryptjs";
@@ -12789,6 +12792,382 @@ If the question cannot be answered with the available information, say so clearl
       .returning();
 
     res.status(201).json(template);
+  }));
+
+  // ============================================================================
+  // FORM COMPONENTS API - Alternative endpoint prefix for component management
+  // ============================================================================
+  
+  // GET /api/form-components - List all active form components (staff/admin)
+  app.get('/api/form-components', requireStaff, asyncHandler(async (req: Request, res: Response) => {
+    const { program } = req.query;
+
+    let query = db.select().from(formComponents).where(eq(formComponents.isActive, true));
+
+    const components = await query;
+
+    // Filter by program if specified
+    let filteredComponents = components;
+    if (program) {
+      filteredComponents = components.filter(c => 
+        !c.program || c.program === program || c.programCodes?.includes(program as string)
+      );
+    }
+
+    // Group by component type
+    const grouped = filteredComponents.reduce((acc, component) => {
+      const type = component.componentType || 'other';
+      if (!acc[type]) {
+        acc[type] = [];
+      }
+      acc[type].push(component);
+      return acc;
+    }, {} as Record<string, typeof components>);
+
+    res.json(grouped);
+  }));
+
+  // POST /api/form-components - Create new component (admin only)
+  app.post('/api/form-components', requireAdmin, asyncHandler(async (req: Request, res: Response) => {
+    const data = insertFormComponentSchema.parse(req.body);
+    
+    const userId = req.user?.id;
+    if (!userId) {
+      throw authorizationError('User not authenticated');
+    }
+
+    const [component] = await db
+      .insert(formComponents)
+      .values({
+        ...data,
+        createdBy: userId,
+      })
+      .returning();
+
+    res.status(201).json(component);
+  }));
+
+  // PUT /api/form-components/:id - Update component (admin only)
+  app.put('/api/form-components/:id', requireAdmin, asyncHandler(async (req: Request, res: Response) => {
+    const data = insertFormComponentSchema.partial().parse(req.body);
+
+    const [existing] = await db
+      .select()
+      .from(formComponents)
+      .where(eq(formComponents.id, req.params.id));
+
+    if (!existing) {
+      throw notFoundError('Component not found');
+    }
+
+    const [updated] = await db
+      .update(formComponents)
+      .set({
+        ...data,
+        updatedAt: new Date(),
+      })
+      .where(eq(formComponents.id, req.params.id))
+      .returning();
+
+    res.json(updated);
+  }));
+
+  // DELETE /api/form-components/:id - Soft delete component (admin only)
+  app.delete('/api/form-components/:id', requireAdmin, asyncHandler(async (req: Request, res: Response) => {
+    const [existing] = await db
+      .select()
+      .from(formComponents)
+      .where(eq(formComponents.id, req.params.id));
+
+    if (!existing) {
+      throw notFoundError('Component not found');
+    }
+
+    const [deleted] = await db
+      .update(formComponents)
+      .set({
+        isActive: false,
+        updatedAt: new Date(),
+      })
+      .where(eq(formComponents.id, req.params.id))
+      .returning();
+
+    res.json({ success: true, component: deleted });
+  }));
+
+  // POST /api/form-components/:id/duplicate - Duplicate existing component (admin only)
+  app.post('/api/form-components/:id/duplicate', requireAdmin, asyncHandler(async (req: Request, res: Response) => {
+    const { componentCode } = req.body;
+
+    if (!componentCode || typeof componentCode !== 'string') {
+      throw validationError('componentCode is required and must be a string');
+    }
+
+    const userId = req.user?.id;
+    if (!userId) {
+      throw authorizationError('User not authenticated');
+    }
+
+    const [existing] = await db
+      .select()
+      .from(formComponents)
+      .where(eq(formComponents.id, req.params.id));
+
+    if (!existing) {
+      throw notFoundError('Component not found');
+    }
+
+    // Check if new componentCode already exists
+    const [existingCode] = await db
+      .select()
+      .from(formComponents)
+      .where(eq(formComponents.componentCode, componentCode));
+
+    if (existingCode) {
+      throw validationError('Component code already exists');
+    }
+
+    // Create duplicate with new componentCode
+    const [duplicate] = await db
+      .insert(formComponents)
+      .values({
+        componentCode,
+        componentName: `${existing.componentName} (Copy)`,
+        componentType: existing.componentType,
+        program: existing.program,
+        programCodes: existing.programCodes,
+        templateContent: existing.templateContent,
+        contentRules: existing.contentRules,
+        usageCount: 0,
+        isActive: true,
+        createdBy: userId,
+      })
+      .returning();
+
+    res.status(201).json(duplicate);
+  }));
+
+  // GET /api/form-components/:id/preview - Preview single component with sample data (staff/admin)
+  app.get('/api/form-components/:id/preview', requireStaff, asyncHandler(async (req: Request, res: Response) => {
+    const [component] = await db
+      .select()
+      .from(formComponents)
+      .where(
+        and(
+          eq(formComponents.id, req.params.id),
+          eq(formComponents.isActive, true)
+        )
+      );
+
+    if (!component) {
+      throw notFoundError('Component not found');
+    }
+
+    // Sample context data for preview
+    const sampleContextData = {
+      clientName: 'John Doe',
+      caseNumber: 'SNAP-12345',
+      benefitAmount: 250,
+      effectiveDate: new Date().toISOString().split('T')[0],
+      program: 'SNAP',
+      county: 'Baltimore',
+    };
+
+    let renderedContent = component.templateContent;
+    let resolvedData = {};
+
+    // Resolve content rules if present
+    if (component.contentRules) {
+      resolvedData = await dynamicNotificationService.resolveContentRules(
+        component.contentRules as Record<string, any>,
+        sampleContextData
+      );
+
+      // Render template with resolved data
+      renderedContent = dynamicNotificationService.renderTemplate(
+        component.templateContent,
+        resolvedData
+      );
+    }
+
+    res.json({
+      component,
+      preview: renderedContent,
+      sampleData: sampleContextData,
+      resolvedData,
+    });
+  }));
+
+  // ============================================================================
+  // CONTENT RULES MAPPING API - Links RaC changes to affected content
+  // ============================================================================
+
+  // GET /api/content-rules-mapping - Get all RaC-to-content mappings (admin only)
+  app.get('/api/content-rules-mapping', requireAdmin, asyncHandler(async (req: Request, res: Response) => {
+    const { rulesEngineTable, affectedContentType, syncStatus } = req.query;
+
+    let query = db.select().from(contentRulesMapping);
+
+    // Apply filters
+    const conditions = [];
+    if (rulesEngineTable) {
+      conditions.push(eq(contentRulesMapping.rulesEngineTable, rulesEngineTable as string));
+    }
+    if (affectedContentType) {
+      conditions.push(eq(contentRulesMapping.affectedContentType, affectedContentType as string));
+    }
+    if (syncStatus) {
+      conditions.push(eq(contentRulesMapping.syncStatus, syncStatus as string));
+    }
+
+    if (conditions.length > 0) {
+      query = query.where(and(...conditions));
+    }
+
+    const mappings = await query.orderBy(desc(contentRulesMapping.createdAt));
+
+    res.json(mappings);
+  }));
+
+  // POST /api/content-rules-mapping - Create new mapping (admin only)
+  app.post('/api/content-rules-mapping', requireAdmin, asyncHandler(async (req: Request, res: Response) => {
+    const schema = z.object({
+      rulesEngineTable: z.string(),
+      rulesEngineField: z.string().optional(),
+      affectedContentType: z.string(),
+      affectedContentId: z.string(),
+      mappingPath: z.string(),
+      transformFunction: z.string().optional(),
+      autoRegenerate: z.boolean().default(true),
+      requiresApproval: z.boolean().default(false),
+    });
+
+    const data = schema.parse(req.body);
+
+    const [mapping] = await db
+      .insert(contentRulesMapping)
+      .values({
+        ...data,
+        syncStatus: 'synced',
+      })
+      .returning();
+
+    res.status(201).json(mapping);
+  }));
+
+  // ============================================================================
+  // NOTIFICATION TEMPLATE CRUD API - Complete CRUD operations
+  // ============================================================================
+
+  // GET /api/notifications/templates/:id - Get specific template with content rules (staff/admin)
+  app.get('/api/notifications/templates/:id', requireStaff, asyncHandler(async (req: Request, res: Response) => {
+    const [template] = await db
+      .select()
+      .from(dynamicNotificationTemplates)
+      .where(eq(dynamicNotificationTemplates.id, req.params.id));
+
+    if (!template) {
+      throw notFoundError('Notification template not found');
+    }
+
+    res.json(template);
+  }));
+
+  // POST /api/notifications/templates - Create new template (admin only)
+  app.post('/api/notifications/templates', requireAdmin, asyncHandler(async (req: Request, res: Response) => {
+    const data = insertDynamicNotificationTemplateSchema.parse(req.body);
+
+    const userId = req.user?.id;
+    if (!userId) {
+      throw authorizationError('User not authenticated');
+    }
+
+    const [template] = await db
+      .insert(dynamicNotificationTemplates)
+      .values({
+        ...data,
+        createdBy: userId,
+      })
+      .returning();
+
+    res.status(201).json(template);
+  }));
+
+  // PUT /api/notifications/templates/:id - Update template (admin only)
+  app.put('/api/notifications/templates/:id', requireAdmin, asyncHandler(async (req: Request, res: Response) => {
+    const data = insertDynamicNotificationTemplateSchema.partial().parse(req.body);
+
+    const [existing] = await db
+      .select()
+      .from(dynamicNotificationTemplates)
+      .where(eq(dynamicNotificationTemplates.id, req.params.id));
+
+    if (!existing) {
+      throw notFoundError('Notification template not found');
+    }
+
+    const [updated] = await db
+      .update(dynamicNotificationTemplates)
+      .set({
+        ...data,
+        updatedAt: new Date(),
+      })
+      .where(eq(dynamicNotificationTemplates.id, req.params.id))
+      .returning();
+
+    res.json(updated);
+  }));
+
+  // PATCH /api/notifications/templates/:id/status - Toggle template active/inactive (admin only)
+  app.patch('/api/notifications/templates/:id/status', requireAdmin, asyncHandler(async (req: Request, res: Response) => {
+    const schema = z.object({
+      isActive: z.boolean(),
+    });
+
+    const { isActive } = schema.parse(req.body);
+
+    const [existing] = await db
+      .select()
+      .from(dynamicNotificationTemplates)
+      .where(eq(dynamicNotificationTemplates.id, req.params.id));
+
+    if (!existing) {
+      throw notFoundError('Notification template not found');
+    }
+
+    const [updated] = await db
+      .update(dynamicNotificationTemplates)
+      .set({
+        isActive,
+        updatedAt: new Date(),
+      })
+      .where(eq(dynamicNotificationTemplates.id, req.params.id))
+      .returning();
+
+    res.json(updated);
+  }));
+
+  // DELETE /api/notifications/templates/:id - Soft delete template (admin only)
+  app.delete('/api/notifications/templates/:id', requireAdmin, asyncHandler(async (req: Request, res: Response) => {
+    const [existing] = await db
+      .select()
+      .from(dynamicNotificationTemplates)
+      .where(eq(dynamicNotificationTemplates.id, req.params.id));
+
+    if (!existing) {
+      throw notFoundError('Notification template not found');
+    }
+
+    const [deleted] = await db
+      .update(dynamicNotificationTemplates)
+      .set({
+        isActive: false,
+        updatedAt: new Date(),
+      })
+      .where(eq(dynamicNotificationTemplates.id, req.params.id))
+      .returning();
+
+    res.json({ success: true, template: deleted });
   }));
 
   const httpServer = createServer(app);
