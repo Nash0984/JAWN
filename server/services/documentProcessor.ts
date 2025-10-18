@@ -159,6 +159,12 @@ class DocumentProcessor {
 
       console.log(`Document ${documentId} processed successfully`);
       
+      // Trigger cross-validation for associated VITA session (if applicable)
+      // This runs in background and doesn't block document processing
+      this.triggerCrossValidation(documentId).catch(err => {
+        console.error('[Cross-Validation] Background validation trigger failed:', err);
+      });
+      
     } catch (error) {
       console.error(`Error processing document ${documentId}:`, error);
       
@@ -486,6 +492,46 @@ class DocumentProcessor {
     
     // Start processing again
     await this.processDocument(documentId);
+  }
+
+  /**
+   * Trigger cross-validation for VITA sessions with tax documents
+   * This checks if the document is linked to a vita session and triggers validation
+   */
+  private async triggerCrossValidation(documentId: string): Promise<void> {
+    try {
+      // Check if this document is linked to any tax documents
+      const taxDocs = await storage.getTaxDocuments({ documentId });
+      
+      if (taxDocs.length === 0) {
+        // Not a tax document, skip validation
+        return;
+      }
+      
+      // Get unique vita session IDs
+      const vitaSessionIds = [...new Set(
+        taxDocs
+          .map(td => td.vitaSessionId)
+          .filter(Boolean) as string[]
+      )];
+      
+      if (vitaSessionIds.length === 0) {
+        // No vita sessions linked, skip validation
+        return;
+      }
+      
+      // Import cross-validation service
+      const { crossValidationService } = await import('./crossValidationService');
+      
+      // Trigger validation for each linked VITA session
+      for (const vitaSessionId of vitaSessionIds) {
+        console.log(`[Cross-Validation] Triggering validation for VITA session ${vitaSessionId} (document ${documentId})`);
+        await crossValidationService.validateVitaSession(vitaSessionId);
+      }
+    } catch (error) {
+      console.error('[Cross-Validation] Failed to trigger validation:', error);
+      // Don't throw - this is a background operation
+    }
   }
 }
 
