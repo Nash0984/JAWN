@@ -33,6 +33,7 @@ export default function Navigation() {
   const allNavigationItems = [
     { name: t("nav.home"), href: "/", icon: FileText, roles: ["public", "client", "navigator", "caseworker", "admin", "super_admin"] },
     { name: t("nav.search"), href: "/search", icon: Search, roles: ["public", "client", "navigator", "caseworker", "admin", "super_admin"] },
+    { name: "Demo Showcase", href: "/demo", icon: LayoutDashboard, roles: ["public", "client", "navigator", "caseworker", "admin", "super_admin"], highlight: true },
     { name: "Applicant Tools", href: "/public/documents", icon: Globe, roles: ["public", "client", "navigator", "caseworker", "admin", "super_admin"] },
     { name: "Eligibility Check", href: "/eligibility", icon: Calculator, roles: ["client", "navigator", "caseworker", "admin", "super_admin"] },
     { name: "VITA Tax Help", href: "/vita", icon: BookOpen, roles: ["navigator", "caseworker", "admin", "super_admin"] },
@@ -92,6 +93,8 @@ export default function Navigation() {
               item.current
                 ? mobile ? "bg-accent text-accent-foreground" : "bg-white/20 text-white"
                 : mobile ? "" : "hover:bg-white/10"
+            } ${
+              item.highlight && !mobile ? "ring-2 ring-md-gold/50" : ""
             } inline-flex items-center px-3 py-2 rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50`}
             data-testid={`nav-${item.href === "/" ? "home" : item.href.slice(1)}`}
             aria-current={item.current ? "page" : undefined}
