@@ -10,28 +10,36 @@ interface MetricsDisplayProps {
 const COLORS = ['#10b981', '#3b82f6', '#f59e0b', '#ef4444', '#8b5cf6'];
 
 export function MetricsDisplay({ metrics }: MetricsDisplayProps) {
+  if (!metrics || !metrics.platformPerformance || !metrics.systemHealth) {
+    return (
+      <div className="text-center py-12">
+        <p className="text-muted-foreground">No metrics data available</p>
+      </div>
+    );
+  }
+
   const apiResponseData = [
     {
       name: 'P50',
-      'SNAP Eligibility': metrics.platformPerformance.apiResponseTimes.byEndpoint['/api/eligibility/snap']?.p50 || 0,
-      'Tax Calculation': metrics.platformPerformance.apiResponseTimes.byEndpoint['/api/tax/calculate']?.p50 || 0,
-      'Document Upload': metrics.platformPerformance.apiResponseTimes.byEndpoint['/api/documents/upload']?.p50 || 0,
+      'SNAP Eligibility': metrics.platformPerformance?.apiResponseTimes?.byEndpoint?.['/api/eligibility/snap']?.p50 ?? 0,
+      'Tax Calculation': metrics.platformPerformance?.apiResponseTimes?.byEndpoint?.['/api/tax/calculate']?.p50 ?? 0,
+      'Document Upload': metrics.platformPerformance?.apiResponseTimes?.byEndpoint?.['/api/documents/upload']?.p50 ?? 0,
     },
     {
       name: 'P95',
-      'SNAP Eligibility': metrics.platformPerformance.apiResponseTimes.byEndpoint['/api/eligibility/snap']?.p95 || 0,
-      'Tax Calculation': metrics.platformPerformance.apiResponseTimes.byEndpoint['/api/tax/calculate']?.p95 || 0,
-      'Document Upload': metrics.platformPerformance.apiResponseTimes.byEndpoint['/api/documents/upload']?.p95 || 0,
+      'SNAP Eligibility': metrics.platformPerformance?.apiResponseTimes?.byEndpoint?.['/api/eligibility/snap']?.p95 ?? 0,
+      'Tax Calculation': metrics.platformPerformance?.apiResponseTimes?.byEndpoint?.['/api/tax/calculate']?.p95 ?? 0,
+      'Document Upload': metrics.platformPerformance?.apiResponseTimes?.byEndpoint?.['/api/documents/upload']?.p95 ?? 0,
     },
     {
       name: 'P99',
-      'SNAP Eligibility': metrics.platformPerformance.apiResponseTimes.byEndpoint['/api/eligibility/snap']?.p99 || 0,
-      'Tax Calculation': metrics.platformPerformance.apiResponseTimes.byEndpoint['/api/tax/calculate']?.p99 || 0,
-      'Document Upload': metrics.platformPerformance.apiResponseTimes.byEndpoint['/api/documents/upload']?.p99 || 0,
+      'SNAP Eligibility': metrics.platformPerformance?.apiResponseTimes?.byEndpoint?.['/api/eligibility/snap']?.p99 ?? 0,
+      'Tax Calculation': metrics.platformPerformance?.apiResponseTimes?.byEndpoint?.['/api/tax/calculate']?.p99 ?? 0,
+      'Document Upload': metrics.platformPerformance?.apiResponseTimes?.byEndpoint?.['/api/documents/upload']?.p99 ?? 0,
     },
   ];
 
-  const cacheHitData = Object.entries(metrics.platformPerformance.cacheHitRates.byCache || {}).map(([name, data]) => ({
+  const cacheHitData = Object.entries(metrics.platformPerformance?.cacheHitRates?.byCache ?? {}).map(([name, data]) => ({
     name: name.replace('Cache', '').replace(/([A-Z])/g, ' $1').trim(),
     value: data.hitRate,
     hits: data.hits,
@@ -48,7 +56,7 @@ export function MetricsDisplay({ metrics }: MetricsDisplayProps) {
             <CheckCircle2 className="h-4 w-4 text-green-600" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{metrics.systemHealth.uptime}%</div>
+            <div className="text-2xl font-bold">{metrics.systemHealth?.uptime ?? 0}%</div>
             <p className="text-xs text-muted-foreground">Last 30 days</p>
           </CardContent>
         </Card>
@@ -59,8 +67,8 @@ export function MetricsDisplay({ metrics }: MetricsDisplayProps) {
             <AlertCircle className="h-4 w-4 text-orange-600" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{metrics.systemHealth.errorRate}%</div>
-            <p className="text-xs text-muted-foreground">Active alerts: {metrics.systemHealth.activeAlerts}</p>
+            <div className="text-2xl font-bold">{metrics.systemHealth?.errorRate ?? 0}%</div>
+            <p className="text-xs text-muted-foreground">Active alerts: {metrics.systemHealth?.activeAlerts ?? 0}</p>
           </CardContent>
         </Card>
 
@@ -70,7 +78,7 @@ export function MetricsDisplay({ metrics }: MetricsDisplayProps) {
             <Zap className="h-4 w-4 text-purple-600" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{metrics.platformPerformance.cacheHitRates.overall}%</div>
+            <div className="text-2xl font-bold">{metrics.platformPerformance?.cacheHitRates?.overall ?? 0}%</div>
             <p className="text-xs text-muted-foreground">Overall performance</p>
           </CardContent>
         </Card>
@@ -81,7 +89,7 @@ export function MetricsDisplay({ metrics }: MetricsDisplayProps) {
             <Database className="h-4 w-4 text-blue-600" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{metrics.platformPerformance.databasePerformance.avgQueryTime}ms</div>
+            <div className="text-2xl font-bold">{metrics.platformPerformance?.databasePerformance?.avgQueryTime ?? 0}ms</div>
             <p className="text-xs text-muted-foreground">Average query</p>
           </CardContent>
         </Card>
@@ -150,17 +158,17 @@ export function MetricsDisplay({ metrics }: MetricsDisplayProps) {
               <div className="flex items-center justify-between mb-2">
                 <span className="text-sm font-medium">Gemini API</span>
                 <span className="text-sm text-muted-foreground">
-                  {metrics.platformPerformance.aiPerformance.geminiApi.successRate}% success rate
+                  {metrics.platformPerformance?.aiPerformance?.geminiApi?.successRate ?? 0}% success rate
                 </span>
               </div>
               <div className="grid grid-cols-2 gap-4 text-sm">
                 <div>
                   <p className="text-muted-foreground">Avg Response</p>
-                  <p className="font-medium">{metrics.platformPerformance.aiPerformance.geminiApi.avgResponseTime}ms</p>
+                  <p className="font-medium">{metrics.platformPerformance?.aiPerformance?.geminiApi?.avgResponseTime ?? 0}ms</p>
                 </div>
                 <div>
                   <p className="text-muted-foreground">Total Calls</p>
-                  <p className="font-medium">{metrics.platformPerformance.aiPerformance.geminiApi.totalCalls.toLocaleString()}</p>
+                  <p className="font-medium">{(metrics.platformPerformance?.aiPerformance?.geminiApi?.totalCalls ?? 0).toLocaleString()}</p>
                 </div>
               </div>
             </div>
@@ -168,17 +176,17 @@ export function MetricsDisplay({ metrics }: MetricsDisplayProps) {
               <div className="flex items-center justify-between mb-2">
                 <span className="text-sm font-medium">RAG Service</span>
                 <span className="text-sm text-muted-foreground">
-                  {metrics.platformPerformance.aiPerformance.ragService.avgRelevanceScore}% relevance
+                  {metrics.platformPerformance?.aiPerformance?.ragService?.avgRelevanceScore ?? 0}% relevance
                 </span>
               </div>
               <div className="grid grid-cols-2 gap-4 text-sm">
                 <div>
                   <p className="text-muted-foreground">Search Time</p>
-                  <p className="font-medium">{metrics.platformPerformance.aiPerformance.ragService.avgSearchTime}ms</p>
+                  <p className="font-medium">{metrics.platformPerformance?.aiPerformance?.ragService?.avgSearchTime ?? 0}ms</p>
                 </div>
                 <div>
                   <p className="text-muted-foreground">Total Searches</p>
-                  <p className="font-medium">{metrics.platformPerformance.aiPerformance.ragService.totalSearches.toLocaleString()}</p>
+                  <p className="font-medium">{(metrics.platformPerformance?.aiPerformance?.ragService?.totalSearches ?? 0).toLocaleString()}</p>
                 </div>
               </div>
             </div>
