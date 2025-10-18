@@ -1,3 +1,9 @@
+---
+**ARCHIVED:** 2025-10-18  
+**REASON:** Specific date assessment, now outdated  
+**SUPERSEDED BY:** /docs/official/platform/PLATFORM_DOCUMENTATION.md  
+---
+
 # Maryland Universal Benefits-Tax Navigator
 ## Platform Assessment & Verification Report
 

@@ -1,3 +1,9 @@
+---
+**ARCHIVED:** 2025-10-18  
+**REASON:** Specific date document, now outdated  
+**SUPERSEDED BY:** /docs/official/platform/PLATFORM_DOCUMENTATION.md  
+---
+
 # New Features & Enhancements (October 16-17, 2025)
 
 **Period:** October 16-17, 2025  

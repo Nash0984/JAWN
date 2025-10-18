@@ -1,3 +1,9 @@
+---
+**ARCHIVED:** 2025-10-18  
+**REASON:** Merged into consolidated PRODUCTION_READINESS.md  
+**SUPERSEDED BY:** /docs/official/deployment/PRODUCTION_READINESS.md  
+---
+
 # Production Deployment Readiness Report
 ## Maryland Universal Financial Navigator
 
