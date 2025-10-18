@@ -1,6 +1,7 @@
 # WCAG 2.1 AAA Compliance Audit Report
 ## Maryland Benefits Navigator Platform
 
+**LAST_UPDATED:** 2025-10-18T21:50:00Z  
 **Document Type:** Third-Party Standards Compliance Audit  
 **Platform:** Maryland Benefits Navigator  
 **Audit Date:** October 17, 2025  
