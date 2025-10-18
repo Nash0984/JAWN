@@ -6663,3 +6663,511 @@ export type TranslationAuditLog = typeof translationAuditLog.$inferSelect;
 
 export type InsertTranslationAssignment = z.infer<typeof insertTranslationAssignmentSchema>;
 export type TranslationAssignment = typeof translationAssignments.$inferSelect;
+
+// ============================================================================
+// GENERAL FEEDBACK MANAGEMENT SYSTEM
+// ============================================================================
+
+// 1. Feedback Features - Hierarchical feature taxonomy for categorizing feedback
+export const feedbackFeatures = pgTable("feedback_features", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  parentId: varchar("parent_id").references((): any => feedbackFeatures.id),
+  code: text("code").notNull().unique(),
+  name: text("name").notNull(),
+  description: text("description"),
+  isActive: boolean("is_active").default(true).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+  codeIdx: uniqueIndex("feedback_features_code_idx").on(table.code),
+  parentIdx: index("feedback_features_parent_idx").on(table.parentId),
+}));
+
+// 2. Feedback Entries - Core table for all feedback submissions
+export const feedbackEntries = pgTable("feedback_entries", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  featureId: varchar("feature_id").references(() => feedbackFeatures.id),
+  userId: varchar("user_id").references(() => users.id),
+  anonymousContactHash: text("anonymous_contact_hash"),
+  tenantId: varchar("tenant_id").references((): any => tenants.id),
+  type: text("type").notNull(),
+  title: text("title").notNull(),
+  description: text("description").notNull(),
+  sentiment: text("sentiment"),
+  priority: text("priority"),
+  status: text("status").notNull().default("submitted"),
+  upvotes: integer("upvotes").default(0).notNull(),
+  downvotes: integer("downvotes").default(0).notNull(),
+  viewCount: integer("view_count").default(0).notNull(),
+  commentCount: integer("comment_count").default(0).notNull(),
+  resolutionNotes: text("resolution_notes"),
+  resolvedAt: timestamp("resolved_at"),
+  resolvedBy: varchar("resolved_by").references(() => users.id),
+  metadata: jsonb("metadata"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  featureIdx: index("feedback_entries_feature_idx").on(table.featureId),
+  userIdx: index("feedback_entries_user_idx").on(table.userId),
+  statusIdx: index("feedback_entries_status_idx").on(table.status),
+  typeIdx: index("feedback_entries_type_idx").on(table.type),
+  createdAtIdx: index("feedback_entries_created_at_idx").on(table.createdAt),
+}));
+
+// 3. Feedback Tags - Flexible tagging system for categorizing feedback
+export const feedbackTags = pgTable("feedback_tags", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull().unique(),
+  description: text("description"),
+  color: text("color"),
+  isActive: boolean("is_active").default(true).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+  nameIdx: uniqueIndex("feedback_tags_name_idx").on(table.name),
+}));
+
+// Feedback Entry Tags - Junction table for many-to-many relationship
+export const feedbackEntryTags = pgTable("feedback_entry_tags", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  entryId: varchar("entry_id").notNull().references(() => feedbackEntries.id),
+  tagId: varchar("tag_id").notNull().references(() => feedbackTags.id),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+  entryTagIdx: uniqueIndex("feedback_entry_tags_unique_idx").on(table.entryId, table.tagId),
+  entryIdx: index("feedback_entry_tags_entry_idx").on(table.entryId),
+  tagIdx: index("feedback_entry_tags_tag_idx").on(table.tagId),
+}));
+
+// 4. Feedback Votes - Voting system with role-weighted tallies
+export const feedbackVotes = pgTable("feedback_votes", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  entryId: varchar("entry_id").notNull().references(() => feedbackEntries.id),
+  voterId: varchar("voter_id").references(() => users.id),
+  anonymousSessionHash: text("anonymous_session_hash"),
+  voteValue: integer("vote_value").notNull(),
+  voterRole: text("voter_role"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+  entryIdx: index("feedback_votes_entry_idx").on(table.entryId),
+  voterIdx: index("feedback_votes_voter_idx").on(table.voterId),
+  uniqueAuthenticatedVoteIdx: uniqueIndex("feedback_votes_authenticated_unique_idx")
+    .on(table.entryId, table.voterId)
+    .where(sql`${table.voterId} IS NOT NULL`),
+  uniqueAnonymousVoteIdx: uniqueIndex("feedback_votes_anonymous_unique_idx")
+    .on(table.entryId, table.anonymousSessionHash)
+    .where(sql`${table.anonymousSessionHash} IS NOT NULL`),
+}));
+
+// 5. Feedback Comments - Threaded discussion on feedback entries
+export const feedbackComments = pgTable("feedback_comments", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  entryId: varchar("entry_id").notNull().references(() => feedbackEntries.id),
+  parentId: varchar("parent_id").references((): any => feedbackComments.id),
+  userId: varchar("user_id").references(() => users.id),
+  anonymousContactHash: text("anonymous_contact_hash"),
+  commentText: text("comment_text").notNull(),
+  isStaffResponse: boolean("is_staff_response").default(false).notNull(),
+  upvotes: integer("upvotes").default(0).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  entryIdx: index("feedback_comments_entry_idx").on(table.entryId),
+  parentIdx: index("feedback_comments_parent_idx").on(table.parentId),
+  userIdx: index("feedback_comments_user_idx").on(table.userId),
+}));
+
+// 6. Feedback Status History - Lifecycle tracking for feedback entries
+export const feedbackStatusHistory = pgTable("feedback_status_history", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  entryId: varchar("entry_id").notNull().references(() => feedbackEntries.id),
+  fromStatus: text("from_status"),
+  toStatus: text("to_status").notNull(),
+  changedBy: varchar("changed_by").references(() => users.id),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+  entryIdx: index("feedback_status_history_entry_idx").on(table.entryId),
+  createdAtIdx: index("feedback_status_history_created_at_idx").on(table.createdAt),
+}));
+
+// 7. Feedback Assignments - Assign feedback to staff members for resolution
+export const feedbackAssignments = pgTable("feedback_assignments", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  entryId: varchar("entry_id").notNull().references(() => feedbackEntries.id),
+  assignedTo: varchar("assigned_to").notNull().references(() => users.id),
+  assignedBy: varchar("assigned_by").references(() => users.id),
+  status: text("status").notNull().default("active"),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  completedAt: timestamp("completed_at"),
+}, (table) => ({
+  entryIdx: index("feedback_assignments_entry_idx").on(table.entryId),
+  assignedToIdx: index("feedback_assignments_assigned_to_idx").on(table.assignedTo),
+  statusIdx: index("feedback_assignments_status_idx").on(table.status),
+}));
+
+// 8. Feedback Attachments - Screenshots, logs, or other files attached to feedback
+export const feedbackAttachments = pgTable("feedback_attachments", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  entryId: varchar("entry_id").references(() => feedbackEntries.id),
+  commentId: varchar("comment_id").references(() => feedbackComments.id),
+  filename: text("filename").notNull(),
+  objectPath: text("object_path"),
+  mimeType: text("mime_type"),
+  fileSize: integer("file_size"),
+  uploadedBy: varchar("uploaded_by").references(() => users.id),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+  entryIdx: index("feedback_attachments_entry_idx").on(table.entryId),
+  commentIdx: index("feedback_attachments_comment_idx").on(table.commentId),
+}));
+
+// 9. Feedback Metrics Daily - Daily aggregations for trend monitoring
+export const feedbackMetricsDaily = pgTable("feedback_metrics_daily", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  date: date("date").notNull(),
+  featureId: varchar("feature_id").references(() => feedbackFeatures.id),
+  type: text("type"),
+  submissionCount: integer("submission_count").default(0).notNull(),
+  resolvedCount: integer("resolved_count").default(0).notNull(),
+  avgResolutionTimeHours: real("avg_resolution_time_hours"),
+  trendScore: real("trend_score"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+  dateFeatureIdx: uniqueIndex("feedback_metrics_daily_date_feature_idx").on(table.date, table.featureId, table.type),
+  dateIdx: index("feedback_metrics_daily_date_idx").on(table.date),
+}));
+
+// 10. FAQ Candidates - Auto-detected repeated questions/issues for FAQ generation
+export const faqCandidates = pgTable("faq_candidates", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  question: text("question").notNull(),
+  answerDraft: text("answer_draft"),
+  sourceEntryIds: jsonb("source_entry_ids").notNull(),
+  occurrenceCount: integer("occurrence_count").default(1).notNull(),
+  confidenceScore: real("confidence_score"),
+  status: text("status").notNull().default("pending"),
+  reviewedBy: varchar("reviewed_by").references(() => users.id),
+  reviewedAt: timestamp("reviewed_at"),
+  reviewerNotes: text("reviewer_notes"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  statusIdx: index("faq_candidates_status_idx").on(table.status),
+  occurrenceCountIdx: index("faq_candidates_occurrence_idx").on(table.occurrenceCount),
+}));
+
+// 11. FAQ Articles - Published FAQ articles
+export const faqArticles = pgTable("faq_articles", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  candidateId: varchar("candidate_id").references(() => faqCandidates.id),
+  question: text("question").notNull(),
+  answer: text("answer").notNull(),
+  category: text("category"),
+  tags: jsonb("tags"),
+  viewCount: integer("view_count").default(0).notNull(),
+  helpfulCount: integer("helpful_count").default(0).notNull(),
+  notHelpfulCount: integer("not_helpful_count").default(0).notNull(),
+  isPublished: boolean("is_published").default(false).notNull(),
+  publishedBy: varchar("published_by").references(() => users.id),
+  publishedAt: timestamp("published_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  isPublishedIdx: index("faq_articles_is_published_idx").on(table.isPublished),
+  categoryIdx: index("faq_articles_category_idx").on(table.category),
+}));
+
+// 12. FAQ Reviews - Admin approval workflow for FAQ candidates
+export const faqReviews = pgTable("faq_reviews", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  candidateId: varchar("candidate_id").references(() => faqCandidates.id),
+  articleId: varchar("article_id").references(() => faqArticles.id),
+  reviewerId: varchar("reviewer_id").notNull().references(() => users.id),
+  action: text("action").notNull(),
+  reviewerNotes: text("reviewer_notes"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+  candidateIdx: index("faq_reviews_candidate_idx").on(table.candidateId),
+  articleIdx: index("faq_reviews_article_idx").on(table.articleId),
+  reviewerIdx: index("faq_reviews_reviewer_idx").on(table.reviewerId),
+}));
+
+// ============================================================================
+// FEEDBACK MANAGEMENT RELATIONS
+// ============================================================================
+
+export const feedbackFeaturesRelations = relations(feedbackFeatures, ({ one, many }) => ({
+  parent: one(feedbackFeatures, {
+    fields: [feedbackFeatures.parentId],
+    references: [feedbackFeatures.id],
+  }),
+  children: many(feedbackFeatures),
+  entries: many(feedbackEntries),
+  metrics: many(feedbackMetricsDaily),
+}));
+
+export const feedbackEntriesRelations = relations(feedbackEntries, ({ one, many }) => ({
+  feature: one(feedbackFeatures, {
+    fields: [feedbackEntries.featureId],
+    references: [feedbackFeatures.id],
+  }),
+  user: one(users, {
+    fields: [feedbackEntries.userId],
+    references: [users.id],
+  }),
+  resolver: one(users, {
+    fields: [feedbackEntries.resolvedBy],
+    references: [users.id],
+  }),
+  tenant: one(tenants, {
+    fields: [feedbackEntries.tenantId],
+    references: [tenants.id],
+  }),
+  votes: many(feedbackVotes),
+  comments: many(feedbackComments),
+  tags: many(feedbackEntryTags),
+  assignments: many(feedbackAssignments),
+  attachments: many(feedbackAttachments),
+  statusHistory: many(feedbackStatusHistory),
+}));
+
+export const feedbackTagsRelations = relations(feedbackTags, ({ many }) => ({
+  entries: many(feedbackEntryTags),
+}));
+
+export const feedbackEntryTagsRelations = relations(feedbackEntryTags, ({ one }) => ({
+  entry: one(feedbackEntries, {
+    fields: [feedbackEntryTags.entryId],
+    references: [feedbackEntries.id],
+  }),
+  tag: one(feedbackTags, {
+    fields: [feedbackEntryTags.tagId],
+    references: [feedbackTags.id],
+  }),
+}));
+
+export const feedbackVotesRelations = relations(feedbackVotes, ({ one }) => ({
+  entry: one(feedbackEntries, {
+    fields: [feedbackVotes.entryId],
+    references: [feedbackEntries.id],
+  }),
+  voter: one(users, {
+    fields: [feedbackVotes.voterId],
+    references: [users.id],
+  }),
+}));
+
+export const feedbackCommentsRelations = relations(feedbackComments, ({ one, many }) => ({
+  entry: one(feedbackEntries, {
+    fields: [feedbackComments.entryId],
+    references: [feedbackEntries.id],
+  }),
+  parent: one(feedbackComments, {
+    fields: [feedbackComments.parentId],
+    references: [feedbackComments.id],
+  }),
+  children: many(feedbackComments),
+  user: one(users, {
+    fields: [feedbackComments.userId],
+    references: [users.id],
+  }),
+  attachments: many(feedbackAttachments),
+}));
+
+export const feedbackStatusHistoryRelations = relations(feedbackStatusHistory, ({ one }) => ({
+  entry: one(feedbackEntries, {
+    fields: [feedbackStatusHistory.entryId],
+    references: [feedbackEntries.id],
+  }),
+  changedBy: one(users, {
+    fields: [feedbackStatusHistory.changedBy],
+    references: [users.id],
+  }),
+}));
+
+export const feedbackAssignmentsRelations = relations(feedbackAssignments, ({ one }) => ({
+  entry: one(feedbackEntries, {
+    fields: [feedbackAssignments.entryId],
+    references: [feedbackEntries.id],
+  }),
+  assignedTo: one(users, {
+    fields: [feedbackAssignments.assignedTo],
+    references: [users.id],
+  }),
+  assignedBy: one(users, {
+    fields: [feedbackAssignments.assignedBy],
+    references: [users.id],
+  }),
+}));
+
+export const feedbackAttachmentsRelations = relations(feedbackAttachments, ({ one }) => ({
+  entry: one(feedbackEntries, {
+    fields: [feedbackAttachments.entryId],
+    references: [feedbackEntries.id],
+  }),
+  comment: one(feedbackComments, {
+    fields: [feedbackAttachments.commentId],
+    references: [feedbackComments.id],
+  }),
+  uploadedBy: one(users, {
+    fields: [feedbackAttachments.uploadedBy],
+    references: [users.id],
+  }),
+}));
+
+export const feedbackMetricsDailyRelations = relations(feedbackMetricsDaily, ({ one }) => ({
+  feature: one(feedbackFeatures, {
+    fields: [feedbackMetricsDaily.featureId],
+    references: [feedbackFeatures.id],
+  }),
+}));
+
+export const faqCandidatesRelations = relations(faqCandidates, ({ one, many }) => ({
+  reviewedBy: one(users, {
+    fields: [faqCandidates.reviewedBy],
+    references: [users.id],
+  }),
+  articles: many(faqArticles),
+  reviews: many(faqReviews),
+}));
+
+export const faqArticlesRelations = relations(faqArticles, ({ one, many }) => ({
+  candidate: one(faqCandidates, {
+    fields: [faqArticles.candidateId],
+    references: [faqCandidates.id],
+  }),
+  publishedBy: one(users, {
+    fields: [faqArticles.publishedBy],
+    references: [users.id],
+  }),
+  reviews: many(faqReviews),
+}));
+
+export const faqReviewsRelations = relations(faqReviews, ({ one }) => ({
+  candidate: one(faqCandidates, {
+    fields: [faqReviews.candidateId],
+    references: [faqCandidates.id],
+  }),
+  article: one(faqArticles, {
+    fields: [faqReviews.articleId],
+    references: [faqArticles.id],
+  }),
+  reviewer: one(users, {
+    fields: [faqReviews.reviewerId],
+    references: [users.id],
+  }),
+}));
+
+// ============================================================================
+// FEEDBACK MANAGEMENT ZOD SCHEMAS
+// ============================================================================
+
+// Insert schemas
+export const insertFeedbackFeatureSchema = createInsertSchema(feedbackFeatures).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertFeedbackEntrySchema = createInsertSchema(feedbackEntries).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertFeedbackTagSchema = createInsertSchema(feedbackTags).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertFeedbackEntryTagSchema = createInsertSchema(feedbackEntryTags).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertFeedbackVoteSchema = createInsertSchema(feedbackVotes).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertFeedbackCommentSchema = createInsertSchema(feedbackComments).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertFeedbackStatusHistorySchema = createInsertSchema(feedbackStatusHistory).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertFeedbackAssignmentSchema = createInsertSchema(feedbackAssignments).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertFeedbackAttachmentSchema = createInsertSchema(feedbackAttachments).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertFeedbackMetricsDailySchema = createInsertSchema(feedbackMetricsDaily).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertFaqCandidateSchema = createInsertSchema(faqCandidates).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertFaqArticleSchema = createInsertSchema(faqArticles).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertFaqReviewSchema = createInsertSchema(faqReviews).omit({
+  id: true,
+  createdAt: true,
+});
+
+// Types
+export type InsertFeedbackFeature = z.infer<typeof insertFeedbackFeatureSchema>;
+export type FeedbackFeature = typeof feedbackFeatures.$inferSelect;
+
+export type InsertFeedbackEntry = z.infer<typeof insertFeedbackEntrySchema>;
+export type FeedbackEntry = typeof feedbackEntries.$inferSelect;
+
+export type InsertFeedbackTag = z.infer<typeof insertFeedbackTagSchema>;
+export type FeedbackTag = typeof feedbackTags.$inferSelect;
+
+export type InsertFeedbackEntryTag = z.infer<typeof insertFeedbackEntryTagSchema>;
+export type FeedbackEntryTag = typeof feedbackEntryTags.$inferSelect;
+
+export type InsertFeedbackVote = z.infer<typeof insertFeedbackVoteSchema>;
+export type FeedbackVote = typeof feedbackVotes.$inferSelect;
+
+export type InsertFeedbackComment = z.infer<typeof insertFeedbackCommentSchema>;
+export type FeedbackComment = typeof feedbackComments.$inferSelect;
+
+export type InsertFeedbackStatusHistory = z.infer<typeof insertFeedbackStatusHistorySchema>;
+export type FeedbackStatusHistory = typeof feedbackStatusHistory.$inferSelect;
+
+export type InsertFeedbackAssignment = z.infer<typeof insertFeedbackAssignmentSchema>;
+export type FeedbackAssignment = typeof feedbackAssignments.$inferSelect;
+
+export type InsertFeedbackAttachment = z.infer<typeof insertFeedbackAttachmentSchema>;
+export type FeedbackAttachment = typeof feedbackAttachments.$inferSelect;
+
+export type InsertFeedbackMetricsDaily = z.infer<typeof insertFeedbackMetricsDailySchema>;
+export type FeedbackMetricsDaily = typeof feedbackMetricsDaily.$inferSelect;
+
+export type InsertFaqCandidate = z.infer<typeof insertFaqCandidateSchema>;
+export type FaqCandidate = typeof faqCandidates.$inferSelect;
+
+export type InsertFaqArticle = z.infer<typeof insertFaqArticleSchema>;
+export type FaqArticle = typeof faqArticles.$inferSelect;
+
+export type InsertFaqReview = z.infer<typeof insertFaqReviewSchema>;
+export type FaqReview = typeof faqReviews.$inferSelect;
