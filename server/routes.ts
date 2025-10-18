@@ -9786,6 +9786,178 @@ If the question cannot be answered with the available information, say so clearl
   }));
 
   // ===========================
+  // ANALYTICS ROUTES - Productivity Dashboard
+  // ===========================
+
+  // Get productivity metrics for navigators
+  app.get("/api/analytics/productivity", requireStaff, asyncHandler(async (req: Request, res: Response) => {
+    const { periodType, navigatorId } = req.query;
+    
+    if (!periodType) {
+      throw validationError("periodType query parameter is required");
+    }
+    
+    const validPeriodTypes = ['daily', 'weekly', 'monthly', 'all_time'];
+    if (!validPeriodTypes.includes(periodType as string)) {
+      throw validationError("periodType must be one of: daily, weekly, monthly, all_time");
+    }
+    
+    let navigatorIds: string[] = [];
+    
+    if (!navigatorId || navigatorId === 'all') {
+      const allUsers = await storage.getUsers();
+      navigatorIds = allUsers
+        .filter(u => u.role === 'caseworker' || u.role === 'navigator')
+        .map(u => u.id);
+    } else {
+      navigatorIds = [navigatorId as string];
+    }
+    
+    const productivityMetrics = [];
+    
+    for (const navId of navigatorIds) {
+      const user = await storage.getUser(navId);
+      if (!user) continue;
+      
+      const kpi = await storage.getLatestNavigatorKpi(navId, periodType as string);
+      
+      if (kpi) {
+        productivityMetrics.push({
+          navigatorId: kpi.navigatorId,
+          navigatorName: user.username,
+          periodType: kpi.periodType,
+          periodStart: kpi.periodStart,
+          periodEnd: kpi.periodEnd,
+          casesClosed: kpi.casesClosed || 0,
+          casesApproved: kpi.casesApproved || 0,
+          casesDenied: kpi.casesDenied || 0,
+          successRate: kpi.successRate || 0,
+          totalBenefitsSecured: kpi.totalBenefitsSecured || 0,
+          avgBenefitPerCase: kpi.avgBenefitPerCase || 0,
+          highValueCases: kpi.highValueCases || 0,
+          avgResponseTime: kpi.avgResponseTime || 0,
+          avgCaseCompletionTime: kpi.avgCaseCompletionTime || 0,
+          documentsProcessed: kpi.documentsProcessed || 0,
+          documentsVerified: kpi.documentsVerified || 0,
+          avgDocumentQuality: (kpi.avgDocumentQuality || 0) * 100,
+          crossEnrollmentsIdentified: kpi.crossEnrollmentsIdentified || 0,
+          aiRecommendationsAccepted: kpi.aiRecommendationsAccepted || 0,
+          performanceScore: kpi.performanceScore || 0,
+        });
+      }
+    }
+    
+    res.json(productivityMetrics);
+  }));
+
+  // Get team-wide analytics metrics
+  app.get("/api/analytics/team-metrics", requireStaff, asyncHandler(async (req: Request, res: Response) => {
+    const allUsers = await storage.getUsers();
+    const navigators = allUsers.filter(u => u.role === 'caseworker' || u.role === 'navigator');
+    
+    const monthlyKpis = [];
+    for (const navigator of navigators) {
+      const kpi = await storage.getLatestNavigatorKpi(navigator.id, 'monthly');
+      if (kpi) {
+        monthlyKpis.push(kpi);
+      }
+    }
+    
+    const totalCasesThisMonth = monthlyKpis.reduce((sum, kpi) => sum + (kpi.casesClosed || 0), 0);
+    const totalBenefitsThisMonth = monthlyKpis.reduce((sum, kpi) => sum + (kpi.totalBenefitsSecured || 0), 0);
+    const avgSuccessRate = monthlyKpis.length > 0
+      ? monthlyKpis.reduce((sum, kpi) => sum + (kpi.successRate || 0), 0) / monthlyKpis.length
+      : 0;
+    
+    const allTimeKpis = [];
+    for (const navigator of navigators) {
+      const user = await storage.getUser(navigator.id);
+      const kpi = await storage.getLatestNavigatorKpi(navigator.id, 'all_time');
+      if (kpi && user) {
+        allTimeKpis.push({
+          navigatorId: kpi.navigatorId,
+          navigatorName: user.username,
+          periodType: kpi.periodType,
+          periodStart: kpi.periodStart,
+          periodEnd: kpi.periodEnd,
+          casesClosed: kpi.casesClosed || 0,
+          casesApproved: kpi.casesApproved || 0,
+          casesDenied: kpi.casesDenied || 0,
+          successRate: kpi.successRate || 0,
+          totalBenefitsSecured: kpi.totalBenefitsSecured || 0,
+          avgBenefitPerCase: kpi.avgBenefitPerCase || 0,
+          highValueCases: kpi.highValueCases || 0,
+          avgResponseTime: kpi.avgResponseTime || 0,
+          avgCaseCompletionTime: kpi.avgCaseCompletionTime || 0,
+          documentsProcessed: kpi.documentsProcessed || 0,
+          documentsVerified: kpi.documentsVerified || 0,
+          avgDocumentQuality: (kpi.avgDocumentQuality || 0) * 100,
+          crossEnrollmentsIdentified: kpi.crossEnrollmentsIdentified || 0,
+          aiRecommendationsAccepted: kpi.aiRecommendationsAccepted || 0,
+          performanceScore: kpi.performanceScore || 0,
+        });
+      }
+    }
+    
+    const topPerformers = allTimeKpis
+      .sort((a, b) => (b.performanceScore || 0) - (a.performanceScore || 0))
+      .slice(0, 5);
+    
+    const trends = [];
+    for (let i = 11; i >= 0; i--) {
+      const date = new Date();
+      date.setMonth(date.getMonth() - i);
+      const periodLabel = date.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+      
+      let periodCases = 0;
+      let periodBenefits = 0;
+      let periodSuccessRates = [];
+      
+      for (const navigator of navigators) {
+        const kpis = await storage.getNavigatorKpis(navigator.id, 'monthly', 12);
+        const relevantKpi = kpis.find(k => {
+          const kpiDate = new Date(k.periodStart);
+          return kpiDate.getMonth() === date.getMonth() && kpiDate.getFullYear() === date.getFullYear();
+        });
+        
+        if (relevantKpi) {
+          periodCases += relevantKpi.casesClosed || 0;
+          periodBenefits += relevantKpi.totalBenefitsSecured || 0;
+          if (relevantKpi.successRate) {
+            periodSuccessRates.push(relevantKpi.successRate);
+          }
+        }
+      }
+      
+      const avgPeriodSuccessRate = periodSuccessRates.length > 0
+        ? periodSuccessRates.reduce((sum, rate) => sum + rate, 0) / periodSuccessRates.length
+        : 0;
+      
+      trends.push({
+        period: periodLabel,
+        cases: periodCases,
+        benefits: periodBenefits,
+        successRate: avgPeriodSuccessRate,
+      });
+    }
+    
+    const activeCasesResult = await db.execute(
+      sql`SELECT COUNT(*) as count FROM client_cases WHERE status IN ('active', 'in_progress', 'pending')`
+    );
+    const activeCases = Number((activeCasesResult.rows[0] as any)?.count || 0);
+    
+    res.json({
+      totalNavigators: navigators.length,
+      activeCases,
+      totalCasesThisMonth,
+      totalBenefitsThisMonth,
+      avgSuccessRate,
+      topPerformers,
+      trends,
+    });
+  }));
+
+  // ===========================
   // GAMIFICATION ROUTES - Achievements
   // ===========================
 

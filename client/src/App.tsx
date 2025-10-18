@@ -70,6 +70,7 @@ import CountyManagement from "@/pages/CountyManagement";
 import NavigatorPerformance from "@/pages/NavigatorPerformance";
 import Leaderboard from "@/pages/Leaderboard";
 import CountyAnalytics from "@/pages/CountyAnalytics";
+import ProductivityDashboard from "@/pages/ProductivityDashboard";
 import VitaKnowledgeBase from "@/pages/VitaKnowledgeBase";
 import EvaluationFramework from "@/pages/EvaluationFramework";
 import HouseholdProfiler from "@/pages/HouseholdProfiler";
@@ -172,6 +173,13 @@ function Router() {
             {() => (
               <ProtectedRoute requireStaff>
                 <Leaderboard />
+              </ProtectedRoute>
+            )}
+          </Route>
+          <Route path="/productivity">
+            {() => (
+              <ProtectedRoute requireStaff>
+                <ProductivityDashboard />
               </ProtectedRoute>
             )}
           </Route>
