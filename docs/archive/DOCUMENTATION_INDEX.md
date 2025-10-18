@@ -1,3 +1,9 @@
+---
+**ARCHIVED:** 2025-10-18  
+**REASON:** Merged into consolidated PLATFORM_DOCUMENTATION.md  
+**SUPERSEDED BY:** /docs/official/platform/PLATFORM_DOCUMENTATION.md  
+---
+
 # Maryland Universal Benefits-Tax Navigator - Documentation Index
 
 **Last Updated:** October 17, 2025  
