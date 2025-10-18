@@ -3,6 +3,8 @@ import bcrypt from "bcryptjs";
 import { seedMarylandTestCases } from "./seedMarylandTestCases";
 import { seedQCData } from "./seedQcData";
 import { seedDhsForms } from "./seedDhsForms";
+import { seedNotificationTemplates } from "./seeds/seedNotificationTemplates";
+import { seedPolicyManual } from "./seeds/seedPolicyManual";
 import { db } from "./db";
 import { eq } from "drizzle-orm";
 import { benefitPrograms } from "@shared/schema";
@@ -540,6 +542,8 @@ export async function initializeSystemData() {
     await seedMarylandTestCases();
     await seedQCData();
     await seedDhsForms();
+    await seedNotificationTemplates();
+    await seedPolicyManual();
     
     console.log('✓ System data initialization complete');
   } catch (error) {

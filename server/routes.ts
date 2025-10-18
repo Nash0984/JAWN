@@ -104,6 +104,7 @@ import { requireTranslationAccess, requireAssignmentOrAdmin } from "./middleware
 import { feedbackService } from "./services/feedbackService";
 import { faqService } from "./services/faqService";
 import { feedbackMetricsService } from "./services/feedbackMetricsService";
+import { dynamicNotificationService } from "./services/dynamicNotificationService";
 
 // Configure secure file uploaders for different use cases
 const documentUpload = createSecureUploader('documents', {
@@ -11650,6 +11651,115 @@ If the question cannot be answered with the available information, say so clearl
     }
     
     res.json(term);
+  }));
+
+  // ============================================================================
+  // DYNAMIC NOTIFICATION ENGINE API - Auto-generating official notices from RaC
+  // ============================================================================
+  
+  // Generate notification from template
+  app.post('/api/notifications/generate', requireAuth, asyncHandler(async (req: Request, res: Response) => {
+    const schema = z.object({
+      templateCode: z.string(),
+      recipientId: z.string(),
+      householdId: z.string(),
+      contextData: z.record(z.any()).optional(),
+      deliveryChannel: z.enum(['email', 'sms', 'mail', 'portal']).default('portal'),
+    });
+
+    const data = schema.parse(req.body);
+    const userId = req.user?.id;
+
+    if (!userId) {
+      throw authorizationError('User not authenticated');
+    }
+
+    const notification = await dynamicNotificationService.generateNotification(
+      data.templateCode,
+      data.recipientId,
+      data.householdId,
+      data.contextData || {},
+      data.deliveryChannel,
+      userId
+    );
+
+    res.json(notification);
+  }));
+
+  // Preview notification without saving
+  app.post('/api/notifications/preview', requireAuth, asyncHandler(async (req: Request, res: Response) => {
+    const schema = z.object({
+      templateCode: z.string(),
+      contextData: z.record(z.any()).optional(),
+    });
+
+    const data = schema.parse(req.body);
+
+    const preview = await dynamicNotificationService.previewNotification(
+      data.templateCode,
+      data.contextData || {}
+    );
+
+    res.json(preview);
+  }));
+
+  // Get all notification templates
+  app.get('/api/notifications/templates', asyncHandler(async (req: Request, res: Response) => {
+    const { program } = req.query;
+
+    const templates = await dynamicNotificationService.getTemplates(
+      program as string | undefined
+    );
+
+    res.json(templates);
+  }));
+
+  // Get generated notifications for current user
+  app.get('/api/notifications/generated', requireAuth, asyncHandler(async (req: Request, res: Response) => {
+    const userId = req.user?.id;
+    if (!userId) {
+      throw authorizationError('User not authenticated');
+    }
+
+    const limit = req.query.limit ? parseInt(req.query.limit as string) : 50;
+
+    const notifications = await dynamicNotificationService.getGeneratedNotifications(
+      userId,
+      limit
+    );
+
+    res.json(notifications);
+  }));
+
+  // Get specific generated notification
+  app.get('/api/notifications/generated/:id', requireAuth, asyncHandler(async (req: Request, res: Response) => {
+    const notification = await dynamicNotificationService.getGeneratedNotification(req.params.id);
+
+    if (!notification) {
+      throw notFoundError('Notification not found');
+    }
+
+    // Verify ownership - user must be recipient or staff
+    const userId = req.user?.id;
+    const userRole = req.user?.role;
+    
+    if (notification.recipientId !== userId && !['navigator', 'caseworker', 'admin', 'super_admin'].includes(userRole || '')) {
+      throw authorizationError('You do not have permission to view this notification');
+    }
+
+    res.json(notification);
+  }));
+
+  // Mark notification as sent (staff only)
+  app.post('/api/notifications/generated/:id/mark-sent', requireStaff, asyncHandler(async (req: Request, res: Response) => {
+    await dynamicNotificationService.markAsSent(req.params.id);
+    res.json({ success: true, message: 'Notification marked as sent' });
+  }));
+
+  // Mark notification as delivered (staff only)
+  app.post('/api/notifications/generated/:id/mark-delivered', requireStaff, asyncHandler(async (req: Request, res: Response) => {
+    await dynamicNotificationService.markAsDelivered(req.params.id);
+    res.json({ success: true, message: 'Notification marked as delivered' });
   }));
 
   const httpServer = createServer(app);
