@@ -1,0 +1,694 @@
+[
+  {
+    "id": "CONV-IC-001",
+    "type": "intake_copilot",
+    "householdId": "HH-001",
+    "userId": "demo.navigator",
+    "startTime": "2025-10-01T14:00:00Z",
+    "endTime": "2025-10-01T14:35:00Z",
+    "language": "English",
+    "program": "SNAP",
+    "status": "completed",
+    "messages": [
+      {
+        "timestamp": "2025-10-01T14:00:15Z",
+        "role": "user",
+        "content": "Hi, I need help filling out a SNAP application for Maria Martinez. She's a single mom with two kids."
+      },
+      {
+        "timestamp": "2025-10-01T14:00:22Z",
+        "role": "assistant",
+        "content": "I'll help you complete Maria's SNAP application. Let's start with the household composition. You mentioned two children - can you provide their names, dates of birth, and relationship to Maria?",
+        "context": {
+          "stage": "household_composition",
+          "fieldsToComplete": ["household_members", "relationships", "ages"]
+        }
+      },
+      {
+        "timestamp": "2025-10-01T14:02:30Z",
+        "role": "user",
+        "content": "Sure, Carlos Martinez born July 22, 2015 (her son) and Sofia Martinez born November 10, 2018 (her daughter)."
+      },
+      {
+        "timestamp": "2025-10-01T14:02:38Z",
+        "role": "assistant",
+        "content": "Perfect! I've recorded:\n- Carlos Martinez (Son, age 10)\n- Sofia Martinez (Daughter, age 6)\n\nNow let's discuss income. Does Maria have any earned income from employment?",
+        "context": {
+          "stage": "income_verification",
+          "householdSize": 3,
+          "dependentChildren": 2
+        }
+      },
+      {
+        "timestamp": "2025-10-01T14:05:00Z",
+        "role": "user",
+        "content": "Yes, she works as a waitress at Joe's Diner. She makes about $1,850 a month including tips."
+      },
+      {
+        "timestamp": "2025-10-01T14:05:12Z",
+        "role": "assistant",
+        "content": "Noted. For SNAP, we'll need to verify this income with recent pay stubs. Based on the $1,850 monthly income and household size of 3, Maria appears likely eligible - the gross income limit is $3,007/month.\n\nDoes Maria have any other income sources? (unemployment, child support, disability benefits, etc.)",
+        "context": {
+          "stage": "income_verification",
+          "earnedIncome": 1850,
+          "incomeLimit": 3007,
+          "preliminaryEligibility": "likely_eligible"
+        },
+        "policyCitation": {
+          "source": "7 CFR § 273.9(c)(1)",
+          "text": "Households must meet both gross and net income limits. For FFY 2025, gross income limit for household of 3 is 130% FPL ($3,007/month)."
+        }
+      },
+      {
+        "timestamp": "2025-10-01T14:07:45Z",
+        "role": "user",
+        "content": "No other income. She pays $950 in rent and about $400 for childcare while she works."
+      },
+      {
+        "timestamp": "2025-10-01T14:07:58Z",
+        "role": "assistant",
+        "content": "Excellent - those expenses will help! For SNAP, we can deduct:\n\n✓ **Standard Deduction**: $198 (automatic for household of 3)\n✓ **Earned Income Deduction**: 20% of earned income = $370\n✓ **Dependent Care**: $400 (since it's for work)\n✓ **Excess Shelter**: Rent ($950) + utilities (est. $180) - 50% of income after other deductions\n\nBased on these deductions, Maria's estimated **monthly SNAP benefit is approximately $766**.\n\nDo you need help with any specific sections of the application form?",
+        "context": {
+          "stage": "benefit_estimation",
+          "estimatedBenefit": 766,
+          "deductionsApplied": {
+            "standard": 198,
+            "earnedIncome": 370,
+            "dependentCare": 400,
+            "excessShelter": 182
+          }
+        },
+        "policyCitation": {
+          "source": "7 CFR § 273.9(d)",
+          "text": "Allowable deductions include: standard deduction, 20% earned income deduction, dependent care deduction for work-related expenses, and excess shelter deduction above 50% of adjusted income."
+        }
+      },
+      {
+        "timestamp": "2025-10-01T14:10:30Z",
+        "role": "user",
+        "content": "That's great! What documents will she need to provide?"
+      },
+      {
+        "timestamp": "2025-10-01T14:10:42Z",
+        "role": "assistant",
+        "content": "For Maria's SNAP application, she'll need:\n\n**Required Documents:**\n1. **Identity**: Driver's license or state ID\n2. **Income Verification**: Last 30 days of pay stubs from Joe's Diner\n3. **Residence**: Rent receipt or lease agreement for 1234 E Monument St\n4. **Childcare Expenses**: Receipt or invoice from childcare provider showing $400/month\n5. **Utility Bills**: Recent electric/gas bill to verify shelter costs\n\n**For the Children:**\n- Birth certificates or Social Security cards for Carlos and Sofia\n\n**Interview**: Maryland requires an interview (can be by phone). The worker will schedule this after receiving the application.\n\n**Tip**: She can submit the application first and has 10 days to provide verification documents. Benefits can be backdated to the application date!",
+        "context": {
+          "stage": "documentation_requirements",
+          "requiredDocs": 5,
+          "optionalDocs": 2
+        },
+        "policyCitation": {
+          "source": "7 CFR § 273.2(f)(1)",
+          "text": "Households must provide verification of certain factors. State agencies must give households at least 10 days to provide required verification."
+        }
+      }
+    ],
+    "summary": "Successfully guided navigator through SNAP application intake for single parent household. Estimated benefit: $766/month. All required fields completed, documentation requirements explained.",
+    "outcome": "Application submitted - BC-SNAP-001"
+  },
+  {
+    "id": "CONV-IC-002",
+    "type": "intake_copilot",
+    "householdId": "HH-007",
+    "userId": "demo.navigator",
+    "startTime": "2025-10-06T15:00:00Z",
+    "endTime": "2025-10-06T15:28:00Z",
+    "language": "Spanish",
+    "program": "SNAP",
+    "status": "completed",
+    "messages": [
+      {
+        "timestamp": "2025-10-06T15:00:10Z",
+        "role": "user",
+        "content": "Hola, necesito ayuda con una aplicación de SNAP para la familia García. No hablan mucho inglés."
+      },
+      {
+        "timestamp": "2025-10-06T15:00:18Z",
+        "role": "assistant",
+        "content": "¡Por supuesto! Puedo ayudarle en español. Vamos a completar la solicitud SNAP para la familia García. \n\nPrimero, ¿cuántas personas viven en el hogar? ¿Puede darme los nombres y edades de todos los miembros de la familia?",
+        "context": {
+          "language": "Spanish",
+          "stage": "household_composition"
+        }
+      },
+      {
+        "timestamp": "2025-10-06T15:03:00Z",
+        "role": "user",
+        "content": "Miguel García (35), Rosa García (33), and their kids Diego (9) and Isabella (5). Miguel and Rosa are legal permanent residents, but the kids were born here in Maryland."
+      },
+      {
+        "timestamp": "2025-10-06T15:03:15Z",
+        "role": "assistant",
+        "content": "Perfecto. Importante: Los niños Diego e Isabella son ciudadanos estadounidenses (nacidos en EE.UU.), entonces ellos califican automáticamente para SNAP. \n\nMiguel y Rosa, como residentes permanentes legales, también pueden calificar si han vivido en EE.UU. por 5 años o más. ¿Cuándo recibieron su tarjeta verde (green card)?",
+        "context": {
+          "stage": "immigration_verification",
+          "householdSize": 4,
+          "citizenChildren": 2,
+          "lprParents": 2
+        },
+        "policyCitation": {
+          "source": "7 CFR § 273.4",
+          "text": "Qualified aliens who have been in the US for 5 years as LPRs are eligible for SNAP. Children who are US citizens are eligible regardless of parents' status."
+        }
+      },
+      {
+        "timestamp": "2025-10-06T15:05:30Z",
+        "role": "user",
+        "content": "They got their green cards in August 2020, so yes, over 5 years."
+      },
+      {
+        "timestamp": "2025-10-06T15:05:42Z",
+        "role": "assistant",
+        "content": "¡Excelente! Toda la familia es elegible para SNAP. \n\nAhora hablemos de ingresos. ¿Cuáles son los trabajos y ingresos de Miguel y Rosa?",
+        "context": {
+          "stage": "income_verification",
+          "eligibilityStatus": "all_household_members_eligible",
+          "lprQualified": true
+        }
+      },
+      {
+        "timestamp": "2025-10-06T15:08:00Z",
+        "role": "user",
+        "content": "Miguel works in landscaping - $2,400/month. Rosa cleans houses - $1,500/month. Total $3,900."
+      },
+      {
+        "timestamp": "2025-10-06T15:08:18Z",
+        "role": "assistant",
+        "content": "Gracias. Con un ingreso total de $3,900 al mes para una familia de 4 personas:\n\n✓ **Límite de ingreso bruto**: $3,760/mes - Pasan apenas este límite\n✓ **Límite de ingreso neto**: $2,893/mes\n\nLas deducciones ayudarán:\n- Deducción estándar: $198\n- 20% del ingreso ganado: $780  \n- Gastos de cuidado infantil (si aplica): ¿Pagan por guardería?\n\nCon las deducciones, la familia probablemente **calificará y recibirá aproximadamente $973 al mes** en beneficios SNAP.",
+        "context": {
+          "stage": "benefit_estimation",
+          "grossIncome": 3900,
+          "householdSize": 4,
+          "preliminaryEligibility": "likely_eligible",
+          "estimatedBenefit": 973
+        }
+      },
+      {
+        "timestamp": "2025-10-06T15:10:45Z",
+        "role": "user",
+        "content": "Yes, they pay $550/month for childcare so Rosa can work."
+      },
+      {
+        "timestamp": "2025-10-06T15:11:00Z",
+        "role": "assistant",
+        "content": "¡Perfecto! Ese gasto de cuidado infantil ($550) se puede deducir completamente porque es necesario para el trabajo de Rosa.\n\n**Beneficio estimado para la familia García: $973 por mes**\n\n**Documentos necesarios:**\n1. Tarjetas verdes (green cards) de Miguel y Rosa\n2. Certificados de nacimiento de Diego e Isabella \n3. Comprobantes de pago (últimos 30 días) de ambos trabajos\n4. Recibo del alquiler ($1,300)\n5. Recibo o contrato de guardería mostrando $550/mes\n\n¿Necesita ayuda con alguna sección específica de la aplicación?",
+        "context": {
+          "stage": "documentation_requirements",
+          "finalBenefitEstimate": 973,
+          "deductions": {
+            "standard": 198,
+            "earnedIncome": 780,
+            "dependentCare": 550,
+            "excessShelter": 467
+          }
+        }
+      }
+    ],
+    "summary": "Bilingual SNAP intake for immigrant family. Successfully navigated LPR eligibility requirements. Estimated benefit: $973/month for family of 4.",
+    "outcome": "Application submitted - BC-SNAP-006"
+  },
+  {
+    "id": "CONV-RAG-001",
+    "type": "policy_rag_qa",
+    "householdId": null,
+    "userId": "demo.navigator",
+    "startTime": "2025-10-05T10:15:00Z",
+    "endTime": "2025-10-05T10:18:30Z",
+    "language": "English",
+    "program": "SNAP",
+    "status": "completed",
+    "messages": [
+      {
+        "timestamp": "2025-10-05T10:15:22Z",
+        "role": "user",
+        "content": "How much can someone earn and still qualify for SNAP in Maryland?"
+      },
+      {
+        "timestamp": "2025-10-05T10:15:35Z",
+        "role": "assistant",
+        "content": "SNAP income limits in Maryland (Federal Fiscal Year 2025) vary by household size:\n\n**Gross Income Limits (130% FPL):**\n- 1 person: $1,580/month\n- 2 people: $2,137/month  \n- 3 people: $2,694/month\n- 4 people: $3,250/month\n- Each additional: +$557\n\n**Net Income Limits (100% FPL):**\n- 1 person: $1,215/month\n- 2 people: $1,644/month\n- 3 people: $2,072/month  \n- 4 people: $2,500/month\n- Each additional: +$428\n\n**Important Exceptions:**\n- **Elderly (60+) or disabled** households only need to meet the net income limit, not gross\n- Allowable deductions (20% earned income, dependent care, medical, shelter) reduce countable income\n- Some households with higher gross income may still qualify after deductions\n\nWould you like help calculating eligibility for a specific household?",
+        "context": {
+          "query_type": "income_limits",
+          "program": "SNAP",
+          "fiscal_year": 2025
+        },
+        "citations": [
+          {
+            "source": "7 CFR § 273.9(a)",
+            "title": "Income and deductions",
+            "excerpt": "Households must meet both gross and net monthly income standards unless all members are elderly or disabled.",
+            "url": "https://www.ecfr.gov/current/title-7/subtitle-B/chapter-II/subchapter-C/part-273/subpart-D/section-273.9"
+          },
+          {
+            "source": "FNS SNAP Income Eligibility Standards FFY 2025",
+            "title": "Federal Poverty Levels and SNAP Income Limits",
+            "excerpt": "Effective October 1, 2024, gross monthly income limits are 130% of federal poverty level.",
+            "url": "https://fns-prod.azureedge.us/snap/recipient/eligibility"
+          }
+        ]
+      }
+    ],
+    "summary": "Provided comprehensive SNAP income limits for FFY 2025 with household size variations and exceptions for elderly/disabled.",
+    "outcome": "Question answered with policy citations"
+  },
+  {
+    "id": "CONV-RAG-002",
+    "type": "policy_rag_qa",
+    "householdId": null,
+    "userId": "demo.caseworker",
+    "startTime": "2025-10-07T14:20:00Z",
+    "endTime": "2025-10-07T14:24:15Z",
+    "language": "English",
+    "program": "Medicaid",
+    "status": "completed",
+    "messages": [
+      {
+        "timestamp": "2025-10-07T14:20:18Z",
+        "role": "user",
+        "content": "What counts as a household member for Medicaid in Maryland? I have a case with a grandmother living with the family."
+      },
+      {
+        "timestamp": "2025-10-07T14:20:35Z",
+        "role": "assistant",
+        "content": "For **Medicaid (MAGI) in Maryland**, household composition depends on who's applying:\n\n**For a Tax Filer:**\n- The individual\n- Their spouse (if married)\n- Their tax dependents (children, relatives they claim)\n- Anyone they're claimed as a dependent by\n\n**For a Non-Tax Filer:**\n- The individual\n- Their spouse (if married and living together)\n- Natural/adopted children under 19 living with them\n- Natural/adopted children under 19 they live with\n\n**Your Grandmother Scenario:**\n\n**If grandmother files taxes separately:** She's her own household for Medicaid purposes, even if living with family.\n\n**If family claims grandmother as tax dependent:** She's part of their household.\n\n**Key Point:** Unlike SNAP, Medicaid uses **tax filing relationships**, not just \"who lives together.\"\n\n**Example:**\nFamily: Parents + 1 child + Grandmother\n- If grandmother files her own taxes → She's a household of 1 for her Medicaid\n- Parents + child → Household of 3 for their Medicaid  \n- If parents claim grandmother → All 4 are one household\n\nDoes the grandmother file her own taxes or is she claimed as a dependent?",
+        "context": {
+          "query_type": "household_definition",
+          "program": "Medicaid_MAGI",
+          "complexity": "multi_generational"
+        },
+        "citations": [
+          {
+            "source": "42 CFR § 435.603(f)",
+            "title": "Application of modified adjusted gross income (MAGI)",
+            "excerpt": "Household composition is based on the tax relationships of individuals. For tax filers, household includes the individual, spouse, and tax dependents.",
+            "url": "https://www.ecfr.gov/current/title-42/chapter-IV/subchapter-C/part-435/subpart-G/section-435.603"
+          },
+          {
+            "source": "Maryland Medicaid MAGI Household Composition Guide",
+            "title": "Determining MAGI Households",
+            "excerpt": "Maryland follows federal MAGI rules. Tax filing status determines household membership.",
+            "url": "https://health.maryland.gov/mmcp/"
+          }
+        ]
+      },
+      {
+        "timestamp": "2025-10-07T14:22:00Z",
+        "role": "user",
+        "content": "She gets Social Security and files her own taxes. So she's separate?"
+      },
+      {
+        "timestamp": "2025-10-07T14:22:12Z",
+        "role": "assistant",
+        "content": "**Yes, exactly!** Since grandmother files her own tax return, she's a **separate household of 1** for Medicaid eligibility purposes.\n\n**This means:**\n- Grandmother's Medicaid eligibility is based only on HER income (Social Security)\n- Parents' income doesn't affect her eligibility\n- The family applies as a separate household (doesn't include grandmother)\n\n**Practical Impact:**\n\nGrandmother (age 76, SS income):\n- Likely eligible for Medicaid under **aged category**\n- Income limit for household of 1: 138% FPL = $20,783/year\n- Most Social Security recipients qualify\n\nFamily (parents + children):\n- Their Medicaid eligibility based on their income only\n- Household size = parents + children (not grandmother)\n\n**Best Practice:** Submit **two separate applications** - one for grandmother, one for the family unit.\n\nWould you like help determining eligibility for both households?",
+        "context": {
+          "resolution": "separate_households",
+          "grandmother_category": "aged_separate_filer",
+          "family_category": "parent_caretaker"
+        },
+        "citations": [
+          {
+            "source": "42 CFR § 435.603(f)(3)",
+            "title": "Household composition for non-filers",
+            "excerpt": "For individuals who do not file taxes and are not claimed as dependents, household includes the individual, spouse (if applicable), and children under 19.",
+            "url": "https://www.ecfr.gov/current/title-42/chapter-IV/subchapter-C/part-435/subpart-G/section-435.603"
+          }
+        ]
+      }
+    ],
+    "summary": "Explained complex Medicaid MAGI household composition rules for multi-generational household. Clarified tax filing determines household membership.",
+    "outcome": "Complex policy question resolved with specific guidance"
+  },
+  {
+    "id": "CONV-RAG-003",
+    "type": "policy_rag_qa",
+    "householdId": null,
+    "userId": "demo.navigator",
+    "startTime": "2025-10-08T11:30:00Z",
+    "endTime": "2025-10-08T11:33:45Z",
+    "language": "English",
+    "program": "TANF",
+    "status": "completed",
+    "messages": [
+      {
+        "timestamp": "2025-10-08T11:30:25Z",
+        "role": "user",
+        "content": "Can I deduct medical expenses from income for TANF eligibility?"
+      },
+      {
+        "timestamp": "2025-10-08T11:30:38Z",
+        "role": "assistant",
+        "content": "**For TANF in Maryland, medical expenses are NOT deducted from income** like they are in SNAP.\n\nHere's the key difference:\n\n**TANF Income Calculation:**\n- Start with gross earned income\n- Deduct $90 + 1/2 of remainder (if employed)\n- Deduct actual work expenses (transportation, uniforms) up to limits\n- Deduct dependent care costs necessary for work\n- **NO medical expense deduction**\n- Compare to payment standard\n\n**SNAP Income Calculation (for comparison):**\n- Gross income\n- Standard deduction\n- 20% earned income deduction  \n- Dependent care deduction\n- **YES - Medical expenses over $35 for elderly/disabled**\n- Excess shelter deduction\n\n**Why the difference?**\nTANF is focused on cash assistance for families with children and work participation. SNAP recognizes that medical costs reduce ability to purchase food, especially for elderly/disabled.\n\n**However:** If the family receives TANF, they may automatically qualify for SNAP (categorical eligibility), where medical expenses CAN be deducted for elderly/disabled household members.\n\nAre you working on a TANF or SNAP case, or both?",
+        "context": {
+          "query_type": "deduction_rules",
+          "program_comparison": ["TANF", "SNAP"],
+          "deduction_type": "medical_expenses"
+        },
+        "citations": [
+          {
+            "source": "Maryland COMAR 07.03.03.15",
+            "title": "TANF Income Deductions",
+            "excerpt": "Allowable deductions from earned income include work expenses and dependent care. Medical expenses are not deducted for TANF eligibility.",
+            "url": "https://dhr.maryland.gov/family-investment-administration/temporary-cash-assistance/"
+          },
+          {
+            "source": "7 CFR § 273.9(d)(3)",
+            "title": "SNAP Medical expense deduction",
+            "excerpt": "Medical expenses over $35 per month for elderly or disabled household members may be deducted from income.",
+            "url": "https://www.ecfr.gov/current/title-7/subtitle-B/chapter-II/subchapter-C/part-273/subpart-D/section-273.9#p-273.9(d)(3)"
+          }
+        ]
+      }
+    ],
+    "summary": "Clarified that TANF does not allow medical expense deductions, unlike SNAP. Explained program differences in income calculation.",
+    "outcome": "Policy comparison provided with regulatory citations"
+  },
+  {
+    "id": "CONV-RAG-004",
+    "type": "policy_rag_qa",
+    "householdId": null,
+    "userId": "demo.navigator",
+    "startTime": "2025-09-20T09:45:00Z",
+    "endTime": "2025-09-20T09:48:20Z",
+    "language": "English",
+    "program": "OHEP",
+    "status": "completed",
+    "messages": [
+      {
+        "timestamp": "2025-09-20T09:45:32Z",
+        "role": "user",
+        "content": "What are Maryland's energy assistance income limits for this year?"
+      },
+      {
+        "timestamp": "2025-09-20T09:45:48Z",
+        "role": "assistant",
+        "content": "**Maryland OHEP (Office of Home Energy Programs) FY 2025-2026** income limits:\n\n**Maximum Income: 175% of Federal Poverty Level**\n\n**By Household Size (Annual):**\n- 1 person: $26,355\n- 2 people: $35,770\n- 3 people: $45,185\n- 4 people: $54,600\n- 5 people: $64,015\n- 6 people: $73,430\n- Each additional: +$9,415\n\n**Monthly Equivalents:**\n- 1 person: $2,196/month\n- 2 people: $2,981/month\n- 3 people: $3,765/month\n- 4 people: $4,550/month\n\n**Special Categories - AUTOMATIC APPROVAL (no income limit):**\n- Currently receiving SNAP\n- Currently receiving TANF  \n- Currently receiving SSI\n\n**Enhanced Benefits for:**\n- Households with members age 60+ (\"elderly bonus\")\n- Households with disabled members\n- Veterans (additional assistance available)\n\n**Application Period:** Typically opens August 1 each year, continues through spring.\n\n**Benefit Amounts:** $200-$1,200 depending on household size, income level, and heating type (oil heat receives higher benefits).\n\nWould you like help screening a specific household?",
+        "context": {
+          "query_type": "income_limits",
+          "program": "OHEP",
+          "program_year": "2025-2026"
+        },
+        "citations": [
+          {
+            "source": "Maryland OHEP Program Guidelines 2025-2026",
+            "title": "Electric Universal Service Program and OHEP Income Eligibility",
+            "excerpt": "Income eligibility for OHEP is set at 175% of the federal poverty level. Categorical eligibility applies for SNAP, TANF, and SSI recipients.",
+            "url": "https://dhr.maryland.gov/office-of-home-energy-programs/"
+          },
+          {
+            "source": "42 USC § 8624 - LIHEAP",
+            "title": "Low Income Home Energy Assistance Program",
+            "excerpt": "States may set income eligibility up to 150% of poverty (or 60% of state median income, whichever is greater). Maryland chooses 175% FPL.",
+            "url": "https://www.law.cornell.edu/uscode/text/42/8624"
+          }
+        ]
+      }
+    ],
+    "summary": "Provided comprehensive OHEP income limits for FY 2025-2026 with special categories and automatic approval criteria.",
+    "outcome": "Income limits provided with federal statutory citations"
+  },
+  {
+    "id": "CONV-CROSS-001",
+    "type": "cross_enrollment_intelligence",
+    "householdId": "HH-001",
+    "userId": "demo.navigator",
+    "startTime": "2025-10-02T13:00:00Z",
+    "endTime": "2025-10-02T13:12:00Z",
+    "language": "English",
+    "program": "multiple",
+    "status": "completed",
+    "messages": [
+      {
+        "timestamp": "2025-10-02T13:00:15Z",
+        "role": "user",
+        "content": "Maria Martinez just got approved for SNAP. Are there other programs she might qualify for?"
+      },
+      {
+        "timestamp": "2025-10-02T13:00:28Z",
+        "role": "assistant",
+        "content": "Great question! Let me analyze Maria's situation for cross-enrollment opportunities.\n\n**Based on her SNAP approval (household of 3, income $1,850/month):**\n\n✅ **Highly Recommended Programs:**\n\n**1. EITC (Earned Income Tax Credit) - Estimated $6,600**\n- Income: $22,200/year ✓\n- 2 qualifying children ✓  \n- Head of household ✓\n- **Action:** File 2024 tax return (can use free VITA services)\n- **Estimated federal refund: $12,333** (EITC + CTC)\n- **Maryland EITC: $2,970** (45% of federal)\n\n**2. Medicaid - Full Coverage**\n- Income 81% FPL - well under 138% limit ✓\n- Parent/caretaker category ✓\n- Children under CHIP (322% FPL limit) ✓\n- **All 3 household members eligible**\n\n**3. OHEP (Energy Assistance) - Estimated $580**\n- Automatic approval (SNAP recipient) ✓\n- Application opens Aug 1 annually\n- Benefit: $400-800 depending on heating type\n\n✓ **Consider:**\n\n**4. Child Care Subsidy**  \n- She's paying $400/month out-of-pocket\n- Income qualifies (below 65% State Median Income)\n- Could reduce childcare costs to $50-100/month\n\n**5. School Meals (Free)**\n- SNAP recipients auto-qualify\n- Contact Baltimore City Schools\n- Carlos & Sofia get free breakfast/lunch\n\nWould you like help applying for any of these programs?",
+        "context": {
+          "cross_enrollment_analysis": true,
+          "programs_identified": 5,
+          "estimated_total_benefit": 20953,
+          "priority_programs": ["EITC", "Medicaid", "OHEP"]
+        },
+        "reasoning": {
+          "eitc_match": "Income $22,200 with 2 qualifying children places household in optimal EITC range. Maximum credit $6,960, expect ~$6,600.",
+          "medicaid_match": "81% FPL well under 138% MAGI limit. Parent + 2 children all qualify.",
+          "ohep_match": "SNAP categorical eligibility = automatic approval. Gas heat likely = $580 benefit.",
+          "childcare_match": "Currently paying $400/month, income 68% SMI, qualifies for subsidy. Could reduce to copay of ~$75/month.",
+          "school_meals": "SNAP categorical eligibility = automatic free meals for school-age children."
+        }
+      },
+      {
+        "timestamp": "2025-10-02T13:05:00Z",
+        "role": "user",
+        "content": "Wow, she could get over $20,000 in benefits? That seems like a lot!"
+      },
+      {
+        "timestamp": "2025-10-02T13:05:15Z",
+        "role": "assistant",
+        "content": "Yes! Here's the breakdown:\n\n**One-Time Benefits (Tax Year 2024):**\n- Federal tax refund: $12,333\n- Maryland tax refund: $4,954  \n- **Total tax refunds: $17,287** ✨\n\n**Ongoing Monthly Benefits:**\n- SNAP: $766/month = $9,192/year\n- Medicaid: Healthcare coverage (value ~$8,000/year)\n- OHEP: $580/year (one-time annual)\n- Potential childcare subsidy savings: $300/month = $3,600/year\n- School meals: ~$1,200/year value\n\n**Total First-Year Value: ~$40,000+**\n\n**Important Context:**\nThese aren't \"handouts\" - they're earned benefits and supports:\n- EITC rewards work (she's working full-time)  \n- SNAP helps buy groceries for her kids\n- Medicaid ensures healthcare access\n- These programs are designed to help working families make ends meet\n\n**The tax credits are especially important** - many people miss out on thousands of dollars simply by not filing taxes. Maria MUST file to claim EITC and CTC.\n\n**Next Steps:**\n1. Apply for Medicaid (takes 2 weeks)\n2. Schedule VITA appointment for tax prep (free)\n3. Apply for OHEP when season opens (Aug 1)\n4. Inquire about childcare subsidy\n\nShall we start with the Medicaid application?",
+        "context": {
+          "total_benefit_value": 40000,
+          "tax_refund_priority": "critical",
+          "navigator_action": "multi_program_enrollment"
+        }
+      }
+    ],
+    "summary": "Identified 5 additional benefit programs for SNAP recipient. Total estimated value: $40,000+ annually including tax credits, healthcare, and support services.",
+    "outcome": "Cross-enrollment opportunities identified - applications initiated for Medicaid, EITC, OHEP"
+  },
+  {
+    "id": "CONV-CROSS-002",
+    "type": "cross_enrollment_intelligence",
+    "householdId": "HH-002",
+    "userId": "demo.navigator",
+    "startTime": "2025-10-03T10:30:00Z",
+    "endTime": "2025-10-03T10:42:00Z",
+    "language": "English",
+    "program": "multiple",
+    "status": "completed",
+    "messages": [
+      {
+        "timestamp": "2025-10-03T10:30:20Z",
+        "role": "user",
+        "content": "The Johnsons (elderly couple on Social Security) were denied SNAP due to high income. But they have huge medical bills. What else can help them?"
+      },
+      {
+        "timestamp": "2025-10-03T10:30:38Z",
+        "role": "assistant",
+        "content": "Excellent catch! Even though they're over SNAP income limits, there are significant programs for elderly households with high medical expenses:\n\n**✅ RECOMMENDED PROGRAMS:**\n\n**1. SNAP with Medical Deduction (RESCREEN!)**\nYou mentioned \"huge medical bills\" - let's recalculate:\n- Elderly household = **no gross income limit** (only net matters)\n- Medical expenses over $35/month are fully deductible\n- Their medical bills might make them eligible after all!\n\n**Current calculation:**\n- Income: $4,600/month\n- Medical reported: $650/month (Medicare premiums, copays, prescriptions)\n- **Medical deduction: $930/month** ($650 + $280 prescriptions)\n- Net income after medical: ~$3,120\n- Net limit for household of 2: $1,869\n\n*Wait - they're still over. But...*\n\n**2. OHEP (Energy Assistance) - APPROVED $750**\n- Elderly household bonus ✓\n- Income 270% FPL (under 175% limit? No...)\n- **BUT** - Check if Medicare Savings Program enrolled\n- **Alternative:** Some utilities offer separate senior programs\n\n**3. Medicare Savings Programs - CRITICAL**\nIncome: $55,200/year = 270% FPL\n- QMB (Qualified Medicare Beneficiary): Up to 100% FPL ❌\n- SLMB (Specified Low-Income): Up to 120% FPL ❌  \n- QI (Qualifying Individual): Up to 135% FPL ❌\n\n**Income too high for Medicare Savings Programs**\n\n**4. Medicare Part D Extra Help - MAYBE**\n- Income limit: 150% FPL = $30,660 for couple\n- Their income: $55,200 ❌ **Too high**\n\n**5. Property Tax Credits (Maryland)**\nIncome: $55,200\n- Homeowners' Tax Credit: Up to $60,000 income ✓\n- Can reduce property taxes by up to $1,100/year\n\n**6. Senior Prescription Drug Assistance (Maryland SPDAP)**\n- Income limit: $32,000 single / $43,000 couple ❌ **Over limit**\n\n**REALITY CHECK:**\nUnfortunately, the Johnsons' income ($55,200) puts them in a difficult spot - **too high for most assistance, but still struggling with medical costs**.\n\n**BEST OPTIONS:**\n1. **Property Tax Credit** - Apply for ~$1,100/year savings\n2. **Utility assistance** - Check BGE/utility senior discounts\n3. **Medical debt negotiation** - Many hospitals have financial assistance programs\n4. **Medicare Advantage** - Consider switching plans to reduce out-of-pocket\n\nThis is a common gap in the safety net. Would you like help with the property tax credit application?",
+        "context": {
+          "gap_population": "elderly_middle_income",
+          "programs_qualified": 1,
+          "programs_denied": 5,
+          "benefit_cliff": true
+        },
+        "reasoning": {
+          "snap_denial_confirmed": "Even with medical deduction, net income $3,120 exceeds $1,869 limit for household of 2",
+          "medicare_programs_denied": "Income 270% FPL exceeds all Medicare Savings Program limits (highest is QI at 135% FPL)",
+          "property_tax_qualified": "Income $55,200 under $60,000 limit for Maryland Homeowners' Tax Credit",
+          "gap_identified": "Middle-income elderly with high medical costs fall through safety net - too much income for assistance, but financially strained"
+        }
+      }
+    ],
+    "summary": "Analyzed elderly couple denied SNAP. Identified benefit cliff - income too high for most programs despite medical expenses. Qualified for property tax credit only.",
+    "outcome": "Realistic assessment of limited options. Helped navigator understand safety net gaps for middle-income elderly."
+  },
+  {
+    "id": "CONV-CROSS-003",
+    "type": "cross_enrollment_intelligence",
+    "householdId": "HH-008",
+    "userId": "demo.caseworker",
+    "startTime": "2025-10-07T14:00:00Z",
+    "endTime": "2025-10-07T14:15:00Z",
+    "language": "English",
+    "program": "multiple",
+    "status": "completed",
+    "messages": [
+      {
+        "timestamp": "2025-10-07T14:00:25Z",
+        "role": "user",
+        "content": "Michael Anderson is a disabled veteran getting VA benefits. What programs is he eligible for?"
+      },
+      {
+        "timestamp": "2025-10-07T14:00:42Z",
+        "role": "assistant",
+        "content": "**Disabled Veteran analysis for Michael Anderson:**\n\n**Income:** VA Disability Compensation $3,100/month ($37,200/year)\n**Disability:** Service-connected PTSD (100% rating)\n\n**✅ PROGRAMS HE QUALIFIES FOR:**\n\n**1. SNAP - APPROVED ~$23/month**\n- **VA disability compensation is EXCLUDED from income** (federal law)\n- Countable income: $0\n- Disabled = gross income test waived\n- Household of 1, no income = maximum benefit $291\n- **Wait - why only $23?**\n- High shelter deduction calculation still applies\n- Net income after deductions: $1,880\n\n**2. Medicaid - FULL COVERAGE**\n- VA income excluded from MAGI ✓\n- Disabled individual category ✓  \n- Coordination with VA healthcare\n- Covers services VA doesn't (dental, vision, Rx copays)\n\n**3. OHEP - MAXIMUM BENEFIT $950**\n- VA income excluded ✓\n- Veteran bonus ✓\n- Disability bonus ✓\n- Electric heat = higher benefit\n- **Approved for maximum OHEP grant**\n\n**4. Property Tax Exemption (Maryland Veterans)**\n- 100% service-connected disability ✓  \n- **Full exemption** from property taxes if homeowner\n- Or renters' tax credit if renting\n\n**5. VA Programs (separate from state benefits):**\n- VA Healthcare (already enrolled)\n- Vocational Rehab & Employment (VR&E)\n- Specially Adapted Housing (SAH) grants  \n- Veterans Pension (if income drops)\n\n**CRITICAL POLICY NOTE:**\nVA disability compensation is **specifically excluded** from income for SNAP, Medicaid, and most benefits programs. This is intentional federal policy to support disabled veterans.\n\n**Estimated Total Annual Benefits:**\n- VA Disability: $37,200 (tax-free)\n- SNAP: $280/year\n- Medicaid: ~$8,000 value (healthcare)\n- OHEP: $950/year  \n- Property tax exemption: ~$1,500/year (if homeowner)\n\n**Next Steps:**\nAll applications can be expedited under veteran status. Would you like help with any specific application?",
+        "context": {
+          "veteran_status": true,
+          "disability_rating": "100%",
+          "va_income_exclusion": true,
+          "programs_qualified": 5
+        },
+        "reasoning": {
+          "va_exclusion": "7 CFR § 273.9(c)(11) and 42 CFR § 435.603 exclude VA disability from countable income",
+          "snap_calculation": "With VA income excluded, countable income is $0, making household categorically eligible",
+          "ohep_maximum": "Veteran + disability bonuses + excluded income = maximum benefit tier",
+          "medicaid_coordination": "Medicaid coordinates with VA as secondary payer, filling gaps in VA coverage"
+        },
+        "citations": [
+          {
+            "source": "7 CFR § 273.9(c)(11)",
+            "title": "SNAP Income Exclusions",
+            "excerpt": "Exclude any payments from the Veterans Administration that are specifically excluded from consideration as income by any other Federal statute.",
+            "url": "https://www.ecfr.gov/current/title-7/subtitle-B/chapter-II/subchapter-C/part-273/subpart-D/section-273.9#p-273.9(c)(11)"
+          },
+          {
+            "source": "38 USC § 5301(a)",
+            "title": "Veterans' Benefits Not Subject to Claims",
+            "excerpt": "Payments of benefits due or to become due shall not be assignable except to the extent specifically authorized by law, and such payments made to, or on account of, a beneficiary shall be exempt from taxation and from the claims of creditors.",
+            "url": "https://uscode.house.gov/view.xhtml?req=granuleid:USC-prelim-title38-section5301"
+          }
+        ]
+      }
+    ],
+    "summary": "Comprehensive benefits analysis for disabled veteran. Identified critical VA income exclusion rule affecting eligibility across multiple programs. Total annual benefits value: ~$48,000.",
+    "outcome": "Five programs identified. Applications prioritized for SNAP, Medicaid, and OHEP with veteran expedited processing."
+  },
+  {
+    "id": "CONV-DOC-001",
+    "type": "document_analysis",
+    "householdId": "HH-001",
+    "userId": "demo.navigator",
+    "startTime": "2025-09-28T10:30:00Z",
+    "endTime": "2025-09-28T10:35:00Z",
+    "language": "English",
+    "program": "SNAP",
+    "status": "completed",
+    "messages": [
+      {
+        "timestamp": "2025-09-28T10:30:15Z",
+        "role": "user",
+        "content": "I uploaded Maria Martinez's pay stub. Can you extract the income information?"
+      },
+      {
+        "timestamp": "2025-09-28T10:30:28Z",
+        "role": "assistant",
+        "content": "✅ **Pay Stub Analysis Complete**\n\nI've analyzed the uploaded document (martinez_paystub_sept_2025.pdf) and extracted:\n\n**Employer:** Joe's Diner\n**Employee:** Maria Martinez  \n**Pay Period:** 09/01/2025 - 09/15/2025 (Bi-weekly)\n\n**Income Details:**\n- Gross Pay (this period): $925.00\n- Net Pay: $742.50\n- Year-to-Date Gross: $16,650.00\n\n**Monthly Income Calculation:**\n- Bi-weekly gross: $925.00\n- Monthly equivalent: $925 × 2.17 = **$2,007/month**\n\n**⚠️ DISCREPANCY NOTED:**\nApplication shows monthly income: $1,850\nPay stub indicates: $2,007/month\n\n**Recommendation:** Ask Maria:\n1. Has her income recently increased?\n2. Does her pay vary (tips, hours)?\n3. Is $1,850 an average accounting for slower weeks?\n\n**For SNAP:** We should use the **higher amount** ($2,007) unless she can document that pay varies and $1,850 is accurate average.\n\n**Verification Status:** ✓ Pay stub is valid and acceptable for SNAP verification. Contains all required elements:\n- Employer name ✓\n- Employee name ✓  \n- Pay period dates ✓\n- Gross and net amounts ✓\n- YTD totals ✓\n\nShould I update the case with the $2,007 monthly income, or would you like to verify with Maria first?",
+        "context": {
+          "document_type": "pay_stub",
+          "ocr_confidence": 0.98,
+          "verification_status": "acceptable",
+          "discrepancy_found": true,
+          "income_difference": 157
+        },
+        "extraction_details": {
+          "employer": "Joe's Diner",
+          "employee": "Maria Martinez",
+          "pay_period_start": "2025-09-01",
+          "pay_period_end": "2025-09-15",
+          "gross_pay": 925.00,
+          "net_pay": 742.50,
+          "ytd_gross": 16650.00,
+          "frequency": "bi-weekly",
+          "monthly_calculation": 2007.25
+        }
+      }
+    ],
+    "summary": "Successfully extracted income data from pay stub with 98% OCR confidence. Identified income discrepancy between application and documentation.",
+    "outcome": "Document verified. Flagged for caseworker review due to income variance."
+  },
+  {
+    "id": "CONV-DOC-002",
+    "type": "document_analysis",
+    "householdId": "HH-005",
+    "userId": "demo.caseworker",
+    "startTime": "2025-10-08T13:00:00Z",
+    "endTime": "2025-10-08T13:05:00Z",
+    "language": "English",
+    "program": "SNAP",
+    "status": "completed",
+    "messages": [
+      {
+        "timestamp": "2025-10-08T13:00:22Z",
+        "role": "user",
+        "content": "Can you help me understand this SNAP denial notice for Emily Thompson?"
+      },
+      {
+        "timestamp": "2025-10-08T13:00:35Z",
+        "role": "assistant",
+        "content": "✅ **Notice Analysis Complete**\n\nI've analyzed the denial letter (thompson_snap_denial_letter.pdf). Let me explain it in plain language:\n\n**DENIAL REASON:**\n\"Gross monthly income ($5,200) exceeds maximum income limit ($1,580) for household size 1\"\n\n**What This Means:**\nEmily makes too much money to qualify for SNAP. Here's why:\n\n**The Numbers:**\n- Emily's monthly income: $5,200 (software developer salary)\n- SNAP income limit for 1 person: $1,580/month\n- She earns **329% of the limit** (more than 3× too high)\n\n**Why She Doesn't Qualify:**\nSNAP has a \"gross income test\" - even before any deductions, your income can't be more than 130% of poverty level. Emily's income is 345% of poverty level.\n\n**Could Deductions Help?**\nNo. Even with maximum deductions:\n- Standard deduction: $198\n- 20% earned income: $1,040\n- Student loan interest: Not a SNAP deduction\n- Her net income would still be ~$4,000/month\n- Net limit is only $1,215/month\n\n**Appeal Rights:**\nThe notice says she has **90 days to appeal**, but an appeal won't change the math - she's clearly over the income limits.\n\n**Alternative Resources for Emily:**\n- Emergency food pantries (no income limits)\n- Employer benefits/assistance programs\n- She doesn't qualify for public assistance at this income level\n\n**Bottom Line:** This is a correct denial. Young professionals with no dependents rarely qualify for SNAP unless unemployed or significantly underemployed.\n\nDoes Emily need referrals to food pantries, or was she just checking eligibility?",
+        "context": {
+          "document_type": "benefits_notice",
+          "decision": "denial",
+          "ocr_confidence": 0.93,
+          "explanation_level": "plain_language"
+        },
+        "extraction_details": {
+          "applicant": "Emily Thompson",
+          "program": "SNAP",
+          "decision": "Denied",
+          "reported_income": 5200,
+          "income_limit": 1580,
+          "household_size": 1,
+          "appeal_deadline": "90 days from notice date"
+        },
+        "plain_language_summary": "Income too high - makes more than 3 times the limit. Deductions won't help. Denial is correct. No point appealing unless income is wrong."
+      }
+    ],
+    "summary": "Analyzed SNAP denial notice and provided plain-language explanation. Confirmed denial is appropriate given income level. Explained why deductions wouldn't change outcome.",
+    "outcome": "Notice explained. Caseworker can confidently explain decision to client. Suggested alternative resources."
+  },
+  {
+    "id": "CONV-NOTICE-001",
+    "type": "notice_explanation",
+    "householdId": "HH-001",
+    "userId": "demo.taxpayer",
+    "startTime": "2025-10-10T16:00:00Z",
+    "endTime": "2025-10-10T16:08:00Z",
+    "language": "English",
+    "program": "SNAP",
+    "status": "completed",
+    "messages": [
+      {
+        "timestamp": "2025-10-10T16:00:18Z",
+        "role": "user",
+        "content": "I received a letter from the benefits office and I don't understand it. It has a lot of numbers and legal terms. Can you help?"
+      },
+      {
+        "timestamp": "2025-10-10T16:00:32Z",
+        "role": "assistant",
+        "content": "Of course! I can help you understand your benefits notice. Let me take a look...\n\n✅ **Your Notice Explained (In Simple Terms)**\n\n**GOOD NEWS: You're Approved for SNAP!** 🎉\n\n**What You're Getting:**\n- **$766 per month** in food assistance\n- Benefits loaded on EBT card\n- Can use at grocery stores, farmers markets\n\n**For:** You and your two children (3 people total)\n\n**When:**\n- **Starts:** November 1, 2025  \n- **Ends:** October 31, 2026 (1 year)\n\n**How They Calculated This:**\n\nYour monthly income: $1,850\n\n**Minus deductions they gave you:**\n- Standard deduction: -$198 (everyone gets this)\n- Work deduction: -$370 (20% of your wages)  \n- Childcare: -$400 (what you pay for daycare)\n- Rent/utilities: -$182 (extra help for housing costs)\n\n**= Your \"countable income\": $700**\n\nThen they use a formula: $973 (max for 3 people) - (30% × $700) = **$766**\n\n**What You Need To Do:**\n\n1. **Report Changes Within 10 Days:**\n   - If your income goes up or down $100+\n   - If someone moves in/out\n   - If you change jobs\n   - If childcare costs change\n\n2. **Recertification:** October 2026\n   - They'll send you a reminder\n   - You'll need to reapply to continue benefits\n\n3. **Keep Your Documents:**\n   - Pay stubs\n   - Rent receipts\n   - Childcare bills\n\n**Your Rights:**\n- Appeal if you think this is wrong: Call 1-800-332-6347\n- Free interpreter if you need one\n- Complaint process if you're treated unfairly\n\n**Questions?** \n- Call your caseworker: The number is on page 1 of your letter\n- Or contact Maryland SNAP hotline: 1-800-332-6347\n\nIs there any specific part of the letter you'd like me to explain more?",
+        "context": {
+          "notice_type": "approval",
+          "reading_level": "grade_6",
+          "technical_terms_simplified": 12,
+          "plain_language_score": 85
+        },
+        "simplifications_made": [
+          "\"Certification period\" → \"When benefits last\"",
+          "\"Gross monthly income\" → \"Monthly income before deductions\"",
+          "\"Excess shelter deduction\" → \"Extra help for housing costs\"",
+          "\"Countable income\" → \"Income after allowed deductions\"",
+          "\"Maximum allotment\" → \"Maximum benefit for your household size\"",
+          "\"Categorical eligibility\" → \"Automatically qualify due to other programs\""
+        ],
+        "key_actions_highlighted": [
+          "Report changes within 10 days",
+          "Keep documents",
+          "Recertify in October 2026"
+        ]
+      },
+      {
+        "timestamp": "2025-10-10T16:05:00Z",
+        "role": "user",
+        "content": "Thank you! This makes so much more sense. I was worried because there was a section about \"failure to report changes\" and \"penalties\" - should I be concerned?"
+      },
+      {
+        "timestamp": "2025-10-10T16:05:18Z",
+        "role": "assistant",
+        "content": "**Don't worry!** That section is standard legal language in every notice. Here's what it really means:\n\n**The \"Scary\" Legal Part:**\n\"Failure to report changes may result in overpayment, disqualification, and criminal prosecution.\"\n\n**What It Actually Means:**\n\n**Just be honest and report changes on time.** That's it!\n\n**Examples of What TO Report:**\n✓ Your pay goes from $1,850 to $2,000/month → Report it  \n✓ You get a new job → Report it\n✓ You move to a new apartment → Report it\n✓ Your ex starts paying child support → Report it\n\n**You WON'T Get In Trouble For:**\n- Reporting changes (even if it lowers your benefits)\n- Making an honest mistake\n- Your income going up naturally\n- Asking questions about what to report\n\n**You WOULD Only Get In Trouble For:**\n- Intentionally lying about income\n- Hiding a job or income source\n- Lying about household members\n- **Fraud** (deliberately deceiving the system)\n\n**Think of it like this:**\nIf you accidentally receive too much in benefits because you forgot to report a change, they might ask you to pay it back - but that's not a crime. It's only a crime if you deliberately lied.\n\n**What If You're Not Sure Whether To Report Something?**\n**ALWAYS CALL AND ASK!** It's better to ask than worry.\n- Call your caseworker\n- Or hotline: 1-800-332-6347\n\n**Pro Tip:** Keep a folder with:\n- Your approval letter\n- Recent pay stubs  \n- Rent receipts\n- Childcare bills\n\nThen if anything changes, you have everything ready to report.\n\n**You're doing great!** You applied honestly, got approved, and you're asking good questions. That's exactly what you should be doing. 👍\n\nAnything else I can clarify?",
+        "context": {
+          "concern_type": "penalties_section",
+          "reassurance_provided": true,
+          "examples_given": 8,
+          "plain_language_score": 90
+        }
+      }
+    ],
+    "summary": "Simplified complex SNAP approval notice into plain language. Explained benefit calculation, reporting requirements, and penalties section. Provided reassurance and actionable guidance.",
+    "outcome": "Client understands their benefits, obligations, and rights. Reduced anxiety about compliance requirements."
+  }
+]
