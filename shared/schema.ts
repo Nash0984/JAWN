@@ -104,6 +104,11 @@ export const documents = pgTable("documents", {
   qualitySuggestions: jsonb("quality_suggestions"), // actionable correction messages for users
   analyzedAt: timestamp("analyzed_at"), // when quality analysis was performed
   metadata: jsonb("metadata"), // extracted metadata
+  // Auto-Enhancement Pipeline fields
+  enhancementStatus: varchar("enhancement_status"), // 'pending', 'completed', 'failed', 'skipped'
+  enhancedObjectPath: varchar("enhanced_object_path"), // GCS path to enhanced version
+  enhancementMetadata: jsonb("enhancement_metadata"), // { appliedSteps, params, qualityDelta, errors }
+  qualityImprovement: real("quality_improvement"), // delta between original and enhanced quality scores
   // Audit trail fields for golden source documents
   sourceUrl: text("source_url"), // original URL where document was downloaded from
   downloadedAt: timestamp("downloaded_at"), // when document was ingested from source
@@ -1754,6 +1759,61 @@ export const insertSearchResultSchema = createInsertSchema(searchResults).omit({
   id: true,
   createdAt: true,
 });
+
+// Enhancement-related Zod schemas
+export const EnhancementStepSchema = z.object({
+  type: z.enum(['rotation', 'noise_reduction', 'contrast', 'sharpen', 'binarization']),
+  params: z.record(z.any()),
+});
+
+export const EnhancementMetadataSchema = z.object({
+  appliedSteps: z.array(EnhancementStepSchema).optional(),
+  params: z.array(EnhancementStepSchema).optional(),
+  qualityDelta: z.number().optional(),
+  errors: z.array(z.string()).optional(),
+  reason: z.string().optional(),
+  originalScore: z.number().optional(),
+  enhancedScore: z.number().optional(),
+  timestamp: z.date().optional(),
+});
+
+export const QualityMetricsSchema = z.object({
+  pageCount: z.number().optional(),
+  perPageMetrics: z.array(z.any()).optional(),
+  blur: z.number().optional(),
+  blurScore: z.number().optional(),
+  ocrConfidence: z.number().optional(),
+  completeness: z.boolean().optional(),
+  format: z.boolean().optional(),
+  contrastScore: z.number().optional(),
+  noiseScore: z.number().optional(),
+  skewAngle: z.number().optional(),
+  overallScore: z.number().optional(),
+});
+
+export const QualityIssueSchema = z.object({
+  severity: z.enum(['error', 'warning', 'info']),
+  type: z.string(),
+  message: z.string(),
+  details: z.record(z.any()).optional(),
+  page: z.number().optional(),
+});
+
+export const QualityAnalysisResultSchema = z.object({
+  documentId: z.string(),
+  qualityScore: z.number(),
+  overallScore: z.number().optional(),
+  metrics: QualityMetricsSchema,
+  issues: z.array(QualityIssueSchema).optional(),
+  suggestions: z.array(z.string()).optional(),
+  analyzedAt: z.date(),
+});
+
+export type EnhancementStep = z.infer<typeof EnhancementStepSchema>;
+export type EnhancementMetadata = z.infer<typeof EnhancementMetadataSchema>;
+export type QualityMetrics = z.infer<typeof QualityMetricsSchema>;
+export type QualityIssue = z.infer<typeof QualityIssueSchema>;
+export type QualityAnalysisResult = z.infer<typeof QualityAnalysisResultSchema>;
 
 // Types
 export type InsertUser = z.infer<typeof insertUserSchema>;
