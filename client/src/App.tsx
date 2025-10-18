@@ -98,6 +98,7 @@ import FeedbackDetailView from "@/pages/FeedbackDetailView";
 import SuggestionVotingList from "@/pages/SuggestionVotingList";
 import FAQDashboard from "@/pages/FAQDashboard";
 import FAQPublicView from "@/pages/FAQPublicView";
+import PolicyManualBrowser from "@/pages/PolicyManualBrowser";
 
 function Router() {
   const [location] = useLocation();
@@ -247,6 +248,13 @@ function Router() {
             {() => (
               <ProtectedRoute>
                 <PolicyManual />
+              </ProtectedRoute>
+            )}
+          </Route>
+          <Route path="/policy-manual">
+            {() => (
+              <ProtectedRoute>
+                <PolicyManualBrowser />
               </ProtectedRoute>
             )}
           </Route>
