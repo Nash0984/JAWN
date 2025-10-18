@@ -1,0 +1,59 @@
+{
+  "programs": {
+    "snap": "SNAP (Asistencia Alimentaria)",
+    "medicaid": "Medicaid (Seguro de Salud)",
+    "tanf": "TANF/TCA (Asistencia en Efectivo)",
+    "ohep": "OHEP (Asistencia de Energía)",
+    "tax_credits": "Créditos Fiscales (EITC, CTC)",
+    "ssi": "SSI (Ingreso de Seguridad Suplementario)"
+  },
+  "eligibility": {
+    "title": "Verifique Su Elegibilidad",
+    "subtitle": "Descubra para qué beneficios puede calificar",
+    "check": "Verificar Elegibilidad",
+    "likely_eligible": "Probablemente Elegible",
+    "not_eligible": "No Elegible",
+    "pending": "Se Necesita Más Información",
+    "monthly_benefit": "Beneficio Mensual Estimado",
+    "annual_benefit": "Beneficio Anual Estimado"
+  },
+  "household": {
+    "title": "Información del Hogar",
+    "size": "Tamaño del Hogar",
+    "members": "Miembros del Hogar",
+    "income": "Ingreso Mensual",
+    "gross_income": "Ingreso Bruto Mensual",
+    "net_income": "Ingreso Neto Mensual",
+    "assets": "Activos Totales",
+    "expenses": "Gastos Mensuales",
+    "rent": "Alquiler/Hipoteca",
+    "utilities": "Servicios Públicos",
+    "childcare": "Cuidado Infantil",
+    "medical": "Gastos Médicos"
+  },
+  "application": {
+    "start": "Iniciar Solicitud",
+    "continue": "Continuar Solicitud",
+    "submit": "Enviar Solicitud",
+    "status": "Estado de la Solicitud",
+    "pending": "Pendiente de Revisión",
+    "approved": "Aprobado",
+    "denied": "Denegado",
+    "more_info": "Se Necesita Más Información"
+  },
+  "documents": {
+    "title": "Documentos Requeridos",
+    "upload": "Subir Documentos",
+    "proof_of_income": "Comprobante de Ingresos",
+    "proof_of_identity": "Prueba de Identidad",
+    "proof_of_residence": "Comprobante de Residencia",
+    "social_security": "Tarjeta de Seguro Social",
+    "birth_certificate": "Certificado de Nacimiento"
+  },
+  "cross_enrollment": {
+    "title": "Beneficios Adicionales para los Que Puede Calificar",
+    "description": "Según la información de su hogar, puede ser elegible para estos programas adicionales",
+    "learn_more": "Más Información",
+    "apply_now": "Solicitar Ahora"
+  }
+}
