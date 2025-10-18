@@ -29,6 +29,11 @@ The backend uses Express.js with TypeScript and PostgreSQL via Drizzle ORM on Ne
 -   **IRS Use & Disclosure Consent Form**: IRS Publication 4299 compliant consent form with electronic signature.
 -   **Unified Monitoring & Analytics Platform**: 7 observability domains, real-time WebSocket updates, alert management, and admin dashboard.
 -   **TaxSlayer Document Management**: Enhanced VITA document workflow with quality validation, audit logging, and secure downloads.
+-   **Interactive Demo Showcase**: Comprehensive static demo with cached data showcasing all 99 features across 20 categories, including Gen AI conversation transcripts, sample households, benefit calculations, tax returns, policy citations, performance metrics, and architecture visualization. Statistics verified via automated scripts. Accessible at /demo (no login required).
+-   **API Documentation Explorer**: Searchable, filterable catalog of all 218 API endpoints across 17 categories with HTTP method badges, authentication requirements, request/response examples, query parameters, and sample data. Accessible at /api-explorer (no login required).
+-   **Spanish Translation System**: Full bilingual support (English/Spanish) using i18next with 7 translation namespaces covering UI, benefits, tax, navigation, forms, errors, and demo content. Includes language switcher component, automatic detection, and localStorage persistence for Maryland's Latino population.
+-   **Statistics Verification System**: Automated verification script (`verify-stats.ts`) dynamically validates platform metrics (99 features, 136 tables, 218 endpoints, 95 services) across Demo, API Explorer, and documentation to ensure accuracy. Includes pre-commit hook template.
+-   **Caseworker Productivity Dashboard**: Comprehensive analytics tracking applications completed, benefits secured, success rates, response times, document quality, and cross-enrollment discoveries with exportable CSV reports and visual charts.
 
 ### E-Filing Infrastructure
 Production-ready components include Form 1040 and Maryland Form 502 PDF generators. XML generators for both federal and state forms are prototyped. An E-File Queue Service for submission tracking and an Admin Dashboard for monitoring are in place, pending IRS EFIN and Maryland iFile credentials for full production.

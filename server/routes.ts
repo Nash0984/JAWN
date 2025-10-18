@@ -87,6 +87,7 @@ import {
 } from "./middleware/fileUploadSecurity";
 import { passwordSecurityService } from "./services/passwordSecurity.service";
 import { decryptVitaIntake } from "./utils/encryptedFields";
+import { demoDataService } from "./services/demoDataService";
 
 // Configure secure file uploaders for different use cases
 const documentUpload = createSecureUploader('documents', {
@@ -831,6 +832,66 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
     } catch (error) {
       console.error("Error updating document status:", error);
       res.status(500).json({ error: "Failed to update document status" });
+    }
+  });
+
+  // Get document quality analysis
+  app.get("/api/documents/:id/quality", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const document = await storage.getDocument(req.params.id);
+      if (!document) {
+        return res.status(404).json({ error: "Document not found" });
+      }
+
+      const history = await storage.getDocumentQualityHistory(req.params.id);
+
+      res.json({
+        score: document.qualityScore,
+        metrics: document.qualityMetrics,
+        issues: document.qualityFlags,
+        suggestions: document.qualitySuggestions,
+        analyzedAt: document.analyzedAt,
+        history,
+      });
+    } catch (error) {
+      console.error("Error fetching document quality:", error);
+      res.status(500).json({ error: "Failed to fetch document quality" });
+    }
+  });
+
+  // Trigger document quality re-analysis
+  app.post("/api/documents/:id/reanalyze", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const document = await storage.getDocument(req.params.id);
+      if (!document) {
+        return res.status(404).json({ error: "Document not found" });
+      }
+
+      const { DocumentQualityAnalyzerService } = await import("./services/documentQualityAnalyzerService");
+      const qualityAnalyzer = new DocumentQualityAnalyzerService();
+      
+      const result = await qualityAnalyzer.analyzeDocument(req.params.id);
+
+      await storage.updateDocumentQuality(req.params.id, {
+        qualityScore: result.overallScore,
+        qualityMetrics: result.metrics,
+        qualityFlags: result.issues,
+        qualitySuggestions: result.suggestions,
+        analyzedAt: new Date(),
+      });
+
+      await storage.createDocumentQualityEvent({
+        documentId: req.params.id,
+        qualityScore: result.overallScore,
+        metrics: result.metrics,
+        issues: result.issues,
+        analyzedAt: new Date(),
+      });
+
+      res.json(result);
+    } catch (error) {
+      console.error("Error reanalyzing document quality:", error);
+      res.status(500).json({ error: "Failed to reanalyze document quality" });
     }
   });
 
@@ -1700,6 +1761,87 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
       success: true,
       message: "E-file submission reset to ready status for retry",
       submissionId: id,
+    });
+  }));
+
+  // ============================================================================
+  // RESILIENCE MONITORING - Circuit Breaker and Retry Metrics
+  // ============================================================================
+
+  // GET /api/admin/resilience/metrics - View circuit breaker states and retry stats
+  app.get('/api/admin/resilience/metrics', requireAdmin, asyncHandler(async (req: Request, res: Response) => {
+    const { resilienceMetricsService } = await import('./services/resilience/resilienceMetrics');
+    const { getAllCircuitBreakers } = await import('./services/resilience/resilientRequest');
+    
+    const { endpoint } = req.query;
+    
+    // Get metrics from metrics service
+    const metrics = resilienceMetricsService.getMetrics(endpoint as string | undefined);
+    
+    // Enhance with current circuit breaker states
+    const circuitBreakers = getAllCircuitBreakers();
+    const enhancedMetrics = metrics.map(m => {
+      const cb = circuitBreakers.get(m.endpointName);
+      return {
+        ...m,
+        circuitBreakerMetrics: cb?.getMetrics()
+      };
+    });
+    
+    res.json({
+      success: true,
+      metrics: enhancedMetrics,
+      summary: resilienceMetricsService.getSummary()
+    });
+  }));
+
+  // POST /api/admin/resilience/:endpoint/reset - Reset circuit breaker
+  app.post('/api/admin/resilience/:endpoint/reset', requireAdmin, asyncHandler(async (req: Request, res: Response) => {
+    const { resetCircuitBreaker } = await import('./services/resilience/resilientRequest');
+    const { endpoint } = req.params;
+    
+    const wasReset = resetCircuitBreaker(endpoint);
+    
+    if (!wasReset) {
+      return res.status(404).json({
+        success: false,
+        error: 'Circuit breaker not found',
+        message: `No circuit breaker found for endpoint: ${endpoint}`
+      });
+    }
+    
+    // Log audit event
+    await auditService.logAction({
+      userId: req.user!.id,
+      action: 'circuit_breaker_reset',
+      resource: 'resilience',
+      resourceId: endpoint,
+      details: {
+        endpoint,
+        timestamp: new Date()
+      }
+    });
+    
+    res.json({
+      success: true,
+      message: `Circuit breaker reset for endpoint: ${endpoint}`
+    });
+  }));
+
+  // GET /api/admin/resilience/circuit-states - Get all circuit breaker states
+  app.get('/api/admin/resilience/circuit-states', requireAdmin, asyncHandler(async (req: Request, res: Response) => {
+    const { getAllCircuitBreakers } = await import('./services/resilience/resilientRequest');
+    
+    const circuitBreakers = getAllCircuitBreakers();
+    const states = Array.from(circuitBreakers.entries()).map(([name, cb]) => ({
+      endpointName: name,
+      state: cb.getState(),
+      metrics: cb.getMetrics()
+    }));
+    
+    res.json({
+      success: true,
+      circuitBreakers: states
     });
   }));
 
@@ -9785,6 +9927,178 @@ If the question cannot be answered with the available information, say so clearl
   }));
 
   // ===========================
+  // ANALYTICS ROUTES - Productivity Dashboard
+  // ===========================
+
+  // Get productivity metrics for navigators
+  app.get("/api/analytics/productivity", requireStaff, asyncHandler(async (req: Request, res: Response) => {
+    const { periodType, navigatorId } = req.query;
+    
+    if (!periodType) {
+      throw validationError("periodType query parameter is required");
+    }
+    
+    const validPeriodTypes = ['daily', 'weekly', 'monthly', 'all_time'];
+    if (!validPeriodTypes.includes(periodType as string)) {
+      throw validationError("periodType must be one of: daily, weekly, monthly, all_time");
+    }
+    
+    let navigatorIds: string[] = [];
+    
+    if (!navigatorId || navigatorId === 'all') {
+      const allUsers = await storage.getUsers();
+      navigatorIds = allUsers
+        .filter(u => u.role === 'caseworker' || u.role === 'navigator')
+        .map(u => u.id);
+    } else {
+      navigatorIds = [navigatorId as string];
+    }
+    
+    const productivityMetrics = [];
+    
+    for (const navId of navigatorIds) {
+      const user = await storage.getUser(navId);
+      if (!user) continue;
+      
+      const kpi = await storage.getLatestNavigatorKpi(navId, periodType as string);
+      
+      if (kpi) {
+        productivityMetrics.push({
+          navigatorId: kpi.navigatorId,
+          navigatorName: user.username,
+          periodType: kpi.periodType,
+          periodStart: kpi.periodStart,
+          periodEnd: kpi.periodEnd,
+          casesClosed: kpi.casesClosed || 0,
+          casesApproved: kpi.casesApproved || 0,
+          casesDenied: kpi.casesDenied || 0,
+          successRate: kpi.successRate || 0,
+          totalBenefitsSecured: kpi.totalBenefitsSecured || 0,
+          avgBenefitPerCase: kpi.avgBenefitPerCase || 0,
+          highValueCases: kpi.highValueCases || 0,
+          avgResponseTime: kpi.avgResponseTime || 0,
+          avgCaseCompletionTime: kpi.avgCaseCompletionTime || 0,
+          documentsProcessed: kpi.documentsProcessed || 0,
+          documentsVerified: kpi.documentsVerified || 0,
+          avgDocumentQuality: (kpi.avgDocumentQuality || 0) * 100,
+          crossEnrollmentsIdentified: kpi.crossEnrollmentsIdentified || 0,
+          aiRecommendationsAccepted: kpi.aiRecommendationsAccepted || 0,
+          performanceScore: kpi.performanceScore || 0,
+        });
+      }
+    }
+    
+    res.json(productivityMetrics);
+  }));
+
+  // Get team-wide analytics metrics
+  app.get("/api/analytics/team-metrics", requireStaff, asyncHandler(async (req: Request, res: Response) => {
+    const allUsers = await storage.getUsers();
+    const navigators = allUsers.filter(u => u.role === 'caseworker' || u.role === 'navigator');
+    
+    const monthlyKpis = [];
+    for (const navigator of navigators) {
+      const kpi = await storage.getLatestNavigatorKpi(navigator.id, 'monthly');
+      if (kpi) {
+        monthlyKpis.push(kpi);
+      }
+    }
+    
+    const totalCasesThisMonth = monthlyKpis.reduce((sum, kpi) => sum + (kpi.casesClosed || 0), 0);
+    const totalBenefitsThisMonth = monthlyKpis.reduce((sum, kpi) => sum + (kpi.totalBenefitsSecured || 0), 0);
+    const avgSuccessRate = monthlyKpis.length > 0
+      ? monthlyKpis.reduce((sum, kpi) => sum + (kpi.successRate || 0), 0) / monthlyKpis.length
+      : 0;
+    
+    const allTimeKpis = [];
+    for (const navigator of navigators) {
+      const user = await storage.getUser(navigator.id);
+      const kpi = await storage.getLatestNavigatorKpi(navigator.id, 'all_time');
+      if (kpi && user) {
+        allTimeKpis.push({
+          navigatorId: kpi.navigatorId,
+          navigatorName: user.username,
+          periodType: kpi.periodType,
+          periodStart: kpi.periodStart,
+          periodEnd: kpi.periodEnd,
+          casesClosed: kpi.casesClosed || 0,
+          casesApproved: kpi.casesApproved || 0,
+          casesDenied: kpi.casesDenied || 0,
+          successRate: kpi.successRate || 0,
+          totalBenefitsSecured: kpi.totalBenefitsSecured || 0,
+          avgBenefitPerCase: kpi.avgBenefitPerCase || 0,
+          highValueCases: kpi.highValueCases || 0,
+          avgResponseTime: kpi.avgResponseTime || 0,
+          avgCaseCompletionTime: kpi.avgCaseCompletionTime || 0,
+          documentsProcessed: kpi.documentsProcessed || 0,
+          documentsVerified: kpi.documentsVerified || 0,
+          avgDocumentQuality: (kpi.avgDocumentQuality || 0) * 100,
+          crossEnrollmentsIdentified: kpi.crossEnrollmentsIdentified || 0,
+          aiRecommendationsAccepted: kpi.aiRecommendationsAccepted || 0,
+          performanceScore: kpi.performanceScore || 0,
+        });
+      }
+    }
+    
+    const topPerformers = allTimeKpis
+      .sort((a, b) => (b.performanceScore || 0) - (a.performanceScore || 0))
+      .slice(0, 5);
+    
+    const trends = [];
+    for (let i = 11; i >= 0; i--) {
+      const date = new Date();
+      date.setMonth(date.getMonth() - i);
+      const periodLabel = date.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+      
+      let periodCases = 0;
+      let periodBenefits = 0;
+      let periodSuccessRates = [];
+      
+      for (const navigator of navigators) {
+        const kpis = await storage.getNavigatorKpis(navigator.id, 'monthly', 12);
+        const relevantKpi = kpis.find(k => {
+          const kpiDate = new Date(k.periodStart);
+          return kpiDate.getMonth() === date.getMonth() && kpiDate.getFullYear() === date.getFullYear();
+        });
+        
+        if (relevantKpi) {
+          periodCases += relevantKpi.casesClosed || 0;
+          periodBenefits += relevantKpi.totalBenefitsSecured || 0;
+          if (relevantKpi.successRate) {
+            periodSuccessRates.push(relevantKpi.successRate);
+          }
+        }
+      }
+      
+      const avgPeriodSuccessRate = periodSuccessRates.length > 0
+        ? periodSuccessRates.reduce((sum, rate) => sum + rate, 0) / periodSuccessRates.length
+        : 0;
+      
+      trends.push({
+        period: periodLabel,
+        cases: periodCases,
+        benefits: periodBenefits,
+        successRate: avgPeriodSuccessRate,
+      });
+    }
+    
+    const activeCasesResult = await db.execute(
+      sql`SELECT COUNT(*) as count FROM client_cases WHERE status IN ('active', 'in_progress', 'pending')`
+    );
+    const activeCases = Number((activeCasesResult.rows[0] as any)?.count || 0);
+    
+    res.json({
+      totalNavigators: navigators.length,
+      activeCases,
+      totalCasesThisMonth,
+      totalBenefitsThisMonth,
+      avgSuccessRate,
+      topPerformers,
+      trends,
+    });
+  }));
+
+  // ===========================
   // GAMIFICATION ROUTES - Achievements
   // ===========================
 
@@ -10527,6 +10841,200 @@ If the question cannot be answered with the available information, say so clearl
     const logs = await storage.getWebhookDeliveryLogs(id, Number(limit));
     
     res.json(logs);
+  }));
+
+  // ============================================================================
+  // CROSS-VALIDATION ENDPOINTS - Document Consistency Checking
+  // ============================================================================
+
+  // Get validation results and discrepancies for a VITA session
+  app.get('/api/vita-sessions/:id/validation', requireAuth, asyncHandler(async (req: Request, res: Response) => {
+    const { id } = req.params;
+    
+    // Get the latest validation result for this VITA session
+    const validationResult = await storage.getDocumentValidationResultByVitaSession(id);
+    
+    if (!validationResult) {
+      return res.json({
+        status: 'not_validated',
+        message: 'No validation has been performed for this VITA session yet'
+      });
+    }
+    
+    // Get all discrepancies for this validation result
+    const discrepancies = await storage.getDocumentDiscrepanciesByValidation(validationResult.id);
+    
+    res.json({
+      validationResult,
+      discrepancies,
+      summary: {
+        overallStatus: validationResult.overallStatus,
+        totalChecks: validationResult.totalChecks,
+        errorsFound: validationResult.errorsFound,
+        warningsFound: validationResult.warningsFound,
+        validatedAt: validationResult.validatedAt,
+        discrepancyCount: discrepancies.length
+      }
+    });
+  }));
+
+  // Trigger re-validation for a VITA session
+  app.post('/api/vita-sessions/:id/revalidate', requireAuth, asyncHandler(async (req: Request, res: Response) => {
+    const { id } = req.params;
+    
+    // Verify the VITA session exists
+    const vitaSession = await storage.getVitaIntakeSession(id);
+    if (!vitaSession) {
+      throw notFoundError('VITA intake session not found');
+    }
+    
+    // Import and trigger cross-validation service
+    const { crossValidationService } = await import('./services/crossValidationService');
+    
+    console.log(`[API] Manual re-validation triggered for VITA session ${id}`);
+    
+    // Run validation synchronously to return results immediately
+    const result = await crossValidationService.validateVitaSession(id);
+    
+    if (result.status === 'skipped') {
+      return res.json({
+        status: 'skipped',
+        message: result.reason || 'Validation was skipped',
+        details: result
+      });
+    }
+    
+    if (result.status === 'failed') {
+      return res.status(500).json({
+        status: 'failed',
+        message: 'Validation failed',
+        error: result.error
+      });
+    }
+    
+    // Fetch the complete validation results
+    const validationResult = await storage.getDocumentValidationResultByVitaSession(id);
+    const discrepancies = validationResult 
+      ? await storage.getDocumentDiscrepanciesByValidation(validationResult.id)
+      : [];
+    
+    res.json({
+      status: 'completed',
+      validationResult,
+      discrepancies,
+      summary: {
+        overallStatus: result.overallStatus,
+        errorsFound: result.errorsFound,
+        warningsFound: result.warningsFound,
+        totalDiscrepancies: discrepancies.length
+      }
+    });
+  }));
+
+  // ============================================================================
+  // DEMO DATA ENDPOINTS - For Maryland Universal Benefits-Tax Navigator Showcase
+  // ============================================================================
+
+  // Get all demo households
+  app.get('/api/demo/households', asyncHandler(async (_req: Request, res: Response) => {
+    await demoDataService.loadDemoData();
+    const households = demoDataService.getAllHouseholds();
+    res.json(households);
+  }));
+
+  // Get demo household by ID
+  app.get('/api/demo/households/:id', asyncHandler(async (req: Request, res: Response) => {
+    await demoDataService.loadDemoData();
+    const household = demoDataService.getHouseholdById(req.params.id);
+    if (!household) {
+      throw notFoundError('Household not found');
+    }
+    res.json(household);
+  }));
+
+  // Get demo benefit calculations
+  app.get('/api/demo/benefit-calculations', asyncHandler(async (req: Request, res: Response) => {
+    await demoDataService.loadDemoData();
+    const { householdId, program } = req.query;
+    const calculations = demoDataService.getBenefitCalculations(
+      householdId as string,
+      program as string
+    );
+    res.json(calculations);
+  }));
+
+  // Get demo tax returns
+  app.get('/api/demo/tax-returns', asyncHandler(async (req: Request, res: Response) => {
+    await demoDataService.loadDemoData();
+    const { householdId, taxYear } = req.query;
+    const returns = demoDataService.getTaxReturns(
+      householdId as string,
+      taxYear ? parseInt(taxYear as string) : undefined
+    );
+    res.json(returns);
+  }));
+
+  // Get demo documents
+  app.get('/api/demo/documents', asyncHandler(async (req: Request, res: Response) => {
+    await demoDataService.loadDemoData();
+    const { householdId } = req.query;
+    const documents = demoDataService.getDocuments(householdId as string);
+    res.json(documents);
+  }));
+
+  // Get demo AI conversations
+  app.get('/api/demo/ai-conversations', asyncHandler(async (req: Request, res: Response) => {
+    await demoDataService.loadDemoData();
+    const { feature, language } = req.query;
+    const conversations = demoDataService.getAIConversations(
+      feature as string,
+      language as 'en' | 'es'
+    );
+    res.json(conversations);
+  }));
+
+  // Get demo AI conversation by ID
+  app.get('/api/demo/ai-conversations/:id', asyncHandler(async (req: Request, res: Response) => {
+    await demoDataService.loadDemoData();
+    const conversation = demoDataService.getAIConversationById(req.params.id);
+    if (!conversation) {
+      throw notFoundError('Conversation not found');
+    }
+    res.json(conversation);
+  }));
+
+  // Get demo appointments
+  app.get('/api/demo/appointments', asyncHandler(async (req: Request, res: Response) => {
+    await demoDataService.loadDemoData();
+    const { householdId } = req.query;
+    const appointments = demoDataService.getAppointments(householdId as string);
+    res.json(appointments);
+  }));
+
+  // Get demo policy sources
+  app.get('/api/demo/policy-sources', asyncHandler(async (req: Request, res: Response) => {
+    await demoDataService.loadDemoData();
+    const { program, type } = req.query;
+    const sources = demoDataService.getPolicySources(
+      program as string,
+      type as string
+    );
+    res.json(sources);
+  }));
+
+  // Get demo users
+  app.get('/api/demo/users', asyncHandler(async (req: Request, res: Response) => {
+    await demoDataService.loadDemoData();
+    const { role } = req.query;
+    const users = demoDataService.getUsers(role as string);
+    res.json(users);
+  }));
+
+  // Get demo metrics
+  app.get('/api/demo/metrics', asyncHandler(async (_req: Request, res: Response) => {
+    await demoDataService.loadDemoData();
+    const metrics = demoDataService.getMetrics();
+    res.json(metrics);
   }));
 
   const httpServer = createServer(app);

@@ -2,8 +2,10 @@ import { useState } from "react";
 import { Link, useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
-import { File, Search, FileText, HelpCircle, Menu, User, Calculator, BookOpen, FileCheck, Users, Shield, LogOut, LogIn, UserPlus, Settings, Globe, Activity, LayoutDashboard } from "lucide-react";
+import { File, Search, FileText, HelpCircle, Menu, User, Calculator, BookOpen, FileCheck, Users, Shield, LogOut, LogIn, UserPlus, Settings, Globe, Activity, LayoutDashboard, TrendingUp } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { useTranslation } from "react-i18next";
+import { LanguageSwitcher } from "./LanguageSwitcher";
 import LanguageSelector from "./LanguageSelector";
 import NotificationBell from "./NotificationBell";
 import { MarylandFlag } from "./MarylandFlag";
@@ -33,6 +35,7 @@ export default function Navigation() {
   const allNavigationItems = [
     { name: t("nav.home"), href: "/", icon: FileText, roles: ["public", "client", "navigator", "caseworker", "admin", "super_admin"] },
     { name: t("nav.search"), href: "/search", icon: Search, roles: ["public", "client", "navigator", "caseworker", "admin", "super_admin"] },
+    { name: "Demo Showcase", href: "/demo", icon: LayoutDashboard, roles: ["public", "client", "navigator", "caseworker", "admin", "super_admin"], highlight: true },
     { name: "Applicant Tools", href: "/public/documents", icon: Globe, roles: ["public", "client", "navigator", "caseworker", "admin", "super_admin"] },
     { name: "Eligibility Check", href: "/eligibility", icon: Calculator, roles: ["client", "navigator", "caseworker", "admin", "super_admin"] },
     { name: "VITA Tax Help", href: "/vita", icon: BookOpen, roles: ["navigator", "caseworker", "admin", "super_admin"] },
@@ -41,6 +44,7 @@ export default function Navigation() {
     { name: "Consent Forms", href: "/consent", icon: Shield, roles: ["navigator", "caseworker", "admin", "super_admin"] },
     { name: "My QC Cockpit", href: "/caseworker/cockpit", icon: Activity, roles: ["caseworker", "admin", "super_admin"] },
     { name: "QC Command Center", href: "/supervisor/cockpit", icon: LayoutDashboard, roles: ["admin", "super_admin"] },
+    { name: "Productivity Analytics", href: "/productivity", icon: TrendingUp, roles: ["navigator", "caseworker", "admin", "super_admin"] },
     { name: "Policy Manual", href: "/manual", icon: BookOpen, roles: ["client", "navigator", "caseworker", "admin", "super_admin"] },
     { name: "Admin Panel", href: "/admin", icon: Settings, roles: ["admin", "super_admin"] },
     { name: t("nav.help"), href: "/help", icon: HelpCircle, roles: ["public", "client", "navigator", "caseworker", "admin", "super_admin"] },
@@ -92,6 +96,8 @@ export default function Navigation() {
               item.current
                 ? mobile ? "bg-accent text-accent-foreground" : "bg-white/20 text-white"
                 : mobile ? "" : "hover:bg-white/10"
+            } ${
+              item.highlight && !mobile ? "ring-2 ring-md-gold/50" : ""
             } inline-flex items-center px-3 py-2 rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50`}
             data-testid={`nav-${item.href === "/" ? "home" : item.href.slice(1)}`}
             aria-current={item.current ? "page" : undefined}

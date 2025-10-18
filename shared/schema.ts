@@ -97,9 +97,18 @@ export const documents = pgTable("documents", {
   tenantId: varchar("tenant_id").references((): any => tenants.id), // Multi-tenant isolation
   status: text("status").notNull().default("uploaded"), // uploaded, processing, processed, failed
   processingStatus: jsonb("processing_status"), // detailed processing info
-  qualityScore: real("quality_score"), // 0-1 quality assessment
+  qualityScore: real("quality_score"), // 0-1 overall weighted quality score
   ocrAccuracy: real("ocr_accuracy"), // 0-1 OCR accuracy
+  qualityMetrics: jsonb("quality_metrics"), // per-page blur, OCR confidence, completeness, format scores
+  qualityFlags: jsonb("quality_flags"), // array of issue objects with severity (error/warning/info)
+  qualitySuggestions: jsonb("quality_suggestions"), // actionable correction messages for users
+  analyzedAt: timestamp("analyzed_at"), // when quality analysis was performed
   metadata: jsonb("metadata"), // extracted metadata
+  // Auto-Enhancement Pipeline fields
+  enhancementStatus: varchar("enhancement_status"), // 'pending', 'completed', 'failed', 'skipped'
+  enhancedObjectPath: varchar("enhanced_object_path"), // GCS path to enhanced version
+  enhancementMetadata: jsonb("enhancement_metadata"), // { appliedSteps, params, qualityDelta, errors }
+  qualityImprovement: real("quality_improvement"), // delta between original and enhanced quality scores
   // Audit trail fields for golden source documents
   sourceUrl: text("source_url"), // original URL where document was downloaded from
   downloadedAt: timestamp("downloaded_at"), // when document was ingested from source
@@ -175,6 +184,21 @@ export const documentVersions = pgTable("document_versions", {
   isActive: boolean("is_active").default(true).notNull(), // Current active version
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
+
+// Document Quality Events - Historical tracking of quality analysis
+export const documentQualityEvents = pgTable("document_quality_events", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  documentId: varchar("document_id").references(() => documents.id, { onDelete: "cascade" }).notNull(),
+  qualityScore: real("quality_score").notNull(), // 0-1 overall weighted score
+  metrics: jsonb("metrics").notNull(), // { blur: 0.8, ocrConfidence: 0.9, completeness: true, format: true }
+  issues: jsonb("issues"), // severity-tiered issue objects: [{ severity: 'error', type: 'blur', message: '...', page: 1 }]
+  suggestions: jsonb("suggestions"), // actionable correction messages: ['Retake photo with better lighting']
+  analyzedAt: timestamp("analyzed_at").defaultNow().notNull(),
+}, (table) => ({
+  documentIdIdx: index("quality_events_document_id_idx").on(table.documentId),
+  analyzedAtIdx: index("quality_events_analyzed_at_idx").on(table.analyzedAt),
+  qualityScoreIdx: index("quality_events_quality_score_idx").on(table.qualityScore),
+}));
 
 // RAG search results for transparency and caching
 export const searchResults = pgTable("search_results", {
@@ -278,6 +302,13 @@ export const trainingJobsRelations = relations(trainingJobs, ({ one }) => ({
 export const documentVersionsRelations = relations(documentVersions, ({ one }) => ({
   document: one(documents, {
     fields: [documentVersions.documentId],
+    references: [documents.id],
+  }),
+}));
+
+export const documentQualityEventsRelations = relations(documentQualityEvents, ({ one }) => ({
+  document: one(documents, {
+    fields: [documentQualityEvents.documentId],
     references: [documents.id],
   }),
 }));
@@ -1719,10 +1750,70 @@ export const insertDocumentVersionSchema = createInsertSchema(documentVersions).
   createdAt: true,
 });
 
+export const insertDocumentQualityEventSchema = createInsertSchema(documentQualityEvents).omit({
+  id: true,
+  analyzedAt: true,
+});
+
 export const insertSearchResultSchema = createInsertSchema(searchResults).omit({
   id: true,
   createdAt: true,
 });
+
+// Enhancement-related Zod schemas
+export const EnhancementStepSchema = z.object({
+  type: z.enum(['rotation', 'noise_reduction', 'contrast', 'sharpen', 'binarization']),
+  params: z.record(z.any()),
+});
+
+export const EnhancementMetadataSchema = z.object({
+  appliedSteps: z.array(EnhancementStepSchema).optional(),
+  params: z.array(EnhancementStepSchema).optional(),
+  qualityDelta: z.number().optional(),
+  errors: z.array(z.string()).optional(),
+  reason: z.string().optional(),
+  originalScore: z.number().optional(),
+  enhancedScore: z.number().optional(),
+  timestamp: z.date().optional(),
+});
+
+export const QualityMetricsSchema = z.object({
+  pageCount: z.number().optional(),
+  perPageMetrics: z.array(z.any()).optional(),
+  blur: z.number().optional(),
+  blurScore: z.number().optional(),
+  ocrConfidence: z.number().optional(),
+  completeness: z.boolean().optional(),
+  format: z.boolean().optional(),
+  contrastScore: z.number().optional(),
+  noiseScore: z.number().optional(),
+  skewAngle: z.number().optional(),
+  overallScore: z.number().optional(),
+});
+
+export const QualityIssueSchema = z.object({
+  severity: z.enum(['error', 'warning', 'info']),
+  type: z.string(),
+  message: z.string(),
+  details: z.record(z.any()).optional(),
+  page: z.number().optional(),
+});
+
+export const QualityAnalysisResultSchema = z.object({
+  documentId: z.string(),
+  qualityScore: z.number(),
+  overallScore: z.number().optional(),
+  metrics: QualityMetricsSchema,
+  issues: z.array(QualityIssueSchema).optional(),
+  suggestions: z.array(z.string()).optional(),
+  analyzedAt: z.date(),
+});
+
+export type EnhancementStep = z.infer<typeof EnhancementStepSchema>;
+export type EnhancementMetadata = z.infer<typeof EnhancementMetadataSchema>;
+export type QualityMetrics = z.infer<typeof QualityMetricsSchema>;
+export type QualityIssue = z.infer<typeof QualityIssueSchema>;
+export type QualityAnalysisResult = z.infer<typeof QualityAnalysisResultSchema>;
 
 // Types
 export type InsertUser = z.infer<typeof insertUserSchema>;
@@ -1751,6 +1842,9 @@ export type TrainingJob = typeof trainingJobs.$inferSelect;
 
 export type InsertDocumentVersion = z.infer<typeof insertDocumentVersionSchema>;
 export type DocumentVersion = typeof documentVersions.$inferSelect;
+
+export type InsertDocumentQualityEvent = z.infer<typeof insertDocumentQualityEventSchema>;
+export type DocumentQualityEvent = typeof documentQualityEvents.$inferSelect;
 
 export type InsertSearchResult = z.infer<typeof insertSearchResultSchema>;
 export type SearchResult = typeof searchResults.$inferSelect;
@@ -6062,3 +6156,510 @@ export const insertAppointmentSchema = createInsertSchema(appointments).omit({
 // Types
 export type InsertAppointment = z.infer<typeof insertAppointmentSchema>;
 export type Appointment = typeof appointments.$inferSelect;
+
+// ============================================================================
+// DOCUMENT CROSS-VALIDATION ENGINE
+// ============================================================================
+
+// Document Validation Results - Overall validation status for a VITA session
+export const documentValidationResults = pgTable("document_validation_results", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  vitaIntakeSessionId: varchar("vita_intake_session_id").references(() => vitaIntakeSessions.id, { onDelete: "cascade" }).notNull(),
+  validatedAt: timestamp("validated_at").defaultNow().notNull(),
+  overallStatus: varchar("overall_status").notNull(), // 'passed', 'warnings', 'errors'
+  totalChecks: integer("total_checks").notNull().default(0),
+  errorsFound: integer("errors_found").notNull().default(0),
+  warningsFound: integer("warnings_found").notNull().default(0),
+  summary: jsonb("summary"), // High-level validation summary: { ruleTypes: string[] }
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+  vitaSessionIdx: index("validation_results_vita_session_idx").on(table.vitaIntakeSessionId),
+  overallStatusIdx: index("validation_results_status_idx").on(table.overallStatus),
+  validatedAtIdx: index("validation_results_validated_at_idx").on(table.validatedAt),
+}));
+
+// Document Discrepancies - Individual cross-validation issues
+export const documentDiscrepancies = pgTable("document_discrepancies", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  validationResultId: varchar("validation_result_id").references(() => documentValidationResults.id, { onDelete: "cascade" }).notNull(),
+  documentId1: varchar("document_id_1").references(() => documents.id), // First document in comparison
+  documentId2: varchar("document_id_2").references(() => documents.id), // Second document (if applicable)
+  taxDocumentId1: varchar("tax_document_id_1").references(() => taxDocuments.id), // For tax-specific documents
+  taxDocumentId2: varchar("tax_document_id_2").references(() => taxDocuments.id), // For tax-specific documents
+  fieldKey: varchar("field_key").notNull(), // e.g., 'employer_name', 'ssn', 'total_wages'
+  expectedValue: text("expected_value"),
+  actualValue: text("actual_value"),
+  severity: varchar("severity").notNull(), // 'error', 'warning', 'info'
+  rationale: text("rationale"), // Explanation of why this is a discrepancy
+  ruleType: varchar("rule_type"), // e.g., 'W2_PAYSTUB_WAGES', 'W2_SSN_CONSISTENCY'
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+  validationResultIdx: index("discrepancies_validation_result_idx").on(table.validationResultId),
+  severityIdx: index("discrepancies_severity_idx").on(table.severity),
+  ruleTypeIdx: index("discrepancies_rule_type_idx").on(table.ruleType),
+  documentId1Idx: index("discrepancies_document_id1_idx").on(table.documentId1),
+}));
+
+// Relations
+export const documentValidationResultsRelations = relations(documentValidationResults, ({ one, many }) => ({
+  vitaIntakeSession: one(vitaIntakeSessions, {
+    fields: [documentValidationResults.vitaIntakeSessionId],
+    references: [vitaIntakeSessions.id],
+  }),
+  discrepancies: many(documentDiscrepancies),
+}));
+
+export const documentDiscrepanciesRelations = relations(documentDiscrepancies, ({ one }) => ({
+  validationResult: one(documentValidationResults, {
+    fields: [documentDiscrepancies.validationResultId],
+    references: [documentValidationResults.id],
+  }),
+  document1: one(documents, {
+    fields: [documentDiscrepancies.documentId1],
+    references: [documents.id],
+  }),
+  document2: one(documents, {
+    fields: [documentDiscrepancies.documentId2],
+    references: [documents.id],
+  }),
+  taxDocument1: one(taxDocuments, {
+    fields: [documentDiscrepancies.taxDocumentId1],
+    references: [taxDocuments.id],
+  }),
+  taxDocument2: one(taxDocuments, {
+    fields: [documentDiscrepancies.taxDocumentId2],
+    references: [taxDocuments.id],
+  }),
+}));
+
+// Types
+export type DocumentValidationResult = typeof documentValidationResults.$inferSelect;
+export type InsertDocumentValidationResult = typeof documentValidationResults.$inferInsert;
+export type DocumentDiscrepancy = typeof documentDiscrepancies.$inferSelect;
+export type InsertDocumentDiscrepancy = typeof documentDiscrepancies.$inferInsert;
+
+// Insert schemas
+export const insertDocumentValidationResultSchema = createInsertSchema(documentValidationResults).omit({
+  id: true,
+  createdAt: true,
+  validatedAt: true,
+});
+
+export const insertDocumentDiscrepancySchema = createInsertSchema(documentDiscrepancies).omit({
+  id: true,
+  createdAt: true,
+});
+
+// Zod schemas for cross-validation results
+export const discrepancySchema = z.object({
+  fieldKey: z.string(),
+  expectedValue: z.string().optional(),
+  actualValue: z.string().optional(),
+  severity: z.enum(['error', 'warning', 'info']),
+  rationale: z.string(),
+  ruleType: z.string(),
+  documentId1: z.string().optional(),
+  documentId2: z.string().optional(),
+  taxDocumentId1: z.string().optional(),
+  taxDocumentId2: z.string().optional(),
+});
+
+export const crossValidationResultSchema = z.object({
+  status: z.enum(['completed', 'skipped', 'failed']),
+  validationResultId: z.string().optional(),
+  errorsFound: z.number().optional(),
+  warningsFound: z.number().optional(),
+  overallStatus: z.enum(['passed', 'warnings', 'errors']).optional(),
+  reason: z.string().optional(),
+  error: z.string().optional(),
+});
+
+export type Discrepancy = z.infer<typeof discrepancySchema>;
+export type CrossValidationResult = z.infer<typeof crossValidationResultSchema>;
+
+// ============================================================================
+// DOCUMENT QUALITY ANALYZER SCHEMAS
+// ============================================================================
+
+export const qualityIssueSchema = z.object({
+  severity: z.enum(['error', 'warning', 'info']),
+  type: z.enum(['blur', 'ocr_confidence', 'completeness', 'format', 'other']),
+  message: z.string(),
+  page: z.number().optional(),
+  details: z.any().optional(),
+});
+
+export const qualityMetricsSchema = z.object({
+  blur: z.number().min(0).max(1).optional(), // 0-1 score (higher = sharper)
+  ocrConfidence: z.number().min(0).max(1).optional(), // 0-1 score (higher = more confident)
+  completeness: z.boolean().optional(), // all required pages present
+  format: z.boolean().optional(), // file is readable
+  pageCount: z.number().optional(),
+  perPageMetrics: z.array(z.object({
+    page: z.number(),
+    blur: z.number().min(0).max(1).optional(),
+    ocrConfidence: z.number().min(0).max(1).optional(),
+  })).optional(),
+});
+
+export const qualityAnalysisResultSchema = z.object({
+  documentId: z.string(),
+  qualityScore: z.number().min(0).max(1), // 0-1 overall weighted score
+  metrics: qualityMetricsSchema,
+  issues: z.array(qualityIssueSchema),
+  suggestions: z.array(z.string()),
+  analyzedAt: z.date(),
+});
+
+export type QualityIssue = z.infer<typeof qualityIssueSchema>;
+export type QualityMetrics = z.infer<typeof qualityMetricsSchema>;
+export type QualityAnalysisResult = z.infer<typeof qualityAnalysisResultSchema>;
+
+// ============================================================================
+// TRANSLATION MANAGEMENT SYSTEM
+// ============================================================================
+
+// Translation Locales - Language metadata table
+export const translationLocales = pgTable("translation_locales", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  code: text("code").notNull().unique(),
+  name: text("name").notNull(),
+  nativeName: text("native_name"),
+  isActive: boolean("is_active").default(true).notNull(),
+  isDefault: boolean("is_default").default(false).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+  codeIdx: uniqueIndex("translation_locales_code_idx").on(table.code),
+}));
+
+// Translation Keys - Normalized translation keys (source of truth)
+export const translationKeys = pgTable("translation_keys", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  namespace: text("namespace").notNull(),
+  key: text("key").notNull(),
+  defaultText: text("default_text").notNull(),
+  context: text("context"),
+  usageNotes: text("usage_notes"),
+  characterLimit: integer("character_limit"),
+  isActive: boolean("is_active").default(true).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  namespaceKeyIdx: uniqueIndex("translation_keys_namespace_key_idx").on(table.namespace, table.key),
+  namespaceIdx: index("translation_keys_namespace_idx").on(table.namespace),
+}));
+
+// Translation Versions - Versioned translations with workflow metadata
+export const translationVersions = pgTable("translation_versions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  keyId: varchar("key_id").notNull().references(() => translationKeys.id),
+  sourceLocaleId: varchar("source_locale_id").notNull().references(() => translationLocales.id),
+  targetLocaleId: varchar("target_locale_id").notNull().references(() => translationLocales.id),
+  versionNumber: integer("version_number").notNull(),
+  translatedText: text("translated_text").notNull(),
+  status: text("status").notNull().default("draft"),
+  qualityScore: real("quality_score"),
+  translatorId: varchar("translator_id").references(() => users.id),
+  reviewerId: varchar("reviewer_id").references(() => users.id),
+  reviewerNotes: text("reviewer_notes"),
+  reviewedAt: timestamp("reviewed_at"),
+  supersedesVersionId: varchar("supersedes_version_id").references((): any => translationVersions.id),
+  promotedSuggestionId: varchar("promoted_suggestion_id").references((): any => translationSuggestions.id),
+  isCurrentVersion: boolean("is_current_version").default(false).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  keyLocaleIdx: index("translation_versions_key_locale_idx").on(table.keyId, table.targetLocaleId),
+  statusIdx: index("translation_versions_status_idx").on(table.status),
+  currentIdx: index("translation_versions_current_idx").on(table.isCurrentVersion),
+  translatorIdx: index("translation_versions_translator_idx").on(table.translatorId),
+  reviewerIdx: index("translation_versions_reviewer_idx").on(table.reviewerId),
+  // Enforce unique version numbers per key+locale
+  uniqueVersionNumberIdx: uniqueIndex("translation_versions_version_number_unique_idx")
+    .on(table.keyId, table.targetLocaleId, table.versionNumber),
+  // Enforce only one current version per key+locale
+  uniqueCurrentVersionIdx: uniqueIndex("translation_versions_current_unique_idx")
+    .on(table.keyId, table.targetLocaleId)
+    .where(sql`${table.isCurrentVersion} = true`),
+}));
+
+// Translation Suggestions - Community-proposed translation improvements
+export const translationSuggestions = pgTable("translation_suggestions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  keyId: varchar("key_id").notNull().references(() => translationKeys.id),
+  targetLocaleId: varchar("target_locale_id").notNull().references(() => translationLocales.id),
+  suggestedText: text("suggested_text").notNull(),
+  rationale: text("rationale"),
+  status: text("status").notNull().default("pending"),
+  qualityScore: real("quality_score"),
+  upvotes: integer("upvotes").default(0).notNull(),
+  downvotes: integer("downvotes").default(0).notNull(),
+  suggestedBy: varchar("suggested_by").references(() => users.id),
+  anonymousSessionHash: text("anonymous_session_hash"),
+  reviewerId: varchar("reviewer_id").references(() => users.id),
+  reviewerNotes: text("reviewer_notes"),
+  reviewedAt: timestamp("reviewed_at"),
+  promotedToVersionId: varchar("promoted_to_version_id").references(() => translationVersions.id),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  keyLocaleIdx: index("translation_suggestions_key_locale_idx").on(table.keyId, table.targetLocaleId),
+  statusIdx: index("translation_suggestions_status_idx").on(table.status),
+  suggestedByIdx: index("translation_suggestions_suggested_by_idx").on(table.suggestedBy),
+}));
+
+// Suggestion Votes - Individual votes on community suggestions
+export const suggestionVotes = pgTable("suggestion_votes", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  suggestionId: varchar("suggestion_id").notNull().references(() => translationSuggestions.id),
+  voterId: varchar("voter_id").references(() => users.id),
+  anonymousSessionHash: text("anonymous_session_hash"),
+  voteValue: integer("vote_value").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+  suggestionIdx: index("suggestion_votes_suggestion_idx").on(table.suggestionId),
+  voterIdx: index("suggestion_votes_voter_idx").on(table.voterId),
+  // Prevent duplicate votes from authenticated users (voter_id IS NOT NULL)
+  uniqueAuthenticatedVoteIdx: uniqueIndex("suggestion_votes_authenticated_unique_idx")
+    .on(table.suggestionId, table.voterId)
+    .where(sql`${table.voterId} IS NOT NULL`),
+  // Prevent duplicate votes from anonymous users (anonymous_session_hash IS NOT NULL)
+  uniqueAnonymousVoteIdx: uniqueIndex("suggestion_votes_anonymous_unique_idx")
+    .on(table.suggestionId, table.anonymousSessionHash)
+    .where(sql`${table.anonymousSessionHash} IS NOT NULL`),
+}));
+
+// Translation Variant Experiments - A/B testing experiments
+export const translationVariantExperiments = pgTable("translation_variant_experiments", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull(),
+  description: text("description"),
+  keyId: varchar("key_id").notNull().references(() => translationKeys.id),
+  targetLocaleId: varchar("target_locale_id").notNull().references(() => translationLocales.id),
+  status: text("status").notNull().default("draft"),
+  startDate: timestamp("start_date"),
+  endDate: timestamp("end_date"),
+  createdBy: varchar("created_by").references(() => users.id),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  keyLocaleIdx: index("translation_experiments_key_locale_idx").on(table.keyId, table.targetLocaleId),
+  statusIdx: index("translation_experiments_status_idx").on(table.status),
+}));
+
+// Translation Variants - Individual variants within an A/B experiment
+export const translationVariants = pgTable("translation_variants", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  experimentId: varchar("experiment_id").notNull().references(() => translationVariantExperiments.id),
+  versionId: varchar("version_id").notNull().references(() => translationVersions.id),
+  variantLabel: text("variant_label").notNull(),
+  trafficSplit: real("traffic_split").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+  experimentIdx: index("translation_variants_experiment_idx").on(table.experimentId),
+  uniqueVariantIdx: uniqueIndex("translation_variants_unique_idx").on(table.experimentId, table.variantLabel),
+}));
+
+// Translation Variant Metrics - Performance metrics for A/B testing
+export const translationVariantMetrics = pgTable("translation_variant_metrics", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  variantId: varchar("variant_id").notNull().references(() => translationVariants.id),
+  metricType: text("metric_type").notNull(),
+  metricValue: real("metric_value").notNull(),
+  sessionCount: integer("session_count").default(0).notNull(),
+  recordedAt: timestamp("recorded_at").defaultNow().notNull(),
+}, (table) => ({
+  variantMetricIdx: index("translation_variant_metrics_variant_idx").on(table.variantId, table.metricType),
+}));
+
+// Translation Audit Log - Comprehensive audit trail
+export const translationAuditLog = pgTable("translation_audit_log", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  action: text("action").notNull(),
+  actorId: varchar("actor_id").references(() => users.id),
+  versionId: varchar("version_id").references(() => translationVersions.id),
+  suggestionId: varchar("suggestion_id").references(() => translationSuggestions.id),
+  details: jsonb("details"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+  actionIdx: index("translation_audit_log_action_idx").on(table.action),
+  actorIdx: index("translation_audit_log_actor_idx").on(table.actorId),
+  versionIdx: index("translation_audit_log_version_idx").on(table.versionId),
+}));
+
+// Translation Assignments - Per-role responsibilities for translation keys
+export const translationAssignments = pgTable("translation_assignments", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  keyId: varchar("key_id").notNull().references(() => translationKeys.id),
+  targetLocaleId: varchar("target_locale_id").notNull().references(() => translationLocales.id),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  role: text("role").notNull(),
+  assignedBy: varchar("assigned_by").references(() => users.id),
+  status: text("status").notNull().default("active"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  keyLocaleUserIdx: uniqueIndex("translation_assignments_key_locale_user_idx").on(table.keyId, table.targetLocaleId, table.userId, table.role),
+  userIdx: index("translation_assignments_user_idx").on(table.userId),
+  statusIdx: index("translation_assignments_status_idx").on(table.status),
+}));
+
+// ============================================================================
+// TRANSLATION MANAGEMENT RELATIONS
+// ============================================================================
+
+export const translationLocalesRelations = relations(translationLocales, ({ many }) => ({
+  translationVersions: many(translationVersions),
+  translationSuggestions: many(translationSuggestions),
+}));
+
+export const translationKeysRelations = relations(translationKeys, ({ many }) => ({
+  versions: many(translationVersions),
+  suggestions: many(translationSuggestions),
+  assignments: many(translationAssignments),
+}));
+
+export const translationVersionsRelations = relations(translationVersions, ({ one, many }) => ({
+  key: one(translationKeys, { fields: [translationVersions.keyId], references: [translationKeys.id] }),
+  sourceLocale: one(translationLocales, { fields: [translationVersions.sourceLocaleId], references: [translationLocales.id] }),
+  targetLocale: one(translationLocales, { fields: [translationVersions.targetLocaleId], references: [translationLocales.id] }),
+  translator: one(users, { fields: [translationVersions.translatorId], references: [users.id] }),
+  reviewer: one(users, { fields: [translationVersions.reviewerId], references: [users.id] }),
+  promotedSuggestion: one(translationSuggestions, { fields: [translationVersions.promotedSuggestionId], references: [translationSuggestions.id] }),
+  variants: many(translationVariants),
+}));
+
+export const translationSuggestionsRelations = relations(translationSuggestions, ({ one, many }) => ({
+  key: one(translationKeys, { fields: [translationSuggestions.keyId], references: [translationKeys.id] }),
+  targetLocale: one(translationLocales, { fields: [translationSuggestions.targetLocaleId], references: [translationLocales.id] }),
+  suggestedBy: one(users, { fields: [translationSuggestions.suggestedBy], references: [users.id] }),
+  reviewer: one(users, { fields: [translationSuggestions.reviewerId], references: [users.id] }),
+  promotedToVersion: one(translationVersions, { fields: [translationSuggestions.promotedToVersionId], references: [translationVersions.id] }),
+  votes: many(suggestionVotes),
+}));
+
+export const suggestionVotesRelations = relations(suggestionVotes, ({ one }) => ({
+  suggestion: one(translationSuggestions, { fields: [suggestionVotes.suggestionId], references: [translationSuggestions.id] }),
+  voter: one(users, { fields: [suggestionVotes.voterId], references: [users.id] }),
+}));
+
+export const translationVariantExperimentsRelations = relations(translationVariantExperiments, ({ one, many }) => ({
+  key: one(translationKeys, { fields: [translationVariantExperiments.keyId], references: [translationKeys.id] }),
+  targetLocale: one(translationLocales, { fields: [translationVariantExperiments.targetLocaleId], references: [translationLocales.id] }),
+  createdBy: one(users, { fields: [translationVariantExperiments.createdBy], references: [users.id] }),
+  variants: many(translationVariants),
+}));
+
+export const translationVariantsRelations = relations(translationVariants, ({ one, many }) => ({
+  experiment: one(translationVariantExperiments, { fields: [translationVariants.experimentId], references: [translationVariantExperiments.id] }),
+  version: one(translationVersions, { fields: [translationVariants.versionId], references: [translationVersions.id] }),
+  metrics: many(translationVariantMetrics),
+}));
+
+export const translationVariantMetricsRelations = relations(translationVariantMetrics, ({ one }) => ({
+  variant: one(translationVariants, { fields: [translationVariantMetrics.variantId], references: [translationVariants.id] }),
+}));
+
+export const translationAuditLogRelations = relations(translationAuditLog, ({ one }) => ({
+  actor: one(users, { fields: [translationAuditLog.actorId], references: [users.id] }),
+  version: one(translationVersions, { fields: [translationAuditLog.versionId], references: [translationVersions.id] }),
+  suggestion: one(translationSuggestions, { fields: [translationAuditLog.suggestionId], references: [translationSuggestions.id] }),
+}));
+
+export const translationAssignmentsRelations = relations(translationAssignments, ({ one }) => ({
+  key: one(translationKeys, { fields: [translationAssignments.keyId], references: [translationKeys.id] }),
+  targetLocale: one(translationLocales, { fields: [translationAssignments.targetLocaleId], references: [translationLocales.id] }),
+  user: one(users, { fields: [translationAssignments.userId], references: [users.id] }),
+  assignedBy: one(users, { fields: [translationAssignments.assignedBy], references: [users.id] }),
+}));
+
+// ============================================================================
+// TRANSLATION MANAGEMENT ZOD SCHEMAS
+// ============================================================================
+
+// Insert schemas
+export const insertTranslationLocaleSchema = createInsertSchema(translationLocales).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertTranslationKeySchema = createInsertSchema(translationKeys).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertTranslationVersionSchema = createInsertSchema(translationVersions).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertTranslationSuggestionSchema = createInsertSchema(translationSuggestions).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertSuggestionVoteSchema = createInsertSchema(suggestionVotes).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertTranslationVariantExperimentSchema = createInsertSchema(translationVariantExperiments).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertTranslationVariantSchema = createInsertSchema(translationVariants).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertTranslationVariantMetricSchema = createInsertSchema(translationVariantMetrics).omit({
+  id: true,
+  recordedAt: true,
+});
+
+export const insertTranslationAuditLogSchema = createInsertSchema(translationAuditLog).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertTranslationAssignmentSchema = createInsertSchema(translationAssignments).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+// Types
+export type InsertTranslationLocale = z.infer<typeof insertTranslationLocaleSchema>;
+export type TranslationLocale = typeof translationLocales.$inferSelect;
+
+export type InsertTranslationKey = z.infer<typeof insertTranslationKeySchema>;
+export type TranslationKey = typeof translationKeys.$inferSelect;
+
+export type InsertTranslationVersion = z.infer<typeof insertTranslationVersionSchema>;
+export type TranslationVersion = typeof translationVersions.$inferSelect;
+
+export type InsertTranslationSuggestion = z.infer<typeof insertTranslationSuggestionSchema>;
+export type TranslationSuggestion = typeof translationSuggestions.$inferSelect;
+
+export type InsertSuggestionVote = z.infer<typeof insertSuggestionVoteSchema>;
+export type SuggestionVote = typeof suggestionVotes.$inferSelect;
+
+export type InsertTranslationVariantExperiment = z.infer<typeof insertTranslationVariantExperimentSchema>;
+export type TranslationVariantExperiment = typeof translationVariantExperiments.$inferSelect;
+
+export type InsertTranslationVariant = z.infer<typeof insertTranslationVariantSchema>;
+export type TranslationVariant = typeof translationVariants.$inferSelect;
+
+export type InsertTranslationVariantMetric = z.infer<typeof insertTranslationVariantMetricSchema>;
+export type TranslationVariantMetric = typeof translationVariantMetrics.$inferSelect;
+
+export type InsertTranslationAuditLog = z.infer<typeof insertTranslationAuditLogSchema>;
+export type TranslationAuditLog = typeof translationAuditLog.$inferSelect;
+
+export type InsertTranslationAssignment = z.infer<typeof insertTranslationAssignmentSchema>;
+export type TranslationAssignment = typeof translationAssignments.$inferSelect;

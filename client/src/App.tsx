@@ -70,6 +70,7 @@ import CountyManagement from "@/pages/CountyManagement";
 import NavigatorPerformance from "@/pages/NavigatorPerformance";
 import Leaderboard from "@/pages/Leaderboard";
 import CountyAnalytics from "@/pages/CountyAnalytics";
+import ProductivityDashboard from "@/pages/ProductivityDashboard";
 import VitaKnowledgeBase from "@/pages/VitaKnowledgeBase";
 import EvaluationFramework from "@/pages/EvaluationFramework";
 import HouseholdProfiler from "@/pages/HouseholdProfiler";
@@ -89,6 +90,8 @@ import { InstallPrompt } from "@/components/InstallPrompt";
 import { TenantProvider } from "@/contexts/TenantContext";
 import { TenantThemeProvider } from "@/components/TenantThemeProvider";
 import Footer from "@/components/Footer";
+import Demo from "@/pages/Demo";
+import APIExplorer from "@/pages/APIExplorer";
 
 function Router() {
   const [location] = useLocation();
@@ -119,6 +122,12 @@ function Router() {
           <Route path="/help" component={Home} />
           <Route path="/login" component={Login} />
           <Route path="/signup" component={Signup} />
+          
+          {/* Demo Dashboard - Public access (no login required) */}
+          <Route path="/demo" component={Demo} />
+          
+          {/* API Explorer - Public access (no login required) */}
+          <Route path="/api-explorer" component={APIExplorer} />
           
           {/* Public Portal - No login required */}
           <Route path="/public/documents" component={DocumentChecklist} />
@@ -164,6 +173,13 @@ function Router() {
             {() => (
               <ProtectedRoute requireStaff>
                 <Leaderboard />
+              </ProtectedRoute>
+            )}
+          </Route>
+          <Route path="/productivity">
+            {() => (
+              <ProtectedRoute requireStaff>
+                <ProductivityDashboard />
               </ProtectedRoute>
             )}
           </Route>
