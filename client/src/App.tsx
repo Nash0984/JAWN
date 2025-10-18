@@ -89,6 +89,7 @@ import { InstallPrompt } from "@/components/InstallPrompt";
 import { TenantProvider } from "@/contexts/TenantContext";
 import { TenantThemeProvider } from "@/components/TenantThemeProvider";
 import Footer from "@/components/Footer";
+import Demo from "@/pages/Demo";
 
 function Router() {
   const [location] = useLocation();
@@ -119,6 +120,9 @@ function Router() {
           <Route path="/help" component={Home} />
           <Route path="/login" component={Login} />
           <Route path="/signup" component={Signup} />
+          
+          {/* Demo Dashboard - Public access (no login required) */}
+          <Route path="/demo" component={Demo} />
           
           {/* Public Portal - No login required */}
           <Route path="/public/documents" component={DocumentChecklist} />
