@@ -56,11 +56,22 @@ import {
   insertTaxpayerMessageSchema,
   insertTaxpayerMessageAttachmentSchema,
   insertESignatureSchema,
+  insertFeedbackEntrySchema,
+  insertFeedbackVoteSchema,
+  insertFeedbackCommentSchema,
+  insertFeedbackStatusHistorySchema,
+  insertFeedbackAssignmentSchema,
+  insertFaqCandidateSchema,
+  insertFaqArticleSchema,
   searchQueries,
   auditLogs,
   ruleChangeLogs,
   quickRatings,
   feedbackSubmissions,
+  feedbackFeatures,
+  feedbackTags,
+  feedbackEntries,
+  feedbackVotes,
   users,
   documentRequirementTemplates,
   noticeTemplates,
@@ -90,6 +101,9 @@ import { decryptVitaIntake } from "./utils/encryptedFields";
 import { demoDataService } from "./services/demoDataService";
 import { translationService } from "./services/translationService";
 import { requireTranslationAccess, requireAssignmentOrAdmin } from "./middleware/translationPermissions";
+import { feedbackService } from "./services/feedbackService";
+import { faqService } from "./services/faqService";
+import { feedbackMetricsService } from "./services/feedbackMetricsService";
 
 // Configure secure file uploaders for different use cases
 const documentUpload = createSecureUploader('documents', {
@@ -11214,6 +11228,261 @@ If the question cannot be answered with the available information, say so clearl
     await demoDataService.loadDemoData();
     const metrics = demoDataService.getMetrics();
     res.json(metrics);
+  }));
+
+  // ============================================================================
+  // FEEDBACK SYSTEM ENDPOINTS - Platform-wide Feedback Collection & FAQ
+  // ============================================================================
+
+  // Submit feedback entry
+  app.post('/api/feedback/entries', asyncHandler(async (req: Request, res: Response) => {
+    const validatedData = insertFeedbackEntrySchema.parse(req.body);
+    
+    // Get user context if authenticated, otherwise allow anonymous
+    const userId = req.user?.id || null;
+    const tenantId = req.user?.tenantId || null;
+    
+    const entry = await feedbackService.createEntry({
+      ...validatedData,
+      userId,
+      tenantId,
+    });
+    
+    res.status(201).json(entry);
+  }));
+
+  // List feedback entries with filters
+  app.get('/api/feedback/entries', requireAuth, asyncHandler(async (req: Request, res: Response) => {
+    const { featureId, status, type, assignedTo, limit, offset } = req.query;
+    
+    const entries = await feedbackService.getEntries({
+      featureId: featureId as string,
+      status: status as string,
+      type: type as string,
+      assignedTo: assignedTo as string,
+      tenantId: req.user!.tenantId || undefined,
+      limit: limit ? parseInt(limit as string) : undefined,
+      offset: offset ? parseInt(offset as string) : undefined,
+    });
+    
+    res.json(entries);
+  }));
+
+  // Get feedback entry details
+  app.get('/api/feedback/entries/:id', asyncHandler(async (req: Request, res: Response) => {
+    const tenantId = req.user?.tenantId || undefined;
+    const entry = await feedbackService.getEntryById(req.params.id, tenantId);
+    
+    if (!entry) {
+      throw notFoundError('Feedback entry not found');
+    }
+    
+    res.json(entry);
+  }));
+
+  // Vote on feedback entry (anonymous allowed)
+  app.post('/api/feedback/entries/:id/vote', asyncHandler(async (req: Request, res: Response) => {
+    const { voteValue } = req.body;
+    
+    if (![1, -1].includes(voteValue)) {
+      return res.status(400).json({ error: "voteValue must be 1 or -1" });
+    }
+    
+    const userId = req.user?.id || null;
+    const voterRole = req.user?.role || "client";
+    const anonymousSessionHash = !userId ? req.sessionID || req.ip : undefined;
+    
+    await feedbackService.voteOnEntry(
+      req.params.id,
+      userId,
+      voteValue,
+      voterRole,
+      anonymousSessionHash
+    );
+    
+    res.json({ success: true });
+  }));
+
+  // Add comment to feedback entry (anonymous allowed)
+  app.post('/api/feedback/entries/:id/comments', asyncHandler(async (req: Request, res: Response) => {
+    const { commentText, parentId } = req.body;
+    
+    if (!commentText || commentText.trim().length === 0) {
+      return res.status(400).json({ error: "commentText is required" });
+    }
+    
+    const userId = req.user?.id || null;
+    const isStaffResponse = req.user ? ["navigator", "caseworker", "admin", "super_admin"].includes(req.user.role) : false;
+    
+    const comment = await feedbackService.addComment(
+      req.params.id,
+      userId,
+      commentText,
+      isStaffResponse,
+      parentId
+    );
+    
+    res.status(201).json(comment);
+  }));
+
+  // Update feedback status (staff only)
+  app.patch('/api/feedback/entries/:id/status', requireAuth, requireStaff, asyncHandler(async (req: Request, res: Response) => {
+    const { fromStatus, toStatus, notes } = req.body;
+    
+    if (!toStatus) {
+      return res.status(400).json({ error: "toStatus is required" });
+    }
+    
+    await feedbackService.updateStatus(
+      req.params.id,
+      fromStatus,
+      toStatus,
+      req.user!.id,
+      notes
+    );
+    
+    res.json({ success: true });
+  }));
+
+  // Assign feedback to staff (staff only)
+  app.patch('/api/feedback/entries/:id/assign', requireAuth, requireStaff, asyncHandler(async (req: Request, res: Response) => {
+    const { assignedTo, notes } = req.body;
+    
+    if (!assignedTo) {
+      return res.status(400).json({ error: "assignedTo is required" });
+    }
+    
+    const assignment = await feedbackService.assignToStaff(
+      req.params.id,
+      assignedTo,
+      req.user!.id,
+      notes
+    );
+    
+    res.json(assignment);
+  }));
+
+  // Get trending feedback issues
+  app.get('/api/feedback/trending', requireAuth, asyncHandler(async (req: Request, res: Response) => {
+    const { limit, featureId, type } = req.query;
+    
+    const trending = await feedbackService.getTrending(
+      limit ? parseInt(limit as string) : 10,
+      {
+        featureId: featureId as string,
+        type: type as string,
+        tenantId: req.user!.tenantId || undefined,
+      }
+    );
+    
+    res.json(trending);
+  }));
+
+  // Get feedback metrics (staff only)
+  app.get('/api/feedback/metrics', requireAuth, requireStaff, asyncHandler(async (req: Request, res: Response) => {
+    const { featureId, startDate, endDate } = req.query;
+    
+    const metrics = await feedbackService.getMetrics({
+      featureId: featureId as string,
+      tenantId: req.user!.tenantId || undefined,
+      startDate: startDate ? new Date(startDate as string) : undefined,
+      endDate: endDate ? new Date(endDate as string) : undefined,
+    });
+    
+    res.json(metrics);
+  }));
+
+  // List feedback features (public)
+  app.get('/api/feedback/features', asyncHandler(async (_req: Request, res: Response) => {
+    const features = await db.select().from(feedbackFeatures).where(eq(feedbackFeatures.isActive, true));
+    res.json(features);
+  }));
+
+  // List feedback tags (public)
+  app.get('/api/feedback/tags', asyncHandler(async (_req: Request, res: Response) => {
+    const tags = await db.select().from(feedbackTags).where(eq(feedbackTags.isActive, true));
+    res.json(tags);
+  }));
+
+  // Trigger FAQ auto-generation (admin only)
+  app.post('/api/faq/generate', requireAuth, requireAdmin, asyncHandler(async (_req: Request, res: Response) => {
+    const candidates = await faqService.detectCandidates();
+    res.json({ 
+      success: true, 
+      count: candidates.length,
+      candidates 
+    });
+  }));
+
+  // List FAQ candidates (admin only)
+  app.get('/api/faq/candidates', requireAuth, requireAdmin, asyncHandler(async (req: Request, res: Response) => {
+    const { status, minConfidence } = req.query;
+    
+    const candidates = await faqService.getCandidates({
+      status: status as string,
+      minConfidence: minConfidence ? parseFloat(minConfidence as string) : undefined,
+    });
+    
+    res.json(candidates);
+  }));
+
+  // Approve FAQ candidate (admin only)
+  app.patch('/api/faq/candidates/:id/approve', requireAuth, requireAdmin, asyncHandler(async (req: Request, res: Response) => {
+    const { question, answer, category, tags } = req.body;
+    
+    const article = await faqService.approveCandidate(
+      req.params.id,
+      req.user!.id,
+      { question, answer, category, tags }
+    );
+    
+    res.json(article);
+  }));
+
+  // Reject FAQ candidate (admin only)
+  app.patch('/api/faq/candidates/:id/reject', requireAuth, requireAdmin, asyncHandler(async (req: Request, res: Response) => {
+    const { reason } = req.body;
+    
+    await faqService.rejectCandidate(req.params.id, req.user!.id, reason);
+    
+    res.json({ success: true });
+  }));
+
+  // List published FAQ articles (public)
+  app.get('/api/faq/articles', asyncHandler(async (req: Request, res: Response) => {
+    const { category, search } = req.query;
+    
+    const articles = await faqService.getArticles({
+      category: category as string,
+      isPublished: true,
+      search: search as string,
+    });
+    
+    res.json(articles);
+  }));
+
+  // Mark FAQ article as helpful (anonymous allowed)
+  app.post('/api/faq/articles/:id/helpful', asyncHandler(async (req: Request, res: Response) => {
+    const { isHelpful } = req.body;
+    
+    if (typeof isHelpful !== 'boolean') {
+      return res.status(400).json({ error: "isHelpful must be a boolean" });
+    }
+    
+    await faqService.recordHelpfulness(req.params.id, isHelpful);
+    
+    res.json({ success: true });
+  }));
+
+  // Get FAQ article details (public)
+  app.get('/api/faq/articles/:id', asyncHandler(async (req: Request, res: Response) => {
+    const article = await faqService.getArticleById(req.params.id);
+    
+    if (!article) {
+      throw notFoundError('FAQ article not found');
+    }
+    
+    res.json(article);
   }));
 
   const httpServer = createServer(app);

@@ -12,6 +12,35 @@ import rateLimit, { RateLimitRequestHandler } from 'express-rate-limit';
 import { Request } from 'express';
 
 /**
+ * Normalize IP address for rate limiting keys
+ * Handles IPv6 addresses to avoid ERR_ERL_KEY_GEN_IPV6 validation errors
+ */
+function normalizeIpForKey(ip: string | undefined): string {
+  if (!ip) return 'unknown';
+  
+  // Convert IPv4-mapped IPv6 addresses to IPv4
+  // ::ffff:192.0.2.1 → 192.0.2.1
+  if (ip.startsWith('::ffff:')) {
+    return ip.substring(7);
+  }
+  
+  // Convert localhost IPv6 to IPv4
+  // ::1 → 127.0.0.1
+  if (ip === '::1') {
+    return '127.0.0.1';
+  }
+  
+  // For other IPv6 addresses, use a hash to create a valid key
+  // This ensures consistent rate limiting for IPv6 clients
+  if (ip.includes(':')) {
+    // Replace colons with hyphens to create valid key
+    return ip.replace(/:/g, '-');
+  }
+  
+  return ip;
+}
+
+/**
  * Rate limit tiers by user role
  */
 const RATE_LIMIT_TIERS = {
@@ -78,7 +107,7 @@ export const standardRateLimiter: RateLimitRequestHandler = rateLimit({
   // Use user ID or IP for rate limiting
   keyGenerator: (req: Request) => {
     const user = (req as any).user;
-    return user ? `user:${user.id}` : `ip:${req.ip}`;
+    return user ? `user:${user.id}` : `ip:${normalizeIpForKey(req.ip)}`;
   },
   // Skip successful requests from counting (optional)
   skip: (req: Request) => {
@@ -113,7 +142,7 @@ export const authRateLimiter: RateLimitRequestHandler = rateLimit({
     message: 'Too many login attempts. Please try again later.',
     retryAfter: 900 // 15 minutes in seconds
   },
-  keyGenerator: (req: Request) => `auth:${req.ip}`,
+  keyGenerator: (req: Request) => `auth:${normalizeIpForKey(req.ip)}`,
   handler: (req, res) => {
     console.warn(`⚠️  Auth rate limit exceeded from IP: ${req.ip}`);
     
@@ -144,7 +173,7 @@ export const aiRateLimiter: RateLimitRequestHandler = rateLimit({
   },
   keyGenerator: (req: Request) => {
     const user = (req as any).user;
-    return user ? `ai:user:${user.id}` : `ai:ip:${req.ip}`;
+    return user ? `ai:user:${user.id}` : `ai:ip:${normalizeIpForKey(req.ip)}`;
   }
 });
 
@@ -167,7 +196,7 @@ export const uploadRateLimiter: RateLimitRequestHandler = rateLimit({
   },
   keyGenerator: (req: Request) => {
     const user = (req as any).user;
-    return user ? `upload:user:${user.id}` : `upload:ip:${req.ip}`;
+    return user ? `upload:user:${user.id}` : `upload:ip:${normalizeIpForKey(req.ip)}`;
   }
 });
 
