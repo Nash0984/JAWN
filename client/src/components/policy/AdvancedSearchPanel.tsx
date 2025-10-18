@@ -11,7 +11,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { Search, X, FileText, Code, Calendar, Filter } from "lucide-react";
-import { useDebounce } from "@/hooks/use-mobile";
+import { useDebounce } from "@/hooks/use-debounce";
 
 interface SearchResult {
   id: string;

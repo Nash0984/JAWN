@@ -2,7 +2,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { FileText, Eye, Edit, Power } from "lucide-react";
-import { useNavigate } from "wouter";
+import { useLocation } from "wouter";
 import type { DynamicNotificationTemplate } from "@shared/schema";
 
 interface TemplateCardProps {
@@ -12,7 +12,7 @@ interface TemplateCardProps {
 }
 
 export function TemplateCard({ template, onViewUsage, onToggleStatus }: TemplateCardProps) {
-  const [, navigate] = useNavigate();
+  const [, navigate] = useLocation();
 
   const formatDate = (date: Date | null | undefined) => {
     if (!date) return 'Never';
