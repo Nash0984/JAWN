@@ -8,7 +8,7 @@
  * Generic name for white-labeling to other states.
  */
 
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import { GoogleGenAI } from '@google/genai';
 import { nanoid } from 'nanoid';
 import type { IStorage } from '../storage';
 import { db } from '../db';
@@ -52,8 +52,7 @@ interface TestRun {
 }
 
 export class MAIVEService {
-  private gemini: GoogleGenerativeAI | null = null;
-  private model: any;
+  private gemini: GoogleGenAI | null = null;
   private storage: IStorage;
   private useMockJudge: boolean = false;
 
@@ -65,13 +64,8 @@ export class MAIVEService {
       console.warn('⚠️ MAIVE: No Gemini API key found. Using mock judge for development.');
       this.useMockJudge = true;
     } else {
-      this.gemini = new GoogleGenerativeAI(apiKey);
-      this.model = this.gemini.getGenerativeModel({ 
-        model: 'gemini-1.5-pro',
-        generationConfig: {
-          temperature: 0.1, // Low temperature for consistent evaluation
-          maxOutputTokens: 8192,
-        }
+      this.gemini = new GoogleGenAI({ 
+        apiKey: apiKey 
       });
     }
   }
@@ -291,8 +285,15 @@ Format your response as JSON:
   "judgment": "PASS" or "FAIL" or "NEEDS_REVIEW"
 }`;
 
-    const result = await this.model.generateContent(prompt);
-    const responseText = result.response.text();
+    const result = await this.gemini.models.generateContent({
+      model: 'gemini-1.5-pro',
+      contents: [{ role: 'user', parts: [{ text: prompt }] }],
+      config: {
+        temperature: 0.1,
+        maxOutputTokens: 8192,
+      }
+    });
+    const responseText = result.candidates?.[0]?.content?.parts?.[0]?.text || '';
     
     // Extract JSON from response
     const jsonMatch = responseText.match(/\{[\s\S]*\}/);
