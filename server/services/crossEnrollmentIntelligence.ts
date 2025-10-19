@@ -1,5 +1,7 @@
 import type { TaxCalculationResult, TaxHouseholdInput } from './policyEngineTaxCalculation';
 import { policyEngineTaxCalculationService } from './policyEngineTaxCalculation';
+import { GoogleGenAI } from '@google/genai';
+import { cacheService } from './cacheService';
 
 /**
  * Cross-Enrollment Intelligence Engine
@@ -81,6 +83,18 @@ export interface CrossEnrollmentAnalysis {
 }
 
 export class CrossEnrollmentIntelligenceService {
+  private gemini: GoogleGenAI | null = null;
+  private model: any;
+
+  constructor() {
+    const apiKey = process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY;
+    
+    if (apiKey) {
+      this.gemini = new GoogleGenAI({ apiKey });
+    } else {
+      console.warn('⚠️ Cross-Enrollment Intelligence: No Gemini API key found.');
+    }
+  }
   /**
    * Analyze tax data for missed benefit opportunities
    */
