@@ -6880,3 +6880,287 @@ export type GdprPrivacyImpactAssessment = typeof gdprPrivacyImpactAssessments.$i
 export type InsertGdprPrivacyImpactAssessment = z.infer<typeof insertGdprPrivacyImpactAssessmentSchema>;
 export type GdprBreachIncident = typeof gdprBreachIncidents.$inferSelect;
 export type InsertGdprBreachIncident = z.infer<typeof insertGdprBreachIncidentSchema>;
+
+// ============================================================================
+// HIPAA COMPLIANCE - Healthcare Data Protection & PHI Security
+// ============================================================================
+
+// HIPAA PHI Access Logs - Track all Protected Health Information access
+export const hipaaPhiAccessLogs = pgTable("hipaa_phi_access_logs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id).notNull(),
+  patientId: varchar("patient_id").references(() => users.id), // Patient whose PHI was accessed
+  accessType: text("access_type").notNull(), // view, create, update, delete, export, print
+  resourceType: text("resource_type").notNull(), // patient_record, document, household_profile, tax_return, etc.
+  resourceId: varchar("resource_id").notNull(), // ID of the accessed resource
+  dataElements: text("data_elements").array(), // Specific PHI fields accessed
+  purpose: text("purpose").notNull(), // treatment, payment, operations, research, etc.
+  minimumNecessary: boolean("minimum_necessary").default(true).notNull(), // Met minimum necessary standard
+  justification: text("justification"), // Why access was needed
+  ipAddress: text("ip_address"),
+  userAgent: text("user_agent"),
+  location: text("location"), // Geographic location
+  sessionId: varchar("session_id"),
+  requestMethod: text("request_method"), // GET, POST, PUT, DELETE
+  requestUrl: text("request_url"),
+  responseStatus: integer("response_status"),
+  accessDuration: integer("access_duration"), // Duration in milliseconds
+  emergencyAccess: boolean("emergency_access").default(false), // Break-glass access
+  delegatedAccess: boolean("delegated_access").default(false), // Access on behalf of another user
+  delegatedBy: varchar("delegated_by").references(() => users.id),
+  auditReviewed: boolean("audit_reviewed").default(false),
+  reviewedBy: varchar("reviewed_by").references(() => users.id),
+  reviewedAt: timestamp("reviewed_at"),
+  flaggedForReview: boolean("flagged_for_review").default(false),
+  flagReason: text("flag_reason"),
+  accessedAt: timestamp("accessed_at").defaultNow().notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+  userIdIdx: index("hipaa_phi_access_user_id_idx").on(table.userId),
+  patientIdIdx: index("hipaa_phi_access_patient_id_idx").on(table.patientId),
+  resourceIdx: index("hipaa_phi_access_resource_idx").on(table.resourceType, table.resourceId),
+  accessTypeIdx: index("hipaa_phi_access_type_idx").on(table.accessType),
+  accessedAtIdx: index("hipaa_phi_access_accessed_at_idx").on(table.accessedAt),
+  flaggedIdx: index("hipaa_phi_access_flagged_idx").on(table.flaggedForReview),
+}));
+
+// HIPAA Business Associate Agreements - Track BAAs and covered entities
+export const hipaaBusinessAssociateAgreements = pgTable("hipaa_business_associate_agreements", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  agreementNumber: text("agreement_number").notNull().unique(),
+  businessAssociateName: text("business_associate_name").notNull(),
+  businessAssociateType: text("business_associate_type").notNull(), // vendor, subcontractor, cloud_provider, etc.
+  contactPerson: text("contact_person").notNull(),
+  contactEmail: text("contact_email").notNull(),
+  contactPhone: text("contact_phone"),
+  servicesProvided: text("services_provided").array().notNull(),
+  phiCategories: text("phi_categories").array().notNull(), // Types of PHI they can access
+  permittedUses: text("permitted_uses").array().notNull(), // What they're allowed to do with PHI
+  permittedDisclosures: text("permitted_disclosures").array(),
+  subcontractorsAllowed: boolean("subcontractors_allowed").default(false),
+  subcontractorsList: jsonb("subcontractors_list"), // List of approved subcontractors
+  signedDate: timestamp("signed_date").notNull(),
+  effectiveDate: timestamp("effective_date").notNull(),
+  expirationDate: timestamp("expiration_date"),
+  autoRenewal: boolean("auto_renewal").default(false),
+  renewalTerms: text("renewal_terms"),
+  terminationDate: timestamp("termination_date"),
+  terminationReason: text("termination_reason"),
+  status: text("status").notNull().default("active"), // active, expired, terminated, under_review
+  securityRequirements: jsonb("security_requirements").notNull(), // Required security controls
+  breachNotificationRequired: boolean("breach_notification_required").default(true).notNull(),
+  breachNotificationTimeframe: text("breach_notification_timeframe").default("60 days"),
+  auditRights: boolean("audit_rights").default(true).notNull(),
+  lastAuditDate: timestamp("last_audit_date"),
+  nextAuditDue: timestamp("next_audit_due"),
+  auditFindings: text("audit_findings"),
+  complianceStatus: text("compliance_status").default("compliant"), // compliant, non_compliant, under_review
+  attestationProvided: boolean("attestation_provided").default(false),
+  attestationDate: timestamp("attestation_date"),
+  insuranceRequired: boolean("insurance_required").default(false),
+  insuranceCoverage: text("insurance_coverage"),
+  insuranceExpirationDate: timestamp("insurance_expiration_date"),
+  documentUrl: text("document_url"), // Link to signed BAA document
+  notes: text("notes"),
+  createdBy: varchar("created_by").references(() => users.id).notNull(),
+  updatedBy: varchar("updated_by").references(() => users.id),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  agreementNumberIdx: uniqueIndex("hipaa_baa_agreement_number_idx").on(table.agreementNumber),
+  statusIdx: index("hipaa_baa_status_idx").on(table.status),
+  expirationDateIdx: index("hipaa_baa_expiration_date_idx").on(table.expirationDate),
+  nextAuditIdx: index("hipaa_baa_next_audit_idx").on(table.nextAuditDue),
+}));
+
+// HIPAA Risk Assessments - Security Risk Analysis (SRA) tracking
+export const hipaaRiskAssessments = pgTable("hipaa_risk_assessments", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  assessmentNumber: text("assessment_number").notNull().unique(),
+  assessmentType: text("assessment_type").notNull(), // annual, incident_driven, change_driven, vendor_assessment
+  scope: text("scope").notNull(), // Full scope description
+  assessmentDate: timestamp("assessment_date").notNull(),
+  assessor: varchar("assessor").references(() => users.id).notNull(),
+  assessorQualifications: text("assessor_qualifications"),
+  methodology: text("methodology").notNull(), // NIST, OCTAVE, custom, etc.
+  physicalSafeguards: jsonb("physical_safeguards").notNull(), // Assessment of physical controls
+  technicalSafeguards: jsonb("technical_safeguards").notNull(), // Assessment of technical controls
+  administrativeSafeguards: jsonb("administrative_safeguards").notNull(), // Assessment of admin controls
+  threatsIdentified: jsonb("threats_identified").notNull(), // List of threats
+  vulnerabilitiesIdentified: jsonb("vulnerabilities_identified").notNull(), // List of vulnerabilities
+  riskLevel: text("risk_level").notNull(), // low, medium, high, critical
+  impactAnalysis: jsonb("impact_analysis").notNull(), // Analysis of potential impact
+  likelihoodAnalysis: jsonb("likelihood_analysis").notNull(), // Analysis of likelihood
+  currentControls: jsonb("current_controls").notNull(), // Existing security controls
+  controlEffectiveness: text("control_effectiveness").notNull(), // effective, partially_effective, ineffective
+  gaps: jsonb("gaps").notNull(), // Identified gaps in security
+  recommendations: jsonb("recommendations").notNull(), // Recommended actions
+  remediationPlan: jsonb("remediation_plan"), // Plan to address risks
+  remediationDeadline: timestamp("remediation_deadline"),
+  remediationStatus: text("remediation_status").default("pending"), // pending, in_progress, completed, deferred
+  residualRisk: text("residual_risk"), // Risk level after remediation
+  acceptedRisks: jsonb("accepted_risks"), // Risks accepted by management
+  riskAcceptanceJustification: text("risk_acceptance_justification"),
+  acceptedBy: varchar("accepted_by").references(() => users.id),
+  acceptedDate: timestamp("accepted_date"),
+  reviewDate: timestamp("review_date"),
+  nextReviewDue: timestamp("next_review_due").notNull(),
+  status: text("status").notNull().default("draft"), // draft, in_review, approved, implemented
+  approvedBy: varchar("approved_by").references(() => users.id),
+  approvalDate: timestamp("approval_date"),
+  documentUrl: text("document_url"),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  assessmentNumberIdx: uniqueIndex("hipaa_ra_assessment_number_idx").on(table.assessmentNumber),
+  assessmentTypeIdx: index("hipaa_ra_assessment_type_idx").on(table.assessmentType),
+  riskLevelIdx: index("hipaa_ra_risk_level_idx").on(table.riskLevel),
+  statusIdx: index("hipaa_ra_status_idx").on(table.status),
+  nextReviewIdx: index("hipaa_ra_next_review_idx").on(table.nextReviewDue),
+}));
+
+// HIPAA Security Incidents - Track security incidents and breaches
+export const hipaaSecurityIncidents = pgTable("hipaa_security_incidents", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  incidentNumber: text("incident_number").notNull().unique(),
+  incidentType: text("incident_type").notNull(), // breach, unauthorized_access, lost_device, ransomware, phishing, etc.
+  incidentDate: timestamp("incident_date").notNull(),
+  discoveryDate: timestamp("discovery_date").notNull(),
+  reportedDate: timestamp("reported_date"),
+  reportedBy: varchar("reported_by").references(() => users.id).notNull(),
+  description: text("description").notNull(),
+  affectedSystems: text("affected_systems").array(),
+  phiInvolved: boolean("phi_involved").default(false).notNull(),
+  phiTypes: text("phi_types").array(), // Types of PHI affected
+  numberOfRecords: integer("number_of_records").default(0),
+  affectedPatients: integer("affected_patients").default(0),
+  affectedPatientIds: text("affected_patient_ids").array(),
+  breachThresholdMet: boolean("breach_threshold_met").default(false), // > 500 individuals
+  hhs_notification_required: boolean("hhs_notification_required").default(false),
+  media_notification_required: boolean("media_notification_required").default(false),
+  severity: text("severity").notNull(), // low, medium, high, critical
+  riskAnalysis: text("risk_analysis").notNull(), // Risk to affected individuals
+  probabilityOfCompromise: text("probability_of_compromise"), // low, medium, high
+  containmentActions: jsonb("containment_actions").notNull(),
+  containmentDate: timestamp("containment_date"),
+  investigationFindings: text("investigation_findings"),
+  investigatedBy: varchar("investigated_by").references(() => users.id),
+  investigationCompletedDate: timestamp("investigation_completed_date"),
+  rootCause: text("root_cause"),
+  contributingFactors: text("contributing_factors").array(),
+  correctiveActions: jsonb("corrective_actions").notNull(),
+  preventiveMeasures: jsonb("preventive_measures"),
+  individualsNotified: boolean("individuals_notified").default(false),
+  individualNotificationDate: timestamp("individual_notification_date"),
+  individualNotificationMethod: text("individual_notification_method"), // mail, email, phone, substitute_notice
+  hhsNotified: boolean("hhs_notified").default(false),
+  hhsNotificationDate: timestamp("hhs_notification_date"),
+  hhsNotificationMethod: text("hhs_notification_method"), // web_portal, written
+  mediaNotified: boolean("media_notified").default(false),
+  mediaNotificationDate: timestamp("media_notification_date"),
+  lawEnforcementNotified: boolean("law_enforcement_notified").default(false),
+  lawEnforcementDetails: jsonb("law_enforcement_details"),
+  insuranceClaimFiled: boolean("insurance_claim_filed").default(false),
+  insuranceClaimNumber: text("insurance_claim_number"),
+  status: text("status").notNull().default("open"), // open, investigating, contained, resolved, closed
+  incidentOwner: varchar("incident_owner").references(() => users.id).notNull(),
+  closedDate: timestamp("closed_date"),
+  closedBy: varchar("closed_by").references(() => users.id),
+  lessonsLearned: text("lessons_learned"),
+  policyUpdatesNeeded: boolean("policy_updates_needed").default(false),
+  trainingNeeded: boolean("training_needed").default(false),
+  documentUrl: text("document_url"),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  incidentNumberIdx: uniqueIndex("hipaa_incident_number_idx").on(table.incidentNumber),
+  incidentTypeIdx: index("hipaa_incident_type_idx").on(table.incidentType),
+  severityIdx: index("hipaa_incident_severity_idx").on(table.severity),
+  statusIdx: index("hipaa_incident_status_idx").on(table.status),
+  discoveryDateIdx: index("hipaa_incident_discovery_date_idx").on(table.discoveryDate),
+  breachIdx: index("hipaa_incident_breach_idx").on(table.breachThresholdMet),
+}));
+
+// HIPAA Audit Logs - Comprehensive audit trail for all system activities
+export const hipaaAuditLogs = pgTable("hipaa_audit_logs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  timestamp: timestamp("timestamp").defaultNow().notNull(),
+  userId: varchar("user_id").references(() => users.id),
+  userName: text("user_name"),
+  userRole: text("user_role"),
+  action: text("action").notNull(), // login, logout, create, read, update, delete, export, etc.
+  actionCategory: text("action_category").notNull(), // authentication, data_access, configuration, system, etc.
+  resourceType: text("resource_type"), // user, patient, document, household_profile, etc.
+  resourceId: varchar("resource_id"),
+  resourceName: text("resource_name"),
+  changesMade: jsonb("changes_made"), // Before/after values
+  outcome: text("outcome").notNull(), // success, failure, partial
+  failureReason: text("failure_reason"),
+  ipAddress: text("ip_address"),
+  userAgent: text("user_agent"),
+  sessionId: varchar("session_id"),
+  requestMethod: text("request_method"),
+  requestUrl: text("request_url"),
+  responseStatus: integer("response_status"),
+  responseTime: integer("response_time"), // milliseconds
+  phiAccessed: boolean("phi_accessed").default(false),
+  securityRelevant: boolean("security_relevant").default(false), // Flag for security-relevant events
+  complianceRelevant: boolean("compliance_relevant").default(false), // Flag for compliance audits
+  retentionPeriod: integer("retention_period").default(2555).notNull(), // Days to retain (default 7 years)
+  archived: boolean("archived").default(false),
+  archivedDate: timestamp("archived_date"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+  timestampIdx: index("hipaa_audit_timestamp_idx").on(table.timestamp),
+  userIdIdx: index("hipaa_audit_user_id_idx").on(table.userId),
+  actionIdx: index("hipaa_audit_action_idx").on(table.action),
+  actionCategoryIdx: index("hipaa_audit_action_category_idx").on(table.actionCategory),
+  resourceIdx: index("hipaa_audit_resource_idx").on(table.resourceType, table.resourceId),
+  phiAccessedIdx: index("hipaa_audit_phi_accessed_idx").on(table.phiAccessed),
+  securityRelevantIdx: index("hipaa_audit_security_relevant_idx").on(table.securityRelevant),
+}));
+
+// Insert schemas for HIPAA Compliance
+export const insertHipaaPhiAccessLogSchema = createInsertSchema(hipaaPhiAccessLogs).omit({
+  id: true,
+  accessedAt: true,
+  createdAt: true,
+});
+
+export const insertHipaaBusinessAssociateAgreementSchema = createInsertSchema(hipaaBusinessAssociateAgreements).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertHipaaRiskAssessmentSchema = createInsertSchema(hipaaRiskAssessments).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertHipaaSecurityIncidentSchema = createInsertSchema(hipaaSecurityIncidents).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertHipaaAuditLogSchema = createInsertSchema(hipaaAuditLogs).omit({
+  id: true,
+  timestamp: true,
+  createdAt: true,
+});
+
+// Types for HIPAA Compliance
+export type HipaaPhiAccessLog = typeof hipaaPhiAccessLogs.$inferSelect;
+export type InsertHipaaPhiAccessLog = z.infer<typeof insertHipaaPhiAccessLogSchema>;
+export type HipaaBusinessAssociateAgreement = typeof hipaaBusinessAssociateAgreements.$inferSelect;
+export type InsertHipaaBusinessAssociateAgreement = z.infer<typeof insertHipaaBusinessAssociateAgreementSchema>;
+export type HipaaRiskAssessment = typeof hipaaRiskAssessments.$inferSelect;
+export type InsertHipaaRiskAssessment = z.infer<typeof insertHipaaRiskAssessmentSchema>;
+export type HipaaSecurityIncident = typeof hipaaSecurityIncidents.$inferSelect;
+export type InsertHipaaSecurityIncident = z.infer<typeof insertHipaaSecurityIncidentSchema>;
+export type HipaaAuditLog = typeof hipaaAuditLogs.$inferSelect;
+export type InsertHipaaAuditLog = z.infer<typeof insertHipaaAuditLogSchema>;
