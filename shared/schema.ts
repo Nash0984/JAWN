@@ -6062,3 +6062,89 @@ export const insertAppointmentSchema = createInsertSchema(appointments).omit({
 // Types
 export type InsertAppointment = z.infer<typeof insertAppointmentSchema>;
 export type Appointment = typeof appointments.$inferSelect;
+
+// ============================================================================
+// MAIVE - AI Validation Engine Tables
+// ============================================================================
+
+// MAIVE Test Cases - Define test scenarios for validation
+export const maiveTestCases = pgTable("maive_test_cases", {
+  id: varchar("id").primaryKey(),
+  name: text("name").notNull(),
+  category: text("category").notNull(), // benefit_calculation, policy_interpretation, document_extraction, eligibility_determination, work_requirements
+  scenario: text("scenario").notNull(), // Description of what we're testing
+  inputs: jsonb("inputs").notNull(), // Test input data
+  expectedOutput: jsonb("expected_output").notNull(), // Ground truth expected output
+  accuracyThreshold: real("accuracy_threshold").default(0.95).notNull(), // Required accuracy (0-1)
+  stateSpecific: varchar("state_specific"), // State code if state-specific (e.g., "MD", "CA")
+  tags: text("tags").array(), // Tags for categorization
+  isActive: boolean("is_active").default(true).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  categoryIdx: index("maive_test_cases_category_idx").on(table.category),
+  stateIdx: index("maive_test_cases_state_idx").on(table.stateSpecific),
+  activeIdx: index("maive_test_cases_active_idx").on(table.isActive),
+}));
+
+// MAIVE Test Runs - Track test suite executions
+export const maiveTestRuns = pgTable("maive_test_runs", {
+  id: varchar("id").primaryKey(),
+  name: text("name").notNull(),
+  totalTests: integer("total_tests").notNull(),
+  passedTests: integer("passed_tests").notNull(),
+  failedTests: integer("failed_tests").notNull(),
+  overallAccuracy: real("overall_accuracy").notNull(), // Average accuracy across all tests
+  status: text("status").notNull(), // running, passed, failed
+  state: varchar("state"), // State being tested (if state-specific)
+  startedAt: timestamp("started_at").notNull(),
+  completedAt: timestamp("completed_at"),
+}, (table) => ({
+  statusIdx: index("maive_test_runs_status_idx").on(table.status),
+  stateIdx: index("maive_test_runs_state_idx").on(table.state),
+  startedAtIdx: index("maive_test_runs_started_idx").on(table.startedAt),
+}));
+
+// MAIVE Evaluations - Individual test case evaluation results
+export const maiveEvaluations = pgTable("maive_evaluations", {
+  id: varchar("id").primaryKey(),
+  testCaseId: varchar("test_case_id").references(() => maiveTestCases.id).notNull(),
+  testRunId: varchar("test_run_id").references(() => maiveTestRuns.id).notNull(),
+  actualOutput: jsonb("actual_output").notNull(),
+  expectedOutput: jsonb("expected_output").notNull(),
+  accuracy: real("accuracy").notNull(), // 0-100 accuracy score
+  passed: boolean("passed").notNull(),
+  reasoning: text("reasoning").notNull(), // LLM's reasoning for the score
+  deviations: text("deviations").array(), // List of critical deviations
+  executionTime: integer("execution_time").notNull(), // in milliseconds
+  llmJudgment: text("llm_judgment").notNull(), // PASS, FAIL, or NEEDS_REVIEW
+  evaluatedAt: timestamp("evaluated_at").notNull(),
+}, (table) => ({
+  testCaseIdx: index("maive_evaluations_test_case_idx").on(table.testCaseId),
+  testRunIdx: index("maive_evaluations_test_run_idx").on(table.testRunId),
+  passedIdx: index("maive_evaluations_passed_idx").on(table.passed),
+  evaluatedAtIdx: index("maive_evaluations_evaluated_idx").on(table.evaluatedAt),
+}));
+
+// Insert schemas for MAIVE
+export const insertMaiveTestCaseSchema = createInsertSchema(maiveTestCases).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertMaiveTestRunSchema = createInsertSchema(maiveTestRuns).omit({
+  id: true,
+});
+
+export const insertMaiveEvaluationSchema = createInsertSchema(maiveEvaluations).omit({
+  id: true,
+});
+
+// Types for MAIVE
+export type InsertMaiveTestCase = z.infer<typeof insertMaiveTestCaseSchema>;
+export type MaiveTestCase = typeof maiveTestCases.$inferSelect;
+export type InsertMaiveTestRun = z.infer<typeof insertMaiveTestRunSchema>;
+export type MaiveTestRun = typeof maiveTestRuns.$inferSelect;
+export type InsertMaiveEvaluation = z.infer<typeof insertMaiveEvaluationSchema>;
+export type MaiveEvaluation = typeof maiveEvaluations.$inferSelect;
