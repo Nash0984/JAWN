@@ -1364,6 +1364,18 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
       message: `Successfully cleared ${type} cache`,
     });
   }));
+  
+  // Cache Management - Get hierarchical L1/L2/L3 cache metrics with Redis status
+  app.get("/api/admin/cache/hierarchical", requireAdmin, asyncHandler(async (req: Request, res: Response) => {
+    const { cacheMetrics } = await import("./services/cacheMetrics");
+    
+    const hierarchicalMetrics = await cacheMetrics.getHierarchicalMetrics();
+    
+    res.json({
+      success: true,
+      ...hierarchicalMetrics,
+    });
+  }));
 
   // ============================================================================
   // MONITORING & OBSERVABILITY - Sentry integration and metrics
