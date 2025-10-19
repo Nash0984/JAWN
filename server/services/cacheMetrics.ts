@@ -3,13 +3,18 @@ import { ragCache } from './ragCache';
 import { documentAnalysisCache } from './documentAnalysisCache';
 import { policyEngineCache } from './policyEngineCache';
 import { cacheService } from './cacheService';
+import { redisCache } from './redisCache';
 
 /**
  * Cache Metrics Aggregation Service
  * 
  * Centralizes performance monitoring across all caching layers.
  * Provides unified view of cost savings and cache efficiency.
- * Now includes hierarchical L1/L2/L3 reporting structure.
+ * Now includes hierarchical L1/L2/L3 reporting structure with Redis integration.
+ * 
+ * L1: NodeCache (Process-local)
+ * L2: Redis (Distributed) - Now implemented
+ * L3: PostgreSQL (Materialized Views) - Future
  */
 
 interface AggregatedMetrics {
@@ -224,7 +229,7 @@ class CacheMetricsService {
   /**
    * Get hierarchical cache metrics with L1/L2/L3 structure
    */
-  getHierarchicalMetrics(): HierarchicalMetrics {
+  async getHierarchicalMetrics(): Promise<HierarchicalMetrics> {
     const metrics = this.getAggregatedMetrics();
     const rulesEngineKeys = cacheService.keys().filter(k => 
       k.includes('rules:') || k.includes('pe:') || k.includes('hybrid:')
@@ -253,15 +258,24 @@ class CacheMetricsService {
         },
         L2: {
           type: 'Redis (Distributed Cache)',
-          status: 'not_implemented',
-          description: 'Redis would provide cross-instance cache sharing for horizontal scaling',
+          status: await this.getRedisStatus(),
+          description: await redisCache.isConnected() 
+            ? 'Redis is active and providing cross-instance cache sharing'
+            : 'Redis would provide cross-instance cache sharing for horizontal scaling',
+          connectionInfo: await this.getRedisConnectionInfo(),
+          stats: await this.getRedisStats(),
           benefits: [
             'Cache sharing across multiple application instances',
             'Persistent cache that survives application restarts',
             'TTL-based expiration with atomic operations',
             'Support for pub/sub invalidation events'
           ],
-          candidates: [
+          activeFeatures: await redisCache.isConnected() ? [
+            'Embedding cache (24hr TTL)',
+            'RAG query results (15min TTL)',
+            'PolicyEngine calculations (1hr TTL)'
+          ] : [],
+          candidates: await redisCache.isConnected() ? [] : [
             'PolicyEngine calculations (shared across navigators)',
             'RAG query results (shared across sessions)',
             'Benefit summary cache (high-value, reusable)',
@@ -331,6 +345,73 @@ class CacheMetricsService {
     }
 
     return recommendations;
+  }
+  
+  /**
+   * Get Redis connection status
+   */
+  private async getRedisStatus(): Promise<string> {
+    const isConnected = await redisCache.isConnected();
+    if (isConnected) {
+      return 'active';
+    }
+    return process.env.REDIS_URL || process.env.UPSTASH_REDIS_REST_URL 
+      ? 'disconnected' 
+      : 'not_configured';
+  }
+  
+  /**
+   * Get Redis connection information
+   */
+  private async getRedisConnectionInfo(): Promise<any> {
+    const isConnected = await redisCache.isConnected();
+    
+    if (!isConnected) {
+      return {
+        connected: false,
+        type: 'none',
+        message: 'Redis not configured - using L1 cache only'
+      };
+    }
+    
+    return {
+      connected: true,
+      type: process.env.UPSTASH_REDIS_REST_URL ? 'Upstash' : 'Redis',
+      url: process.env.REDIS_URL || process.env.UPSTASH_REDIS_REST_URL 
+        ? '***configured***' 
+        : 'not_set',
+      features: ['TTL expiration', 'Atomic operations', 'Cross-instance sharing']
+    };
+  }
+  
+  /**
+   * Get Redis cache statistics
+   */
+  private async getRedisStats(): Promise<any> {
+    const isConnected = await redisCache.isConnected();
+    
+    if (!isConnected) {
+      return null;
+    }
+    
+    // Get L2 stats from redisCache
+    const stats = await redisCache.getStats();
+    
+    return {
+      keys: stats.keys,
+      memoryUsage: stats.memoryUsage || 'N/A',
+      hitRate: 'Tracked per service',
+      operations: {
+        gets: stats.gets || 0,
+        sets: stats.sets || 0,
+        deletes: stats.deletes || 0
+      },
+      namespaces: {
+        'embedding:': 'Text embeddings (24hr TTL)',
+        'rag:': 'RAG queries (15min TTL)', 
+        'pe:calc:': 'PolicyEngine calculations (1hr TTL)'
+      }
+    };
   }
 }
 
