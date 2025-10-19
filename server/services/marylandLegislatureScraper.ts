@@ -4,7 +4,7 @@ import { db } from '../db';
 import { marylandBills, documents, policySources } from '@shared/schema';
 import { eq, and } from 'drizzle-orm';
 import { ObjectStorageService } from '../objectStorage';
-import { documentProcessor } from './documentProcessor';
+import { unifiedDocumentService as documentProcessor } from './unified/UnifiedDocumentService';
 
 /**
  * Maryland Legislature Scraper

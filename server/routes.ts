@@ -7,6 +7,8 @@ import { ragService } from "./services/ragService";
 import { unifiedDocumentService } from "./services/unified/UnifiedDocumentService";
 import { unifiedExportService } from "./services/unified/UnifiedExportService";
 import { unifiedIngestionService } from "./services/unified/UnifiedIngestionService";
+// Cross-State Rules
+import { registerCrossStateRulesRoutes } from "./api/crossStateRules.routes";
 
 // Legacy services (to be gradually migrated)
 const documentProcessor = unifiedDocumentService; // Alias for backward compatibility
@@ -10700,6 +10702,11 @@ If the question cannot be answered with the available information, say so clearl
   // ============================================================================
   const { registerStateConfigurationRoutes } = await import('./routes/stateConfiguration.routes');
   registerStateConfigurationRoutes(app);
+
+  // ============================================================================
+  // Mount Cross-State Rules Routes - Cross-State Rules Architecture
+  // ============================================================================
+  registerCrossStateRulesRoutes(app);
 
   const httpServer = createServer(app);
   

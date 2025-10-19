@@ -4,7 +4,7 @@ import { db } from '../db';
 import { federalBills, documents, policySources, benefitPrograms } from '@shared/schema';
 import { eq, and, sql } from 'drizzle-orm';
 import { ObjectStorageService } from '../objectStorage';
-import { documentProcessor } from './documentProcessor';
+import { unifiedDocumentService as documentProcessor } from './unified/UnifiedDocumentService';
 
 /**
  * GovInfo Bill Status Downloader

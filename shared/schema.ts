@@ -6331,6 +6331,251 @@ export const statePolicyRules = pgTable("state_policy_rules", {
   programIdx: index("state_policy_rules_program_idx").on(table.benefitProgramId),
 }));
 
+// ============================================================================
+// CROSS-STATE RULES ARCHITECTURE
+// ============================================================================
+
+// Cross-State Rules - Track rule conflicts and resolutions across jurisdictions
+export const crossStateRules = pgTable("cross_state_rules", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  
+  // Rule identification
+  ruleName: text("rule_name").notNull(),
+  ruleCode: text("rule_code").notNull().unique(),
+  ruleDescription: text("rule_description").notNull(),
+  
+  // States involved
+  primaryState: text("primary_state").notNull(), // Main state being evaluated
+  secondaryState: text("secondary_state"), // Comparison or conflict state
+  affectedStates: text("affected_states").array(), // All states impacted
+  
+  // Rule type and category
+  ruleType: text("rule_type").notNull(), // conflict_resolution, reciprocity, portability, border_worker
+  conflictType: text("conflict_type"), // income_threshold, asset_limit, work_requirement, eligibility_criteria
+  
+  // Resolution strategy
+  resolutionStrategy: text("resolution_strategy").notNull(), // primary_residence, work_state, most_favorable, federal_override
+  resolutionLogic: jsonb("resolution_logic").notNull(), // Detailed logic for resolution
+  
+  // Program association
+  benefitProgramId: varchar("benefit_program_id").references(() => benefitPrograms.id),
+  
+  // Priority and precedence
+  priority: integer("priority").default(0), // Higher priority rules apply first
+  overridesStandardRules: boolean("overrides_standard_rules").default(false),
+  
+  // Effective dates
+  effectiveDate: timestamp("effective_date"),
+  expirationDate: timestamp("expiration_date"),
+  
+  // Compliance and source
+  federalRegulation: text("federal_regulation"), // Federal law/reg that governs
+  stateRegulations: jsonb("state_regulations"), // State-specific regulations
+  
+  // Status
+  isActive: boolean("is_active").default(true).notNull(),
+  isTemporary: boolean("is_temporary").default(false),
+  
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  ruleTypeIdx: index("cross_state_rules_type_idx").on(table.ruleType),
+  primaryStateIdx: index("cross_state_rules_primary_state_idx").on(table.primaryState),
+  programIdx: index("cross_state_rules_program_idx").on(table.benefitProgramId),
+  activeIdx: index("cross_state_rules_active_idx").on(table.isActive),
+}));
+
+// Jurisdiction Hierarchies - Define precedence rules for overlapping jurisdictions
+export const jurisdictionHierarchies = pgTable("jurisdiction_hierarchies", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  
+  // Jurisdiction levels
+  jurisdictionType: text("jurisdiction_type").notNull(), // federal, state, county, city, special_district
+  jurisdictionCode: text("jurisdiction_code").notNull(), // US, MD, NYC, DC-FED
+  jurisdictionName: text("jurisdiction_name").notNull(),
+  
+  // Parent jurisdiction
+  parentJurisdictionId: varchar("parent_jurisdiction_id").references((): any => jurisdictionHierarchies.id),
+  
+  // Hierarchy level (0 = federal, 1 = state, 2 = county, etc.)
+  hierarchyLevel: integer("hierarchy_level").notNull(),
+  
+  // Special flags
+  isFederalTerritory: boolean("is_federal_territory").default(false), // DC, territories
+  hasSpecialStatus: boolean("has_special_status").default(false), // NYC, DC federal employees
+  specialStatusDetails: jsonb("special_status_details"),
+  
+  // Override rules
+  canOverrideParent: boolean("can_override_parent").default(false),
+  overrideCategories: text("override_categories").array(), // Which rules can be overridden
+  
+  // Geographic bounds (for mapping)
+  geoBounds: jsonb("geo_bounds"), // GeoJSON or boundary data
+  
+  // Status
+  isActive: boolean("is_active").default(true).notNull(),
+  
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  typeIdx: index("jurisdiction_hierarchies_type_idx").on(table.jurisdictionType),
+  codeIdx: uniqueIndex("jurisdiction_hierarchies_code_idx").on(table.jurisdictionCode),
+  levelIdx: index("jurisdiction_hierarchies_level_idx").on(table.hierarchyLevel),
+  parentIdx: index("jurisdiction_hierarchies_parent_idx").on(table.parentJurisdictionId),
+}));
+
+// State Reciprocity Agreements - Track inter-state benefit agreements
+export const stateReciprocityAgreements = pgTable("state_reciprocity_agreements", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  
+  // States in agreement
+  stateA: text("state_a").notNull(),
+  stateB: text("state_b").notNull(),
+  additionalStates: text("additional_states").array(), // For multi-state compacts
+  
+  // Agreement details
+  agreementName: text("agreement_name").notNull(),
+  agreementType: text("agreement_type").notNull(), // mutual_recognition, portability, work_credit, tax_reciprocity
+  agreementScope: text("agreement_scope").array(), // Which benefits are covered
+  
+  // Program coverage
+  coveredPrograms: text("covered_programs").array(), // SNAP, TANF, Medicaid, etc.
+  excludedPrograms: text("excluded_programs").array(),
+  
+  // Specific terms
+  terms: jsonb("terms").notNull(), // Detailed agreement terms
+  specialConditions: jsonb("special_conditions"), // Any special conditions or exceptions
+  
+  // Portability rules
+  benefitPortability: boolean("benefit_portability").default(false),
+  waitingPeriodDays: integer("waiting_period_days"), // Days before benefits transfer
+  documentationRequired: jsonb("documentation_required"),
+  
+  // Effective dates
+  effectiveDate: timestamp("effective_date").notNull(),
+  expirationDate: timestamp("expiration_date"),
+  renewalDate: timestamp("renewal_date"),
+  
+  // Legal references
+  legalAuthority: text("legal_authority"), // Law or regulation establishing agreement
+  agreementDocumentUrl: text("agreement_document_url"),
+  
+  // Status
+  status: text("status").notNull().default("active"), // active, pending, expired, terminated
+  isActive: boolean("is_active").default(true).notNull(),
+  
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  statesIdx: uniqueIndex("reciprocity_states_idx").on(table.stateA, table.stateB),
+  typeIdx: index("reciprocity_type_idx").on(table.agreementType),
+  statusIdx: index("reciprocity_status_idx").on(table.status),
+}));
+
+// Multi-State Households - Track households with members in different states
+export const multiStateHouseholds = pgTable("multi_state_households", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  
+  // Household reference
+  householdId: varchar("household_id").references(() => householdProfiles.id).notNull(),
+  clientCaseId: varchar("client_case_id").references(() => clientCases.id),
+  
+  // Primary residence
+  primaryResidenceState: text("primary_residence_state").notNull(),
+  primaryResidenceCounty: text("primary_residence_county"),
+  primaryResidenceZip: text("primary_residence_zip"),
+  
+  // Work location (if different)
+  workState: text("work_state"),
+  workCounty: text("work_county"),
+  workZip: text("work_zip"),
+  
+  // Member locations
+  memberStates: jsonb("member_states").notNull(), // {memberId: state} mapping
+  outOfStateMembers: integer("out_of_state_members").default(0),
+  
+  // Scenarios
+  scenario: text("scenario").notNull(), // border_worker, college_student, military, shared_custody, relocation
+  scenarioDetails: jsonb("scenario_details"),
+  
+  // Federal employment
+  hasFederalEmployee: boolean("has_federal_employee").default(false),
+  federalEmployeeDetails: jsonb("federal_employee_details"),
+  
+  // Military status
+  hasMilitaryMember: boolean("has_military_member").default(false),
+  homeOfRecord: text("home_of_record"), // Military home of record state
+  militaryDetails: jsonb("military_details"),
+  
+  // Resolution applied
+  appliedResolutionStrategy: text("applied_resolution_strategy"),
+  resolutionDate: timestamp("resolution_date"),
+  resolutionNotes: text("resolution_notes"),
+  
+  // Benefit implications
+  benefitImplications: jsonb("benefit_implications"), // How benefits are affected
+  requiredDocumentation: jsonb("required_documentation"),
+  
+  // Status
+  status: text("status").notNull().default("pending"), // pending, resolved, requires_review
+  reviewRequired: boolean("review_required").default(false),
+  lastReviewedBy: varchar("last_reviewed_by").references(() => users.id),
+  lastReviewedAt: timestamp("last_reviewed_at"),
+  
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  householdIdx: index("multi_state_households_household_idx").on(table.householdId),
+  caseIdx: index("multi_state_households_case_idx").on(table.clientCaseId),
+  scenarioIdx: index("multi_state_households_scenario_idx").on(table.scenario),
+  statusIdx: index("multi_state_households_status_idx").on(table.status),
+}));
+
+// Cross-State Rule Applications - Track when cross-state rules are applied to cases
+export const crossStateRuleApplications = pgTable("cross_state_rule_applications", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  
+  // Case reference
+  clientCaseId: varchar("client_case_id").references(() => clientCases.id).notNull(),
+  householdId: varchar("household_id").references(() => householdProfiles.id),
+  multiStateHouseholdId: varchar("multi_state_household_id").references(() => multiStateHouseholds.id),
+  
+  // Rule applied
+  crossStateRuleId: varchar("cross_state_rule_id").references(() => crossStateRules.id).notNull(),
+  
+  // States involved
+  fromState: text("from_state").notNull(),
+  toState: text("to_state"),
+  affectedStates: text("affected_states").array(),
+  
+  // Application details
+  applicationReason: text("application_reason").notNull(),
+  conflictsDetected: jsonb("conflicts_detected"),
+  resolutionApplied: jsonb("resolution_applied"),
+  
+  // Outcome
+  outcome: text("outcome").notNull(), // approved, denied, partial, pending_review
+  benefitAmount: integer("benefit_amount"),
+  effectiveDate: timestamp("effective_date"),
+  
+  // Review and approval
+  requiresReview: boolean("requires_review").default(false),
+  reviewedBy: varchar("reviewed_by").references(() => users.id),
+  reviewedAt: timestamp("reviewed_at"),
+  reviewNotes: text("review_notes"),
+  
+  // Audit trail
+  appliedBy: varchar("applied_by").references(() => users.id),
+  appliedAt: timestamp("applied_at").defaultNow().notNull(),
+  
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  caseIdx: index("cross_state_applications_case_idx").on(table.clientCaseId),
+  ruleIdx: index("cross_state_applications_rule_idx").on(table.crossStateRuleId),
+  outcomeIdx: index("cross_state_applications_outcome_idx").on(table.outcome),
+}));
+
 // Insert schemas for State Configuration
 export const insertStateConfigurationSchema = createInsertSchema(stateConfigurations).omit({
   id: true,
@@ -6356,6 +6601,37 @@ export const insertStatePolicyRuleSchema = createInsertSchema(statePolicyRules).
   updatedAt: true,
 });
 
+// Insert schemas for Cross-State Rules
+export const insertCrossStateRuleSchema = createInsertSchema(crossStateRules).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertJurisdictionHierarchySchema = createInsertSchema(jurisdictionHierarchies).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertStateReciprocityAgreementSchema = createInsertSchema(stateReciprocityAgreements).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertMultiStateHouseholdSchema = createInsertSchema(multiStateHouseholds).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertCrossStateRuleApplicationSchema = createInsertSchema(crossStateRuleApplications).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
 // Types for State Configuration
 export type StateConfiguration = typeof stateConfigurations.$inferSelect;
 export type InsertStateConfiguration = z.infer<typeof insertStateConfigurationSchema>;
@@ -6365,3 +6641,15 @@ export type StateForm = typeof stateForms.$inferSelect;
 export type InsertStateForm = z.infer<typeof insertStateFormSchema>;
 export type StatePolicyRule = typeof statePolicyRules.$inferSelect;
 export type InsertStatePolicyRule = z.infer<typeof insertStatePolicyRuleSchema>;
+
+// Types for Cross-State Rules
+export type CrossStateRule = typeof crossStateRules.$inferSelect;
+export type InsertCrossStateRule = z.infer<typeof insertCrossStateRuleSchema>;
+export type JurisdictionHierarchy = typeof jurisdictionHierarchies.$inferSelect;
+export type InsertJurisdictionHierarchy = z.infer<typeof insertJurisdictionHierarchySchema>;
+export type StateReciprocityAgreement = typeof stateReciprocityAgreements.$inferSelect;
+export type InsertStateReciprocityAgreement = z.infer<typeof insertStateReciprocityAgreementSchema>;
+export type MultiStateHousehold = typeof multiStateHouseholds.$inferSelect;
+export type InsertMultiStateHousehold = z.infer<typeof insertMultiStateHouseholdSchema>;
+export type CrossStateRuleApplication = typeof crossStateRuleApplications.$inferSelect;
+export type InsertCrossStateRuleApplication = z.infer<typeof insertCrossStateRuleApplicationSchema>;
