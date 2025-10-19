@@ -68,7 +68,7 @@ export default function Demo() {
         <title>Demo Dashboard - Maryland Universal Benefits-Tax Navigator</title>
         <meta
           name="description"
-          content="Interactive showcase of 105 features across the Maryland Universal Benefits-Tax Navigator platform. Explore AI capabilities, system architecture, and real-time performance metrics."
+          content="Interactive showcase of 99 features across the Maryland Universal Benefits-Tax Navigator platform. Explore AI capabilities, system architecture, and real-time performance metrics."
         />
       </Helmet>
 
@@ -93,7 +93,7 @@ export default function Demo() {
             </Card>
             <Card data-testid="stat-tables">
               <CardHeader className="pb-3">
-                <CardTitle className="text-3xl font-bold text-primary">144</CardTitle>
+                <CardTitle className="text-3xl font-bold text-primary">136</CardTitle>
                 <CardDescription>Database Tables</CardDescription>
               </CardHeader>
             </Card>
@@ -105,7 +105,7 @@ export default function Demo() {
             </Card>
             <Card data-testid="stat-services">
               <CardHeader className="pb-3">
-                <CardTitle className="text-3xl font-bold text-primary">95</CardTitle>
+                <CardTitle className="text-3xl font-bold text-primary">140+</CardTitle>
                 <CardDescription>Services</CardDescription>
               </CardHeader>
             </Card>

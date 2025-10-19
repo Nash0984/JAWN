@@ -54,7 +54,7 @@ export default function APIExplorer() {
     <>
       <Helmet>
         <title>API Explorer - Maryland Universal Benefits-Tax Navigator</title>
-        <meta name="description" content="Interactive API documentation with 270 endpoints covering benefits, tax, AI, policy management, and more" />
+        <meta name="description" content="Interactive API documentation with 218 endpoints covering benefits, tax, AI, and more" />
       </Helmet>
 
       <div className="container mx-auto p-6 space-y-8">

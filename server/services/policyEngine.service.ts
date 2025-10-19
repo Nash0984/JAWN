@@ -1,7 +1,5 @@
 import { policyEngineHttpClient, PolicyEngineHouseholdInput } from './policyEngineHttpClient';
 import { policyEngineCache } from './policyEngineCache';
-import { resilientRequest } from './resilience/resilientRequest';
-import { POLICYENGINE_PROFILE } from './resilience/profiles';
 
 /**
  * PolicyEngine Service
@@ -9,7 +7,6 @@ import { POLICYENGINE_PROFILE } from './resilience/profiles';
  * Bypasses Python library dependency issues
  * 
  * OPTIMIZED: Uses calculation cache to reduce API calls by 50-70%
- * RESILIENT: Wraps API calls with exponential backoff, circuit breaker, and cached fallback
  */
 
 export interface PolicyEngineHousehold {
@@ -98,39 +95,11 @@ class PolicyEngineService {
         elderlyOrDisabled: household.elderlyOrDisabled
       };
       
-      // Call HTTP API with resilience wrapper (retry + circuit breaker + cached fallback)
-      const result = await resilientRequest(
-        () => policyEngineHttpClient.calculateBenefits(input),
-        POLICYENGINE_PROFILE,
-        // Fallback: Use existing policyEngineCache if API fails
-        () => {
-          const cached = policyEngineCache.get(household);
-          if (cached) {
-            console.warn('[PolicyEngine] Using cached fallback (API unavailable)');
-            return Promise.resolve(cached);
-          }
-          throw new Error('No cached data available for fallback');
-        },
-        // Cache key params for uniqueness
-        {
-          adults: household.adults,
-          children: household.children,
-          income: household.employmentIncome,
-          state: household.stateCode
-        }
-      );
+      // Call HTTP API
+      const benefits = await policyEngineHttpClient.calculateBenefits(input);
       
-      const benefits = result.data;
-      
-      // Cache the fresh result in policyEngineCache
+      // Cache the result
       policyEngineCache.set(household, benefits);
-      
-      // Log if result came from resilience cache
-      if (result.fromCache) {
-        console.warn('[PolicyEngine] Result from resilience cache (retries exhausted)');
-      } else if (result.retries > 0) {
-        console.log(`[PolicyEngine] Succeeded after ${result.retries} retries`);
-      }
       
       // Build eligibility tests from benefit amounts
       const eligibilityTests = {

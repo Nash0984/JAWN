@@ -1,7 +1,5 @@
 # Contributing to Maryland Benefits Navigator
 
-**LAST_UPDATED:** 2025-10-18T22:15:00Z
-
 Thank you for your interest in contributing to the Maryland Benefits Navigator! This platform helps Maryland residents access government benefits and tax assistance, and we welcome contributions from the community.
 
 ## Table of Contents

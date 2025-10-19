@@ -10,7 +10,6 @@ import { ohepRulesEngine } from './ohepRulesEngine';
 import { tanfRulesEngine } from './tanfRulesEngine';
 import { medicaidRulesEngine } from './medicaidRulesEngine';
 import { vitaTaxRulesEngine } from './vitaTaxRulesEngine';
-import { marylandTaxCreditsRulesEngine } from './marylandTaxCreditsRulesEngine';
 import { cacheService, CACHE_KEYS, generateHouseholdHash } from './cacheService';
 
 export interface HybridEligibilityPayload {
@@ -47,12 +46,6 @@ export interface HybridEligibilityPayload {
   
   // Medicaid specific
   receivesSSI?: boolean;
-  
-  // Housing status (for tax credits)
-  isRenter?: boolean;
-  isHomeowner?: boolean;
-  rentPaid?: number; // Monthly rent paid (in dollars)
-  propertyTaxPaid?: number; // Annual property tax paid (in dollars)
   
   // Other
   shelterCosts?: number;
@@ -317,122 +310,12 @@ class RulesEngineAdapterService {
   }
 
   /**
-   * Tax Credits Adapter
-   * Calculates Maryland state tax credits (Renters', Property Tax, Poverty Level)
+   * Tax Credits Adapter (not implemented yet)
    */
   private async taxCreditsAdapter(input: HybridEligibilityPayload): Promise<HybridCalculationResult | null> {
-    // ========================================
-    // CRITICAL INPUT VALIDATION
-    // ========================================
-    
-    // 1. Validate required fields for AGI calculation and eligibility
-    if (!input.income || input.income <= 0) {
-      console.warn('Tax Credits: Missing or invalid income (required for AGI calculation)');
-      return null;
-    }
-    
-    if (!input.householdSize || input.householdSize <= 0) {
-      console.warn('Tax Credits: Missing or invalid householdSize (required for poverty level credit)');
-      return null;
-    }
-    
-    if (!input.filingStatus) {
-      console.warn('Tax Credits: Missing filingStatus (required for poverty threshold calculation)');
-      return null;
-    }
-
-    // 2. Enforce mutually exclusive housing status
-    if (input.isRenter && input.isHomeowner) {
-      console.warn('Tax Credits: Both isRenter and isHomeowner are true - mutually exclusive');
-      return null;
-    }
-    
-    if (!input.isRenter && !input.isHomeowner) {
-      console.warn('Tax Credits: No housing status provided - need isRenter or isHomeowner');
-      return null;
-    }
-
-    // 3. Require housing cost fields based on status
-    if (input.isRenter && (!input.rentPaid || input.rentPaid <= 0)) {
-      console.warn('Tax Credits: Renter status but no rentPaid amount provided');
-      return null;
-    }
-    
-    if (input.isHomeowner && (!input.propertyTaxPaid || input.propertyTaxPaid <= 0)) {
-      console.warn('Tax Credits: Homeowner status but no propertyTaxPaid amount provided');
-      return null;
-    }
-
-    // 4. Validate tax year
-    const taxYear = input.taxYear || 2024; // Default to current tax year (2024)
-    if (taxYear < 2020 || taxYear > 2025) {
-      console.warn(`Tax Credits: Tax year ${taxYear} out of supported range (2020-2025)`);
-      return null;
-    }
-
-    // ========================================
-    // DATA PROCESSING (after validation)
-    // ========================================
-
-    // CRITICAL FIX #1: Income annualization
-    // input.income is MONTHLY income throughout the codebase
-    // Tax credits need ANNUAL AGI, so multiply by 12 before converting to cents
-    const annualAgiInCents = ((input.income || 0) * 12) * 100;
-
-    // CRITICAL FIX #2: Use explicit housing status fields instead of placeholder logic
-    const isRenter = input.isRenter || false;
-    const isHomeowner = input.isHomeowner || false;
-
-    // CRITICAL FIX #3: Use separate rent and property tax fields
-    // rentPaid is monthly, so annualize it (* 12), then convert to cents (* 100)
-    // propertyTaxPaid is already annual, so just convert to cents
-    const annualRentPaidInCents = input.rentPaid ? (input.rentPaid * 12) * 100 : undefined;
-    const propertyTaxPaidInCents = input.propertyTaxPaid ? input.propertyTaxPaid * 100 : undefined;
-
-    // Prepare input for tax credits rules engine
-    const taxCreditsInput = {
-      adjustedGrossIncome: annualAgiInCents,
-      householdSize: input.householdSize,
-      filingStatus: input.filingStatus,
-      rentPaid: annualRentPaidInCents,
-      propertyTaxPaid: propertyTaxPaidInCents,
-      isRenter,
-      isHomeowner,
-      taxYear,
-    };
-
-    // Calculate eligibility using Maryland Tax Credits rules engine
-    const result = await marylandTaxCreditsRulesEngine.calculateEligibility(taxCreditsInput);
-
-    // Build breakdown with individual credit amounts
-    const breakdown: string[] = [];
-    
-    breakdown.push(`Total Maryland Tax Credits: $${(result.totalCredits / 100).toFixed(2)}`);
-    
-    if (result.rentersCredit > 0) {
-      breakdown.push(`• Renters' Credit: $${(result.rentersCredit / 100).toFixed(2)}`);
-    }
-    
-    if (result.propertyTaxCredit > 0) {
-      breakdown.push(`• Property Tax Credit: $${(result.propertyTaxCredit / 100).toFixed(2)}`);
-    }
-    
-    if (result.povertyLevelCredit > 0) {
-      breakdown.push(`• Poverty Level Credit: $${(result.povertyLevelCredit / 100).toFixed(2)}`);
-    }
-    
-    // Add detailed breakdown from rules engine
-    breakdown.push(...result.calculationBreakdown);
-
-    return {
-      eligible: result.isEligible,
-      estimatedBenefit: result.totalCredits,
-      reason: result.reason || 'Not eligible for any Maryland tax credits',
-      breakdown,
-      citations: result.policyCitations,
-      programCode: 'TAX_CREDITS',
-      calculationType: 'tax',
-    };
+    // Tax Credits calculation not yet implemented
+    // Will return null to trigger RAG fallback
+    return null;
   }
 
   /**

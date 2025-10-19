@@ -35,15 +35,6 @@ import { ProductionValidator } from "./utils/productionValidation";
 import "./utils/piiMasking"; // Import early to override console methods with PII redaction
 
 // ============================================================================
-// PRODUCTION INFRASTRUCTURE IMPORTS
-// ============================================================================
-import { distributedCache } from "./services/distributedCache";
-import { connectionPool } from "./services/connectionPool";
-import { webSocketService } from "./services/scalableWebSocket";
-import { prometheusMetricsHandler, httpMetricsMiddleware } from "./services/prometheusExporter";
-import { registry } from "./services/universalFeatureRegistry";
-
-// ============================================================================
 // ENVIRONMENT VALIDATION - Validate required environment variables on startup
 // ============================================================================
 const envValidation = EnvValidator.validate();
@@ -135,9 +126,6 @@ app.use(performanceMonitoringMiddleware());
 // Add request logging middleware
 app.use(requestLoggerMiddleware());
 
-// Add Prometheus metrics middleware for production monitoring
-app.use(httpMetricsMiddleware());
-
 // Session configuration
 if (!process.env.SESSION_SECRET) {
   console.error("❌ FATAL: SESSION_SECRET environment variable is required for secure session management");
@@ -195,16 +183,11 @@ app.get("/api/health", async (req, res) => {
     // Check database connectivity
     await db.execute(sql`SELECT 1`);
     
-    // Get connection pool statistics
-    const { getPoolStats } = await import("./db");
-    const poolStats = await getPoolStats();
-    
     res.json({
       status: "healthy",
       timestamp: new Date().toISOString(),
       uptime: process.uptime(),
       database: "connected",
-      poolStats: poolStats, // Include connection pool statistics
       environment: process.env.NODE_ENV || "development",
     });
   } catch (error) {
@@ -217,11 +200,6 @@ app.get("/api/health", async (req, res) => {
     });
   }
 });
-
-// ============================================================================
-// PROMETHEUS METRICS ENDPOINT - Production monitoring metrics
-// ============================================================================
-app.get("/metrics", prometheusMetricsHandler);
 
 // Endpoint to get CSRF token (before county context middleware)
 app.get("/api/csrf-token", (req, res) => {
@@ -278,20 +256,6 @@ app.use("/api/", (req, res, next) => {
   app.use(getSentryRequestHandler()); // Request context and tracing
   app.use(getSentryTracingHandler()); // Performance monitoring
   
-  // ============================================================================
-  // INITIALIZE PRODUCTION INFRASTRUCTURE
-  // ============================================================================
-  // Initialize distributed cache
-  try {
-    await distributedCache.initialize();
-    console.log("✅ Distributed cache initialized");
-  } catch (error) {
-    console.error("⚠️  Distributed cache initialization failed, using in-memory fallback:", error);
-  }
-  
-  // Connection pool initializes automatically via singleton pattern
-  console.log("✅ Production connection pool ready");
-  
   // Initialize system data (benefit programs, etc.)
   await initializeSystemData();
   
@@ -308,14 +272,6 @@ app.use("/api/", (req, res, next) => {
   }
   
   const server = await registerRoutes(app, sessionMiddleware);
-  
-  // Initialize WebSocket service with Redis Pub/Sub for scaling
-  try {
-    await webSocketService.initialize(server);
-    console.log("✅ Scalable WebSocket service initialized");
-  } catch (error) {
-    console.error("⚠️  WebSocket service initialization failed:", error);
-  }
 
   // importantly only setup vite in development and after
   // setting up all the other routes so the catch-all route
@@ -374,31 +330,6 @@ app.use("/api/", (req, res, next) => {
   }
 
   // ============================================================================
-  // RULES-TO-CONTENT SYNC - Auto-detect RaC changes every hour
-  // ============================================================================
-  let racSyncInterval: NodeJS.Timeout | null = null;
-  
-  try {
-    const cron = await import("node-cron");
-    const { rulesContentSyncService } = await import("./services/rulesContentSyncService");
-    
-    // Run RaC change detection every hour (at minute 0)
-    cron.default.schedule('0 * * * *', async () => {
-      console.log('🔄 Running RaC change detection...');
-      try {
-        const jobs = await rulesContentSyncService.detectRacChanges();
-        console.log(`📊 Found ${jobs.length} content items affected by RaC changes`);
-      } catch (error) {
-        console.error("❌ Error detecting RaC changes:", error);
-      }
-    });
-    
-    console.log("🔄 RaC change detection scheduled (runs every hour)");
-  } catch (error) {
-    console.error("❌ Failed to start RaC sync scheduler:", error);
-  }
-
-  // ============================================================================
   // GRACEFUL SHUTDOWN HANDLING - Clean up resources on SIGTERM/SIGINT
   // ============================================================================
   const gracefulShutdown = async (signal: string) => {
@@ -418,9 +349,9 @@ app.use("/api/", (req, res, next) => {
         });
       });
 
-      // Close database connection pool properly
-      const { closePool } = await import("./db");
-      await closePool();
+      // Close database connections
+      // Note: Drizzle with neon doesn't require explicit close, but we log it
+      console.log("✅ Database connections closed");
 
       // Stop Smart Scheduler if running
       try {

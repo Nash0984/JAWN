@@ -18,31 +18,19 @@ The backend uses Express.js with TypeScript and PostgreSQL via Drizzle ORM on Ne
 ### Core Platform Features
 -   **Navigator Workspace**: Client management and export.
 -   **Financial Opportunity Radar**: Real-time cross-program eligibility and dynamic benefit calculations.
--   **General Feedback System**: Comprehensive platform-wide feedback collection with AI-powered FAQ generation (Gemini API), suggestion voting with role-weighted tallies, sentiment analysis, admin dashboards, and automatic FAQ updates from high-value suggestions.
+-   **Feedback Collection System**: Gathers user feedback on AI responses.
 -   **Adaptive Intake Copilot**: Conversational AI assistant for application guidance.
 -   **PolicyEngine Integration**: Accurate multi-benefit calculations.
 -   **Anonymous Benefit Screener**: Public eligibility check tool.
 -   **Tax Preparation System**: Integrates federal/state tax preparation with public benefits eligibility, including tax document extraction (Gemini Vision), VITA tax document upload with quality validation and audit logging, PolicyEngine tax calculation, Form 1040/Maryland Form 502 PDF generation, and prior year tax support (2020-2024 with historical brackets and credits).
 -   **Cross-Enrollment Intelligence Engine**: AI-powered recommendations for unclaimed benefits.
--   **Google Calendar Appointments**: OAuth2-integrated scheduling with conflict checking, availability verification, recurring events, and multi-view calendar interface for VITA site appointments.
+-   **Google Calendar Appointments**: OAuth2-integrated scheduling with conflict checking, availability verification, recurring events, and multi-view calendar interface (month/week/day) for VITA site appointments.
 -   **Smart Scheduler**: Automated policy document monitoring with admin controls for frequency, toggle on/off, verified source uploads, and DB-backed persistence.
 -   **IRS Use & Disclosure Consent Form**: IRS Publication 4299 compliant consent form with electronic signature.
 -   **Unified Monitoring & Analytics Platform**: 7 observability domains, real-time WebSocket updates, alert management, and admin dashboard.
 -   **TaxSlayer Document Management**: Enhanced VITA document workflow with quality validation, audit logging, and secure downloads.
--   **Interactive Demo Showcase**: Comprehensive static demo with cached data showcasing all 105 features across 21 categories, including Gen AI conversation transcripts, sample households, benefit calculations, tax returns, policy citations, performance metrics, and architecture visualization. Accessible at /demo (no login required).
--   **API Documentation Explorer**: Searchable, filterable catalog of all 469 API endpoints across 18 categories with HTTP method badges, authentication requirements, request/response examples, query parameters, and sample data. Accessible at /api-explorer (no login required).
--   **Spanish Translation System**: Full bilingual support (English/Spanish) using i18next with 7 translation namespaces covering UI, benefits, tax, navigation, forms, errors, and demo content. Includes language switcher component, automatic detection, and localStorage persistence for Maryland's Latino population.
--   **Statistics Verification System**: Automated verification script (`verify-stats.ts`) dynamically validates platform metrics (105 features, 173 tables, 469 endpoints, 94 services) across Demo, API Explorer, and documentation to ensure accuracy. Includes pre-commit hook template.
--   **Caseworker Productivity Dashboard**: Comprehensive analytics tracking applications completed, benefits secured, success rates, response times, document quality, and cross-enrollment discoveries with exportable CSV reports and visual charts.
--   **Translation Management System**: Professional 3-role translation workflow (translators, reviewers, admins) with side-by-side comparison interface, quality scoring, approval/rejection workflow, locale-specific filtering, version history tracking, and progress analytics.
--   **Living Policy Manual**: Ebook-style browser transforming 25 golden policy sources into organized chapters with page numbering, legal citations, glossary extraction, and direct links to Rules as Code implementations. Features 3-column interface with chapter/section tree navigation, full-text search, and responsive design.
--   **Dynamic Notification Engine**: Auto-generates official notices (SNAP approval/denial, tax reminders) pulling real-time data from Rules as Code, eliminating static templates and version control issues. Features content rules mapping variables to RaC sources, full audit trail with RaC version tracking, multi-channel delivery, and policy-driven regeneration when rules change.
--   **Shared Glossary API Service**: Centralized glossary terms across all 6 programs with autocomplete search and tooltip integration. Provides consistent definitions with legal citations, usage examples, and cross-program term relationships.
--   **Modular Form Builder**: Drag-and-drop UI for assembling official notices and documents from reusable components using @dnd-kit/sortable. Enables non-technical content editors to create policy-driven templates. Features component library with headers, footers, calculations, and signatures.
--   **Rules-to-Content Pipeline**: Automated detection of Rules as Code changes with content sync job generation. Runs hourly cron job monitoring RaC tables to identify content requiring updates. Features content_rules_mapping table linking RaC fields to affected templates, configurable auto-regeneration policies, and complete audit trail.
--   **Admin Content Dashboard**: Comprehensive 4-tab admin interface for reviewing sync jobs, managing templates, viewing analytics, and configuring automation settings. Sync Jobs tab shows pending RaC change reviews with approve/reject workflow. Templates tab displays searchable card grid with usage statistics. Analytics tab shows 10+ metrics with Recharts visualizations. Settings tab controls auto-regeneration policies and notification channels.
--   **Advanced Policy Search**: Enhanced search with 3 modes (keyword, citation, semantic) and filters by program, date range, and Rules as Code availability. Citation mode searches specifically in legalCitation and sourceUrl fields. Semantic mode includes synonym expansion. Integrated into PolicyManualBrowser.tsx as slide-in Sheet panel.
--   **Version Comparison UI**: Side-by-side diff view for policy evolution tracking with version history timeline, synchronized scrolling, and color-coded change highlighting. Tracks changes to manual sections and notification templates with complete audit trail. Features line-by-line diff algorithm with word-level highlighting.
+-   **Interactive Demo Showcase**: Comprehensive static demo with cached data showcasing all 99 features across 20 categories, including Gen AI conversation transcripts, sample households, benefit calculations, tax returns, policy citations, performance metrics, and architecture visualization. Accessible at /demo (no login required).
+-   **API Documentation Explorer**: Searchable, filterable catalog of all 218 API endpoints across 17 categories with HTTP method badges, authentication requirements, request/response examples, query parameters, and sample data. Accessible at /api-explorer (no login required).
 
 ### E-Filing Infrastructure
 Production-ready components include Form 1040 and Maryland Form 502 PDF generators. XML generators for both federal and state forms are prototyped. An E-File Queue Service for submission tracking and an Admin Dashboard for monitoring are in place, pending IRS EFIN and Maryland iFile credentials for full production.
@@ -51,9 +39,9 @@ Production-ready components include Form 1040 and Maryland Form 502 PDF generato
 -   **Data Management**: PostgreSQL for core data, Google Cloud Storage for files.
 -   **Authentication & Authorization**: Basic user authentication with roles, object-level security, and CSRF protection.
 -   **Production Security Hardening**: Field-level encryption (AES-256-GCM), secure file uploads, strong password enforcement, enhanced session security, CORS hardening, security headers, XSS sanitization, SQL injection protection, and a Security Monitoring Dashboard.
--   **Production Readiness & Hardening**: Health check endpoints, role-based rate limiting with IPv6 normalization, DoS protection, database connection pooling, graceful shutdown, and self-healing document resilience (exponential backoff, circuit breaker, smart retry with jitter, timeout management, comprehensive error tracking).
+-   **Production Readiness & Hardening**: Health check endpoints, role-based rate limiting, DoS protection, database connection pooling, and graceful shutdown.
 -   **Unified Household Profiler**: Single profile for benefits and tax workflows.
--   **Performance Optimization**: Server-side caching (Rules Engine, PolicyEngine API responses), extensive database indexing.
+-   **Performance Optimization**: Server-side caching (Rules Engine, PolicyEngine API responses), extensive database indexing (135+ indexes).
 -   **Maryland Rules-as-Code Architecture**: Maryland rules engines are the primary determination system, with PolicyEngine serving as a third-party verifier. This includes SNAP, OHEP, TANF, Medicaid, and VITA Tax rules engines, integrated via a hybrid service layer and rules engine adapter.
 -   **Testing**: Vitest, @testing-library/react, and supertest.
 
@@ -73,73 +61,3 @@ Production-ready components include Form 1040 and Maryland Form 502 PDF generato
 -   **Caching**: Node-cache.
 -   **IRS Integration (Planned)**: IRS Bulk Data API, MeF FIRE API.
 -   **Maryland E-Filing (Planned)**: MDTAX iFile system API.
-# Platform Metrics (Verified 2025-10-18)
-
-**Production Readiness Score: 92/100 (A Grade)**
-
-| Metric | Count | Status |
-|--------|-------|--------|
-| **Features** | 105 | ✅ Production Ready |
-| **API Endpoints** | 469 | ✅ All Implemented |
-| **Database Tables** | 173 | ✅ Fully Operational |
-| **Frontend Pages** | 73 | ✅ Complete |
-| **Backend Services** | 94 | ✅ Active |
-| **Test Coverage** | 65% | ⚠️ Needs Improvement |
-| **WCAG Compliance** | 91.7% | ✅ Level A Achieved |
-
-# Unfinished Assets & Known Issues
-
-## Production Blockers
-- **E-Filing Integration**: Awaiting IRS EFIN and Maryland iFile credentials
-- **SMS Notifications**: Twilio configuration pending (environment variables not set)
-
-## Feature Gaps (Non-Blocking)
-- **PDF Export**: PolicyManualBrowser and FormBuilderPage have stub implementations
-- **E-Filing Appointments**: Scheduling feature marked "coming soon" 
-- **Database Source Resolution**: Dynamic notification service incomplete for some tables
-- **Test Coverage**: Missing unit tests for ~40% of services
-
-## Minor Issues
-- 11 TODO/FIXME comments in React components
-- Some API endpoints lack request/response examples in documentation
-
-# White-Label Readiness
-
-**White-Label Feasibility Score: 8.5/10**
-
-The platform demonstrates exceptional white-label viability with:
-- **70% configuration-driven customization** (no code changes needed)
-- **Multi-tenant architecture** supporting 5000+ concurrent users
-- **18-week typical implementation timeline** for new deployments
-- **Deployment templates** for states, federal agencies, and non-profits
-
-## Deployment Scenarios & Costs
-- **Other States** (CA, NY, TX): $150K-250K, 12-16 weeks
-- **Federal Agencies** (SSA, HUD, USDA): $300K-500K, 16-20 weeks
-- **Non-Profits/CBOs**: $15K-75K, 8-12 weeks
-
-## Configuration Points
-- Benefit program definitions (database-driven)
-- Income limits and eligibility rules (Rules as Code)
-- Branding and theming (environment variables)
-- Language translations (i18next configuration)
-- Policy document sources (database configuration)
-
-# Documentation Structure
-
-Complete documentation is organized in `/docs/` with the following structure:
-
-## Official Documentation (`/docs/official/`)
-- **Platform**: Technical references, feature documentation, statistics
-- **Deployment**: Production guides, white-label templates, deployment procedures
-- **Audits**: UX/UI analysis, performance metrics, scalability review, optimization roadmap
-
-## Technical Guides (`/docs/`)
-- API reference (469 endpoints)
-- Database schema (173 tables)
-- Architecture patterns
-- Security procedures
-- Integration guides
-
-## Master Index
-See `/docs/INDEX.md` for complete documentation navigation with timestamps and verification status.

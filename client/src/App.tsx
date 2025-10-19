@@ -70,7 +70,6 @@ import CountyManagement from "@/pages/CountyManagement";
 import NavigatorPerformance from "@/pages/NavigatorPerformance";
 import Leaderboard from "@/pages/Leaderboard";
 import CountyAnalytics from "@/pages/CountyAnalytics";
-import ProductivityDashboard from "@/pages/ProductivityDashboard";
 import VitaKnowledgeBase from "@/pages/VitaKnowledgeBase";
 import EvaluationFramework from "@/pages/EvaluationFramework";
 import HouseholdProfiler from "@/pages/HouseholdProfiler";
@@ -92,15 +91,6 @@ import { TenantThemeProvider } from "@/components/TenantThemeProvider";
 import Footer from "@/components/Footer";
 import Demo from "@/pages/Demo";
 import APIExplorer from "@/pages/APIExplorer";
-import TranslationDashboard from "@/pages/TranslationDashboard";
-import FeedbackDashboard from "@/pages/FeedbackDashboard";
-import FeedbackDetailView from "@/pages/FeedbackDetailView";
-import SuggestionVotingList from "@/pages/SuggestionVotingList";
-import FAQDashboard from "@/pages/FAQDashboard";
-import FAQPublicView from "@/pages/FAQPublicView";
-import PolicyManualBrowser from "@/pages/PolicyManualBrowser";
-import FormBuilderPage from "@/pages/FormBuilderPage";
-import AdminContentDashboard from "@/pages/AdminContentDashboard";
 
 function Router() {
   const [location] = useLocation();
@@ -146,9 +136,6 @@ function Router() {
           <Route path="/public/quick-screener" component={QuickScreener} />
           <Route path="/public/fsa" component={FsaLanding} />
           
-          {/* FAQ - Public access (no login required) */}
-          <Route path="/faq" component={FAQPublicView} />
-          
           {/* Legal Pages - Public access (no login required) */}
           <Route path="/legal" component={LegalHub} />
           <Route path="/legal/privacy" component={PrivacyPolicy} />
@@ -185,13 +172,6 @@ function Router() {
             {() => (
               <ProtectedRoute requireStaff>
                 <Leaderboard />
-              </ProtectedRoute>
-            )}
-          </Route>
-          <Route path="/productivity">
-            {() => (
-              <ProtectedRoute requireStaff>
-                <ProductivityDashboard />
               </ProtectedRoute>
             )}
           </Route>
@@ -253,13 +233,6 @@ function Router() {
               </ProtectedRoute>
             )}
           </Route>
-          <Route path="/policy-manual">
-            {() => (
-              <ProtectedRoute>
-                <PolicyManualBrowser />
-              </ProtectedRoute>
-            )}
-          </Route>
           <Route path="/intake">
             {() => (
               <ProtectedRoute>
@@ -306,13 +279,6 @@ function Router() {
             {() => (
               <ProtectedRoute requireStaff>
                 <AppointmentsCalendar />
-              </ProtectedRoute>
-            )}
-          </Route>
-          <Route path="/translations">
-            {() => (
-              <ProtectedRoute>
-                <TranslationDashboard />
               </ProtectedRoute>
             )}
           </Route>
@@ -579,50 +545,6 @@ function Router() {
             {() => (
               <ProtectedRoute requireAdmin>
                 <WebhookManagement />
-              </ProtectedRoute>
-            )}
-          </Route>
-          <Route path="/admin/content-dashboard">
-            {() => (
-              <ProtectedRoute requireAdmin>
-                <AdminContentDashboard />
-              </ProtectedRoute>
-            )}
-          </Route>
-          <Route path="/form-builder">
-            {() => (
-              <ProtectedRoute requireAdmin>
-                <FormBuilderPage />
-              </ProtectedRoute>
-            )}
-          </Route>
-          
-          {/* Feedback System */}
-          <Route path="/suggestions">
-            {() => (
-              <ProtectedRoute>
-                <SuggestionVotingList />
-              </ProtectedRoute>
-            )}
-          </Route>
-          <Route path="/feedback/:id">
-            {() => (
-              <ProtectedRoute>
-                <FeedbackDetailView />
-              </ProtectedRoute>
-            )}
-          </Route>
-          <Route path="/feedback">
-            {() => (
-              <ProtectedRoute requireStaff>
-                <FeedbackDashboard />
-              </ProtectedRoute>
-            )}
-          </Route>
-          <Route path="/faq/admin">
-            {() => (
-              <ProtectedRoute requireAdmin>
-                <FAQDashboard />
               </ProtectedRoute>
             )}
           </Route>

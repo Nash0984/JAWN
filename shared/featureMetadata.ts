@@ -943,7 +943,7 @@ export const FEATURE_CATALOG: FeatureMetadata[] = [
     icon: 'BarChart'
   },
 
-  // POLICY MANAGEMENT AUTOMATION (9)
+  // POLICY MANAGEMENT AUTOMATION (3)
   {
     id: 'policy-01',
     name: 'Rules Extraction Service',
@@ -976,83 +976,6 @@ export const FEATURE_CATALOG: FeatureMetadata[] = [
     status: 'production-ready',
     tags: ['policy', 'ingestion', 'documents'],
     icon: 'Upload'
-  },
-  {
-    id: 'policy-04',
-    name: 'Living Policy Manual',
-    description: 'Ebook-style browser transforming 25 golden policy sources into organized chapters with page numbering (500 words/page), legal citations, glossary extraction, and direct links to Rules as Code implementations. Features 3-column interface with chapter/section tree navigation and full-text search.',
-    category: 'Policy Management Automation',
-    aiPowered: false,
-    route: '/policy-manual',
-    status: 'production-ready',
-    tags: ['policy', 'manual', 'ebook', 'documentation', 'rac'],
-    icon: 'BookOpen'
-  },
-  {
-    id: 'policy-05',
-    name: 'Shared Glossary API Service',
-    description: 'Centralized glossary terms across all programs with autocomplete search and tooltip integration. Provides consistent definitions with legal citations and usage examples.',
-    category: 'Policy Management Automation',
-    aiPowered: false,
-    route: '/policy-manual',
-    status: 'production-ready',
-    tags: ['glossary', 'tooltips', 'autocomplete', 'policy', 'cross-program'],
-    icon: 'BookText'
-  },
-  {
-    id: 'policy-06',
-    name: 'Modular Form Builder',
-    description: 'Drag-and-drop UI for assembling official notices and documents from reusable components. Enables non-technical content editors to create policy-driven templates.',
-    category: 'Policy Management Automation',
-    aiPowered: false,
-    route: '/form-builder',
-    status: 'production-ready',
-    tags: ['forms', 'drag-drop', 'builder', 'templates', 'content'],
-    icon: 'LayoutTemplate'
-  },
-  {
-    id: 'policy-07',
-    name: 'Rules-to-Content Pipeline',
-    description: 'Automated detection of Rules as Code changes and content sync job generation. Runs hourly cron job monitoring 12 RaC tables to identify content requiring updates.',
-    category: 'Policy Management Automation',
-    aiPowered: false,
-    route: '/admin/content-dashboard',
-    status: 'production-ready',
-    tags: ['automation', 'rac', 'sync', 'pipeline', 'monitoring'],
-    icon: 'RefreshCw'
-  },
-  {
-    id: 'policy-08',
-    name: 'Admin Content Dashboard',
-    description: 'Comprehensive admin dashboard for reviewing sync jobs, managing templates, viewing analytics, and configuring automation settings. Features 4 tabs: Sync Jobs, Templates, Analytics, Settings.',
-    category: 'Policy Management Automation',
-    aiPowered: false,
-    route: '/admin/content-dashboard',
-    status: 'production-ready',
-    tags: ['admin', 'dashboard', 'content', 'sync', 'analytics'],
-    icon: 'LayoutDashboard'
-  },
-  {
-    id: 'policy-09',
-    name: 'Advanced Policy Search',
-    description: 'Enhanced search with 3 modes (keyword, citation, semantic) and filters by program, date range, and Rules as Code availability. Includes synonym expansion for intelligent search.',
-    category: 'Policy Management Automation',
-    aiPowered: true,
-    route: '/policy-manual',
-    status: 'production-ready',
-    tags: ['search', 'policy', 'citation', 'semantic', 'ai', 'advanced'],
-    icon: 'SearchCode'
-  },
-  {
-    id: 'policy-10',
-    name: 'Version Comparison UI',
-    description: 'Side-by-side diff view for policy evolution tracking with version history timeline, synchronized scrolling, and color-coded change highlighting. Tracks changes to sections and templates.',
-    category: 'Policy Management Automation',
-    aiPowered: false,
-    route: '/policy-manual',
-    status: 'production-ready',
-    tags: ['version-control', 'diff', 'history', 'tracking', 'comparison'],
-    icon: 'GitCompare'
   },
 
   // GAMIFICATION (1)

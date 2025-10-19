@@ -55,42 +55,8 @@ class DocumentProcessor {
         message: "Assessing document quality",
       });
 
-      // Step 1: Detailed Quality Analysis (BEFORE enhancement)
-      const { DocumentQualityAnalyzerService } = await import("./documentQualityAnalyzerService");
-      const qualityAnalyzer = new DocumentQualityAnalyzerService();
-      
-      console.log(`[DocumentProcessor] Running detailed quality analysis for document ${documentId}`);
-      const detailedQualityResult = await qualityAnalyzer.analyzeDocument(documentId);
-      
-      // Persist quality metrics to database
-      await storage.updateDocumentQuality(documentId, {
-        qualityScore: detailedQualityResult.overallScore ?? detailedQualityResult.qualityScore,
-        qualityMetrics: detailedQualityResult.metrics,
-        qualityFlags: detailedQualityResult.issues,
-        qualitySuggestions: detailedQualityResult.suggestions,
-        analyzedAt: new Date(),
-      });
-      
-      await storage.createDocumentQualityEvent({
-        documentId,
-        qualityScore: detailedQualityResult.overallScore ?? detailedQualityResult.qualityScore,
-        metrics: detailedQualityResult.metrics,
-        issues: detailedQualityResult.issues,
-        analyzedAt: new Date(),
-      });
-      
-      console.log(`[DocumentProcessor] Quality analysis completed for document ${documentId}, score: ${detailedQualityResult.qualityScore}`);
-      
-      // Step 1.5: Auto-Enhancement (pass quality metrics directly)
-      const { AutoEnhancementService } = await import("./autoEnhancementService");
-      const autoEnhancer = new AutoEnhancementService();
-      
-      console.log(`[DocumentProcessor] Running auto-enhancement for document ${documentId}`);
-      const enhancementResult = await autoEnhancer.enhanceDocument(documentId, detailedQualityResult);
-      
-      console.log(`[DocumentProcessor] Enhancement result: ${enhancementResult.status}`, 
-        enhancementResult.improvement ? `(improvement: +${enhancementResult.improvement.toFixed(3)})` : ''
-      );
+      // Step 1: Quality Assessment
+      const qualityAssessment = await this.assessDocumentQuality(documentId);
       
       await this.updateProcessingStatus(documentId, {
         stage: "ocr",
@@ -99,13 +65,8 @@ class DocumentProcessor {
         completedSteps: ["quality_check"],
       });
 
-      // Step 2: OCR Processing (using enhanced version if available)
-      const document = await storage.getDocument(documentId);
-      const ocrDocumentId = enhancementResult.status === 'completed' && document?.enhancedObjectPath
-        ? documentId // Use same ID, enhanced version is now in the document record
-        : documentId;
-      
-      const extractedText = await this.performOCR(ocrDocumentId);
+      // Step 2: OCR Processing
+      const extractedText = await this.performOCR(documentId);
       
       await this.updateProcessingStatus(documentId, {
         stage: "classification",
@@ -148,22 +109,16 @@ class DocumentProcessor {
       await storage.updateDocument(documentId, {
         status: "processed",
         processingStatus: this.processingJobs.get(documentId),
-        qualityScore: detailedQualityResult.qualityScore,
-        ocrAccuracy: detailedQualityResult.metrics.ocrConfidence ?? 0.9,
+        qualityScore: qualityAssessment.qualityScore,
+        ocrAccuracy: qualityAssessment.ocrAccuracy,
         metadata: {
           classification,
-          qualityAssessment: detailedQualityResult,
+          qualityAssessment,
           chunksCount: chunks.length,
         },
       });
 
       console.log(`Document ${documentId} processed successfully`);
-      
-      // Trigger cross-validation for associated VITA session (if applicable)
-      // This runs in background and doesn't block document processing
-      this.triggerCrossValidation(documentId).catch(err => {
-        console.error('[Cross-Validation] Background validation trigger failed:', err);
-      });
       
     } catch (error) {
       console.error(`Error processing document ${documentId}:`, error);
@@ -296,12 +251,8 @@ class DocumentProcessor {
         throw new Error("Document not found");
       }
 
-      // Use enhanced version for OCR if available (better quality = better OCR)
-      const ocrPath = document.enhancedObjectPath || document.objectPath;
-      console.log(`[DocumentProcessor] Using ${document.enhancedObjectPath ? 'enhanced' : 'original'} version for OCR: ${ocrPath}`);
-
       // In a real implementation, this would:
-      // 1. Download file from object storage using ocrPath
+      // 1. Download file from object storage
       // 2. Use OCR services (Tesseract, AWS Textract, Google Document AI)
       // 3. Handle different file formats (PDF, images)
       // 4. Apply post-processing and error correction
@@ -492,46 +443,6 @@ class DocumentProcessor {
     
     // Start processing again
     await this.processDocument(documentId);
-  }
-
-  /**
-   * Trigger cross-validation for VITA sessions with tax documents
-   * This checks if the document is linked to a vita session and triggers validation
-   */
-  private async triggerCrossValidation(documentId: string): Promise<void> {
-    try {
-      // Check if this document is linked to any tax documents
-      const taxDocs = await storage.getTaxDocuments({ documentId });
-      
-      if (taxDocs.length === 0) {
-        // Not a tax document, skip validation
-        return;
-      }
-      
-      // Get unique vita session IDs
-      const vitaSessionIds = [...new Set(
-        taxDocs
-          .map(td => td.vitaSessionId)
-          .filter(Boolean) as string[]
-      )];
-      
-      if (vitaSessionIds.length === 0) {
-        // No vita sessions linked, skip validation
-        return;
-      }
-      
-      // Import cross-validation service
-      const { crossValidationService } = await import('./crossValidationService');
-      
-      // Trigger validation for each linked VITA session
-      for (const vitaSessionId of vitaSessionIds) {
-        console.log(`[Cross-Validation] Triggering validation for VITA session ${vitaSessionId} (document ${documentId})`);
-        await crossValidationService.validateVitaSession(vitaSessionId);
-      }
-    } catch (error) {
-      console.error('[Cross-Validation] Failed to trigger validation:', error);
-      // Don't throw - this is a background operation
-    }
   }
 }
 

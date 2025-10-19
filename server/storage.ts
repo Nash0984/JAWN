@@ -3,7 +3,6 @@ import {
   documents,
   documentChunks,
   documentVersions,
-  documentQualityEvents,
   benefitPrograms,
   documentTypes,
   policySources,
@@ -32,8 +31,6 @@ import {
   type InsertDocumentChunk,
   type DocumentVersion,
   type InsertDocumentVersion,
-  type DocumentQualityEvent,
-  type InsertDocumentQualityEvent,
   type BenefitProgram,
   type InsertBenefitProgram,
   type DocumentType,
@@ -237,12 +234,6 @@ import {
   eSignatures,
   type ESignature,
   type InsertESignature,
-  documentValidationResults,
-  type DocumentValidationResult,
-  type InsertDocumentValidationResult,
-  documentDiscrepancies,
-  type DocumentDiscrepancy,
-  type InsertDocumentDiscrepancy,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and, ilike, sql, or, isNull, lte, gte, inArray } from "drizzle-orm";
@@ -308,17 +299,6 @@ export interface IStorage {
   getActiveDocumentVersion(documentId: string): Promise<DocumentVersion | null>;
   updateDocumentVersion(id: string, updates: Partial<DocumentVersion>): Promise<DocumentVersion>;
   deactivateDocumentVersions(documentId: string): Promise<void>;
-
-  // Document Quality Analysis
-  updateDocumentQuality(documentId: string, qualityData: {
-    qualityScore: number;
-    qualityMetrics: any;
-    qualityFlags: any;
-    qualitySuggestions: any;
-    analyzedAt: Date;
-  }): Promise<Document>;
-  createDocumentQualityEvent(event: InsertDocumentQualityEvent): Promise<DocumentQualityEvent>;
-  getDocumentQualityHistory(documentId: string): Promise<DocumentQualityEvent[]>;
 
   // Rules as Code - SNAP Income Limits
   createSnapIncomeLimit(limit: InsertSnapIncomeLimit): Promise<SnapIncomeLimit>;
@@ -539,19 +519,11 @@ export interface IStorage {
   // Tax Preparation - Tax Documents
   createTaxDocument(taxDoc: InsertTaxDocument): Promise<TaxDocument>;
   getTaxDocument(id: string): Promise<TaxDocument | undefined>;
-  getTaxDocuments(filters?: { scenarioId?: string; federalReturnId?: string; vitaSessionId?: string; documentId?: string; documentType?: string; verificationStatus?: string }): Promise<TaxDocument[]>;
+  getTaxDocuments(filters?: { scenarioId?: string; federalReturnId?: string; vitaSessionId?: string; documentType?: string; verificationStatus?: string }): Promise<TaxDocument[]>;
   getTaxDocumentsByScenario(scenarioId: string): Promise<TaxDocument[]>;
   getTaxDocumentsByFederalReturn(federalReturnId: string): Promise<TaxDocument[]>;
-  getTaxDocumentsByVitaSession(vitaSessionId: string): Promise<TaxDocument[]>;
   updateTaxDocument(id: string, updates: Partial<TaxDocument>): Promise<TaxDocument>;
   deleteTaxDocument(id: string): Promise<void>;
-
-  // Document Cross-Validation
-  createDocumentValidationResult(data: InsertDocumentValidationResult): Promise<DocumentValidationResult>;
-  getDocumentValidationResultByVitaSession(vitaSessionId: string): Promise<DocumentValidationResult | undefined>;
-  getDocumentValidationResults(filters?: { vitaSessionId?: string; overallStatus?: string }): Promise<DocumentValidationResult[]>;
-  createDocumentDiscrepancy(data: InsertDocumentDiscrepancy): Promise<DocumentDiscrepancy>;
-  getDocumentDiscrepanciesByValidation(validationResultId: string): Promise<DocumentDiscrepancy[]>;
 
   // E&E Cross-Enrollment - Datasets
   createEeDataset(dataset: InsertEeDataset): Promise<EeDataset>;
@@ -1276,44 +1248,6 @@ export class DatabaseStorage implements IStorage {
       .update(documentVersions)
       .set({ isActive: false })
       .where(eq(documentVersions.documentId, documentId));
-  }
-
-  // Document Quality Analysis
-  async updateDocumentQuality(documentId: string, qualityData: {
-    qualityScore: number;
-    qualityMetrics: any;
-    qualityFlags: any;
-    qualitySuggestions: any;
-    analyzedAt: Date;
-  }): Promise<Document> {
-    const [document] = await db
-      .update(documents)
-      .set({
-        qualityScore: qualityData.qualityScore,
-        qualityMetrics: qualityData.qualityMetrics,
-        qualityFlags: qualityData.qualityFlags,
-        qualitySuggestions: qualityData.qualitySuggestions,
-        analyzedAt: qualityData.analyzedAt,
-      })
-      .where(eq(documents.id, documentId))
-      .returning();
-    return document;
-  }
-
-  async createDocumentQualityEvent(event: InsertDocumentQualityEvent): Promise<DocumentQualityEvent> {
-    const [qualityEvent] = await db
-      .insert(documentQualityEvents)
-      .values(event)
-      .returning();
-    return qualityEvent;
-  }
-
-  async getDocumentQualityHistory(documentId: string): Promise<DocumentQualityEvent[]> {
-    return await db
-      .select()
-      .from(documentQualityEvents)
-      .where(eq(documentQualityEvents.documentId, documentId))
-      .orderBy(desc(documentQualityEvents.analyzedAt));
   }
 
   // Rules as Code - SNAP Income Limits
@@ -2874,7 +2808,6 @@ export class DatabaseStorage implements IStorage {
     scenarioId?: string; 
     federalReturnId?: string; 
     vitaSessionId?: string;
-    documentId?: string;
     documentType?: string; 
     verificationStatus?: string 
   }): Promise<TaxDocument[]> {
@@ -2889,9 +2822,6 @@ export class DatabaseStorage implements IStorage {
     }
     if (filters?.vitaSessionId) {
       conditions.push(eq(taxDocuments.vitaSessionId, filters.vitaSessionId));
-    }
-    if (filters?.documentId) {
-      conditions.push(eq(taxDocuments.documentId, filters.documentId));
     }
     if (filters?.documentType) {
       conditions.push(eq(taxDocuments.documentType, filters.documentType));
@@ -2932,59 +2862,6 @@ export class DatabaseStorage implements IStorage {
 
   async deleteTaxDocument(id: string): Promise<void> {
     await db.delete(taxDocuments).where(eq(taxDocuments.id, id));
-  }
-
-  async getTaxDocumentsByVitaSession(vitaSessionId: string): Promise<TaxDocument[]> {
-    return await db.query.taxDocuments.findMany({
-      where: eq(taxDocuments.vitaSessionId, vitaSessionId),
-      orderBy: [desc(taxDocuments.createdAt)],
-    });
-  }
-
-  // ============================================================================
-  // Document Cross-Validation
-  // ============================================================================
-
-  async createDocumentValidationResult(data: InsertDocumentValidationResult): Promise<DocumentValidationResult> {
-    const [created] = await db.insert(documentValidationResults).values(data).returning();
-    return created;
-  }
-
-  async getDocumentValidationResultByVitaSession(vitaSessionId: string): Promise<DocumentValidationResult | undefined> {
-    return await db.query.documentValidationResults.findFirst({
-      where: eq(documentValidationResults.vitaIntakeSessionId, vitaSessionId),
-      orderBy: [desc(documentValidationResults.validatedAt)],
-    });
-  }
-
-  async getDocumentValidationResults(filters?: { vitaSessionId?: string; overallStatus?: string }): Promise<DocumentValidationResult[]> {
-    let query = db.select().from(documentValidationResults);
-    
-    const conditions = [];
-    if (filters?.vitaSessionId) {
-      conditions.push(eq(documentValidationResults.vitaIntakeSessionId, filters.vitaSessionId));
-    }
-    if (filters?.overallStatus) {
-      conditions.push(eq(documentValidationResults.overallStatus, filters.overallStatus));
-    }
-    
-    if (conditions.length > 0) {
-      query = query.where(and(...conditions)) as any;
-    }
-    
-    return await query.orderBy(desc(documentValidationResults.validatedAt));
-  }
-
-  async createDocumentDiscrepancy(data: InsertDocumentDiscrepancy): Promise<DocumentDiscrepancy> {
-    const [created] = await db.insert(documentDiscrepancies).values(data).returning();
-    return created;
-  }
-
-  async getDocumentDiscrepanciesByValidation(validationResultId: string): Promise<DocumentDiscrepancy[]> {
-    return await db.query.documentDiscrepancies.findMany({
-      where: eq(documentDiscrepancies.validationResultId, validationResultId),
-      orderBy: [desc(documentDiscrepancies.createdAt)],
-    });
   }
 
   // ============================================================================
