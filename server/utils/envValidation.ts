@@ -141,6 +141,32 @@ const ENV_CONFIGS: EnvConfig[] = [
     },
     errorMessage: 'PORT must be a valid port number',
   },
+  
+  // Redis/Upstash Cache Configuration (optional)
+  {
+    name: 'REDIS_URL',
+    required: false,
+    validator: (val) => {
+      // Support standard Redis URLs: redis://... or rediss://... (SSL)
+      // Support Upstash REST URLs: https://... (Upstash format)
+      const isRedisUrl = val.startsWith('redis://') || val.startsWith('rediss://');
+      const isUpstashUrl = val.startsWith('https://') && val.includes('upstash.io');
+      return isRedisUrl || isUpstashUrl;
+    },
+    errorMessage: 'REDIS_URL must be a valid Redis connection string (redis://, rediss://) or Upstash REST URL',
+  },
+  {
+    name: 'UPSTASH_REDIS_REST_URL',
+    required: false,
+    validator: (val) => val.startsWith('https://'),
+    errorMessage: 'UPSTASH_REDIS_REST_URL must be a valid HTTPS URL',
+  },
+  {
+    name: 'UPSTASH_REDIS_REST_TOKEN',
+    required: false,
+    validator: (val) => val.length > 20,
+    errorMessage: 'UPSTASH_REDIS_REST_TOKEN appears to be invalid',
+  },
 ];
 
 interface ValidationResult {
@@ -209,6 +235,14 @@ export class EnvValidator {
       if (!process.env.ENCRYPTION_KEY) {
         warnings.push('ENCRYPTION_KEY not set - using development-only key (DO NOT USE IN PRODUCTION)');
       }
+    }
+    
+    // Redis/Cache configuration info
+    const hasRedis = !!process.env.REDIS_URL || 
+                     (!!process.env.UPSTASH_REDIS_REST_URL && !!process.env.UPSTASH_REDIS_REST_TOKEN);
+    
+    if (!hasRedis) {
+      warnings.push('Redis not configured - using in-memory cache only. For production, configure REDIS_URL or Upstash credentials for distributed caching.');
     }
     
     return {
