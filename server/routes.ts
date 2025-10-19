@@ -10681,6 +10681,12 @@ If the question cannot be answered with the available information, say so clearl
   const crossEnrollmentRouter = (await import('./api/crossEnrollment.routes')).default;
   app.use('/api/cross-enrollment', crossEnrollmentRouter);
 
+  // ============================================================================
+  // Mount State Configuration Routes - Multi-State White-Labeling
+  // ============================================================================
+  const { registerStateConfigurationRoutes } = await import('./routes/stateConfiguration.routes');
+  registerStateConfigurationRoutes(app);
+
   const httpServer = createServer(app);
   
   // Initialize WebSocket service for real-time notifications
