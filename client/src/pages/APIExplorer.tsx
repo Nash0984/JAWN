@@ -4,13 +4,18 @@ import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Input } from '@/components/ui/input';
+import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Code, Search, Lock, Zap, BookOpen, Filter } from 'lucide-react';
+import { Code, Search, Lock, Zap, BookOpen, Filter, Copy, Check } from 'lucide-react';
 import { Helmet } from 'react-helmet-async';
+import { useToast } from '@/hooks/use-toast';
+import { generateCodeSnippets } from '@/lib/codeSnippets';
 
 export default function APIExplorer() {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+  const [copiedSnippet, setCopiedSnippet] = useState<string | null>(null);
+  const { toast } = useToast();
 
   // Filter endpoints based on search and category
   const filteredEndpoints = API_ENDPOINTS.filter(endpoint => {
@@ -47,6 +52,25 @@ export default function APIExplorer() {
         return 'destructive';
       default:
         return 'outline';
+    }
+  };
+
+  // Copy code snippet to clipboard
+  const copyToClipboard = async (code: string, snippetId: string) => {
+    try {
+      await navigator.clipboard.writeText(code);
+      setCopiedSnippet(snippetId);
+      toast({
+        title: "Copied!",
+        description: "Code snippet copied to clipboard",
+      });
+      setTimeout(() => setCopiedSnippet(null), 2000);
+    } catch (err) {
+      toast({
+        title: "Failed to copy",
+        description: "Please try again",
+        variant: "destructive",
+      });
     }
   };
 
@@ -237,41 +261,105 @@ export default function APIExplorer() {
                       </div>
                     )}
 
-                    {/* Request/Response Examples */}
-                    {(endpoint.requestBody || endpoint.responseExample) && (
-                      <Tabs defaultValue="response" className="mt-3">
-                        <TabsList className="grid w-full max-w-[400px]" style={{ gridTemplateColumns: `repeat(${endpoint.requestBody && endpoint.responseExample ? 2 : 1}, 1fr)` }}>
-                          {endpoint.requestBody && (
-                            <TabsTrigger value="request" data-testid={`tab-request-${endpoint.id}`}>
-                              Request Body
-                            </TabsTrigger>
-                          )}
-                          {endpoint.responseExample && (
-                            <TabsTrigger value="response" data-testid={`tab-response-${endpoint.id}`}>
-                              Response Example
-                            </TabsTrigger>
-                          )}
-                        </TabsList>
+                    {/* Code Snippets & Examples */}
+                    <Tabs defaultValue="snippets" className="mt-3">
+                      <TabsList className="grid w-full" style={{ gridTemplateColumns: `repeat(${1 + (endpoint.requestBody ? 1 : 0) + (endpoint.responseExample ? 1 : 0)}, 1fr)` }}>
+                        <TabsTrigger value="snippets" data-testid={`tab-snippets-${endpoint.id}`}>
+                          Code Examples
+                        </TabsTrigger>
                         {endpoint.requestBody && (
-                          <TabsContent value="request" data-testid={`content-request-${endpoint.id}`}>
-                            <div className="relative">
-                              <pre className="text-xs font-mono bg-slate-900 dark:bg-slate-950 text-slate-100 p-4 rounded-lg overflow-x-auto border border-slate-700">
-                                <code>{JSON.stringify(endpoint.requestBody, null, 2)}</code>
-                              </pre>
-                            </div>
-                          </TabsContent>
+                          <TabsTrigger value="request" data-testid={`tab-request-${endpoint.id}`}>
+                            Request Body
+                          </TabsTrigger>
                         )}
                         {endpoint.responseExample && (
-                          <TabsContent value="response" data-testid={`content-response-${endpoint.id}`}>
-                            <div className="relative">
-                              <pre className="text-xs font-mono bg-slate-900 dark:bg-slate-950 text-slate-100 p-4 rounded-lg overflow-x-auto border border-slate-700">
-                                <code>{JSON.stringify(endpoint.responseExample, null, 2)}</code>
-                              </pre>
-                            </div>
-                          </TabsContent>
+                          <TabsTrigger value="response" data-testid={`tab-response-${endpoint.id}`}>
+                            Response
+                          </TabsTrigger>
                         )}
-                      </Tabs>
-                    )}
+                      </TabsList>
+                      
+                      {/* Code Snippets Tab */}
+                      <TabsContent value="snippets" data-testid={`content-snippets-${endpoint.id}`}>
+                        <Tabs defaultValue="curl" className="w-full">
+                          <TabsList className="grid w-full max-w-md grid-cols-3">
+                            <TabsTrigger value="curl">cURL</TabsTrigger>
+                            <TabsTrigger value="javascript">JavaScript</TabsTrigger>
+                            <TabsTrigger value="python">Python</TabsTrigger>
+                          </TabsList>
+                          {generateCodeSnippets(endpoint).map((snippet) => (
+                            <TabsContent key={snippet.language} value={snippet.language}>
+                              <div className="relative group">
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  className="absolute right-2 top-2 z-10 opacity-0 group-hover:opacity-100 transition-opacity"
+                                  onClick={() => copyToClipboard(snippet.code, `${endpoint.id}-${snippet.language}`)}
+                                  data-testid={`btn-copy-${endpoint.id}-${snippet.language}`}
+                                >
+                                  {copiedSnippet === `${endpoint.id}-${snippet.language}` ? (
+                                    <Check className="h-4 w-4 text-green-500" />
+                                  ) : (
+                                    <Copy className="h-4 w-4" />
+                                  )}
+                                </Button>
+                                <pre className="text-xs font-mono bg-slate-900 dark:bg-slate-950 text-slate-100 p-4 rounded-lg overflow-x-auto border border-slate-700">
+                                  <code>{snippet.code}</code>
+                                </pre>
+                              </div>
+                            </TabsContent>
+                          ))}
+                        </Tabs>
+                      </TabsContent>
+                      
+                      {/* Request Body Tab */}
+                      {endpoint.requestBody && (
+                        <TabsContent value="request" data-testid={`content-request-${endpoint.id}`}>
+                          <div className="relative group">
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="absolute right-2 top-2 z-10 opacity-0 group-hover:opacity-100 transition-opacity"
+                              onClick={() => copyToClipboard(JSON.stringify(endpoint.requestBody, null, 2), `${endpoint.id}-request`)}
+                              data-testid={`btn-copy-${endpoint.id}-request`}
+                            >
+                              {copiedSnippet === `${endpoint.id}-request` ? (
+                                <Check className="h-4 w-4 text-green-500" />
+                              ) : (
+                                <Copy className="h-4 w-4" />
+                              )}
+                            </Button>
+                            <pre className="text-xs font-mono bg-slate-900 dark:bg-slate-950 text-slate-100 p-4 rounded-lg overflow-x-auto border border-slate-700">
+                              <code>{JSON.stringify(endpoint.requestBody, null, 2)}</code>
+                            </pre>
+                          </div>
+                        </TabsContent>
+                      )}
+                      
+                      {/* Response Example Tab */}
+                      {endpoint.responseExample && (
+                        <TabsContent value="response" data-testid={`content-response-${endpoint.id}`}>
+                          <div className="relative group">
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="absolute right-2 top-2 z-10 opacity-0 group-hover:opacity-100 transition-opacity"
+                              onClick={() => copyToClipboard(JSON.stringify(endpoint.responseExample, null, 2), `${endpoint.id}-response`)}
+                              data-testid={`btn-copy-${endpoint.id}-response`}
+                            >
+                              {copiedSnippet === `${endpoint.id}-response` ? (
+                                <Check className="h-4 w-4 text-green-500" />
+                              ) : (
+                                <Copy className="h-4 w-4" />
+                              )}
+                            </Button>
+                            <pre className="text-xs font-mono bg-slate-900 dark:bg-slate-950 text-slate-100 p-4 rounded-lg overflow-x-auto border border-slate-700">
+                              <code>{JSON.stringify(endpoint.responseExample, null, 2)}</code>
+                            </pre>
+                          </div>
+                        </TabsContent>
+                      )}
+                    </Tabs>
                   </div>
                 </Card>
               ))

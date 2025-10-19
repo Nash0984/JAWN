@@ -246,6 +246,12 @@ app.use("/api/", (req, res, next) => {
   csrfProtection.doubleCsrfProtection(req, res, next);
 });
 
+// ============================================================================
+// API VERSIONING - Version detection and compatibility management
+// ============================================================================
+import { apiVersionMiddleware } from "./middleware/apiVersioning";
+app.use("/api/", apiVersionMiddleware);
+
 (async () => {
   // ============================================================================
   // SENTRY SETUP - Initialize and attach middleware BEFORE other initialization
