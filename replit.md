@@ -45,6 +45,52 @@ Production-ready components include Form 1040 and Maryland Form 502 PDF generato
 -   **Maryland Rules-as-Code Architecture**: Maryland rules engines are the primary determination system, with PolicyEngine serving as a third-party verifier. This includes SNAP, OHEP, TANF, Medicaid, and VITA Tax rules engines, integrated via a hybrid service layer and rules engine adapter.
 -   **Testing**: Vitest, @testing-library/react, and supertest.
 
+## Production Infrastructure (New)
+### Distributed Caching System
+-   **Redis/Upstash Integration**: Distributed cache with automatic fallback to in-memory cache for development
+-   **Multi-layer caching**: Session (30min), Documents (24hr), Calculations (1hr), Metrics (1min)
+-   **Cache hit rate tracking**: Real-time monitoring across all cache layers
+
+### Scalable Connection Pooling
+-   **Neon Pooled Connections**: Production-grade connection pool supporting 100+ concurrent connections
+-   **Surge Protection**: Queue management for 1000+ waiting requests with backoff retry logic
+-   **Circuit Breaker Pattern**: Automatic failure detection and recovery
+-   **Connection Metrics**: P95/P99 response times, pool utilization, query performance tracking
+
+### WebSocket Scaling with Redis Pub/Sub
+-   **Multi-instance Support**: Redis Pub/Sub for cross-instance message broadcasting
+-   **Room Management**: Dynamic room creation/deletion with presence tracking
+-   **Event Types**: 15+ event types for real-time updates (benefits, documents, notifications)
+-   **Heartbeat & Monitoring**: Automatic client health checks and metrics reporting
+
+### Prometheus Metrics Export
+-   **System Metrics**: CPU, memory, uptime, load averages
+-   **HTTP Metrics**: Request rates, latencies (with histograms), status codes
+-   **Database Metrics**: Connection pool stats, query performance, failure rates
+-   **Cache Metrics**: Hit rates, memory usage, key counts by category
+-   **WebSocket Metrics**: Connected clients, rooms, message throughput
+-   **Application Metrics**: Benefit calculations, document processing, AI requests
+-   **Endpoint**: `/metrics` for Prometheus scraping
+
+### Universal Feature Registry
+-   **Feature Parity**: Ensures all 6 programs (SNAP, Medicaid, TANF, OHEP, Tax Credits, SSI) have access to all features
+-   **Modular Architecture**: 5 core feature categories with rollback support
+-   **Cross-Enrollment Intelligence**: AI-powered detection of unclaimed benefits
+-   **Feature Matrix**: Real-time tracking of feature availability per program
+
+### PM2 Production Deployment
+-   **Cluster Mode**: Automatic scaling across all CPU cores
+-   **Process Management**: Main API, background workers, scheduler processes
+-   **Zero-downtime Deployments**: Rolling updates with health checks
+-   **Auto-restart**: Memory limits, error recovery, daily scheduler restarts
+-   **Environment Configs**: Separate production, staging, development settings
+
+### Load Testing Infrastructure
+-   **k6 Load Tests**: Comprehensive user journey testing with 5000+ virtual users
+-   **Artillery Tests**: API endpoint stress testing with realistic scenarios
+-   **Test Data**: CSV-driven test data for realistic household scenarios
+-   **Performance Baselines**: P95 < 500ms, P99 < 1000ms for critical paths
+
 # External Dependencies
 
 -   **AI Services**: Google Gemini API (`@google/genai`), Google Gemini Vision API.
@@ -58,6 +104,6 @@ Production-ready components include Form 1040 and Maryland Form 502 PDF generato
 -   **Legislative Data**: Congress.gov API, GovInfo API, Maryland General Assembly website.
 -   **Monitoring & Alerts**: Sentry error tracking.
 -   **Communication**: Twilio SMS API.
--   **Caching**: Node-cache.
+-   **Caching**: Redis/Upstash (distributed), In-memory fallback for development.
 -   **IRS Integration (Planned)**: IRS Bulk Data API, MeF FIRE API.
 -   **Maryland E-Filing (Planned)**: MDTAX iFile system API.
