@@ -14,13 +14,12 @@
 
 import { db } from '../db';
 import { 
-  households, 
-  benefits, 
+  clientCases, 
   documents, 
   auditLogs,
   users,
   notifications,
-  benchmarkMetrics
+  eligibilityCalculations
 } from '@shared/schema';
 import { eq, and, gte, lte, desc, sql, inArray, notInArray } from 'drizzle-orm';
 import { GoogleGenAI } from '@google/genai';
@@ -47,8 +46,8 @@ export interface ErrorPattern {
 
 export interface FlaggedCase {
   id: string;
-  householdId: string;
-  householdName: string;
+  caseId: string;
+  clientName: string;
   program: string;
   riskScore: number;
   riskLevel: 'critical' | 'high' | 'medium' | 'low';
@@ -91,29 +90,47 @@ class QCAnalyticsService {
   private model = gemini?.getGenerativeModel({ model: "gemini-pro" });
   
   /**
+   * Get recent cases for analysis
+   */
+  async getRecentCases(limit: number = 20): Promise<any[]> {
+    try {
+      const cases = await db.select()
+        .from(clientCases)
+        .orderBy(desc(clientCases.createdAt))
+        .limit(limit);
+      return cases;
+    } catch (error) {
+      console.error('Error fetching recent cases:', error);
+      return [];
+    }
+  }
+
+  /**
    * Analyze a case using AI to calculate risk score and identify issues
    */
-  async analyzeCase(householdId: string): Promise<FlaggedCase | null> {
-    const cacheKey = `qc:case:${householdId}`;
+  async analyzeCase(caseId: string): Promise<FlaggedCase | null> {
+    const cacheKey = `qc:case:${caseId}`;
     const cached = await cacheService.get(cacheKey);
     if (cached) return cached as FlaggedCase;
 
     try {
-      // Get household data with benefits and documents
-      const household = await db.query.households.findFirst({
-        where: eq(households.id, householdId),
-        with: {
-          benefits: true,
-          documents: true
-        }
+      // Get case data with related information
+      const clientCase = await db.query.clientCases.findFirst({
+        where: eq(clientCases.id, caseId)
       });
 
-      if (!household) return null;
+      if (!clientCase) return null;
 
-      // Get audit history for this household
+      // Get documents for this case
+      const caseDocuments = await db.select()
+        .from(documents)
+        .where(eq(documents.uploadedBy, clientCase.createdBy))
+        .limit(10);
+
+      // Get audit history for this case
       const auditHistory = await db.select()
         .from(auditLogs)
-        .where(eq(auditLogs.resourceId, householdId))
+        .where(eq(auditLogs.resourceId, caseId))
         .orderBy(desc(auditLogs.createdAt))
         .limit(20);
 
@@ -121,11 +138,12 @@ class QCAnalyticsService {
       let aiAnalysis = null;
       if (this.model) {
         const prompt = `
-          Analyze this household case for quality control risk factors:
+          Analyze this client case for quality control risk factors:
           
-          Household: ${household.name}
-          Active Benefits: ${household.benefits?.map(b => b.programId).join(', ') || 'None'}
-          Documents: ${household.documents?.length || 0} documents
+          Client: ${clientCase.clientName}
+          Program: ${clientCase.benefitProgramId}
+          Status: ${clientCase.status}
+          Documents: ${caseDocuments.length} documents
           Recent Activity: ${auditHistory.length} audit events
           
           Identify:
@@ -153,19 +171,19 @@ class QCAnalyticsService {
       }
 
       // Fallback risk calculation if AI unavailable
-      const riskScore = aiAnalysis?.riskScore || this.calculateRiskScore(household, auditHistory);
+      const riskScore = aiAnalysis?.riskScore || this.calculateRiskScore(clientCase, caseDocuments, auditHistory);
       const riskLevel = this.getRiskLevel(riskScore);
 
       const flaggedCase: FlaggedCase = {
-        id: `flag_${householdId}`,
-        householdId,
-        householdName: household.name,
-        program: household.benefits?.[0]?.programId || 'Multiple',
+        id: `flag_${caseId}`,
+        caseId,
+        clientName: clientCase.clientName,
+        program: clientCase.benefitProgramId || 'Unknown',
         riskScore,
         riskLevel,
-        flagReason: aiAnalysis?.flagReasons?.[0] || this.generateFlagReason(household),
+        flagReason: aiAnalysis?.flagReasons?.[0] || this.generateFlagReason(clientCase),
         lastReviewed: auditHistory[0]?.createdAt || undefined,
-        caseworkerId: household.assignedTo || undefined,
+        caseworkerId: clientCase.assignedNavigator || undefined,
         errorHistory: this.extractErrorHistory(auditHistory),
         aiRecommendations: aiAnalysis?.recommendations || [],
         predictedOutcome: aiAnalysis?.predictedOutcome
@@ -392,12 +410,8 @@ class QCAnalyticsService {
       
       // Count high risk cases
       const highRiskCount = await db.select({ count: sql<number>`COUNT(*)::int` })
-        .from(households)
-        .where(sql`EXISTS (
-          SELECT 1 FROM ${benefits} b 
-          WHERE b.household_id = ${households.id} 
-          AND b.status != 'approved'
-        )`);
+        .from(clientCases)
+        .where(sql`${clientCases.status} != 'approved'`);
 
       // Use AI for predictions if available
       let aiPrediction = null;
@@ -531,11 +545,11 @@ class QCAnalyticsService {
   }
 
   // Helper methods
-  private calculateRiskScore(household: any, auditHistory: any[]): number {
+  private calculateRiskScore(clientCase: any, documents: any[], auditHistory: any[]): number {
     let score = 0;
     
     // Factor in missing documents
-    if (!household.documents || household.documents.length < 3) score += 20;
+    if (documents.length < 3) score += 20;
     
     // Factor in recent errors
     const errorCount = auditHistory.filter(a => 
@@ -543,12 +557,16 @@ class QCAnalyticsService {
     ).length;
     score += errorCount * 10;
     
-    // Factor in time since last review
-    const lastReview = auditHistory[0]?.createdAt;
-    if (lastReview) {
-      const daysSinceReview = (Date.now() - new Date(lastReview).getTime()) / (1000 * 60 * 60 * 24);
-      if (daysSinceReview > 30) score += 15;
-      if (daysSinceReview > 60) score += 25;
+    // Factor in case status
+    if (clientCase.status === 'documents_pending') score += 15;
+    if (clientCase.status === 'screening') score += 10;
+    
+    // Factor in time since last update
+    const lastUpdate = clientCase.updatedAt;
+    if (lastUpdate) {
+      const daysSinceUpdate = (Date.now() - new Date(lastUpdate).getTime()) / (1000 * 60 * 60 * 24);
+      if (daysSinceUpdate > 30) score += 15;
+      if (daysSinceUpdate > 60) score += 25;
     } else {
       score += 30;
     }
@@ -563,12 +581,15 @@ class QCAnalyticsService {
     return 'low';
   }
 
-  private generateFlagReason(household: any): string {
-    if (!household.documents || household.documents.length === 0) {
-      return 'Missing required documentation';
+  private generateFlagReason(clientCase: any): string {
+    if (clientCase.status === 'documents_pending') {
+      return 'Waiting for required documentation';
     }
-    if (!household.benefits || household.benefits.length === 0) {
-      return 'No active benefits - verification needed';
+    if (clientCase.status === 'screening') {
+      return 'Initial screening - verification needed';
+    }
+    if (clientCase.status === 'submitted') {
+      return 'Application submitted - awaiting review';
     }
     return 'Routine quality control review required';
   }
