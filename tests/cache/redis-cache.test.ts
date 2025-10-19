@@ -1,9 +1,9 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { redisCache } from '../services/redisCache';
-import { embeddingCache } from '../services/embeddingCache';
-import { ragCache } from '../services/ragCache';
-import { policyEngineCache } from '../services/policyEngineCache';
-import { cacheMetrics } from '../services/cacheMetrics';
+import { redisCache } from '../../server/services/redisCache';
+import { embeddingCache } from '../../server/services/embeddingCache';
+import { ragCache } from '../../server/services/ragCache';
+import { policyEngineCache } from '../../server/services/policyEngineCache';
+import { cacheMetrics } from '../../server/services/cacheMetrics';
 
 /**
  * Redis Distributed Cache Tests
