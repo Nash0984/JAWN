@@ -1,12 +1,17 @@
 import NodeCache from 'node-cache';
 import type { PolicyEngineHousehold, BenefitResult } from './policyEngine.service';
 import { generateHouseholdHash } from './cacheService';
+import { redisCache, tieredCacheGet } from './redisCache';
 
 /**
  * PolicyEngine Calculation Cache Service
  * 
  * Caches benefit calculation results to reduce expensive PolicyEngine API calls.
  * Particularly effective for scenario modeling and comparison features.
+ * 
+ * Now supports L1 (NodeCache) + L2 (Redis) tiered caching:
+ * - L1: Process-local for rapid comparisons
+ * - L2: Distributed for shared calculations across navigators
  * 
  * Cost Savings: 50-70% reduction for repeated household scenarios
  * TTL: 1 hour
@@ -74,17 +79,30 @@ class PolicyEngineCacheService {
   
   /**
    * Get cached calculation or return null
+   * Now checks L1 → L2 → null
    */
-  get(household: PolicyEngineHousehold): BenefitResult | null {
+  async get(household: PolicyEngineHousehold): Promise<BenefitResult | null> {
     this.metrics.totalRequests++;
     
-    const key = this.generateKey(household);
-    const cached = this.cache.get<CachedCalculation>(key);
+    const baseKey = this.generateKey(household);
+    const key = `pe:calc:${baseKey}`;
     
-    if (cached) {
+    // Check L1 (NodeCache)
+    const l1Cached = this.cache.get<CachedCalculation>(key);
+    if (l1Cached) {
       this.metrics.hits++;
       this.metrics.estimatedTimeSavings += this.AVG_CALCULATION_TIME_MS;
-      return cached.benefits;
+      return l1Cached.benefits;
+    }
+    
+    // Check L2 (Redis)
+    const l2Cached = await redisCache.get<CachedCalculation>(key);
+    if (l2Cached) {
+      this.metrics.hits++;
+      this.metrics.estimatedTimeSavings += this.AVG_CALCULATION_TIME_MS;
+      // Write-through to L1
+      this.cache.set(key, l2Cached);
+      return l2Cached.benefits;
     }
     
     this.metrics.misses++;
@@ -93,15 +111,44 @@ class PolicyEngineCacheService {
   
   /**
    * Store calculation result in cache
+   * Now writes to both L1 and L2
    */
-  set(household: PolicyEngineHousehold, benefits: BenefitResult): void {
-    const key = this.generateKey(household);
+  async set(household: PolicyEngineHousehold, benefits: BenefitResult): Promise<void> {
+    const baseKey = this.generateKey(household);
+    const key = `pe:calc:${baseKey}`;
+    const ttl = 60 * 60; // 1 hour
+    
     const entry: CachedCalculation = {
       benefits,
-      householdHash: key,
+      householdHash: baseKey,
       timestamp: Date.now()
     };
-    this.cache.set(key, entry);
+    
+    // Write to L1 (NodeCache)
+    this.cache.set(key, entry, ttl);
+    
+    // Write to L2 (Redis)
+    await redisCache.set(key, entry, ttl);
+  }
+  
+  /**
+   * Get cached calculation with automatic generation if not found
+   * Uses tiered cache with automatic population
+   */
+  async getOrCalculate(
+    household: PolicyEngineHousehold,
+    calculateFn: () => Promise<BenefitResult>
+  ): Promise<BenefitResult> {
+    const baseKey = this.generateKey(household);
+    const key = `pe:calc:${baseKey}`;
+    const ttl = 60 * 60; // 1 hour
+    
+    const result = await tieredCacheGet(key, async () => {
+      const benefits = await calculateFn();
+      return { benefits, householdHash: baseKey, timestamp: Date.now() };
+    }, ttl);
+    
+    return result.benefits;
   }
   
   /**
