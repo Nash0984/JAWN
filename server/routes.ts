@@ -3,24 +3,38 @@ import { createServer, type Server } from "http";
 import { initializeWebSocketService } from "./services/websocket.service";
 import { storage } from "./storage";
 import { ragService } from "./services/ragService";
-import { documentProcessor } from "./services/documentProcessor";
-import { documentIngestionService } from "./services/documentIngestion";
-import { automatedIngestionService } from "./services/automatedIngestion";
+// Unified Services
+import { unifiedDocumentService } from "./services/unified/UnifiedDocumentService";
+import { unifiedExportService } from "./services/unified/UnifiedExportService";
+import { unifiedIngestionService } from "./services/unified/UnifiedIngestionService";
+
+// Legacy services (to be gradually migrated)
+const documentProcessor = unifiedDocumentService; // Alias for backward compatibility
+const documentIngestionService = unifiedIngestionService; // Alias for backward compatibility
+const automatedIngestionService = unifiedIngestionService; // Alias for backward compatibility  
+const manualIngestionService = unifiedIngestionService; // Alias for backward compatibility
+const documentVerificationService = unifiedDocumentService; // Alias for backward compatibility
+const taxDocExtractor = unifiedDocumentService; // Alias for backward compatibility
+
+// Export aliases for backward compatibility
+const exportToPDF = (returnId: string) => unifiedExportService.exportTaxSlayerReturn(returnId, { format: 'pdf', type: 'taxslayer_worksheet' });
+const exportToCSV = (returnId: string) => unifiedExportService.exportTaxSlayerReturn(returnId, { format: 'csv', type: 'taxslayer_worksheet' });
+const exportChecklist = exportToPDF; // Use same PDF export for now
+const exportVarianceReport = exportToPDF; // Use same PDF export for now
+const exportFieldGuide = exportToPDF; // Use same PDF export for now
+
+// Other services
 import { ObjectStorageService, objectStorageClient, parseObjectPath } from "./objectStorage";
 import { rulesEngine } from "./services/rulesEngine";
 import { rulesAsCodeService } from "./services/rulesAsCodeService";
 import { hybridService } from "./services/hybridService";
-import { manualIngestionService } from "./services/manualIngestion";
 import { auditService } from "./services/auditService";
-import { documentVerificationService } from "./services/documentVerificationService";
 import { textGenerationService } from "./services/textGenerationService";
 import { notificationService } from "./services/notification.service";
 import { cacheService, CACHE_KEYS, invalidateRulesCache, generateHouseholdHash } from "./services/cacheService";
 import { kpiTrackingService } from "./services/kpiTracking.service";
 import { achievementSystemService } from "./services/achievementSystem.service";
 import { leaderboardService } from "./services/leaderboard.service";
-import { taxDocExtractor } from "./services/taxDocumentExtraction";
-import { exportToPDF, exportToCSV, exportChecklist, exportVarianceReport, exportFieldGuide } from "./services/taxslayerExport";
 import { GoogleGenAI } from "@google/genai";
 import { asyncHandler, validationError, notFoundError, externalServiceError, authorizationError } from "./middleware/errorHandler";
 import { requireAuth, requireStaff, requireAdmin } from "./middleware/auth";
