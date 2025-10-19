@@ -804,6 +804,8 @@ export const eligibilityCalculations = pgTable("eligibility_calculations", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   userId: varchar("user_id").references(() => users.id),
   benefitProgramId: varchar("benefit_program_id").references(() => benefitPrograms.id).notNull(),
+  tenantId: varchar("tenant_id").references((): any => tenants.id), // Multi-tenant isolation
+  stateCode: text("state_code"), // Jurisdiction state code (MD, PA, etc.)
   householdSize: integer("household_size").notNull(),
   grossMonthlyIncome: integer("gross_monthly_income").notNull(), // in cents
   netMonthlyIncome: integer("net_monthly_income").notNull(), // in cents
@@ -964,6 +966,8 @@ export const clientCases = pgTable("client_cases", {
   benefitProgramId: varchar("benefit_program_id").references(() => benefitPrograms.id).notNull(),
   assignedNavigator: varchar("assigned_navigator").references(() => users.id),
   tenantId: varchar("tenant_id").references((): any => tenants.id), // Multi-tenant isolation
+  stateCode: text("state_code"), // Jurisdiction state code (MD, PA, etc.)
+  countyCode: text("county_code"), // County/locality code for sub-jurisdictions
   status: text("status").notNull().default("screening"), // screening, documents_pending, submitted, approved, denied
   householdSize: integer("household_size"),
   estimatedIncome: integer("estimated_income"), // in cents
@@ -978,6 +982,7 @@ export const clientCases = pgTable("client_cases", {
 }, (table) => ({
   benefitProgramStatusIdx: index("client_cases_benefit_program_status_idx").on(table.benefitProgramId, table.status),
   navigatorStatusIdx: index("client_cases_assigned_navigator_status_idx").on(table.assignedNavigator, table.status),
+  tenantStateIdx: index("client_cases_tenant_state_idx").on(table.tenantId, table.stateCode),
   createdAtIdx: index("client_cases_created_at_idx").on(table.createdAt),
 }));
 
@@ -6148,3 +6153,215 @@ export type InsertMaiveTestRun = z.infer<typeof insertMaiveTestRunSchema>;
 export type MaiveTestRun = typeof maiveTestRuns.$inferSelect;
 export type InsertMaiveEvaluation = z.infer<typeof insertMaiveEvaluationSchema>;
 export type MaiveEvaluation = typeof maiveEvaluations.$inferSelect;
+
+// ============================================================================
+// STATE CONFIGURATION SYSTEM - Multi-State White-Labeling Foundation
+// ============================================================================
+
+// State Configurations - Core state/jurisdiction settings
+export const stateConfigurations = pgTable("state_configurations", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").references(() => tenants.id, { onDelete: "cascade" }).notNull().unique(),
+  
+  // Basic Information
+  stateName: text("state_name").notNull(), // "Maryland", "Pennsylvania", etc.
+  stateCode: text("state_code").notNull().unique(), // "MD", "PA", etc.
+  abbreviation: text("abbreviation").notNull(), // Display abbreviation
+  timezone: text("timezone").notNull().default("America/New_York"), // Timezone identifier
+  region: text("region").notNull(), // "Mid-Atlantic", "Northeast", etc.
+  
+  // Agency Information
+  agencyName: text("agency_name").notNull(), // "Maryland Department of Human Services"
+  agencyAcronym: text("agency_acronym"), // "MD DHS"
+  agencyWebsite: text("agency_website"),
+  agencyAddress: text("agency_address"),
+  agencyPhone: text("agency_phone"),
+  agencyEmail: text("agency_email"),
+  
+  // Contact Information
+  mainContactName: text("main_contact_name"),
+  mainContactTitle: text("main_contact_title"),
+  mainContactPhone: text("main_contact_phone"),
+  mainContactEmail: text("main_contact_email"),
+  
+  // Emergency/After-Hours Contact
+  emergencyContactPhone: text("emergency_contact_phone"),
+  emergencyContactEmail: text("emergency_contact_email"),
+  
+  // Support Channels
+  supportPhone: text("support_phone"),
+  supportEmail: text("support_email"),
+  supportHours: text("support_hours"), // "Mon-Fri 8AM-5PM EST"
+  supportLanguages: text("support_languages").array().default(sql`'{en}'::text[]`), // ["en", "es", "zh", etc.]
+  
+  // Policy Configuration
+  policyManualUrl: text("policy_manual_url"),
+  regulationsUrl: text("regulations_url"),
+  legislativeUrl: text("legislative_url"),
+  
+  // Feature Flags
+  features: jsonb("features").default('{}'), // { "enableVita": true, "enableSms": false, etc. }
+  
+  // Metadata
+  isActive: boolean("is_active").default(true).notNull(),
+  launchDate: timestamp("launch_date"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  stateCodeIdx: index("state_configs_state_code_idx").on(table.stateCode),
+  tenantIdx: index("state_configs_tenant_idx").on(table.tenantId),
+  activeIdx: index("state_configs_active_idx").on(table.isActive),
+}));
+
+// State Benefit Programs - Programs available in each state
+export const stateBenefitPrograms = pgTable("state_benefit_programs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  stateConfigId: varchar("state_config_id").references(() => stateConfigurations.id, { onDelete: "cascade" }).notNull(),
+  benefitProgramId: varchar("benefit_program_id").references(() => benefitPrograms.id).notNull(),
+  
+  // State-specific program details
+  stateProgramName: text("state_program_name"), // State's name for the program
+  stateProgramCode: text("state_program_code"), // State's internal code
+  stateProgramUrl: text("state_program_url"), // State-specific program website
+  
+  // Eligibility variations
+  eligibilityOverrides: jsonb("eligibility_overrides"), // State-specific eligibility rules
+  incomeLimitMultiplier: real("income_limit_multiplier").default(1.0), // Adjust federal poverty level
+  assetLimitOverride: integer("asset_limit_override"), // State-specific asset limit
+  
+  // Application process
+  applicationUrl: text("application_url"),
+  applicationPhone: text("application_phone"),
+  applicationMethods: text("application_methods").array(), // ["online", "phone", "in-person", "mail"]
+  averageProcessingTime: integer("average_processing_time"), // in days
+  
+  // Required documents
+  requiredDocuments: jsonb("required_documents"), // State-specific document requirements
+  
+  // Feature flags
+  isActive: boolean("is_active").default(true).notNull(),
+  allowsOnlineApplication: boolean("allows_online_application").default(true),
+  requiresInterview: boolean("requires_interview").default(false),
+  
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  stateConfigProgramIdx: uniqueIndex("state_benefit_programs_unique_idx").on(table.stateConfigId, table.benefitProgramId),
+  activeIdx: index("state_benefit_programs_active_idx").on(table.isActive),
+}));
+
+// State Forms - State-specific forms and documents
+export const stateForms = pgTable("state_forms", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  stateConfigId: varchar("state_config_id").references(() => stateConfigurations.id, { onDelete: "cascade" }).notNull(),
+  
+  // Form identification
+  formNumber: text("form_number").notNull(), // "DHS-9780", "PA-600", etc.
+  formName: text("form_name").notNull(),
+  formType: text("form_type").notNull(), // "application", "renewal", "change_report", etc.
+  
+  // Program association
+  benefitProgramId: varchar("benefit_program_id").references(() => benefitPrograms.id),
+  
+  // Language support
+  language: text("language").notNull().default("en"),
+  languageName: text("language_name").notNull().default("English"),
+  
+  // Version control
+  version: text("version").notNull(),
+  effectiveDate: timestamp("effective_date"),
+  expirationDate: timestamp("expiration_date"),
+  
+  // Storage
+  objectPath: text("object_path"), // Path in object storage
+  sourceUrl: text("source_url"), // Original state URL
+  
+  // Metadata
+  isFillable: boolean("is_fillable").default(false),
+  isRequired: boolean("is_required").default(false),
+  isActive: boolean("is_active").default(true).notNull(),
+  
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  stateFormNumberIdx: index("state_forms_state_number_idx").on(table.stateConfigId, table.formNumber),
+  formTypeIdx: index("state_forms_type_idx").on(table.formType),
+  languageIdx: index("state_forms_language_idx").on(table.language),
+}));
+
+// State Policy Rules - Jurisdiction-specific rules and criteria
+export const statePolicyRules = pgTable("state_policy_rules", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  stateConfigId: varchar("state_config_id").references(() => stateConfigurations.id, { onDelete: "cascade" }).notNull(),
+  
+  // Rule identification
+  ruleName: text("rule_name").notNull(),
+  ruleCode: text("rule_code").notNull(),
+  ruleCategory: text("rule_category").notNull(), // "eligibility", "benefit_calculation", "documentation", etc.
+  
+  // Program association
+  benefitProgramId: varchar("benefit_program_id").references(() => benefitPrograms.id),
+  
+  // Rule definition
+  ruleType: text("rule_type").notNull(), // "income_limit", "asset_test", "categorical", etc.
+  ruleLogic: jsonb("rule_logic").notNull(), // Structured rule definition
+  
+  // Priority and conflicts
+  priority: integer("priority").default(0), // Higher priority rules apply first
+  overridesFederalRule: boolean("overrides_federal_rule").default(false),
+  
+  // Effective dates
+  effectiveDate: timestamp("effective_date"),
+  expirationDate: timestamp("expiration_date"),
+  
+  // Source and compliance
+  sourceRegulation: text("source_regulation"), // Citation/reference
+  sourceUrl: text("source_url"),
+  lastVerifiedDate: timestamp("last_verified_date"),
+  
+  // Status
+  isActive: boolean("is_active").default(true).notNull(),
+  isTemporary: boolean("is_temporary").default(false), // Emergency/temporary rules
+  
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  stateRuleCodeIdx: uniqueIndex("state_policy_rules_unique_idx").on(table.stateConfigId, table.ruleCode),
+  categoryIdx: index("state_policy_rules_category_idx").on(table.ruleCategory),
+  programIdx: index("state_policy_rules_program_idx").on(table.benefitProgramId),
+}));
+
+// Insert schemas for State Configuration
+export const insertStateConfigurationSchema = createInsertSchema(stateConfigurations).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertStateBenefitProgramSchema = createInsertSchema(stateBenefitPrograms).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertStateFormSchema = createInsertSchema(stateForms).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertStatePolicyRuleSchema = createInsertSchema(statePolicyRules).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+// Types for State Configuration
+export type StateConfiguration = typeof stateConfigurations.$inferSelect;
+export type InsertStateConfiguration = z.infer<typeof insertStateConfigurationSchema>;
+export type StateBenefitProgram = typeof stateBenefitPrograms.$inferSelect;
+export type InsertStateBenefitProgram = z.infer<typeof insertStateBenefitProgramSchema>;
+export type StateForm = typeof stateForms.$inferSelect;
+export type InsertStateForm = z.infer<typeof insertStateFormSchema>;
+export type StatePolicyRule = typeof statePolicyRules.$inferSelect;
+export type InsertStatePolicyRule = z.infer<typeof insertStatePolicyRuleSchema>;

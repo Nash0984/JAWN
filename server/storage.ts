@@ -234,6 +234,18 @@ import {
   eSignatures,
   type ESignature,
   type InsertESignature,
+  stateConfigurations,
+  type StateConfiguration,
+  type InsertStateConfiguration,
+  stateBenefitPrograms,
+  type StateBenefitProgram,
+  type InsertStateBenefitProgram,
+  stateForms,
+  type StateForm,
+  type InsertStateForm,
+  statePolicyRules,
+  type StatePolicyRule,
+  type InsertStatePolicyRule,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and, ilike, sql, or, isNull, lte, gte, inArray } from "drizzle-orm";
@@ -875,6 +887,39 @@ export interface IStorage {
     isValid?: boolean;
   }): Promise<ESignature[]>;
   invalidateESignature(id: string, reason: string): Promise<ESignature>;
+
+  // State Configurations - Multi-State White-Labeling
+  getStateConfiguration(id: string): Promise<StateConfiguration | undefined>;
+  getStateConfigurationByTenant(tenantId: string): Promise<StateConfiguration | undefined>;
+  getStateConfigurationByCode(stateCode: string): Promise<StateConfiguration | undefined>;
+  getStateConfigurations(filters?: { isActive?: boolean; region?: string }): Promise<StateConfiguration[]>;
+  createStateConfiguration(config: InsertStateConfiguration): Promise<StateConfiguration>;
+  updateStateConfiguration(id: string, updates: Partial<StateConfiguration>): Promise<StateConfiguration>;
+  deleteStateConfiguration(id: string): Promise<void>;
+
+  // State Benefit Programs
+  getStateBenefitProgram(id: string): Promise<StateBenefitProgram | undefined>;
+  getStateBenefitPrograms(stateConfigId: string): Promise<StateBenefitProgram[]>;
+  getStateBenefitProgramByCode(stateConfigId: string, programCode: string): Promise<StateBenefitProgram | undefined>;
+  createStateBenefitProgram(program: InsertStateBenefitProgram): Promise<StateBenefitProgram>;
+  updateStateBenefitProgram(id: string, updates: Partial<StateBenefitProgram>): Promise<StateBenefitProgram>;
+  deleteStateBenefitProgram(id: string): Promise<void>;
+
+  // State Forms
+  getStateForm(id: string): Promise<StateForm | undefined>;
+  getStateForms(stateConfigId: string, filters?: { formType?: string; language?: string; isActive?: boolean }): Promise<StateForm[]>;
+  getStateFormByNumber(stateConfigId: string, formNumber: string): Promise<StateForm | undefined>;
+  createStateForm(form: InsertStateForm): Promise<StateForm>;
+  updateStateForm(id: string, updates: Partial<StateForm>): Promise<StateForm>;
+  deleteStateForm(id: string): Promise<void>;
+
+  // State Policy Rules
+  getStatePolicyRule(id: string): Promise<StatePolicyRule | undefined>;
+  getStatePolicyRules(stateConfigId: string, filters?: { ruleCategory?: string; benefitProgramId?: string; isActive?: boolean }): Promise<StatePolicyRule[]>;
+  getStatePolicyRuleByCode(stateConfigId: string, ruleCode: string): Promise<StatePolicyRule | undefined>;
+  createStatePolicyRule(rule: InsertStatePolicyRule): Promise<StatePolicyRule>;
+  updateStatePolicyRule(id: string, updates: Partial<StatePolicyRule>): Promise<StatePolicyRule>;
+  deleteStatePolicyRule(id: string): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -4500,6 +4545,207 @@ export class DatabaseStorage implements IStorage {
       .where(eq(eSignatures.id, id))
       .returning();
     return updated;
+  }
+
+  // State Configurations - Multi-State White-Labeling
+  async getStateConfiguration(id: string): Promise<StateConfiguration | undefined> {
+    return await db.query.stateConfigurations.findFirst({
+      where: eq(stateConfigurations.id, id),
+    });
+  }
+
+  async getStateConfigurationByTenant(tenantId: string): Promise<StateConfiguration | undefined> {
+    return await db.query.stateConfigurations.findFirst({
+      where: eq(stateConfigurations.tenantId, tenantId),
+    });
+  }
+
+  async getStateConfigurationByCode(stateCode: string): Promise<StateConfiguration | undefined> {
+    return await db.query.stateConfigurations.findFirst({
+      where: eq(stateConfigurations.stateCode, stateCode),
+    });
+  }
+
+  async getStateConfigurations(filters?: { isActive?: boolean; region?: string }): Promise<StateConfiguration[]> {
+    let query = db.select().from(stateConfigurations);
+    const conditions = [];
+
+    if (filters?.isActive !== undefined) {
+      conditions.push(eq(stateConfigurations.isActive, filters.isActive));
+    }
+    if (filters?.region) {
+      conditions.push(eq(stateConfigurations.region, filters.region));
+    }
+
+    if (conditions.length > 0) {
+      query = query.where(and(...conditions)) as any;
+    }
+
+    return await query.orderBy(stateConfigurations.stateName);
+  }
+
+  async createStateConfiguration(config: InsertStateConfiguration): Promise<StateConfiguration> {
+    const [created] = await db.insert(stateConfigurations).values(config).returning();
+    return created;
+  }
+
+  async updateStateConfiguration(id: string, updates: Partial<StateConfiguration>): Promise<StateConfiguration> {
+    const [updated] = await db
+      .update(stateConfigurations)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(stateConfigurations.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteStateConfiguration(id: string): Promise<void> {
+    await db.delete(stateConfigurations).where(eq(stateConfigurations.id, id));
+  }
+
+  // State Benefit Programs
+  async getStateBenefitProgram(id: string): Promise<StateBenefitProgram | undefined> {
+    return await db.query.stateBenefitPrograms.findFirst({
+      where: eq(stateBenefitPrograms.id, id),
+    });
+  }
+
+  async getStateBenefitPrograms(stateConfigId: string): Promise<StateBenefitProgram[]> {
+    return await db
+      .select()
+      .from(stateBenefitPrograms)
+      .where(eq(stateBenefitPrograms.stateConfigId, stateConfigId))
+      .orderBy(stateBenefitPrograms.stateProgramName);
+  }
+
+  async getStateBenefitProgramByCode(stateConfigId: string, programCode: string): Promise<StateBenefitProgram | undefined> {
+    return await db.query.stateBenefitPrograms.findFirst({
+      where: and(
+        eq(stateBenefitPrograms.stateConfigId, stateConfigId),
+        eq(stateBenefitPrograms.stateProgramCode, programCode)
+      ),
+    });
+  }
+
+  async createStateBenefitProgram(program: InsertStateBenefitProgram): Promise<StateBenefitProgram> {
+    const [created] = await db.insert(stateBenefitPrograms).values(program).returning();
+    return created;
+  }
+
+  async updateStateBenefitProgram(id: string, updates: Partial<StateBenefitProgram>): Promise<StateBenefitProgram> {
+    const [updated] = await db
+      .update(stateBenefitPrograms)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(stateBenefitPrograms.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteStateBenefitProgram(id: string): Promise<void> {
+    await db.delete(stateBenefitPrograms).where(eq(stateBenefitPrograms.id, id));
+  }
+
+  // State Forms
+  async getStateForm(id: string): Promise<StateForm | undefined> {
+    return await db.query.stateForms.findFirst({
+      where: eq(stateForms.id, id),
+    });
+  }
+
+  async getStateForms(stateConfigId: string, filters?: { formType?: string; language?: string; isActive?: boolean }): Promise<StateForm[]> {
+    let query = db.select().from(stateForms);
+    const conditions = [eq(stateForms.stateConfigId, stateConfigId)];
+
+    if (filters?.formType) {
+      conditions.push(eq(stateForms.formType, filters.formType));
+    }
+    if (filters?.language) {
+      conditions.push(eq(stateForms.language, filters.language));
+    }
+    if (filters?.isActive !== undefined) {
+      conditions.push(eq(stateForms.isActive, filters.isActive));
+    }
+
+    query = query.where(and(...conditions)) as any;
+    return await query.orderBy(stateForms.formNumber);
+  }
+
+  async getStateFormByNumber(stateConfigId: string, formNumber: string): Promise<StateForm | undefined> {
+    return await db.query.stateForms.findFirst({
+      where: and(
+        eq(stateForms.stateConfigId, stateConfigId),
+        eq(stateForms.formNumber, formNumber)
+      ),
+    });
+  }
+
+  async createStateForm(form: InsertStateForm): Promise<StateForm> {
+    const [created] = await db.insert(stateForms).values(form).returning();
+    return created;
+  }
+
+  async updateStateForm(id: string, updates: Partial<StateForm>): Promise<StateForm> {
+    const [updated] = await db
+      .update(stateForms)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(stateForms.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteStateForm(id: string): Promise<void> {
+    await db.delete(stateForms).where(eq(stateForms.id, id));
+  }
+
+  // State Policy Rules
+  async getStatePolicyRule(id: string): Promise<StatePolicyRule | undefined> {
+    return await db.query.statePolicyRules.findFirst({
+      where: eq(statePolicyRules.id, id),
+    });
+  }
+
+  async getStatePolicyRules(stateConfigId: string, filters?: { ruleCategory?: string; benefitProgramId?: string; isActive?: boolean }): Promise<StatePolicyRule[]> {
+    let query = db.select().from(statePolicyRules);
+    const conditions = [eq(statePolicyRules.stateConfigId, stateConfigId)];
+
+    if (filters?.ruleCategory) {
+      conditions.push(eq(statePolicyRules.ruleCategory, filters.ruleCategory));
+    }
+    if (filters?.benefitProgramId) {
+      conditions.push(eq(statePolicyRules.benefitProgramId, filters.benefitProgramId));
+    }
+    if (filters?.isActive !== undefined) {
+      conditions.push(eq(statePolicyRules.isActive, filters.isActive));
+    }
+
+    query = query.where(and(...conditions)) as any;
+    return await query.orderBy(desc(statePolicyRules.priority));
+  }
+
+  async getStatePolicyRuleByCode(stateConfigId: string, ruleCode: string): Promise<StatePolicyRule | undefined> {
+    return await db.query.statePolicyRules.findFirst({
+      where: and(
+        eq(statePolicyRules.stateConfigId, stateConfigId),
+        eq(statePolicyRules.ruleCode, ruleCode)
+      ),
+    });
+  }
+
+  async createStatePolicyRule(rule: InsertStatePolicyRule): Promise<StatePolicyRule> {
+    const [created] = await db.insert(statePolicyRules).values(rule).returning();
+    return created;
+  }
+
+  async updateStatePolicyRule(id: string, updates: Partial<StatePolicyRule>): Promise<StatePolicyRule> {
+    const [updated] = await db
+      .update(statePolicyRules)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(statePolicyRules.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteStatePolicyRule(id: string): Promise<void> {
+    await db.delete(statePolicyRules).where(eq(statePolicyRules.id, id));
   }
 }
 
