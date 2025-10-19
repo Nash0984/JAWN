@@ -10645,6 +10645,12 @@ If the question cannot be answered with the available information, say so clearl
     next();
   }, maiveRouter);
 
+  // ============================================================================
+  // Mount QC Analytics Routes
+  // ============================================================================
+  const qcAnalyticsRouter = (await import('./api/qcAnalytics.routes')).default;
+  app.use('/api/qc-analytics', qcAnalyticsRouter);
+
   const httpServer = createServer(app);
   
   // Initialize WebSocket service for real-time notifications
