@@ -6576,6 +6576,190 @@ export const crossStateRuleApplications = pgTable("cross_state_rule_applications
   outcomeIdx: index("cross_state_applications_outcome_idx").on(table.outcome),
 }));
 
+// ============================================================================
+// GDPR COMPLIANCE TABLES - Data Protection and Privacy Management
+// ============================================================================
+
+// GDPR Consents - Track user consent for data processing purposes
+export const gdprConsents = pgTable("gdpr_consents", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+  purpose: text("purpose").notNull(), // marketing, analytics, service, research
+  consentGiven: boolean("consent_given").notNull(),
+  consentDate: timestamp("consent_date").notNull().defaultNow(),
+  expiresAt: timestamp("expires_at"), // Consent expiration date
+  ipAddress: text("ip_address"), // IP address at time of consent
+  userAgent: text("user_agent"), // Browser/device info for audit trail
+  consentMethod: text("consent_method").notNull(), // web_form, api, verbal, written
+  consentText: text("consent_text"), // Exact text user consented to
+  withdrawnAt: timestamp("withdrawn_at"), // When consent was withdrawn
+  withdrawalReason: text("withdrawal_reason"),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  userIdIdx: index("gdpr_consents_user_id_idx").on(table.userId),
+  purposeIdx: index("gdpr_consents_purpose_idx").on(table.purpose),
+  activeConsentIdx: index("gdpr_consents_active_idx").on(table.userId, table.purpose, table.consentGiven),
+}));
+
+// GDPR Data Subject Requests - Track GDPR right requests
+export const gdprDataSubjectRequests = pgTable("gdpr_data_subject_requests", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+  requestType: text("request_type").notNull(), // access, erasure, portability, rectification, restriction, objection
+  status: text("status").notNull().default("pending"), // pending, in_progress, completed, denied, cancelled
+  requestDate: timestamp("request_date").notNull().defaultNow(),
+  completedDate: timestamp("completed_date"),
+  dueDate: timestamp("due_date").notNull(), // 30-day deadline
+  requestedBy: varchar("requested_by").references(() => users.id), // User who made the request (could be different from subject)
+  handledBy: varchar("handled_by").references(() => users.id), // Staff member handling the request
+  verificationToken: text("verification_token"), // Token for identity verification
+  verificationCompleted: boolean("verification_completed").default(false),
+  verificationDate: timestamp("verification_date"),
+  requestDetails: jsonb("request_details"), // Specific details about the request
+  responseData: jsonb("response_data"), // Generated export data or response
+  denialReason: text("denial_reason"), // Reason if denied
+  notes: text("notes"),
+  remindersSent: integer("reminders_sent").default(0), // Track deadline reminders
+  lastReminderAt: timestamp("last_reminder_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  userIdIdx: index("gdpr_dsr_user_id_idx").on(table.userId),
+  statusIdx: index("gdpr_dsr_status_idx").on(table.status),
+  dueDateIdx: index("gdpr_dsr_due_date_idx").on(table.dueDate),
+  requestTypeIdx: index("gdpr_dsr_request_type_idx").on(table.requestType),
+}));
+
+// GDPR Data Processing Activities - Record of processing activities register
+export const gdprDataProcessingActivities = pgTable("gdpr_data_processing_activities", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  activityName: text("activity_name").notNull(),
+  activityCode: text("activity_code").notNull().unique(), // Unique identifier
+  purpose: text("purpose").notNull(), // Purpose of processing
+  dataCategories: text("data_categories").array().notNull(), // Types of personal data processed
+  dataSubjectCategories: text("data_subject_categories").array(), // Categories of individuals
+  legalBasis: text("legal_basis").notNull(), // consent, contract, legal_obligation, vital_interests, public_task, legitimate_interests
+  legalBasisDetails: text("legal_basis_details"),
+  retentionPeriod: text("retention_period").notNull(), // How long data is kept
+  retentionJustification: text("retention_justification"),
+  recipients: text("recipients").array(), // Who receives the data
+  recipientCategories: text("recipient_categories").array(), // Categories of recipients
+  crossBorderTransfer: boolean("cross_border_transfer").default(false),
+  transferCountries: text("transfer_countries").array(), // Countries data is transferred to
+  transferSafeguards: text("transfer_safeguards"), // Safeguards for cross-border transfers
+  dataMinimization: boolean("data_minimization").default(true),
+  securityMeasures: jsonb("security_measures"), // Technical and organizational measures
+  automatedDecisionMaking: boolean("automated_decision_making").default(false),
+  profilingUsed: boolean("profiling_used").default(false),
+  dpiaRequired: boolean("dpia_required").default(false), // Data Protection Impact Assessment required
+  dpiaId: varchar("dpia_id").references((): any => gdprPrivacyImpactAssessments.id),
+  responsiblePerson: varchar("responsible_person").references(() => users.id),
+  dataProtectionOfficer: varchar("data_protection_officer").references(() => users.id),
+  isActive: boolean("is_active").default(true).notNull(),
+  lastReviewDate: timestamp("last_review_date"),
+  nextReviewDate: timestamp("next_review_date"),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  activityCodeIdx: uniqueIndex("gdpr_dpa_activity_code_idx").on(table.activityCode),
+  legalBasisIdx: index("gdpr_dpa_legal_basis_idx").on(table.legalBasis),
+  activeIdx: index("gdpr_dpa_active_idx").on(table.isActive),
+  reviewDateIdx: index("gdpr_dpa_review_date_idx").on(table.nextReviewDate),
+}));
+
+// GDPR Privacy Impact Assessments - Track PIAs for high-risk processing
+export const gdprPrivacyImpactAssessments = pgTable("gdpr_privacy_impact_assessments", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  assessmentName: text("assessment_name").notNull(),
+  assessmentCode: text("assessment_code").notNull().unique(),
+  processingActivity: text("processing_activity").notNull(),
+  processingActivityId: varchar("processing_activity_id").references((): any => gdprDataProcessingActivities.id),
+  description: text("description").notNull(),
+  necessity: text("necessity").notNull(), // Why the processing is necessary
+  proportionality: text("proportionality").notNull(), // Is it proportionate to the purpose
+  riskLevel: text("risk_level").notNull(), // low, medium, high, critical
+  riskDescription: text("risk_description").notNull(),
+  risksIdentified: jsonb("risks_identified").notNull(), // Array of identified risks
+  impactOnRights: text("impact_on_rights").notNull(), // Impact on data subject rights
+  mitigations: jsonb("mitigations").notNull(), // Mitigation measures
+  residualRisk: text("residual_risk"), // Risk after mitigations
+  consultationRequired: boolean("consultation_required").default(false),
+  consultationDetails: text("consultation_details"),
+  assessmentDate: timestamp("assessment_date").notNull(),
+  reviewDate: timestamp("review_date"), // When to review again
+  nextReviewDue: timestamp("next_review_due"),
+  assessorId: varchar("assessor_id").references(() => users.id).notNull(),
+  approvedBy: varchar("approved_by").references(() => users.id),
+  approvalDate: timestamp("approval_date"),
+  status: text("status").notNull().default("draft"), // draft, in_review, approved, rejected, archived
+  dpoReviewed: boolean("dpo_reviewed").default(false),
+  dpoComments: text("dpo_comments"),
+  implementationStatus: text("implementation_status"), // not_started, in_progress, completed
+  isActive: boolean("is_active").default(true).notNull(),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  assessmentCodeIdx: uniqueIndex("gdpr_pia_assessment_code_idx").on(table.assessmentCode),
+  riskLevelIdx: index("gdpr_pia_risk_level_idx").on(table.riskLevel),
+  statusIdx: index("gdpr_pia_status_idx").on(table.status),
+  reviewDateIdx: index("gdpr_pia_review_date_idx").on(table.nextReviewDue),
+}));
+
+// GDPR Breach Incidents - Data breach tracking and notification
+export const gdprBreachIncidents = pgTable("gdpr_breach_incidents", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  incidentNumber: text("incident_number").notNull().unique(), // Unique incident ID
+  incidentDate: timestamp("incident_date").notNull(), // When breach occurred
+  discoveryDate: timestamp("discovery_date").notNull(), // When breach was discovered
+  reportedDate: timestamp("reported_date"), // When it was reported internally
+  description: text("description").notNull(),
+  natureOfBreach: text("nature_of_breach").notNull(), // unauthorized_access, loss, alteration, disclosure, etc.
+  causeOfBreach: text("cause_of_breach"), // human_error, malicious_attack, system_failure, etc.
+  affectedUsers: integer("affected_users").default(0), // Number of affected users
+  affectedUserIds: text("affected_user_ids").array(), // IDs of affected users
+  dataTypes: text("data_types").array().notNull(), // Types of data compromised
+  dataVolume: text("data_volume"), // Volume of data affected
+  severity: text("severity").notNull(), // low, medium, high, critical
+  riskAssessment: text("risk_assessment").notNull(), // Assessment of risk to individuals
+  likelyConsequences: text("likely_consequences"), // Likely impact on individuals
+  containmentActions: jsonb("containment_actions").notNull(), // Actions taken to contain breach
+  containmentDate: timestamp("containment_date"), // When breach was contained
+  mitigationMeasures: jsonb("mitigation_measures"), // Measures to mitigate effects
+  notificationsSent: boolean("notifications_sent").default(false),
+  userNotificationDate: timestamp("user_notification_date"), // When users were notified
+  userNotificationMethod: text("user_notification_method"), // email, letter, phone, etc.
+  reportedToAuthority: boolean("reported_to_authority").default(false),
+  reportedToAuthorityDate: timestamp("reported_to_authority_date"), // When DPA was notified
+  authorityName: text("authority_name"), // Which authority was notified
+  authorityReferenceNumber: text("authority_reference_number"),
+  reportWithin72Hours: boolean("report_within_72_hours"), // Met 72-hour requirement
+  delayJustification: text("delay_justification"), // If reported after 72 hours
+  externalPartiesNotified: boolean("external_parties_notified").default(false),
+  externalPartiesDetails: jsonb("external_parties_details"), // Law enforcement, etc.
+  mediaInvolvement: boolean("media_involvement").default(false),
+  status: text("status").notNull().default("open"), // open, contained, resolved, closed
+  incidentOwner: varchar("incident_owner").references(() => users.id).notNull(),
+  investigatedBy: varchar("investigated_by").references(() => users.id),
+  closedBy: varchar("closed_by").references(() => users.id),
+  closedDate: timestamp("closed_date"),
+  lessonsLearned: text("lessons_learned"),
+  preventiveMeasures: jsonb("preventive_measures"), // Measures to prevent recurrence
+  documents: jsonb("documents"), // Links to related documents
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  incidentNumberIdx: uniqueIndex("gdpr_breach_incident_number_idx").on(table.incidentNumber),
+  severityIdx: index("gdpr_breach_severity_idx").on(table.severity),
+  statusIdx: index("gdpr_breach_status_idx").on(table.status),
+  discoveryDateIdx: index("gdpr_breach_discovery_date_idx").on(table.discoveryDate),
+  reportedToAuthorityIdx: index("gdpr_breach_reported_authority_idx").on(table.reportedToAuthority),
+}));
+
 // Insert schemas for State Configuration
 export const insertStateConfigurationSchema = createInsertSchema(stateConfigurations).omit({
   id: true,
@@ -6632,6 +6816,37 @@ export const insertCrossStateRuleApplicationSchema = createInsertSchema(crossSta
   updatedAt: true,
 });
 
+// Insert schemas for GDPR Compliance
+export const insertGdprConsentSchema = createInsertSchema(gdprConsents).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertGdprDataSubjectRequestSchema = createInsertSchema(gdprDataSubjectRequests).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertGdprDataProcessingActivitySchema = createInsertSchema(gdprDataProcessingActivities).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertGdprPrivacyImpactAssessmentSchema = createInsertSchema(gdprPrivacyImpactAssessments).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertGdprBreachIncidentSchema = createInsertSchema(gdprBreachIncidents).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
 // Types for State Configuration
 export type StateConfiguration = typeof stateConfigurations.$inferSelect;
 export type InsertStateConfiguration = z.infer<typeof insertStateConfigurationSchema>;
@@ -6653,3 +6868,15 @@ export type MultiStateHousehold = typeof multiStateHouseholds.$inferSelect;
 export type InsertMultiStateHousehold = z.infer<typeof insertMultiStateHouseholdSchema>;
 export type CrossStateRuleApplication = typeof crossStateRuleApplications.$inferSelect;
 export type InsertCrossStateRuleApplication = z.infer<typeof insertCrossStateRuleApplicationSchema>;
+
+// Types for GDPR Compliance
+export type GdprConsent = typeof gdprConsents.$inferSelect;
+export type InsertGdprConsent = z.infer<typeof insertGdprConsentSchema>;
+export type GdprDataSubjectRequest = typeof gdprDataSubjectRequests.$inferSelect;
+export type InsertGdprDataSubjectRequest = z.infer<typeof insertGdprDataSubjectRequestSchema>;
+export type GdprDataProcessingActivity = typeof gdprDataProcessingActivities.$inferSelect;
+export type InsertGdprDataProcessingActivity = z.infer<typeof insertGdprDataProcessingActivitySchema>;
+export type GdprPrivacyImpactAssessment = typeof gdprPrivacyImpactAssessments.$inferSelect;
+export type InsertGdprPrivacyImpactAssessment = z.infer<typeof insertGdprPrivacyImpactAssessmentSchema>;
+export type GdprBreachIncident = typeof gdprBreachIncidents.$inferSelect;
+export type InsertGdprBreachIncident = z.infer<typeof insertGdprBreachIncidentSchema>;

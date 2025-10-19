@@ -261,6 +261,21 @@ import {
   crossStateRuleApplications,
   type CrossStateRuleApplication,
   type InsertCrossStateRuleApplication,
+  gdprConsents,
+  type GdprConsent,
+  type InsertGdprConsent,
+  gdprDataSubjectRequests,
+  type GdprDataSubjectRequest,
+  type InsertGdprDataSubjectRequest,
+  gdprDataProcessingActivities,
+  type GdprDataProcessingActivity,
+  type InsertGdprDataProcessingActivity,
+  gdprPrivacyImpactAssessments,
+  type GdprPrivacyImpactAssessment,
+  type InsertGdprPrivacyImpactAssessment,
+  gdprBreachIncidents,
+  type GdprBreachIncident,
+  type InsertGdprBreachIncident,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and, ilike, sql, or, isNull, lte, gte, inArray } from "drizzle-orm";
@@ -974,6 +989,69 @@ export interface IStorage {
   createCrossStateRuleApplication(application: InsertCrossStateRuleApplication): Promise<CrossStateRuleApplication>;
   updateCrossStateRuleApplication(id: string, updates: Partial<CrossStateRuleApplication>): Promise<CrossStateRuleApplication>;
   deleteCrossStateRuleApplication(id: string): Promise<void>;
+
+  // ============================================================================
+  // GDPR Compliance - Data Protection and Privacy Management
+  // ============================================================================
+
+  // GDPR Consents
+  createGdprConsent(consent: InsertGdprConsent): Promise<GdprConsent>;
+  getGdprConsent(id: string): Promise<GdprConsent | undefined>;
+  getGdprConsents(userId: string, filters?: { purpose?: string; consentGiven?: boolean }): Promise<GdprConsent[]>;
+  getActiveConsent(userId: string, purpose: string): Promise<GdprConsent | undefined>;
+  updateGdprConsent(id: string, updates: Partial<GdprConsent>): Promise<GdprConsent>;
+  withdrawConsent(userId: string, purpose: string, reason?: string): Promise<GdprConsent>;
+
+  // GDPR Data Subject Requests
+  createGdprDataSubjectRequest(request: InsertGdprDataSubjectRequest): Promise<GdprDataSubjectRequest>;
+  getGdprDataSubjectRequest(id: string): Promise<GdprDataSubjectRequest | undefined>;
+  getGdprDataSubjectRequests(filters?: { 
+    userId?: string; 
+    requestType?: string; 
+    status?: string;
+    dueBefore?: Date;
+  }): Promise<GdprDataSubjectRequest[]>;
+  updateGdprDataSubjectRequest(id: string, updates: Partial<GdprDataSubjectRequest>): Promise<GdprDataSubjectRequest>;
+  getOverdueDataSubjectRequests(): Promise<GdprDataSubjectRequest[]>;
+
+  // GDPR Data Processing Activities
+  createGdprDataProcessingActivity(activity: InsertGdprDataProcessingActivity): Promise<GdprDataProcessingActivity>;
+  getGdprDataProcessingActivity(id: string): Promise<GdprDataProcessingActivity | undefined>;
+  getGdprDataProcessingActivityByCode(activityCode: string): Promise<GdprDataProcessingActivity | undefined>;
+  getGdprDataProcessingActivities(filters?: { 
+    isActive?: boolean; 
+    legalBasis?: string;
+    crossBorderTransfer?: boolean;
+    dpiaRequired?: boolean;
+  }): Promise<GdprDataProcessingActivity[]>;
+  updateGdprDataProcessingActivity(id: string, updates: Partial<GdprDataProcessingActivity>): Promise<GdprDataProcessingActivity>;
+  deleteGdprDataProcessingActivity(id: string): Promise<void>;
+
+  // GDPR Privacy Impact Assessments
+  createGdprPrivacyImpactAssessment(pia: InsertGdprPrivacyImpactAssessment): Promise<GdprPrivacyImpactAssessment>;
+  getGdprPrivacyImpactAssessment(id: string): Promise<GdprPrivacyImpactAssessment | undefined>;
+  getGdprPrivacyImpactAssessmentByCode(assessmentCode: string): Promise<GdprPrivacyImpactAssessment | undefined>;
+  getGdprPrivacyImpactAssessments(filters?: { 
+    status?: string; 
+    riskLevel?: string;
+    processingActivityId?: string;
+    reviewDueBefore?: Date;
+  }): Promise<GdprPrivacyImpactAssessment[]>;
+  updateGdprPrivacyImpactAssessment(id: string, updates: Partial<GdprPrivacyImpactAssessment>): Promise<GdprPrivacyImpactAssessment>;
+  deleteGdprPrivacyImpactAssessment(id: string): Promise<void>;
+
+  // GDPR Breach Incidents
+  createGdprBreachIncident(incident: InsertGdprBreachIncident): Promise<GdprBreachIncident>;
+  getGdprBreachIncident(id: string): Promise<GdprBreachIncident | undefined>;
+  getGdprBreachIncidentByNumber(incidentNumber: string): Promise<GdprBreachIncident | undefined>;
+  getGdprBreachIncidents(filters?: { 
+    status?: string; 
+    severity?: string;
+    reportedToAuthority?: boolean;
+    affectsUser?: string;
+  }): Promise<GdprBreachIncident[]>;
+  updateGdprBreachIncident(id: string, updates: Partial<GdprBreachIncident>): Promise<GdprBreachIncident>;
+  getUnreportedBreaches(): Promise<GdprBreachIncident[]>;
 }
 
 export class DatabaseStorage implements IStorage {

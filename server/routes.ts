@@ -10708,6 +10708,12 @@ If the question cannot be answered with the available information, say so clearl
   // ============================================================================
   registerCrossStateRulesRoutes(app);
 
+  // ============================================================================
+  // Mount GDPR Compliance Routes - Data Subject Rights & Privacy
+  // ============================================================================
+  const gdprRouter = (await import('./routes/gdpr.routes')).default;
+  app.use('/api/gdpr', gdprRouter);
+
   const httpServer = createServer(app);
   
   // Initialize WebSocket service for real-time notifications
