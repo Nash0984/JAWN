@@ -29,6 +29,7 @@ import PolicySources from "@/pages/PolicySources";
 import AIMonitoring from "@/pages/AIMonitoring";
 import SecurityMonitoring from "@/pages/SecurityMonitoring";
 import AuditLogs from "@/pages/AuditLogs";
+import MAIVEDashboard from "@/pages/MAIVEDashboard";
 import ApiDocs from "@/pages/ApiDocs";
 import Monitoring from "@/pages/admin/Monitoring";
 import EFileMonitoring from "@/pages/admin/EFileMonitoring";
@@ -384,6 +385,13 @@ function Router() {
             {() => (
               <ProtectedRoute>
                 <AIMonitoring />
+              </ProtectedRoute>
+            )}
+          </Route>
+          <Route path="/admin/maive">
+            {() => (
+              <ProtectedRoute requireAdmin>
+                <MAIVEDashboard />
               </ProtectedRoute>
             )}
           </Route>

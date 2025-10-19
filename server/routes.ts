@@ -10636,6 +10636,15 @@ If the question cannot be answered with the available information, say so clearl
     res.json(metrics);
   }));
 
+  // ============================================================================
+  // Mount MAIVE Routes
+  // ============================================================================
+  const maiveRouter = (await import('./api/maive.routes')).default;
+  app.use('/api/maive', (req: any, res, next) => {
+    req.storage = storage; // Attach storage to request
+    next();
+  }, maiveRouter);
+
   const httpServer = createServer(app);
   
   // Initialize WebSocket service for real-time notifications
