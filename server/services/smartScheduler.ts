@@ -280,11 +280,16 @@ export class SmartScheduler {
         log(displayText);
         log(`   ${config.description}`);
         
-        // Run initial check immediately for non-session-aware sources
-        // Session-aware sources check their own status
-        if (!config.sessionAware) {
-          await config.checkFunction();
-        }
+        // OPTIMIZATION: Defer initial checks to background (run after 5 seconds)
+        // This prevents blocking server startup with long-running downloads/API calls
+        // Session-aware sources check their own status before running
+        setTimeout(async () => {
+          try {
+            await config.checkFunction();
+          } catch (error) {
+            log(`❌ Initial background check failed for ${config.name}: ${error}`);
+          }
+        }, 5000); // Run first check 5 seconds after startup
         
         // Schedule periodic checks
         const interval = setInterval(async () => {
