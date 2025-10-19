@@ -158,9 +158,10 @@ class QCAnalyticsService {
             model: "gemini-1.5-pro",
             contents: [{ role: 'user', parts: [{ text: prompt }] }]
           });
+          const responseText = response.text;
           
           // Parse AI response
-          const jsonMatch = response.text?.match(/\{[\s\S]*\}/);
+          const jsonMatch = responseText?.match(/\{[\s\S]*\}/);
           if (jsonMatch) {
             aiAnalysis = JSON.parse(jsonMatch[0]);
           }

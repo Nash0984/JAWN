@@ -10651,6 +10651,36 @@ If the question cannot be answered with the available information, say so clearl
   const qcAnalyticsRouter = (await import('./api/qcAnalytics.routes')).default;
   app.use('/api/qc-analytics', qcAnalyticsRouter);
 
+  // ============================================================================
+  // Mount Benefits Navigation Routes
+  // ============================================================================
+  const benefitsNavigationRouter = (await import('./api/benefitsNavigation.routes')).default;
+  app.use('/api/benefits-navigation', benefitsNavigationRouter);
+
+  // ============================================================================
+  // Mount Decision Points Routes
+  // ============================================================================
+  const decisionPointsRouter = (await import('./api/decisionPoints.routes')).default;
+  app.use('/api/decision-points', decisionPointsRouter);
+
+  // ============================================================================
+  // Mount Info Cost Reduction Routes
+  // ============================================================================
+  const infoCostReductionRouter = (await import('./api/infoCostReduction.routes')).default;
+  app.use('/api/info-cost-reduction', infoCostReductionRouter);
+
+  // ============================================================================
+  // Mount Multi-State Rules Routes
+  // ============================================================================
+  const multiStateRulesRouter = (await import('./api/multiStateRules.routes')).default;
+  app.use('/api/multi-state-rules', multiStateRulesRouter);
+
+  // ============================================================================
+  // Mount Cross-Enrollment Intelligence Routes
+  // ============================================================================
+  const crossEnrollmentRouter = (await import('./api/crossEnrollment.routes')).default;
+  app.use('/api/cross-enrollment', crossEnrollmentRouter);
+
   const httpServer = createServer(app);
   
   // Initialize WebSocket service for real-time notifications
