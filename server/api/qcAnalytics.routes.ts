@@ -33,9 +33,9 @@ router.get('/patterns', requireAuth, asyncHandler(async (req: Request, res: Resp
 }));
 
 // Analyze specific case
-router.get('/case/:householdId', requireAuth, asyncHandler(async (req: Request, res: Response) => {
-  const { householdId } = req.params;
-  const analysis = await qcAnalyticsService.analyzeCase(householdId);
+router.get('/case/:caseId', requireAuth, asyncHandler(async (req: Request, res: Response) => {
+  const { caseId } = req.params;
+  const analysis = await qcAnalyticsService.analyzeCase(caseId);
   
   if (!analysis) {
     return res.status(404).json({ error: 'Case not found' });
@@ -48,11 +48,12 @@ router.get('/case/:householdId', requireAuth, asyncHandler(async (req: Request, 
 router.get('/flagged-cases', requireAuth, asyncHandler(async (req: Request, res: Response) => {
   const { limit = 20, riskLevel } = req.query;
   
-  // For now, analyze recent households
-  // In production, would maintain a flagged cases table
-  const mockHouseholdIds = ['household_1', 'household_2', 'household_3'];
+  // Get recent cases from database
+  const recentCases = await qcAnalyticsService.getRecentCases(Number(limit));
+  
+  // Analyze each case for risk
   const cases = await Promise.all(
-    mockHouseholdIds.map(id => qcAnalyticsService.analyzeCase(id))
+    recentCases.map(c => qcAnalyticsService.analyzeCase(c.id))
   );
   
   const filteredCases = cases
