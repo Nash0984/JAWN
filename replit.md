@@ -39,9 +39,12 @@ Production-ready components include Form 1040 and Maryland Form 502 PDF generato
 -   **Data Management**: PostgreSQL for core data, Google Cloud Storage for files.
 -   **Authentication & Authorization**: Basic user authentication with roles, object-level security, and CSRF protection.
 -   **Production Security Hardening**: Field-level encryption (AES-256-GCM), secure file uploads, strong password enforcement, enhanced session security, CORS hardening, security headers, XSS sanitization, SQL injection protection, and a Security Monitoring Dashboard.
+-   **Enterprise Compliance Framework**: 
+    -   **GDPR Compliance**: Complete data subject rights management (access, erasure, portability, rectification), consent tracking with granular purposes, 72-hour breach notification system, privacy impact assessments (DPIA), data processing activities register, and automated 30-day deadline tracking for data subject requests.
+    -   **HIPAA Compliance**: PHI access logging with minimum necessary standard, Business Associate Agreement (BAA) tracking, Security Risk Assessments (SRA), security incident management with breach threshold detection (>500 individuals), comprehensive audit trails with 7-year retention, and HHS/media notification workflows.
 -   **Production Readiness & Hardening**: Health check endpoints, role-based rate limiting, DoS protection, database connection pooling, and graceful shutdown.
 -   **Unified Household Profiler**: Single profile for benefits and tax workflows.
--   **Performance Optimization**: Server-side caching (Rules Engine, PolicyEngine API responses), extensive database indexing (135+ indexes).
+-   **Performance Optimization**: Server-side caching (Rules Engine, PolicyEngine API responses), extensive database indexing (145+ indexes including compliance tables).
 -   **Maryland Rules-as-Code Architecture**: Maryland rules engines are the primary determination system, with PolicyEngine serving as a third-party verifier. This includes SNAP, OHEP, TANF, Medicaid, and VITA Tax rules engines, integrated via a hybrid service layer and rules engine adapter.
 -   **Testing**: Vitest, @testing-library/react, and supertest.
 
