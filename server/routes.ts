@@ -10714,6 +10714,12 @@ If the question cannot be answered with the available information, say so clearl
   const gdprRouter = (await import('./routes/gdpr.routes')).default;
   app.use('/api/gdpr', gdprRouter);
 
+  // ============================================================================
+  // Mount HIPAA Compliance Routes - Healthcare Data Protection & PHI Security
+  // ============================================================================
+  const hipaaRouter = (await import('./routes/hipaa.routes')).default;
+  app.use('/api/hipaa', hipaaRouter);
+
   const httpServer = createServer(app);
   
   // Initialize WebSocket service for real-time notifications
