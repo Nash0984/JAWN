@@ -35,6 +35,15 @@ import { ProductionValidator } from "./utils/productionValidation";
 import "./utils/piiMasking"; // Import early to override console methods with PII redaction
 
 // ============================================================================
+// PRODUCTION INFRASTRUCTURE IMPORTS
+// ============================================================================
+import { distributedCache } from "./services/distributedCache";
+import { connectionPool } from "./services/connectionPool";
+import { webSocketService } from "./services/scalableWebSocket";
+import { prometheusMetricsHandler, httpMetricsMiddleware } from "./services/prometheusExporter";
+import { registry } from "./services/universalFeatureRegistry";
+
+// ============================================================================
 // ENVIRONMENT VALIDATION - Validate required environment variables on startup
 // ============================================================================
 const envValidation = EnvValidator.validate();
@@ -126,6 +135,9 @@ app.use(performanceMonitoringMiddleware());
 // Add request logging middleware
 app.use(requestLoggerMiddleware());
 
+// Add Prometheus metrics middleware for production monitoring
+app.use(httpMetricsMiddleware());
+
 // Session configuration
 if (!process.env.SESSION_SECRET) {
   console.error("❌ FATAL: SESSION_SECRET environment variable is required for secure session management");
@@ -206,6 +218,11 @@ app.get("/api/health", async (req, res) => {
   }
 });
 
+// ============================================================================
+// PROMETHEUS METRICS ENDPOINT - Production monitoring metrics
+// ============================================================================
+app.get("/metrics", prometheusMetricsHandler);
+
 // Endpoint to get CSRF token (before county context middleware)
 app.get("/api/csrf-token", (req, res) => {
   try {
@@ -261,6 +278,20 @@ app.use("/api/", (req, res, next) => {
   app.use(getSentryRequestHandler()); // Request context and tracing
   app.use(getSentryTracingHandler()); // Performance monitoring
   
+  // ============================================================================
+  // INITIALIZE PRODUCTION INFRASTRUCTURE
+  // ============================================================================
+  // Initialize distributed cache
+  try {
+    await distributedCache.initialize();
+    console.log("✅ Distributed cache initialized");
+  } catch (error) {
+    console.error("⚠️  Distributed cache initialization failed, using in-memory fallback:", error);
+  }
+  
+  // Connection pool initializes automatically via singleton pattern
+  console.log("✅ Production connection pool ready");
+  
   // Initialize system data (benefit programs, etc.)
   await initializeSystemData();
   
@@ -277,6 +308,14 @@ app.use("/api/", (req, res, next) => {
   }
   
   const server = await registerRoutes(app, sessionMiddleware);
+  
+  // Initialize WebSocket service with Redis Pub/Sub for scaling
+  try {
+    await webSocketService.initialize(server);
+    console.log("✅ Scalable WebSocket service initialized");
+  } catch (error) {
+    console.error("⚠️  WebSocket service initialization failed:", error);
+  }
 
   // importantly only setup vite in development and after
   // setting up all the other routes so the catch-all route

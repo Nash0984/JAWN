@@ -1,7 +1,12 @@
-import { Pool, PoolConfig, PoolClient } from 'pg';
+import pg from 'pg';
+const { Pool } = pg;
 import { drizzle, NeonHttpDatabase } from 'drizzle-orm/neon-http';
 import { neon, NeonQueryFunction } from '@neondatabase/serverless';
 import * as schema from '../../shared/schema';
+
+// Type definitions for pg module
+type PoolConfig = any;
+type PoolClient = any;
 
 // Connection pool configuration for production scale
 const POOL_CONFIG: PoolConfig = {
