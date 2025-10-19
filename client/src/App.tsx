@@ -92,6 +92,7 @@ import { TenantThemeProvider } from "@/components/TenantThemeProvider";
 import Footer from "@/components/Footer";
 import Demo from "@/pages/Demo";
 import APIExplorer from "@/pages/APIExplorer";
+import Developers from "@/pages/Developers";
 
 function Router() {
   const [location] = useLocation();
@@ -128,6 +129,9 @@ function Router() {
           
           {/* API Explorer - Public access (no login required) */}
           <Route path="/api-explorer" component={APIExplorer} />
+          
+          {/* Developer Guide - Public access (no login required) */}
+          <Route path="/developers" component={Developers} />
           
           {/* Public Portal - No login required */}
           <Route path="/public/documents" component={DocumentChecklist} />
