@@ -1,11 +1,5 @@
-import NodeCache from 'node-cache';
+import { distributedCache } from './distributedCache';
 import crypto from 'crypto';
-
-const cache = new NodeCache({
-  stdTTL: 300, // 5 minutes default TTL
-  checkperiod: 60,
-  useClones: false,
-});
 
 // Generate deterministic hash for household data to use as cache key
 // Uses deep serialization to handle nested objects correctly
@@ -30,30 +24,42 @@ export function generateHouseholdHash(householdData: any): string {
 }
 
 export const cacheService = {
-  get<T>(key: string): T | undefined {
-    return cache.get<T>(key);
+  async get<T>(key: string): Promise<T | null> {
+    return await distributedCache.get('general', key);
   },
 
-  set<T>(key: string, value: T, ttl?: number): boolean {
-    return cache.set(key, value, ttl || 300);
+  async set<T>(key: string, value: T, ttl?: number): Promise<boolean> {
+    await distributedCache.set('general', key, value, ttl || 300);
+    return true;
   },
 
-  del(keys: string | string[]): number {
-    return cache.del(keys);
+  async del(keys: string | string[]): Promise<number> {
+    const keysArray = Array.isArray(keys) ? keys : [keys];
+    let deleted = 0;
+    for (const key of keysArray) {
+      const result = await distributedCache.delete('general', key);
+      if (result) deleted++;
+    }
+    return deleted;
   },
 
-  flush(): void {
-    cache.flushAll();
+  async flush(): Promise<void> {
+    await distributedCache.clear('general');
   },
 
-  keys(): string[] {
-    return cache.keys();
+  async keys(): Promise<string[]> {
+    return await distributedCache.keys('general');
   },
 
-  invalidatePattern(pattern: string): number {
-    const keys = cache.keys();
+  async invalidatePattern(pattern: string): Promise<number> {
+    const keys = await distributedCache.keys('general');
     const matchingKeys = keys.filter(key => key.includes(pattern));
-    return cache.del(matchingKeys);
+    let deleted = 0;
+    for (const key of matchingKeys) {
+      const result = await distributedCache.delete('general', key);
+      if (result) deleted++;
+    }
+    return deleted;
   },
 };
 
@@ -74,14 +80,14 @@ export const CACHE_KEYS = {
   HYBRID_SUMMARY: (householdHash: string) => `hybrid:summary:${householdHash}`,
 };
 
-export const invalidateRulesCache = (programId: number) => {
-  cacheService.del([
+export const invalidateRulesCache = async (programId: number) => {
+  await cacheService.del([
     CACHE_KEYS.INCOME_LIMITS(programId),
     CACHE_KEYS.DEDUCTIONS(programId),
     CACHE_KEYS.ALLOTMENTS(programId),
     CACHE_KEYS.CATEGORICAL_ELIGIBILITY(programId),
     CACHE_KEYS.DOCUMENT_REQUIREMENTS(programId),
   ]);
-  cacheService.invalidatePattern(`manual_section`);
-  cacheService.invalidatePattern(`manual_sections:${programId}`);
+  await cacheService.invalidatePattern(`manual_section`);
+  await cacheService.invalidatePattern(`manual_sections:${programId}`);
 };
