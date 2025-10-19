@@ -26,7 +26,7 @@ import { GoogleGenAI } from '@google/genai';
 import { cacheService } from './cacheService';
 
 const gemini = process.env.GEMINI_API_KEY 
-  ? new GoogleGenAI(process.env.GEMINI_API_KEY)
+  ? new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY })
   : null;
 
 export interface ErrorPattern {
@@ -87,8 +87,6 @@ export interface QCMetrics {
 }
 
 class QCAnalyticsService {
-  private model = gemini?.getGenerativeModel({ model: "gemini-pro" });
-  
   /**
    * Get recent cases for analysis
    */
@@ -136,7 +134,7 @@ class QCAnalyticsService {
 
       // Use AI to analyze the case if Gemini is available
       let aiAnalysis = null;
-      if (this.model) {
+      if (gemini) {
         const prompt = `
           Analyze this client case for quality control risk factors:
           
@@ -156,12 +154,13 @@ class QCAnalyticsService {
         `;
 
         try {
-          const result = await this.model.generateContent(prompt);
-          const response = await result.response;
-          const text = response.text();
+          const response = await gemini.models.generateContent({
+            model: "gemini-1.5-pro",
+            contents: [{ role: 'user', parts: [{ text: prompt }] }]
+          });
           
           // Parse AI response
-          const jsonMatch = text.match(/\{[\s\S]*\}/);
+          const jsonMatch = response.text?.match(/\{[\s\S]*\}/);
           if (jsonMatch) {
             aiAnalysis = JSON.parse(jsonMatch[0]);
           }
@@ -228,7 +227,7 @@ class QCAnalyticsService {
 
       // Use AI to analyze patterns if available
       let aiPatterns: ErrorPattern[] = [];
-      if (this.model && errorGroups.length > 0) {
+      if (gemini && errorGroups.length > 0) {
         const prompt = `
           Analyze these error patterns for quality control:
           
@@ -245,9 +244,11 @@ class QCAnalyticsService {
         `;
 
         try {
-          const result = await this.model.generateContent(prompt);
-          const response = await result.response;
-          const text = response.text();
+          const response = await gemini.models.generateContent({
+            model: "gemini-1.5-pro",
+            contents: [{ role: 'user', parts: [{ text: prompt }] }]
+          });
+          const text = response.text;
           
           const jsonMatch = text.match(/\[[\s\S]*\]/);
           if (jsonMatch) {
@@ -331,7 +332,7 @@ class QCAnalyticsService {
 
       // Use AI for performance analysis if available
       let aiAnalysis = null;
-      if (this.model) {
+      if (gemini) {
         const prompt = `
           Analyze caseworker performance:
           
@@ -352,9 +353,11 @@ class QCAnalyticsService {
         `;
 
         try {
-          const result = await this.model.generateContent(prompt);
-          const response = await result.response;
-          const text = response.text();
+          const response = await gemini.models.generateContent({
+            model: "gemini-1.5-pro",
+            contents: [{ role: 'user', parts: [{ text: prompt }] }]
+          });
+          const text = response.text;
           
           const jsonMatch = text.match(/\{[\s\S]*\}/);
           if (jsonMatch) {
@@ -415,7 +418,7 @@ class QCAnalyticsService {
 
       // Use AI for predictions if available
       let aiPrediction = null;
-      if (this.model) {
+      if (gemini) {
         const prompt = `
           Based on these QC metrics:
           - Total errors last 30 days: ${totalErrors}
@@ -433,9 +436,11 @@ class QCAnalyticsService {
         `;
 
         try {
-          const result = await this.model.generateContent(prompt);
-          const response = await result.response;
-          const text = response.text();
+          const response = await gemini.models.generateContent({
+            model: "gemini-1.5-pro",
+            contents: [{ role: 'user', parts: [{ text: prompt }] }]
+          });
+          const text = response.text;
           
           const jsonMatch = text.match(/\{[\s\S]*\}/);
           if (jsonMatch) {
@@ -510,9 +515,11 @@ class QCAnalyticsService {
         `;
 
         try {
-          const result = await this.model.generateContent(prompt);
-          const response = await result.response;
-          const text = response.text();
+          const response = await gemini.models.generateContent({
+            model: "gemini-1.5-pro",
+            contents: [{ role: 'user', parts: [{ text: prompt }] }]
+          });
+          const text = response.text;
           
           const jsonMatch = text.match(/\[[\s\S]*\]/);
           if (jsonMatch) {
