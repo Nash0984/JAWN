@@ -1,0 +1,196 @@
+config:
+  target: "http://localhost:5000"
+  phases:
+    # Warm up phase
+    - duration: 30
+      arrivalRate: 10
+      name: "Warm up"
+    
+    # Ramp up to 100 users
+    - duration: 30
+      arrivalRate: 10
+      rampTo: 100
+      name: "Ramp to 100 users/sec"
+    
+    # Ramp up to 500 users
+    - duration: 30
+      arrivalRate: 100
+      rampTo: 500
+      name: "Ramp to 500 users/sec"
+    
+    # Ramp up to 1000 users  
+    - duration: 30
+      arrivalRate: 500
+      rampTo: 1000
+      name: "Ramp to 1000 users/sec"
+    
+    # Ramp up to 2500 users
+    - duration: 60
+      arrivalRate: 1000
+      rampTo: 2500
+      name: "Ramp to 2500 users/sec"
+    
+    # Sustained load at 2500 users
+    - duration: 180
+      arrivalRate: 2500
+      name: "Sustained 2500 users/sec"
+    
+    # Cool down
+    - duration: 60
+      arrivalRate: 2500
+      rampTo: 10
+      name: "Cool down"
+      
+  payload:
+    - path: "./test-data.csv"
+      fields:
+        - "username"
+        - "password"
+        - "county"
+        - "householdSize"
+        - "monthlyIncome"
+      
+  variables:
+    authToken: ""
+    
+  processor: "./artillery-processor.js"
+  
+  http:
+    timeout: 10
+    
+  plugins:
+    metrics-by-endpoint: {}
+    expect: {}
+    
+  ensure:
+    p95: 1000      # 95th percentile under 1 second
+    p99: 2000      # 99th percentile under 2 seconds
+    maxErrorRate: 5 # Max 5% error rate
+
+scenarios:
+  # Health check scenario
+  - name: "Health Check"
+    weight: 5
+    flow:
+      - get:
+          url: "/api/health"
+          expect:
+            - statusCode: 200
+            
+  # Public API scenario
+  - name: "Public API Access"
+    weight: 30
+    flow:
+      - get:
+          url: "/api/programs"
+          expect:
+            - statusCode: 200
+            - contentType: json
+          capture:
+            - json: "$"
+              as: programs
+              
+      - think: 2
+      
+      - get:
+          url: "/api/counties"
+          expect:
+            - statusCode: 200
+            
+      - think: 1
+      
+      - get:
+          url: "/api/glossary"
+          expect:
+            - statusCode: 200
+            
+  # Authenticated user scenario
+  - name: "Authenticated User Flow"
+    weight: 40
+    flow:
+      - post:
+          url: "/api/auth/login"
+          json:
+            username: "{{ username }}"
+            password: "{{ password }}"
+          capture:
+            - json: "$.token"
+              as: authToken
+              
+      - get:
+          url: "/api/benefits/snap/eligibility"
+          headers:
+            Authorization: "Bearer {{ authToken }}"
+          expect:
+            - statusCode: 200
+            
+      - think: 2
+      
+      - get:
+          url: "/api/benefits/medicaid/eligibility"
+          headers:
+            Authorization: "Bearer {{ authToken }}"
+          expect:
+            - statusCode: 200
+            
+      - think: 1
+      
+      - get:
+          url: "/api/policy-documents"
+          headers:
+            Authorization: "Bearer {{ authToken }}"
+          expect:
+            - statusCode: 200
+            
+  # Benefit screening scenario
+  - name: "Benefit Screening"
+    weight: 15
+    flow:
+      - post:
+          url: "/api/benefits/snap/screen"
+          json:
+            county: "{{ county }}"
+            householdSize: "{{ householdSize }}"
+            monthlyIncome: "{{ monthlyIncome }}"
+            hasChildren: true
+            hasElderly: false
+            hasDisabled: false
+          expect:
+            - statusCode: 200
+            - contentType: json
+            - hasProperty: eligible
+            
+      - think: 2
+      
+      - post:
+          url: "/api/benefits/medicaid/screen"
+          json:
+            county: "{{ county }}"
+            householdSize: "{{ householdSize }}"
+            monthlyIncome: "{{ monthlyIncome }}"
+          expect:
+            - statusCode: 200
+            
+  # Search scenario
+  - name: "Search Operations"
+    weight: 10
+    flow:
+      - get:
+          url: "/api/search?q=SNAP%20eligibility"
+          expect:
+            - statusCode: 200
+            - contentType: json
+            
+      - think: 1
+      
+      - get:
+          url: "/api/search?q=Medicaid%20application"
+          expect:
+            - statusCode: 200
+            
+      - think: 1
+      
+      - get:
+          url: "/api/search?q=tax%20credits"
+          expect:
+            - statusCode: 200
