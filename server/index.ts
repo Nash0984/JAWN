@@ -176,8 +176,10 @@ const csrfProtection = doubleCsrf({
 });
 
 // ============================================================================
-// HEALTH CHECK ENDPOINT - Database connectivity and system status
+// HEALTH CHECK ENDPOINTS - Database connectivity and system status
 // ============================================================================
+
+// Basic health check (fast, minimal overhead)
 app.get("/api/health", async (req, res) => {
   try {
     // Check database connectivity
@@ -197,6 +199,27 @@ app.get("/api/health", async (req, res) => {
       timestamp: new Date().toISOString(),
       database: "disconnected",
       error: "Database connection failed",
+    });
+  }
+});
+
+// Detailed health check (comprehensive service and dependency status)
+app.get("/api/health/detailed", async (req, res) => {
+  try {
+    const { healthCheckService } = await import("./services/healthCheckService");
+    const healthStatus = await healthCheckService.checkAll();
+    
+    // Return appropriate status code based on health
+    const statusCode = healthStatus.status === 'unhealthy' ? 503 : 200;
+    
+    res.status(statusCode).json(healthStatus);
+  } catch (error) {
+    console.error("❌ Detailed health check failed:", error);
+    res.status(500).json({
+      status: "unhealthy",
+      timestamp: new Date().toISOString(),
+      error: "Health check service failed",
+      message: error instanceof Error ? error.message : "Unknown error",
     });
   }
 });
