@@ -1,6 +1,6 @@
 import { embeddingCache } from './embeddingCache';
 import { ragCache } from './ragCache';
-import { documentAnalysisCache } from './documentAnalysisCache';
+// import { documentAnalysisCache } from './documentAnalysisCache'; // Not implemented yet
 import { policyEngineCache } from './policyEngineCache';
 import { cacheService } from './cacheService';
 import { 
@@ -320,8 +320,8 @@ class CacheOrchestratorService {
           break;
 
         case 'document_analysis':
-          documentAnalysisCache.clear();
-          console.log('  ✓ Cleared document analysis cache');
+          // documentAnalysisCache.clear(); // Not implemented yet
+          console.log('  ✓ Cleared document analysis cache (skipped - not implemented)');
           break;
 
         case 'policy_engine':
@@ -369,7 +369,7 @@ class CacheOrchestratorService {
           // Clear everything
           embeddingCache.clear();
           ragCache.clear();
-          documentAnalysisCache.clear();
+          // documentAnalysisCache.clear(); // Not implemented yet
           policyEngineCache.clear();
           cacheService.flush();
           console.log('  ✓ Cleared ALL caches');
@@ -384,7 +384,8 @@ class CacheOrchestratorService {
   async getCacheHealth(): Promise<CacheHealthReport> {
     const embeddingStats = embeddingCache.getStats();
     const ragStats = ragCache.getStats();
-    const docStats = documentAnalysisCache.getStats();
+    // const docStats = documentAnalysisCache.getStats(); // Not implemented yet
+    const docStats = { hitRate: 0, cacheSize: 0, maxKeys: 0, ttl: '24 hours' }; // Default values for now
     const policyEngineStats = policyEngineCache.getStats();
 
     // Calculate overall L1 status

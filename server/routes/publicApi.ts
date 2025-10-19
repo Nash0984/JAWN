@@ -6,7 +6,7 @@ import { db } from "../db";
 import { benefitPrograms, webhooks, insertWebhookSchema } from "@shared/schema";
 import { eq } from "drizzle-orm";
 import { rulesEngine } from "../services/rulesEngine";
-import { documentVerificationService } from "../services/documentVerificationService";
+// import { documentVerificationService } from "../services/documentVerificationService"; // Not implemented yet
 import crypto from "crypto";
 
 const router = Router();
@@ -102,12 +102,13 @@ router.post(
     const documentBuffer = Buffer.from(validatedData.documentData, 'base64');
     
     // Use existing document verification service
-    const verificationResult = await documentVerificationService.verifyDocument(
-      documentBuffer,
-      validatedData.documentType,
-      req.apiTenantId!,
-      validatedData.metadata
-    );
+    // TODO: Implement document verification service
+    const verificationResult = {
+      verified: false,
+      confidence: 0,
+      extractedData: {},
+      issues: ["Document verification service not implemented yet"]
+    };
     
     res.json({
       verified: verificationResult.verified || false,

@@ -246,6 +246,21 @@ import {
   statePolicyRules,
   type StatePolicyRule,
   type InsertStatePolicyRule,
+  crossStateRules,
+  type CrossStateRule,
+  type InsertCrossStateRule,
+  jurisdictionHierarchies,
+  type JurisdictionHierarchy,
+  type InsertJurisdictionHierarchy,
+  stateReciprocityAgreements,
+  type StateReciprocityAgreement,
+  type InsertStateReciprocityAgreement,
+  multiStateHouseholds,
+  type MultiStateHousehold,
+  type InsertMultiStateHousehold,
+  crossStateRuleApplications,
+  type CrossStateRuleApplication,
+  type InsertCrossStateRuleApplication,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and, ilike, sql, or, isNull, lte, gte, inArray } from "drizzle-orm";
@@ -920,6 +935,45 @@ export interface IStorage {
   createStatePolicyRule(rule: InsertStatePolicyRule): Promise<StatePolicyRule>;
   updateStatePolicyRule(id: string, updates: Partial<StatePolicyRule>): Promise<StatePolicyRule>;
   deleteStatePolicyRule(id: string): Promise<void>;
+  
+  // Cross-State Rules
+  getCrossStateRule(id: string): Promise<CrossStateRule | undefined>;
+  getCrossStateRules(filters?: { primaryState?: string; secondaryState?: string; ruleType?: string; resolutionStrategy?: string; benefitProgramId?: string; isActive?: boolean }): Promise<CrossStateRule[]>;
+  getCrossStateRuleByCode(ruleCode: string): Promise<CrossStateRule | undefined>;
+  createCrossStateRule(rule: InsertCrossStateRule): Promise<CrossStateRule>;
+  updateCrossStateRule(id: string, updates: Partial<CrossStateRule>): Promise<CrossStateRule>;
+  deleteCrossStateRule(id: string): Promise<void>;
+  
+  // Jurisdiction Hierarchies
+  getJurisdictionHierarchy(id: string): Promise<JurisdictionHierarchy | undefined>;
+  getJurisdictionByCode(jurisdictionCode: string): Promise<JurisdictionHierarchy | undefined>;
+  getJurisdictionHierarchies(filters?: { jurisdictionType?: string; parentJurisdictionId?: string; hierarchyLevel?: number; isActive?: boolean }): Promise<JurisdictionHierarchy[]>;
+  createJurisdictionHierarchy(jurisdiction: InsertJurisdictionHierarchy): Promise<JurisdictionHierarchy>;
+  updateJurisdictionHierarchy(id: string, updates: Partial<JurisdictionHierarchy>): Promise<JurisdictionHierarchy>;
+  deleteJurisdictionHierarchy(id: string): Promise<void>;
+  
+  // State Reciprocity Agreements
+  getReciprocityAgreement(stateA: string, stateB: string): Promise<StateReciprocityAgreement | undefined>;
+  getReciprocityAgreements(filters?: { state?: string; agreementType?: string; status?: string; isActive?: boolean }): Promise<StateReciprocityAgreement[]>;
+  createReciprocityAgreement(agreement: InsertStateReciprocityAgreement): Promise<StateReciprocityAgreement>;
+  updateReciprocityAgreement(id: string, updates: Partial<StateReciprocityAgreement>): Promise<StateReciprocityAgreement>;
+  deleteReciprocityAgreement(id: string): Promise<void>;
+  
+  // Multi-State Households
+  getMultiStateHousehold(id: string): Promise<MultiStateHousehold | undefined>;
+  getMultiStateHouseholdByHouseholdId(householdId: string): Promise<MultiStateHousehold | undefined>;
+  getMultiStateHouseholdByCaseId(clientCaseId: string): Promise<MultiStateHousehold | undefined>;
+  getMultiStateHouseholds(filters?: { scenario?: string; status?: string; primaryResidenceState?: string; workState?: string; reviewRequired?: boolean }): Promise<MultiStateHousehold[]>;
+  createMultiStateHousehold(household: InsertMultiStateHousehold): Promise<MultiStateHousehold>;
+  updateMultiStateHousehold(id: string, updates: Partial<MultiStateHousehold>): Promise<MultiStateHousehold>;
+  deleteMultiStateHousehold(id: string): Promise<void>;
+  
+  // Cross-State Rule Applications
+  getCrossStateRuleApplication(id: string): Promise<CrossStateRuleApplication | undefined>;
+  getCrossStateRuleApplications(filters?: { clientCaseId?: string; householdId?: string; crossStateRuleId?: string; outcome?: string }): Promise<CrossStateRuleApplication[]>;
+  createCrossStateRuleApplication(application: InsertCrossStateRuleApplication): Promise<CrossStateRuleApplication>;
+  updateCrossStateRuleApplication(id: string, updates: Partial<CrossStateRuleApplication>): Promise<CrossStateRuleApplication>;
+  deleteCrossStateRuleApplication(id: string): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -4746,6 +4800,324 @@ export class DatabaseStorage implements IStorage {
 
   async deleteStatePolicyRule(id: string): Promise<void> {
     await db.delete(statePolicyRules).where(eq(statePolicyRules.id, id));
+  }
+  
+  // Cross-State Rules
+  async getCrossStateRule(id: string): Promise<CrossStateRule | undefined> {
+    return await db.query.crossStateRules.findFirst({
+      where: eq(crossStateRules.id, id),
+    });
+  }
+
+  async getCrossStateRules(filters?: { 
+    primaryState?: string; 
+    secondaryState?: string; 
+    ruleType?: string; 
+    resolutionStrategy?: string; 
+    benefitProgramId?: string; 
+    isActive?: boolean 
+  }): Promise<CrossStateRule[]> {
+    let query = db.select().from(crossStateRules);
+    const conditions = [];
+
+    if (filters?.primaryState) {
+      conditions.push(eq(crossStateRules.primaryState, filters.primaryState));
+    }
+    if (filters?.secondaryState) {
+      conditions.push(eq(crossStateRules.secondaryState, filters.secondaryState));
+    }
+    if (filters?.ruleType) {
+      conditions.push(eq(crossStateRules.ruleType, filters.ruleType));
+    }
+    if (filters?.resolutionStrategy) {
+      conditions.push(eq(crossStateRules.resolutionStrategy, filters.resolutionStrategy));
+    }
+    if (filters?.benefitProgramId) {
+      conditions.push(eq(crossStateRules.benefitProgramId, filters.benefitProgramId));
+    }
+    if (filters?.isActive !== undefined) {
+      conditions.push(eq(crossStateRules.isActive, filters.isActive));
+    }
+
+    if (conditions.length > 0) {
+      query = query.where(and(...conditions)) as any;
+    }
+    
+    return await query.orderBy(desc(crossStateRules.priority));
+  }
+
+  async getCrossStateRuleByCode(ruleCode: string): Promise<CrossStateRule | undefined> {
+    return await db.query.crossStateRules.findFirst({
+      where: eq(crossStateRules.ruleCode, ruleCode),
+    });
+  }
+
+  async createCrossStateRule(rule: InsertCrossStateRule): Promise<CrossStateRule> {
+    const [created] = await db.insert(crossStateRules).values(rule).returning();
+    return created;
+  }
+
+  async updateCrossStateRule(id: string, updates: Partial<CrossStateRule>): Promise<CrossStateRule> {
+    const [updated] = await db
+      .update(crossStateRules)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(crossStateRules.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteCrossStateRule(id: string): Promise<void> {
+    await db.delete(crossStateRules).where(eq(crossStateRules.id, id));
+  }
+
+  // Jurisdiction Hierarchies
+  async getJurisdictionHierarchy(id: string): Promise<JurisdictionHierarchy | undefined> {
+    return await db.query.jurisdictionHierarchies.findFirst({
+      where: eq(jurisdictionHierarchies.id, id),
+    });
+  }
+
+  async getJurisdictionByCode(jurisdictionCode: string): Promise<JurisdictionHierarchy | undefined> {
+    return await db.query.jurisdictionHierarchies.findFirst({
+      where: eq(jurisdictionHierarchies.jurisdictionCode, jurisdictionCode),
+    });
+  }
+
+  async getJurisdictionHierarchies(filters?: { 
+    jurisdictionType?: string; 
+    parentJurisdictionId?: string; 
+    hierarchyLevel?: number; 
+    isActive?: boolean 
+  }): Promise<JurisdictionHierarchy[]> {
+    let query = db.select().from(jurisdictionHierarchies);
+    const conditions = [];
+
+    if (filters?.jurisdictionType) {
+      conditions.push(eq(jurisdictionHierarchies.jurisdictionType, filters.jurisdictionType));
+    }
+    if (filters?.parentJurisdictionId) {
+      conditions.push(eq(jurisdictionHierarchies.parentJurisdictionId, filters.parentJurisdictionId));
+    }
+    if (filters?.hierarchyLevel !== undefined) {
+      conditions.push(eq(jurisdictionHierarchies.hierarchyLevel, filters.hierarchyLevel));
+    }
+    if (filters?.isActive !== undefined) {
+      conditions.push(eq(jurisdictionHierarchies.isActive, filters.isActive));
+    }
+
+    if (conditions.length > 0) {
+      query = query.where(and(...conditions)) as any;
+    }
+    
+    return await query.orderBy(jurisdictionHierarchies.hierarchyLevel);
+  }
+
+  async createJurisdictionHierarchy(jurisdiction: InsertJurisdictionHierarchy): Promise<JurisdictionHierarchy> {
+    const [created] = await db.insert(jurisdictionHierarchies).values(jurisdiction).returning();
+    return created;
+  }
+
+  async updateJurisdictionHierarchy(id: string, updates: Partial<JurisdictionHierarchy>): Promise<JurisdictionHierarchy> {
+    const [updated] = await db
+      .update(jurisdictionHierarchies)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(jurisdictionHierarchies.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteJurisdictionHierarchy(id: string): Promise<void> {
+    await db.delete(jurisdictionHierarchies).where(eq(jurisdictionHierarchies.id, id));
+  }
+
+  // State Reciprocity Agreements
+  async getReciprocityAgreement(stateA: string, stateB: string): Promise<StateReciprocityAgreement | undefined> {
+    return await db.query.stateReciprocityAgreements.findFirst({
+      where: or(
+        and(
+          eq(stateReciprocityAgreements.stateA, stateA),
+          eq(stateReciprocityAgreements.stateB, stateB)
+        ),
+        and(
+          eq(stateReciprocityAgreements.stateA, stateB),
+          eq(stateReciprocityAgreements.stateB, stateA)
+        )
+      ),
+    });
+  }
+
+  async getReciprocityAgreements(filters?: { 
+    state?: string; 
+    agreementType?: string; 
+    status?: string; 
+    isActive?: boolean 
+  }): Promise<StateReciprocityAgreement[]> {
+    let query = db.select().from(stateReciprocityAgreements);
+    const conditions = [];
+
+    if (filters?.state) {
+      conditions.push(or(
+        eq(stateReciprocityAgreements.stateA, filters.state),
+        eq(stateReciprocityAgreements.stateB, filters.state)
+      ));
+    }
+    if (filters?.agreementType) {
+      conditions.push(eq(stateReciprocityAgreements.agreementType, filters.agreementType));
+    }
+    if (filters?.status) {
+      conditions.push(eq(stateReciprocityAgreements.status, filters.status));
+    }
+    if (filters?.isActive !== undefined) {
+      conditions.push(eq(stateReciprocityAgreements.isActive, filters.isActive));
+    }
+
+    if (conditions.length > 0) {
+      query = query.where(and(...conditions)) as any;
+    }
+    
+    return await query.orderBy(stateReciprocityAgreements.effectiveDate);
+  }
+
+  async createReciprocityAgreement(agreement: InsertStateReciprocityAgreement): Promise<StateReciprocityAgreement> {
+    const [created] = await db.insert(stateReciprocityAgreements).values(agreement).returning();
+    return created;
+  }
+
+  async updateReciprocityAgreement(id: string, updates: Partial<StateReciprocityAgreement>): Promise<StateReciprocityAgreement> {
+    const [updated] = await db
+      .update(stateReciprocityAgreements)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(stateReciprocityAgreements.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteReciprocityAgreement(id: string): Promise<void> {
+    await db.delete(stateReciprocityAgreements).where(eq(stateReciprocityAgreements.id, id));
+  }
+
+  // Multi-State Households
+  async getMultiStateHousehold(id: string): Promise<MultiStateHousehold | undefined> {
+    return await db.query.multiStateHouseholds.findFirst({
+      where: eq(multiStateHouseholds.id, id),
+    });
+  }
+
+  async getMultiStateHouseholdByHouseholdId(householdId: string): Promise<MultiStateHousehold | undefined> {
+    return await db.query.multiStateHouseholds.findFirst({
+      where: eq(multiStateHouseholds.householdId, householdId),
+    });
+  }
+
+  async getMultiStateHouseholdByCaseId(clientCaseId: string): Promise<MultiStateHousehold | undefined> {
+    return await db.query.multiStateHouseholds.findFirst({
+      where: eq(multiStateHouseholds.clientCaseId, clientCaseId),
+    });
+  }
+
+  async getMultiStateHouseholds(filters?: { 
+    scenario?: string; 
+    status?: string; 
+    primaryResidenceState?: string; 
+    workState?: string; 
+    reviewRequired?: boolean 
+  }): Promise<MultiStateHousehold[]> {
+    let query = db.select().from(multiStateHouseholds);
+    const conditions = [];
+
+    if (filters?.scenario) {
+      conditions.push(eq(multiStateHouseholds.scenario, filters.scenario));
+    }
+    if (filters?.status) {
+      conditions.push(eq(multiStateHouseholds.status, filters.status));
+    }
+    if (filters?.primaryResidenceState) {
+      conditions.push(eq(multiStateHouseholds.primaryResidenceState, filters.primaryResidenceState));
+    }
+    if (filters?.workState) {
+      conditions.push(eq(multiStateHouseholds.workState, filters.workState));
+    }
+    if (filters?.reviewRequired !== undefined) {
+      conditions.push(eq(multiStateHouseholds.reviewRequired, filters.reviewRequired));
+    }
+
+    if (conditions.length > 0) {
+      query = query.where(and(...conditions)) as any;
+    }
+    
+    return await query.orderBy(desc(multiStateHouseholds.createdAt));
+  }
+
+  async createMultiStateHousehold(household: InsertMultiStateHousehold): Promise<MultiStateHousehold> {
+    const [created] = await db.insert(multiStateHouseholds).values(household).returning();
+    return created;
+  }
+
+  async updateMultiStateHousehold(id: string, updates: Partial<MultiStateHousehold>): Promise<MultiStateHousehold> {
+    const [updated] = await db
+      .update(multiStateHouseholds)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(multiStateHouseholds.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteMultiStateHousehold(id: string): Promise<void> {
+    await db.delete(multiStateHouseholds).where(eq(multiStateHouseholds.id, id));
+  }
+
+  // Cross-State Rule Applications
+  async getCrossStateRuleApplication(id: string): Promise<CrossStateRuleApplication | undefined> {
+    return await db.query.crossStateRuleApplications.findFirst({
+      where: eq(crossStateRuleApplications.id, id),
+    });
+  }
+
+  async getCrossStateRuleApplications(filters?: { 
+    clientCaseId?: string; 
+    householdId?: string; 
+    crossStateRuleId?: string; 
+    outcome?: string 
+  }): Promise<CrossStateRuleApplication[]> {
+    let query = db.select().from(crossStateRuleApplications);
+    const conditions = [];
+
+    if (filters?.clientCaseId) {
+      conditions.push(eq(crossStateRuleApplications.clientCaseId, filters.clientCaseId));
+    }
+    if (filters?.householdId) {
+      conditions.push(eq(crossStateRuleApplications.householdId, filters.householdId));
+    }
+    if (filters?.crossStateRuleId) {
+      conditions.push(eq(crossStateRuleApplications.crossStateRuleId, filters.crossStateRuleId));
+    }
+    if (filters?.outcome) {
+      conditions.push(eq(crossStateRuleApplications.outcome, filters.outcome));
+    }
+
+    if (conditions.length > 0) {
+      query = query.where(and(...conditions)) as any;
+    }
+    
+    return await query.orderBy(desc(crossStateRuleApplications.appliedAt));
+  }
+
+  async createCrossStateRuleApplication(application: InsertCrossStateRuleApplication): Promise<CrossStateRuleApplication> {
+    const [created] = await db.insert(crossStateRuleApplications).values(application).returning();
+    return created;
+  }
+
+  async updateCrossStateRuleApplication(id: string, updates: Partial<CrossStateRuleApplication>): Promise<CrossStateRuleApplication> {
+    const [updated] = await db
+      .update(crossStateRuleApplications)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(crossStateRuleApplications.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteCrossStateRuleApplication(id: string): Promise<void> {
+    await db.delete(crossStateRuleApplications).where(eq(crossStateRuleApplications.id, id));
   }
 }
 

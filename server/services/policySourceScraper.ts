@@ -3,7 +3,7 @@ import * as cheerio from 'cheerio';
 import crypto from 'crypto';
 import { storage } from '../storage';
 import type { InsertPolicySource, InsertDocument } from '../../shared/schema';
-import { documentProcessor } from './documentProcessor';
+import { unifiedDocumentService as documentProcessor } from './unified/UnifiedDocumentService';
 import { ecfrBulkDownloader } from './ecfrBulkDownloader';
 import { irsDirectDownloader } from './irsDirectDownloader';
 

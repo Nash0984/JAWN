@@ -1,6 +1,6 @@
 import axios from 'axios';
 import { parseStringPromise } from 'xml2js';
-import { documentProcessor } from './documentProcessor';
+import { unifiedDocumentService as documentProcessor } from './unified/UnifiedDocumentService';
 import type { Document, InsertDocument } from '@shared/schema';
 import { db } from '../db';
 import { documents, policySources } from '@shared/schema';
