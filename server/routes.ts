@@ -1681,14 +1681,18 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
   // BENEFITS ACCESS REVIEW (BAR) - Case quality monitoring and supervisor reviews
   // ============================================================================
 
-  // GET /api/bar/reviews - List reviews for supervisor dashboard
+  // GET /api/bar/reviews - List reviews for supervisor dashboard (scoped by LDSS office)
   app.get('/api/bar/reviews', requireAuth, requireStaff, asyncHandler(async (req: Request, res: Response) => {
     const { benefitsAccessReviewService } = await import("./services/benefitsAccessReview.service");
     const { status, supervisorId } = req.query;
     
-    // If user is not admin, only show their own reviews
     const userId = req.user!.id;
     const userRole = req.user!.role;
+    
+    // Get user's primary county assignment (LDSS office)
+    const primaryCounty = await storage.getPrimaryCounty(userId);
+    
+    // Build query filters
     const effectiveSupervisorId = userRole === 'admin' || userRole === 'super_admin' 
       ? (supervisorId as string | undefined) 
       : userId;
@@ -1697,11 +1701,33 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
     if (status === 'active') {
       reviews = await benefitsAccessReviewService.getActiveReviews(effectiveSupervisorId);
     } else {
-      // Get all reviews (optionally filtered by supervisor)
-      const query = db.select().from(benefitsAccessReviews);
-      reviews = effectiveSupervisorId
-        ? await query.where(eq(benefitsAccessReviews.supervisorId, effectiveSupervisorId))
+      // For LDSS office scoping: join with client_cases to filter by county
+      // Super admins see all reviews, staff see only their county's reviews
+      const query = db
+        .select({
+          review: benefitsAccessReviews,
+          case: clientCases,
+        })
+        .from(benefitsAccessReviews)
+        .leftJoin(clientCases, eq(benefitsAccessReviews.caseId, clientCases.id));
+      
+      // Apply filters
+      const conditions = [];
+      if (effectiveSupervisorId) {
+        conditions.push(eq(benefitsAccessReviews.supervisorId, effectiveSupervisorId));
+      }
+      
+      // Scope by county for non-super-admins
+      if (userRole !== 'super_admin' && primaryCounty) {
+        conditions.push(eq(clientCases.county, primaryCounty.code));
+      }
+      
+      const results = conditions.length > 0
+        ? await query.where(and(...conditions)).limit(100).orderBy(desc(benefitsAccessReviews.createdAt))
         : await query.limit(100).orderBy(desc(benefitsAccessReviews.createdAt));
+      
+      // Extract just the reviews
+      reviews = results.map(r => r.review);
     }
     
     res.json({ success: true, data: reviews });
