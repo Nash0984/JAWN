@@ -5268,8 +5268,10 @@ export type CaseActivityEvent = typeof caseActivityEvents.$inferSelect;
 
 // ============================================================================
 // SMS INTEGRATION FOR TEXT-BASED BENEFIT SCREENING & INTAKE
+// COMMENTED OUT DURING SCHEMA ROLLBACK - MOVED TO BACKUP
 // ============================================================================
 
+/*
 // SMS Conversations - Track SMS-based benefit screening and intake sessions
 export const smsConversations = pgTable("sms_conversations", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -5362,6 +5364,7 @@ export type InsertSmsMessage = z.infer<typeof insertSmsMessageSchema>;
 export type SmsMessage = typeof smsMessages.$inferSelect;
 export type InsertSmsTenantConfig = z.infer<typeof insertSmsTenantConfigSchema>;
 export type SmsTenantConfig = typeof smsTenantConfig.$inferSelect;
+*/
 
 // Tenant schema insert/select types
 export const insertTenantSchema = createInsertSchema(tenants).omit({
@@ -6868,6 +6871,8 @@ export const crossStateRuleApplications = pgTable("cross_state_rule_applications
 
 
 // SMS Screening Links - Secure, time-limited screening URLs
+// COMMENTED OUT DURING SCHEMA ROLLBACK - MOVED TO BACKUP
+/*
 export const smsScreeningLinks = pgTable("sms_screening_links", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   token: text("token").notNull().unique(), // Unique nanoid token for URL
@@ -6918,6 +6923,7 @@ export const smsScreeningLinks = pgTable("sms_screening_links", {
   expiresAtIdx: index("sms_screening_links_expires_at_idx").on(table.expiresAt),
   createdAtIdx: index("sms_screening_links_created_at_idx").on(table.createdAt),
 }));
+*/
 
 // ============================================================================
 // GDPR COMPLIANCE TABLES - Data Protection and Privacy Management
