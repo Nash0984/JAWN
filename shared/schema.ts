@@ -7508,6 +7508,208 @@ export type InsertHipaaSecurityIncident = z.infer<typeof insertHipaaSecurityInci
 export type HipaaAuditLog = typeof hipaaAuditLogs.$inferSelect;
 export type InsertHipaaAuditLog = z.infer<typeof insertHipaaAuditLogSchema>;
 
+// ============================================================================
+// BENEFITS ACCESS REVIEW MODULE - Autonomous case monitoring system
+// ============================================================================
+
+// Benefits Access Reviews - Main table for tracking case lifecycle
+export const benefitsAccessReviews = pgTable("benefits_access_reviews", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  caseId: varchar("case_id").references(() => clientCases.id, { onDelete: "cascade" }).notNull(),
+  caseworkerId: varchar("caseworker_id").references(() => users.id).notNull(),
+  supervisorId: varchar("supervisor_id").references(() => users.id), // Assigned supervisor
+  
+  // Review period tracking (30-60 days)
+  reviewPeriodStart: timestamp("review_period_start").notNull(),
+  reviewPeriodEnd: timestamp("review_period_end").notNull(),
+  reviewDuration: integer("review_duration").notNull(), // days (30-60)
+  
+  // Sampling metadata
+  samplingMethod: text("sampling_method").notNull(), // stratified, random, targeted
+  samplingCriteria: jsonb("sampling_criteria"), // demographic, program, county stratification
+  selectedForReview: boolean("selected_for_review").default(false).notNull(),
+  selectionWeight: real("selection_weight"), // probability weight used in sampling
+  
+  // Review status
+  reviewStatus: text("review_status").notNull().default("pending"), // pending, in_progress, completed, escalated
+  reviewPriority: text("review_priority").default("normal"), // low, normal, high, urgent
+  
+  // Anonymization for blind review
+  anonymizedCaseId: text("anonymized_case_id"), // hashed ID for blind review
+  anonymizedWorkerId: text("anonymized_worker_id"), // hashed worker ID for blind review
+  blindReviewMode: boolean("blind_review_mode").default(true).notNull(),
+  
+  // AI assessment
+  aiAssessmentScore: real("ai_assessment_score"), // 0-1 quality score from Gemini
+  aiAssessmentSummary: text("ai_assessment_summary"), // AI-generated summary
+  aiAssessmentDetails: jsonb("ai_assessment_details"), // detailed AI analysis
+  aiAssessmentDate: timestamp("ai_assessment_date"),
+  
+  // Supervisor feedback
+  supervisorFeedbackId: varchar("supervisor_feedback_id").references((): any => reviewerFeedback.id),
+  supervisorReviewDate: timestamp("supervisor_review_date"),
+  supervisorScore: real("supervisor_score"), // 0-100 score
+  
+  // Lifecycle checkpoints
+  checkpointsCompleted: integer("checkpoints_completed").default(0),
+  totalCheckpoints: integer("total_checkpoints").default(0),
+  checkpointStatus: jsonb("checkpoint_status"), // status of each checkpoint
+  
+  // Metadata
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  caseIdIdx: index("bar_case_id_idx").on(table.caseId),
+  caseworkerIdIdx: index("bar_caseworker_id_idx").on(table.caseworkerId),
+  supervisorIdIdx: index("bar_supervisor_id_idx").on(table.supervisorId),
+  reviewStatusIdx: index("bar_review_status_idx").on(table.reviewStatus),
+  selectedForReviewIdx: index("bar_selected_for_review_idx").on(table.selectedForReview),
+  reviewPeriodIdx: index("bar_review_period_idx").on(table.reviewPeriodStart, table.reviewPeriodEnd),
+}));
+
+// Review Samples - Statistical sampling records
+export const reviewSamples = pgTable("review_samples", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  samplingPeriod: text("sampling_period").notNull(), // e.g., "2025-W42" for week 42 of 2025
+  samplingDate: timestamp("sampling_date").defaultNow().notNull(),
+  
+  // Sampling parameters
+  totalCases: integer("total_cases").notNull(), // total cases in the pool
+  selectedCases: integer("selected_cases").notNull(), // number of cases selected
+  samplingRate: real("sampling_rate").notNull(), // selected / total
+  
+  // Stratification metadata
+  stratificationDimensions: jsonb("stratification_dimensions"), // dimensions used (program, county, etc.)
+  stratificationDistribution: jsonb("stratification_distribution"), // actual distribution of selected cases
+  
+  // Sample quality metrics
+  diversityScore: real("diversity_score"), // 0-1 measure of sample diversity
+  representativenessScore: real("representativeness_score"), // 0-1 measure of population representation
+  
+  // Worker allocation (2 cases per worker target)
+  workersIncluded: integer("workers_included").notNull(),
+  casesPerWorker: jsonb("cases_per_worker"), // distribution of cases per worker
+  
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+  samplingPeriodIdx: index("rs_sampling_period_idx").on(table.samplingPeriod),
+  samplingDateIdx: index("rs_sampling_date_idx").on(table.samplingDate),
+}));
+
+// Reviewer Feedback - Structured feedback from supervisors
+export const reviewerFeedback = pgTable("reviewer_feedback", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  reviewId: varchar("review_id").references(() => benefitsAccessReviews.id, { onDelete: "cascade" }).notNull(),
+  reviewerId: varchar("reviewer_id").references(() => users.id).notNull(),
+  
+  // Feedback dimensions
+  accuracyScore: real("accuracy_score"), // 0-100 accuracy of determination
+  timelinessScore: real("timeliness_score"), // 0-100 processing timeliness
+  documentationScore: real("documentation_score"), // 0-100 documentation quality
+  customerServiceScore: real("customer_service_score"), // 0-100 customer interaction quality
+  overallScore: real("overall_score"), // 0-100 overall performance
+  
+  // Structured feedback
+  strengths: text("strengths").array(), // array of strength categories
+  areasForImprovement: text("areas_for_improvement").array(), // array of improvement areas
+  criticalIssues: text("critical_issues").array(), // array of critical issues found
+  
+  // Detailed feedback
+  feedbackNotes: text("feedback_notes"), // detailed written feedback
+  recommendations: text("recommendations"), // specific recommendations for improvement
+  
+  // Follow-up actions
+  requiresFollowUp: boolean("requires_follow_up").default(false),
+  followUpActions: jsonb("follow_up_actions"), // specific actions to take
+  escalationRequired: boolean("escalation_required").default(false),
+  escalationReason: text("escalation_reason"),
+  
+  // Metadata
+  reviewDate: timestamp("review_date").defaultNow().notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  reviewIdIdx: index("rf_review_id_idx").on(table.reviewId),
+  reviewerIdIdx: index("rf_reviewer_id_idx").on(table.reviewerId),
+  reviewDateIdx: index("rf_review_date_idx").on(table.reviewDate),
+  escalationIdx: index("rf_escalation_idx").on(table.escalationRequired),
+}));
+
+// Case Lifecycle Events - Checkpoint tracking (30-60 day lifecycle)
+export const caseLifecycleEvents = pgTable("case_lifecycle_events", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  reviewId: varchar("review_id").references(() => benefitsAccessReviews.id, { onDelete: "cascade" }).notNull(),
+  caseId: varchar("case_id").references(() => clientCases.id, { onDelete: "cascade" }).notNull(),
+  
+  // Checkpoint tracking
+  checkpointType: text("checkpoint_type").notNull(), // intake, verification, determination, notification, followup
+  checkpointName: text("checkpoint_name").notNull(), // descriptive name
+  checkpointDescription: text("checkpoint_description"),
+  
+  // Timing
+  expectedDate: timestamp("expected_date"), // when checkpoint should occur
+  actualDate: timestamp("actual_date"), // when checkpoint actually occurred
+  daysFromStart: integer("days_from_start"), // days since case started
+  isOnTime: boolean("is_on_time"), // true if met within expected timeframe
+  delayDays: integer("delay_days"), // days delayed (if applicable)
+  
+  // Status
+  status: text("status").notNull().default("pending"), // pending, completed, overdue, skipped
+  completedBy: varchar("completed_by").references(() => users.id),
+  
+  // Details
+  eventDetails: jsonb("event_details"), // checkpoint-specific details
+  notes: text("notes"), // additional notes
+  
+  // AI monitoring
+  aiAlerted: boolean("ai_alerted").default(false), // true if AI flagged this event
+  aiAlertReason: text("ai_alert_reason"), // why AI flagged this
+  
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  reviewIdIdx: index("cle_review_id_idx").on(table.reviewId),
+  caseIdIdx: index("cle_case_id_idx").on(table.caseId),
+  checkpointTypeIdx: index("cle_checkpoint_type_idx").on(table.checkpointType),
+  statusIdx: index("cle_status_idx").on(table.status),
+  expectedDateIdx: index("cle_expected_date_idx").on(table.expectedDate),
+  aiAlertedIdx: index("cle_ai_alerted_idx").on(table.aiAlerted),
+}));
+
+// Insert schemas for Benefits Access Review
+export const insertBenefitsAccessReviewSchema = createInsertSchema(benefitsAccessReviews).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertReviewSampleSchema = createInsertSchema(reviewSamples).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertReviewerFeedbackSchema = createInsertSchema(reviewerFeedback).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertCaseLifecycleEventSchema = createInsertSchema(caseLifecycleEvents).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+// Types for Benefits Access Review
+export type BenefitsAccessReview = typeof benefitsAccessReviews.$inferSelect;
+export type InsertBenefitsAccessReview = z.infer<typeof insertBenefitsAccessReviewSchema>;
+export type ReviewSample = typeof reviewSamples.$inferSelect;
+export type InsertReviewSample = z.infer<typeof insertReviewSampleSchema>;
+export type ReviewerFeedback = typeof reviewerFeedback.$inferSelect;
+export type InsertReviewerFeedback = z.infer<typeof insertReviewerFeedbackSchema>;
+export type CaseLifecycleEvent = typeof caseLifecycleEvents.$inferSelect;
+export type InsertCaseLifecycleEvent = z.infer<typeof insertCaseLifecycleEventSchema>;
+
 // Export tax return tables from taxReturnSchema
 // COMMENTED OUT DURING SCHEMA ROLLBACK - taxReturnSchema.ts moved to backup
 // export * from './taxReturnSchema';
