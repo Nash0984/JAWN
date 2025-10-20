@@ -1,4 +1,4 @@
-import { db } from "@db";
+import { db } from "../db";
 import { 
   benefitsAccessReviews, 
   reviewSamples, 
@@ -16,7 +16,7 @@ import {
 import { eq, and, gte, lte, desc, sql, inArray } from "drizzle-orm";
 import { createHash, randomBytes } from "crypto";
 import { cacheOrchestrator } from "./cacheOrchestrator";
-import { GoogleGenerativeAI } from "@google/genai";
+import { GoogleGenAI } from "@google/genai";
 
 // ============================================================================
 // TYPES AND CONSTANTS
@@ -553,13 +553,13 @@ const checkpointService = new CheckpointTrackingService();
 // ============================================================================
 
 class AIAssessmentService {
-  private genAI: GoogleGenerativeAI | null = null;
+  private genAI: GoogleGenAI | null = null;
   private model: any = null;
 
   constructor() {
     const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
     if (apiKey) {
-      this.genAI = new GoogleGenerativeAI(apiKey);
+      this.genAI = new GoogleGenAI(apiKey);
       this.model = this.genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
     }
   }
