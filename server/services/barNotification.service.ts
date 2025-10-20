@@ -12,7 +12,7 @@
  * - Gracefully degrades when email service unavailable
  */
 
-import { db } from "@db";
+import { db } from "../db";
 import {
   caseLifecycleEvents,
   benefitsAccessReviews,
