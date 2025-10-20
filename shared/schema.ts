@@ -7509,4 +7509,5 @@ export type HipaaAuditLog = typeof hipaaAuditLogs.$inferSelect;
 export type InsertHipaaAuditLog = z.infer<typeof insertHipaaAuditLogSchema>;
 
 // Export tax return tables from taxReturnSchema
-export * from './taxReturnSchema';
+// COMMENTED OUT DURING SCHEMA ROLLBACK - taxReturnSchema.ts moved to backup
+// export * from './taxReturnSchema';

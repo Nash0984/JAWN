@@ -10378,8 +10378,10 @@ If the question cannot be answered with the available information, say so clearl
   
   // ============================================================================
   // SMS/TWILIO - Text-based benefit screening and intake
+  // COMMENTED OUT DURING SCHEMA ROLLBACK
   // ============================================================================
   
+  /*
   // Admin API endpoints for SMS management
   const { getTwilioConfig } = await import("./services/twilioConfig");
   const { getConversationStats, isSmsEnabledForTenant } = await import("./services/smsService");
@@ -10428,6 +10430,7 @@ If the question cannot be answered with the available information, say so clearl
   // Twilio webhook routes
   const twilioWebhooksRouter = (await import("./routes/twilioWebhooks")).default;
   app.use("/api/sms", twilioWebhooksRouter);
+  */
   
   // ============================================================================
   // API DOCUMENTATION - OpenAPI/Swagger endpoints
