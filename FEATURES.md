@@ -1,12 +1,12 @@
 # Maryland Universal Benefits-Tax Navigator - Complete Feature Catalog
 
-**Version:** 4.0  
+**Version:** 4.1  
 **Last Updated:** October 20, 2025  
-**Total Features:** 109
+**Total Features:** 110
 
 **Note:** This document reflects the complete feature inventory discovered through comprehensive production readiness audit (October 2025), including enterprise compliance features (GDPR/HIPAA) and advanced infrastructure capabilities verified in Phase A re-audit.
 
-This document provides a comprehensive catalog of all 109 features implemented in the Maryland Universal Benefits-Tax Service Delivery Platform. The platform integrates 5 Maryland benefit programs (SNAP, Medicaid, TANF, OHEP, Tax Credits) with federal/state tax preparation (VITA), quality control analytics, multi-county deployment, AI-powered assistance, legislative tracking, accessibility compliance, enterprise compliance (GDPR/HIPAA), and production infrastructure operations.
+This document provides a comprehensive catalog of all 110 features implemented in the Maryland Universal Benefits-Tax Service Delivery Platform. The platform integrates 5 Maryland benefit programs (SNAP, Medicaid, TANF, OHEP, Tax Credits) with federal/state tax preparation (VITA), quality control analytics, multi-county deployment, AI-powered assistance, legislative tracking, accessibility compliance, enterprise compliance (GDPR/HIPAA), and production infrastructure operations.
 
 **Planned for Future Development:**
 - SSI (Supplemental Security Income) standalone benefit program
@@ -665,6 +665,45 @@ This document provides a comprehensive catalog of all 109 features implemented i
 
 **Production Status**: ✅ Production Ready  
 **Completion Notes**: Complete rules snapshot versioning service successfully extracted from rules engine. Dedicated `server/services/rulesAsCodeService.ts` provides point-in-time snapshots, version history, rule comparison, and retroactive calculations. API endpoints: GET/POST /api/rules/snapshots, GET /api/rules/snapshots/compare. Maintains 100% backward compatibility with rules engine. Supports SNAP, Medicaid, and all benefit programs with complete audit trail via ruleChangeLogs.
+
+---
+
+### 110. E-Filing Dashboard
+**Location:** `/efile`  
+**User Type:** Navigators, Caseworkers, Administrators  
+**Purpose:** Comprehensive e-filing management for federal and Maryland tax returns
+
+**Features:**
+- Federal Returns tab with submission status tracking
+- Maryland Returns tab with linked federal returns
+- E-File Queue monitoring with real-time status updates
+- Validate tax returns before submission (IRS/Maryland business rules)
+- Submit for e-filing (Form 1040 and Form 502)
+- Download generated XML files (federal and state)
+- Real-time WebSocket status updates with live connection indicator
+- Toast notifications for status changes (transmitted, accepted, rejected)
+- Auto-refresh data when status updates occur
+- Retry functionality for rejected submissions
+- Status badges (draft, ready, transmitted, accepted, rejected)
+- Transmission ID tracking
+- Submission and acceptance date display
+
+**Technical Details:**
+- Page: `client/src/pages/EFileDashboard.tsx` (699 lines)
+- Backend Routes:
+  - `server/api/efile.routes.ts` - Federal e-filing endpoints (7 routes)
+  - `server/api/marylandEfile.routes.ts` - Maryland e-filing endpoints (5 routes)
+- Service: `server/services/eFileQueueService.ts` (802 lines)
+- WebSocket: Real-time updates via `server/services/websocket.service.ts`
+- Hook: `client/src/hooks/useWebSocket.ts` for dashboard integration
+- API Endpoints:
+  - Federal: POST/GET/DELETE /api/efile/submit/:id, /api/efile/validate/:id, /api/efile/status/:id, /api/efile/xml/:id, /api/efile/retry/:id, /api/efile/queue/pending, /api/efile/queue/recent
+  - Maryland: POST/GET/DELETE /api/maryland/efile/submit/:id, /api/maryland/efile/validate/:id, /api/maryland/efile/status/:id, /api/maryland/efile/xml/:id, /api/maryland/efile/retry/:id
+- Authentication: All routes protected with requireAuth middleware
+- Database: Utilizes `federalTaxReturns` and `marylandTaxReturns` tables with efileStatus tracking
+
+**Production Status**: ✅ Production Ready  
+**Completion Notes**: Complete e-filing dashboard operational with federal and Maryland tax submission workflows, real-time WebSocket status updates, validation and XML generation, status tracking, and comprehensive UI. Backend API routes fully functional with audit logging. IRS EFIN and Maryland iFile credentials pending for live transmission (currently returns "ready" status). Infrastructure fully production-ready for activation upon credential configuration.
 
 ---
 
@@ -2530,12 +2569,12 @@ This document provides a comprehensive catalog of all 109 features implemented i
 
 ## Summary Statistics
 
-**Total Features:** 109  
+**Total Features:** 110  
 **Production Status Distribution:**
-- ✅ **Production Ready:** 108 features (99.1% - fully operational with all components)
+- ✅ **Production Ready:** 109 features (99.1% - fully operational with all components)
 - ⏳ **Planned:** 1 feature (0.9% - infrastructure exists, AI analysis not implemented)
 
-**Completed in Latest Release:** 13 features
+**Completed in Latest Release:** 14 features
   - Feature #47: Federal Law Tracker ✅ (admin UI at /admin/federal-law-tracker)
   - Feature #48: Maryland State Law Tracker ✅ (admin UI at /admin/maryland-law-tracker)
   - Feature #58: Smart Scheduler ✅ (admin UI at /admin/scheduler)
@@ -2549,6 +2588,7 @@ This document provides a comprehensive catalog of all 109 features implemented i
   - Feature #91: Accessibility Audit Infrastructure ✅ (Oct 16-17, 2025)
   - Feature #92: Executive Summaries for Stakeholders ✅ (Oct 16-17, 2025)
   - Feature #93: Machine-Readable Compliance Data ✅ (Oct 16-17, 2025)
+  - Feature #110: E-Filing Dashboard ✅ (Oct 20, 2025)
 
 **Planned Features:** 1
   - Feature #52: Legislative Impact Analysis (infrastructure exists, AI analysis not implemented)
@@ -2558,7 +2598,7 @@ This document provides a comprehensive catalog of all 109 features implemented i
 **Eligibility Tools:** 7 features (all ✅ Production Ready)  
 **Application Assistance:** 3 features (all ✅ Production Ready)  
 **Document Management:** 7 features (all ✅ Production Ready)  
-**Tax & VITA:** 5 features (all ✅ Production Ready)  
+**Tax & VITA:** 6 features (all ✅ Production Ready)  
 **Navigator Tools:** 5 features (all ✅ Production Ready)  
 **Quality Control:** 5 features (all ✅ Production Ready)  
 **Administration:** 17 features (all ✅ Production Ready)  
@@ -2658,7 +2698,7 @@ This document provides a comprehensive catalog of all 109 features implemented i
 13. **Document Management Enhancements** (4 features) - Versioning, golden source tracking, hash verification
 14. **Policy Management Automation** (3 features) - Source sync, web scraping, document counting
 15. **Quality Control Analytics** (2 features) - Training intervention tracking and error pattern analytics
-16. **Tax Preparation Expansion** (3 features) - County tax rates, Maryland credits, document classification
+16. **Tax Preparation Expansion** (4 features) - County tax rates, Maryland credits, document classification, e-filing dashboard
 17. **Eligibility Enhancements** (2 features) - Audit trail and rules snapshot versioning
 
 ---
