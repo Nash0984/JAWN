@@ -111,13 +111,19 @@ app.use(dosProtection({
 // ============================================================================
 import { rateLimiters } from "./middleware/enhancedRateLimiting";
 
-// Apply role-based rate limiters
-app.use("/api/", rateLimiters.standard); // General limit based on user role
-app.use("/api/auth/login", rateLimiters.auth); // Strict limit for login
-app.use("/api/auth/signup", rateLimiters.auth); // Strict limit for signup
-app.use("/api/chat/ask", rateLimiters.ai); // AI chat endpoint
-app.use("/api/search", rateLimiters.ai); // AI search endpoint
-app.use("/api/documents/upload", rateLimiters.upload); // Document upload endpoints
+// Apply permissive public rate limiter first (more specific routes go first)
+app.use("/api/public/", rateLimiters.public); // Public endpoints: 100 req/min
+app.use("/api/screener/", rateLimiters.public); // Screener endpoints: 100 req/min
+
+// Apply strict rate limiters for auth and AI endpoints
+app.use("/api/auth/login", rateLimiters.auth); // Strict limit for login (5 attempts/15min)
+app.use("/api/auth/signup", rateLimiters.auth); // Strict limit for signup (5 attempts/15min)
+app.use("/api/chat/ask", rateLimiters.ai); // AI chat endpoint (2-30 req/min based on role)
+app.use("/api/search", rateLimiters.ai); // AI search endpoint (2-30 req/min based on role)
+app.use("/api/documents/upload", rateLimiters.upload); // Document upload endpoints (5-200 req/hour)
+
+// Apply role-based standard limiter to remaining API routes
+app.use("/api/", rateLimiters.standard); // General limit based on user role (20-1000 req/15min)
 
 // Add timing headers and performance monitoring
 app.use(timingHeadersMiddleware());
