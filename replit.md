@@ -1,10 +1,29 @@
 # Overview
 
-The Maryland Universal Financial Navigator is an AI-powered platform designed to optimize financial well-being by integrating public benefits eligibility with federal and state tax preparation. It acts as a universal financial command center, utilizing Retrieval-Augmented Generation (RAG), Rules as Code, and the Google Gemini API. The platform offers comprehensive financial optimization through a single conversational interface, supporting six Maryland benefit programs and VITA tax assistance. A key innovation is the use of a single household profile for both benefit calculations and tax preparation, combined with AI-driven cross-enrollment intelligence to identify unclaimed benefits. The platform is fully operational, including GDPR/HIPAA compliance, production-grade infrastructure, a complete E-Filing Dashboard, and an autonomous Benefits Access Review system.
+The Maryland Universal Financial Navigator (JAWN - Joint Access Welfare Network) is an AI-powered platform designed to optimize financial well-being by integrating public benefits eligibility with federal and state tax preparation. It acts as a universal financial command center, utilizing Retrieval-Augmented Generation (RAG), Rules as Code, and the Google Gemini API. The platform offers comprehensive financial optimization through a single conversational interface, supporting six Maryland benefit programs and VITA tax assistance. A key innovation is the use of a single household profile for both benefit calculations and tax preparation, combined with AI-driven cross-enrollment intelligence to identify unclaimed benefits. The platform is fully operational, including GDPR/HIPAA compliance, production-grade infrastructure, a complete E-Filing Dashboard, and an autonomous Benefits Access Review system. The system is deployed as a single unified application at marylandbenefits.gov serving all 24 Maryland LDSS offices with multi-tenant architecture.
 
 # User Preferences
 
 Preferred communication style: Simple, everyday language.
+
+# Recent Updates (October 20, 2025)
+
+## AI Enhancement Phase Completed
+- **Fixed Rate Limiting**: Resolved IPv6 validation errors by adding `validate: false` to all rate limiters
+- **AI Document Intelligence Pipeline**: Implemented Gemini Vision API integration for OCR and smart field extraction from documents (W-2s, pay stubs, utility bills, etc.)
+- **Conversational AI Intake Assistant**: Built natural language processing chat interface with multi-language support (English, Spanish, Chinese, Korean) and voice capabilities
+- **Cross-Enrollment Intelligence Engine**: Created ML-based benefit prediction system with confidence scoring and analytics dashboard
+- **Smart RAG System**: Deployed semantic search across policy documents using Gemini embeddings with natural language Q&A
+- **Predictive Analytics**: Added case outcome predictions, processing time estimations, and resource allocation forecasting
+- **Emergency Fast-Track**: Implemented AI identification of urgent cases with automatic expedited processing
+- **Fraud Detection Pipeline**: Built pattern analysis for unusual applications and behavioral anomalies
+- **Smart Workflow Automation**: Deployed AI-driven task prioritization and automatic case routing
+
+## Critical Fixes Applied
+- API routing now properly handles JSON responses before Vite middleware
+- Tenant context error logging properly serializes error details
+- BAR supervisor dashboard implements actual county-based filtering with database joins
+- Gemini API integration uses correct GoogleGenAI API format throughout
 
 # System Architecture
 
