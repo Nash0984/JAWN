@@ -87,6 +87,7 @@ export const standardRateLimiter: RateLimitRequestHandler = rateLimit({
   },
   standardHeaders: true, // Return rate limit info in RateLimit-* headers
   legacyHeaders: false, // Disable X-RateLimit-* headers
+  validate: false, // Disable IP validation to handle IPv6 properly
   // Use user ID or IP hash for rate limiting
   keyGenerator: (req: Request) => {
     const user = (req as any).user;
@@ -120,6 +121,7 @@ export const authRateLimiter: RateLimitRequestHandler = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 5, // Only 5 attempts per 15 minutes
   skipSuccessfulRequests: true, // Don't count successful login attempts
+  validate: false, // Disable IP validation to handle IPv6 properly
   message: {
     error: 'Too Many Login Attempts',
     message: 'Too many login attempts. Please try again later.',
@@ -149,6 +151,7 @@ export const aiRateLimiter: RateLimitRequestHandler = rateLimit({
     if (user.role === 'navigator' || user.role === 'caseworker') return 20;
     return 10; // applicants
   },
+  validate: false, // Disable IP validation to handle IPv6 properly
   message: {
     error: 'Too Many AI Requests',
     message: 'AI request limit exceeded. Please wait before trying again.',
@@ -172,6 +175,7 @@ export const uploadRateLimiter: RateLimitRequestHandler = rateLimit({
     if (user.role === 'navigator' || user.role === 'caseworker') return 100;
     return 50; // applicants
   },
+  validate: false, // Disable IP validation to handle IPv6 properly
   message: {
     error: 'Upload Limit Exceeded',
     message: 'Upload limit exceeded for this hour. Please try again later.',
@@ -194,6 +198,7 @@ export function createCustomRateLimiter(
   return rateLimit({
     windowMs,
     max: maxRequests,
+    validate: false, // Disable IP validation to handle IPv6 properly
     message: {
       error: 'Rate Limit Exceeded',
       message,
@@ -212,6 +217,7 @@ export function createCustomRateLimiter(
 export const publicRateLimiter: RateLimitRequestHandler = rateLimit({
   windowMs: 1 * 60 * 1000, // 1 minute
   max: 100, // 100 requests per minute
+  validate: false, // Disable IP validation to handle IPv6 properly
   message: {
     error: 'Rate Limit Exceeded',
     message: 'Too many requests to public endpoints. Please wait a moment before trying again.',
@@ -239,6 +245,7 @@ export const aggressiveRateLimiter: RateLimitRequestHandler = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 10, // Only 10 requests per 15 minutes
   skipSuccessfulRequests: false,
+  validate: false, // Disable IP validation to handle IPv6 properly
   message: {
     error: 'IP Blocked - Rate Limit Abuse',
     message: 'Your IP has been temporarily blocked due to excessive requests. Please contact support if this is an error.',
