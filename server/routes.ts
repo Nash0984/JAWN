@@ -4491,6 +4491,278 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
   }));
 
   // ============================================================================
+  // AI INTAKE ASSISTANT - Conversational benefits application with voice support
+  // ============================================================================
+  
+  // Import services
+  const { aiIntakeAssistantService } = await import("./services/aiIntakeAssistant.service");
+  const { voiceAssistantService } = await import("./services/voiceAssistant.service");
+  
+  // Initialize AI intake session
+  app.post("/api/ai-intake/session", asyncHandler(async (req: Request, res: Response) => {
+    const { language = 'en', existingSessionId } = req.body;
+    const userId = req.user?.id;
+    
+    const session = await aiIntakeAssistantService.initializeSession(
+      userId,
+      language,
+      existingSessionId
+    );
+    
+    res.json({
+      sessionId: session.sessionId,
+      language: session.language,
+      formProgress: session.formProgress,
+      preferences: session.preferences
+    });
+  }));
+  
+  // Send message to AI assistant
+  app.post("/api/ai-intake/message", asyncHandler(async (req: Request, res: Response) => {
+    const { sessionId, message, isVoiceInput = false, attachments } = req.body;
+    
+    if (!sessionId || !message) {
+      return res.status(400).json({ error: 'sessionId and message are required' });
+    }
+    
+    const result = await aiIntakeAssistantService.processMessage(
+      sessionId,
+      message,
+      isVoiceInput,
+      attachments
+    );
+    
+    res.json(result);
+  }));
+  
+  // Upload file for AI intake
+  app.post("/api/ai-intake/upload", 
+    documentUpload.single('file'),
+    verifyFileMiddleware,
+    asyncHandler(async (req: Request, res: Response) => {
+      if (!req.file) {
+        return res.status(400).json({ error: 'No file uploaded' });
+      }
+      
+      // Upload to object storage
+      const objectPath = await objectStorageClient.uploadFile(
+        req.file.buffer,
+        req.file.originalname,
+        'documents'
+      );
+      
+      res.json({
+        url: objectPath,
+        filename: req.file.originalname,
+        size: req.file.size,
+        type: req.file.mimetype
+      });
+    })
+  );
+  
+  // Get voice settings for user
+  app.get("/api/ai-intake/voice-settings", requireAuth, asyncHandler(async (req: Request, res: Response) => {
+    const settings = await voiceAssistantService.getUserVoiceSettings(req.user!.id);
+    res.json(settings);
+  }));
+  
+  // Update voice settings
+  app.put("/api/ai-intake/voice-settings", requireAuth, asyncHandler(async (req: Request, res: Response) => {
+    await voiceAssistantService.saveUserVoiceSettings(req.user!.id, req.body);
+    res.json({ success: true });
+  }));
+  
+  // Process voice command
+  app.post("/api/ai-intake/voice-command", asyncHandler(async (req: Request, res: Response) => {
+    const { transcript, sessionId, userId } = req.body;
+    
+    if (!transcript || !sessionId) {
+      return res.status(400).json({ error: 'transcript and sessionId are required' });
+    }
+    
+    const result = await voiceAssistantService.processVoiceCommand(
+      transcript,
+      sessionId,
+      userId
+    );
+    
+    res.json(result);
+  }));
+  
+  // Get speech recognition config for language
+  app.get("/api/ai-intake/speech-config", asyncHandler(async (req: Request, res: Response) => {
+    const language = req.query.language as string || 'en';
+    const config = voiceAssistantService.getSpeechRecognitionConfig(language);
+    res.json(config);
+  }));
+  
+  // Get available voices for language
+  app.get("/api/ai-intake/voices", asyncHandler(async (req: Request, res: Response) => {
+    const language = req.query.language as string || 'en';
+    const voices = voiceAssistantService.getVoiceOptions(language);
+    res.json(voices);
+  }));
+  
+  // Get voice prompts for language
+  app.get("/api/ai-intake/prompts", asyncHandler(async (req: Request, res: Response) => {
+    const language = req.query.language as string || 'en';
+    const prompts = voiceAssistantService.getVoicePrompts(language);
+    res.json(prompts);
+  }));
+  
+  // Generate SSML for text
+  app.post("/api/ai-intake/ssml", asyncHandler(async (req: Request, res: Response) => {
+    const { text, options } = req.body;
+    
+    if (!text) {
+      return res.status(400).json({ error: 'text is required' });
+    }
+    
+    const ssml = voiceAssistantService.generateSSML(text, options);
+    res.json({ ssml });
+  }));
+  
+  // Format text for optimal speech
+  app.post("/api/ai-intake/format-speech", asyncHandler(async (req: Request, res: Response) => {
+    const { text, language = 'en' } = req.body;
+    
+    if (!text) {
+      return res.status(400).json({ error: 'text is required' });
+    }
+    
+    const formatted = voiceAssistantService.formatForSpeech(text, language);
+    res.json({ formatted });
+  }));
+  
+  // Get conversation analytics
+  app.get("/api/ai-intake/analytics", requireAuth, requireStaff, asyncHandler(async (req: Request, res: Response) => {
+    const startDate = req.query.startDate ? new Date(req.query.startDate as string) : undefined;
+    const endDate = req.query.endDate ? new Date(req.query.endDate as string) : undefined;
+    
+    const analytics = await aiIntakeAssistantService.getConversationAnalytics(startDate, endDate);
+    res.json(analytics);
+  }));
+  
+  // Schedule appointment through chat
+  app.post("/api/ai-intake/schedule-appointment", asyncHandler(async (req: Request, res: Response) => {
+    const { sessionId, requestedDate, requestedTime } = req.body;
+    
+    if (!sessionId) {
+      return res.status(400).json({ error: 'sessionId is required' });
+    }
+    
+    const result = await aiIntakeAssistantService.scheduleAppointment(
+      sessionId,
+      requestedDate ? new Date(requestedDate) : undefined,
+      requestedTime
+    );
+    
+    res.json(result);
+  }));
+  
+  // Update session preferences
+  app.put("/api/ai-intake/preferences", asyncHandler(async (req: Request, res: Response) => {
+    const { sessionId, preferences } = req.body;
+    
+    if (!sessionId) {
+      return res.status(400).json({ error: 'sessionId is required' });
+    }
+    
+    await aiIntakeAssistantService.updatePreferences(sessionId, preferences);
+    res.json({ success: true });
+  }));
+  
+  // End session and save data
+  app.post("/api/ai-intake/end-session", asyncHandler(async (req: Request, res: Response) => {
+    const { sessionId } = req.body;
+    
+    if (!sessionId) {
+      return res.status(400).json({ error: 'sessionId is required' });
+    }
+    
+    await aiIntakeAssistantService.endSession(sessionId);
+    res.json({ success: true });
+  }));
+  
+  // Get session summary
+  app.get("/api/ai-intake/session/:sessionId", requireAuth, asyncHandler(async (req: Request, res: Response) => {
+    const { sessionId } = req.params;
+    
+    const [session] = await db
+      .select()
+      .from(intakeSessions)
+      .where(eq(intakeSessions.id, sessionId))
+      .limit(1);
+    
+    if (!session) {
+      return res.status(404).json({ error: 'Session not found' });
+    }
+    
+    // Check permission
+    if (session.userId !== req.user?.id && req.user?.role !== 'staff' && req.user?.role !== 'admin') {
+      return res.status(403).json({ error: 'Unauthorized' });
+    }
+    
+    // Get messages
+    const messages = await db
+      .select()
+      .from(intakeMessages)
+      .where(eq(intakeMessages.sessionId, sessionId))
+      .orderBy(intakeMessages.createdAt);
+    
+    res.json({
+      session,
+      messages,
+      extractedData: session.extractedData,
+      formProgress: session.formProgress
+    });
+  }));
+  
+  // Export conversation transcript
+  app.get("/api/ai-intake/export/:sessionId", requireAuth, asyncHandler(async (req: Request, res: Response) => {
+    const { sessionId } = req.params;
+    const format = req.query.format as string || 'json';
+    
+    const [session] = await db
+      .select()
+      .from(intakeSessions)
+      .where(eq(intakeSessions.id, sessionId))
+      .limit(1);
+    
+    if (!session) {
+      return res.status(404).json({ error: 'Session not found' });
+    }
+    
+    // Check permission
+    if (session.userId !== req.user?.id && req.user?.role !== 'staff' && req.user?.role !== 'admin') {
+      return res.status(403).json({ error: 'Unauthorized' });
+    }
+    
+    const messages = await db
+      .select()
+      .from(intakeMessages)
+      .where(eq(intakeMessages.sessionId, sessionId))
+      .orderBy(intakeMessages.createdAt);
+    
+    if (format === 'text') {
+      const transcript = messages.map(m => 
+        `[${m.role.toUpperCase()}] (${new Date(m.createdAt).toLocaleString()}): ${m.content}`
+      ).join('\n\n');
+      
+      res.setHeader('Content-Type', 'text/plain');
+      res.setHeader('Content-Disposition', `attachment; filename="conversation-${sessionId}.txt"`);
+      res.send(transcript);
+    } else {
+      res.json({
+        session,
+        messages,
+        extractedData: session.extractedData,
+        formProgress: session.formProgress
+      });
+    }
+  }));
+
+  // ============================================================================
   // AUDIT LOGS - Compliance and transparency viewing
   // ============================================================================
 

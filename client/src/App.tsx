@@ -78,6 +78,7 @@ import HouseholdProfiler from "@/pages/HouseholdProfiler";
 import VitaIntake from "@/pages/VitaIntake";
 import VitaDocuments from "@/pages/VitaDocuments";
 import AppointmentsCalendar from "@/pages/AppointmentsCalendar";
+import { IntakeAssistant } from "@/pages/IntakeAssistant";
 import TaxpayerDashboard from "@/pages/TaxpayerDashboard";
 import TaxpayerDocumentRequests from "@/pages/TaxpayerDocumentRequests";
 import TaxpayerMessaging from "@/pages/TaxpayerMessaging";
@@ -145,6 +146,9 @@ function Router() {
           <Route path="/screener" component={BenefitScreener} />
           <Route path="/public/quick-screener" component={QuickScreener} />
           <Route path="/public/fsa" component={FsaLanding} />
+          
+          {/* AI Intake Assistant - Public access (no login required for demo) */}
+          <Route path="/intake-assistant" component={IntakeAssistant} />
           
           {/* Mobile SMS Screening - No login required */}
           {/* COMMENTED OUT DURING SCHEMA ROLLBACK */}
