@@ -1690,17 +1690,36 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
     // Get user's primary county assignment (LDSS office)
     const primaryCounty = await storage.getPrimaryCounty(userId);
     
-    // Get active reviews, optionally filtered by supervisor
-    const effectiveSupervisorId = userRole === 'admin' || userRole === 'super_admin' ? undefined : userId;
-    const reviews = await benefitsAccessReviewService.getActiveReviews(effectiveSupervisorId);
+    // Build query with proper joins for county filtering
+    const query = db
+      .select({
+        review: benefitsAccessReviews,
+        case: clientCases,
+      })
+      .from(benefitsAccessReviews)
+      .leftJoin(clientCases, eq(benefitsAccessReviews.caseId, clientCases.id))
+      .where(eq(benefitsAccessReviews.status, 'active'));
     
-    // Filter by county for non-super-admins
-    const filteredReviews = userRole !== 'super_admin' && primaryCounty
-      ? reviews.filter((review: any) => {
-          // TODO: Join with client_cases to get county
-          return true; // For now, return all until we can join properly
-        })
-      : reviews;
+    // Apply filters
+    const conditions = [eq(benefitsAccessReviews.status, 'active')];
+    
+    // Filter by supervisor for non-admin users
+    if (userRole !== 'admin' && userRole !== 'super_admin') {
+      conditions.push(eq(benefitsAccessReviews.supervisorId, userId));
+    }
+    
+    // Scope by county for non-super-admins
+    if (userRole !== 'super_admin' && primaryCounty) {
+      conditions.push(eq(clientCases.county, primaryCounty.code));
+    }
+    
+    const results = await query
+      .where(and(...conditions))
+      .limit(100)
+      .orderBy(desc(benefitsAccessReviews.createdAt));
+    
+    // Extract just the reviews
+    const filteredReviews = results.map(r => r.review);
     
     res.json({ success: true, data: filteredReviews });
   }));

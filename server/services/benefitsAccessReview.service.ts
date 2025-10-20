@@ -554,13 +554,11 @@ const checkpointService = new CheckpointTrackingService();
 
 class AIAssessmentService {
   private genAI: GoogleGenAI | null = null;
-  private model: any = null;
 
   constructor() {
     const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
     if (apiKey) {
-      this.genAI = new GoogleGenAI(apiKey);
-      this.model = this.genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+      this.genAI = new GoogleGenAI({ apiKey });
     }
   }
 
@@ -573,7 +571,7 @@ class AIAssessmentService {
     details: any;
   }> {
     
-    if (!this.model) {
+    if (!this.genAI) {
       throw new Error("Gemini API not configured");
     }
 
@@ -636,9 +634,11 @@ Return your assessment as a JSON object with this structure:
 Score range: 0.0 (poor) to 1.0 (excellent)`;
 
     try {
-      const result = await this.model.generateContent(prompt);
-      const response = result.response;
-      const text = response.text();
+      const result = await this.genAI.models.generateContent({
+        model: "gemini-1.5-flash",
+        contents: [{ role: 'user', parts: [{ text: prompt }] }]
+      });
+      const text = result.text || "";
 
       // Parse JSON from response
       const jsonMatch = text.match(/\{[\s\S]*\}/);
