@@ -2,6 +2,7 @@ import { db } from '../db';
 import { sql } from 'drizzle-orm';
 import { redisCache } from './redisCache';
 import { databaseBackupService } from './databaseBackup.service';
+import { getWebSocketService } from './websocket.service';
 import os from 'os';
 
 export interface ServiceStatus {
@@ -60,12 +61,14 @@ class HealthCheckService {
       geminiStatus,
       objectStorageStatus,
       backupStatus,
+      websocketStatus,
     ] = await Promise.all([
       this.checkDatabase(),
       this.checkRedis(),
       this.checkGemini(),
       this.checkObjectStorage(),
       this.checkBackup(),
+      this.checkWebSocket(),
     ]);
     
     const services = [
@@ -74,6 +77,7 @@ class HealthCheckService {
       geminiStatus,
       objectStorageStatus,
       backupStatus,
+      websocketStatus,
     ];
     
     // Determine overall status
@@ -278,6 +282,66 @@ class HealthCheckService {
         status: 'unhealthy',
         latency: Date.now() - startTime,
         message: 'Backup monitoring failed',
+        details: {
+          error: error instanceof Error ? error.message : 'Unknown error',
+        },
+      };
+    }
+  }
+  
+  /**
+   * Check WebSocket service health
+   */
+  private async checkWebSocket(): Promise<ServiceStatus> {
+    const startTime = Date.now();
+    
+    try {
+      const wsService = getWebSocketService();
+      
+      if (!wsService) {
+        return {
+          name: 'websocket',
+          status: 'degraded',
+          latency: Date.now() - startTime,
+          message: 'WebSocket service not initialized',
+          details: {
+            initialized: false,
+          },
+        };
+      }
+      
+      const health = wsService.getConnectionHealth();
+      const latency = Date.now() - startTime;
+      
+      // Determine status based on connection health
+      let status: 'healthy' | 'degraded' | 'unhealthy' = 'healthy';
+      let message = 'WebSocket service healthy';
+      
+      // Flag degraded if there are connections but none are active
+      if (health.totalConnections > 0 && health.activeConnections === 0) {
+        status = 'degraded';
+        message = 'All WebSocket connections are inactive';
+      }
+      
+      return {
+        name: 'websocket',
+        status,
+        latency,
+        message,
+        details: {
+          totalConnections: health.totalConnections,
+          activeConnections: health.activeConnections,
+          uniqueUsers: health.uniqueUsers,
+          metricsSubscribers: health.metricsSubscribers,
+          heartbeatInterval: '30s',
+        },
+      };
+    } catch (error) {
+      return {
+        name: 'websocket',
+        status: 'unhealthy',
+        latency: Date.now() - startTime,
+        message: 'WebSocket health check failed',
         details: {
           error: error instanceof Error ? error.message : 'Unknown error',
         },
