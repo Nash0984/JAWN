@@ -9644,6 +9644,16 @@ If the question cannot be answered with the available information, say so clearl
     res.json(counties);
   }));
 
+  // Get current user's county assignments (for LDSS office info)
+  app.get("/api/users/me/county-assignments", requireAuth, asyncHandler(async (req: Request, res: Response) => {
+    if (!req.user) {
+      return res.status(401).json({ error: "Authentication required" });
+    }
+    
+    const counties = await storage.getUserCounties(req.user.id);
+    res.json(counties);
+  }));
+
   // Remove user from county (admin only)
   app.delete("/api/county-users/:id", requireAdmin, asyncHandler(async (req: Request, res: Response) => {
     await storage.removeUserFromCounty(req.params.id);

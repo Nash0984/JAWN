@@ -3295,10 +3295,26 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getUserCounties(userId: string): Promise<CountyUser[]> {
-    return await db.query.countyUsers.findMany({
-      where: eq(countyUsers.userId, userId),
-      orderBy: [desc(countyUsers.isPrimary), desc(countyUsers.assignedAt)],
-    });
+    const assignments = await db
+      .select({
+        id: countyUsers.id,
+        countyId: countyUsers.countyId,
+        userId: countyUsers.userId,
+        role: countyUsers.role,
+        isPrimary: countyUsers.isPrimary,
+        accessLevel: countyUsers.accessLevel,
+        assignedAt: countyUsers.assignedAt,
+        assignedBy: countyUsers.assignedBy,
+        deactivatedAt: countyUsers.deactivatedAt,
+        createdAt: countyUsers.createdAt,
+        county: counties,
+      })
+      .from(countyUsers)
+      .leftJoin(counties, eq(countyUsers.countyId, counties.id))
+      .where(eq(countyUsers.userId, userId))
+      .orderBy(desc(countyUsers.isPrimary), desc(countyUsers.assignedAt));
+    
+    return assignments as any;
   }
 
   async getCountyUsers(countyId: string, role?: string): Promise<CountyUser[]> {

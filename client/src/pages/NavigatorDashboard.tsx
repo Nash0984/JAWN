@@ -4,6 +4,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Users, Shield, FileCheck, Search, Calculator, BookOpen, ClipboardCheck } from "lucide-react";
+import { LDSSOfficeInfo } from "@/components/LDSSOfficeInfo";
 
 export default function NavigatorDashboard() {
   const { user } = useAuth();
@@ -78,6 +79,11 @@ export default function NavigatorDashboard() {
           Welcome{user?.fullName ? `, ${user.fullName}` : ""}
           {user?.officeLocation && ` • ${user.officeLocation}`}
         </p>
+      </div>
+
+      {/* LDSS Office Information */}
+      <div className="mb-8">
+        <LDSSOfficeInfo />
       </div>
 
       {/* Quick Actions Grid */}
