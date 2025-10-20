@@ -58,7 +58,8 @@ import Disclaimer from "@/pages/legal/Disclaimer";
 import License from "@/pages/legal/License";
 import AbawdVerificationAdmin from "@/pages/AbawdVerificationAdmin";
 import CrossEnrollmentAdmin from "@/pages/CrossEnrollmentAdmin";
-import SmsConfig from "@/pages/admin/SmsConfig";
+// COMMENTED OUT DURING SCHEMA ROLLBACK
+// import SmsConfig from "@/pages/admin/SmsConfig";
 import FNSStateOptionsManager from "@/pages/admin/FNSStateOptionsManager";
 import FederalLawTracker from "@/pages/admin/FederalLawTracker";
 import MarylandStateLawTracker from "@/pages/admin/MarylandStateLawTracker";
@@ -518,13 +519,14 @@ function Router() {
               </ProtectedRoute>
             )}
           </Route>
-          <Route path="/admin/sms-config">
+          {/* COMMENTED OUT DURING SCHEMA ROLLBACK */}
+          {/* <Route path="/admin/sms-config">
             {() => (
               <ProtectedRoute requireAdmin>
                 <SmsConfig />
               </ProtectedRoute>
             )}
-          </Route>
+          </Route> */}
           <Route path="/admin/fns-state-options">
             {() => (
               <ProtectedRoute requireAdmin>

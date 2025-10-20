@@ -22,6 +22,10 @@ Successfully rolled back subagent-added schema changes to resolve PostgreSQL mig
 
 ### Frontend Components
 - `client/src/pages/MobileScreening.tsx` - Mobile SMS screening interface
+- `client/src/pages/admin/SmsConfig.tsx` - SMS tenant configuration admin page
+
+### Middleware
+- `server/middleware/smsRateLimiter.ts` - SMS rate limiting middleware
 
 ### Schema Files
 - `shared/taxReturnSchema.ts` - Extended tax return schema with e-filing fields
@@ -47,8 +51,10 @@ Successfully rolled back subagent-added schema changes to resolve PostgreSQL mig
 - **Lines 156-167**: Commented out SMS notification code
 
 ### client/src/App.tsx
-- **Line 96**: Commented out MobileScreening import
+- **Line 64-65**: Commented out SmsConfig import
+- **Line 96-97**: Commented out MobileScreening import
 - **Lines 146-147**: Commented out MobileScreening routes
+- **Lines 525-532**: Commented out SmsConfig route (/admin/sms-config)
 
 ### shared/schema.ts
 - **Lines 5269-5370**: SMS integration tables and types (commented with `/* */`)
@@ -160,7 +166,12 @@ npm run dev
 - [x] Backend serves on port 5000
 - [x] WebSocket initialized
 - [x] Database connected
+- [x] HMR (Hot Module Reload) working
+- [x] All SMS-related imports and routes removed
+- [x] SMS middleware moved to backup
+- [x] SMS frontend components moved to backup
 - [x] All existing features functional
+- [x] No orphaned references to SMS services/tables
 - [ ] Schema synchronized (pending db:push)
 - [ ] Production-ready for deployment
 
