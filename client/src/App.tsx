@@ -95,6 +95,7 @@ import Demo from "@/pages/Demo";
 import APIExplorer from "@/pages/APIExplorer";
 import Developers from "@/pages/Developers";
 import EFileDashboard from "@/pages/EFileDashboard";
+import SupervisorReviewDashboard from "@/pages/SupervisorReviewDashboard";
 // COMMENTED OUT DURING SCHEMA ROLLBACK
 // import MobileScreening from "@/pages/MobileScreening";
 
@@ -207,6 +208,13 @@ function Router() {
             {() => (
               <ProtectedRoute requireStaff>
                 <SupervisorCockpit />
+              </ProtectedRoute>
+            )}
+          </Route>
+          <Route path="/supervisor/reviews">
+            {() => (
+              <ProtectedRoute requireStaff>
+                <SupervisorReviewDashboard />
               </ProtectedRoute>
             )}
           </Route>

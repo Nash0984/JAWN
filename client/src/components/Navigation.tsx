@@ -6,6 +6,7 @@ import { File, Search, FileText, HelpCircle, Menu, User, Calculator, BookOpen, F
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import LanguageSelector from "./LanguageSelector";
 import NotificationBell from "./NotificationBell";
+import BarNotificationBadge from "./BarNotificationBadge";
 import { MarylandFlag } from "./MarylandFlag";
 import { useLanguage } from "@/hooks/useLanguage";
 import { useAuth } from "@/hooks/useAuth";
@@ -43,6 +44,7 @@ export default function Navigation() {
     { name: "Consent Forms", href: "/consent", icon: Shield, roles: ["navigator", "caseworker", "admin", "super_admin"] },
     { name: "My QC Cockpit", href: "/caseworker/cockpit", icon: Activity, roles: ["caseworker", "admin", "super_admin"] },
     { name: "QC Command Center", href: "/supervisor/cockpit", icon: LayoutDashboard, roles: ["admin", "super_admin"] },
+    { name: "Supervisor Reviews", href: "/supervisor/reviews", icon: FileCheck, roles: ["admin", "super_admin"] },
     { name: "Policy Manual", href: "/manual", icon: BookOpen, roles: ["client", "navigator", "caseworker", "admin", "super_admin"] },
     { name: "Admin Panel", href: "/admin", icon: Settings, roles: ["admin", "super_admin"] },
     { name: t("nav.help"), href: "/help", icon: HelpCircle, roles: ["public", "client", "navigator", "caseworker", "admin", "super_admin"] },
@@ -134,6 +136,7 @@ export default function Navigation() {
               {isAuthenticated ? (
                 <>
                   <NotificationBell />
+                  <BarNotificationBadge />
                   
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
