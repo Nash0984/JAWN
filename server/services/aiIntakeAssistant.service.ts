@@ -310,10 +310,8 @@ class AIIntakeAssistantService {
     intent: IntentClassification
   ): Promise<string> {
     // Get relevant policy information using RAG
-    const policyContext = await ragService.search(message, {
-      limit: 3,
-      benefitPrograms: ['SNAP', 'MEDICAID', 'TANF', 'OHEP']
-    });
+    // Note: ragService.search only takes a query string and optional single benefitProgramId
+    const policyContext = await ragService.search(message);
 
     const systemPrompt = `
       You are a friendly and knowledgeable benefits counselor helping someone apply for Maryland benefits.
@@ -333,7 +331,7 @@ class AIIntakeAssistantService {
       - User preferences: Language=${context.language}, Voice=${context.preferences.voiceEnabled}
       
       Policy context:
-      ${policyContext.results.map(r => r.content).join('\n\n')}
+      ${policyContext.sources ? policyContext.sources.map(s => s.content).join('\n\n') : 'No specific policy context available'}
     `;
 
     const conversationHistory = context.conversationHistory

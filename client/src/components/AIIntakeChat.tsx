@@ -108,6 +108,13 @@ export function AIIntakeChat() {
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [showTranslation, setShowTranslation] = useState(false);
   
+  // Helper to get CSRF token
+  const getCsrfToken = async (): Promise<string> => {
+    const response = await fetch('/api/csrf-token', { credentials: 'include' });
+    const data = await response.json();
+    return data.token;
+  };
+  
   // Speech recognition and synthesis refs
   const recognitionRef = useRef<any>(null);
   const synthRef = useRef<SpeechSynthesisUtterance | null>(null);
@@ -115,10 +122,23 @@ export function AIIntakeChat() {
 
   // Initialize session
   const initSessionMutation = useMutation({
-    mutationFn: (language: string) => apiRequest('/api/ai-intake/session', {
-      method: 'POST',
-      body: JSON.stringify({ language })
-    }),
+    mutationFn: async (language: string) => {
+      const response = await fetch('/api/ai-intake/session', {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          'x-csrf-token': await getCsrfToken()
+        },
+        credentials: 'include',
+        body: JSON.stringify({ language })
+      });
+      
+      if (!response.ok) {
+        throw new Error('Failed to create session');
+      }
+      
+      return response.json();
+    },
     onSuccess: (data) => {
       setSession(data);
       // Add welcome message
@@ -144,8 +164,14 @@ export function AIIntakeChat() {
       attachmentUrls?: string[];
     }) => {
       if (!session) throw new Error('No active session');
-      return apiRequest(`/api/ai-intake/message`, {
+      
+      const response = await fetch('/api/ai-intake/message', {
         method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-csrf-token': await getCsrfToken()
+        },
+        credentials: 'include',
         body: JSON.stringify({
           sessionId: session.sessionId,
           message,
@@ -153,6 +179,12 @@ export function AIIntakeChat() {
           attachments: attachmentUrls
         })
       });
+      
+      if (!response.ok) {
+        throw new Error('Failed to send message');
+      }
+      
+      return response.json();
     },
     onMutate: ({ message, isVoice }) => {
       // Add user message immediately
