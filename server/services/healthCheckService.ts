@@ -1,6 +1,7 @@
 import { db } from '../db';
 import { sql } from 'drizzle-orm';
 import { redisCache } from './redisCache';
+import { databaseBackupService } from './databaseBackup.service';
 import os from 'os';
 
 export interface ServiceStatus {
@@ -58,11 +59,13 @@ class HealthCheckService {
       redisStatus,
       geminiStatus,
       objectStorageStatus,
+      backupStatus,
     ] = await Promise.all([
       this.checkDatabase(),
       this.checkRedis(),
       this.checkGemini(),
       this.checkObjectStorage(),
+      this.checkBackup(),
     ]);
     
     const services = [
@@ -70,6 +73,7 @@ class HealthCheckService {
       redisStatus,
       geminiStatus,
       objectStorageStatus,
+      backupStatus,
     ];
     
     // Determine overall status
@@ -239,6 +243,46 @@ class HealthCheckService {
         bucket: gcsBucket,
       },
     };
+  }
+  
+  /**
+   * Check database backup system health
+   */
+  private async checkBackup(): Promise<ServiceStatus> {
+    const startTime = Date.now();
+    
+    try {
+      const backupStatus = await databaseBackupService.getBackupStatus();
+      const latency = Date.now() - startTime;
+      
+      return {
+        name: 'backup',
+        status: backupStatus.status,
+        latency,
+        message: backupStatus.message,
+        details: {
+          pitrEnabled: backupStatus.pitrEnabled,
+          retentionDays: backupStatus.retentionDays,
+          databaseSize: backupStatus.details?.sizeFormatted,
+          tableCount: backupStatus.tableCount,
+          connectionPool: {
+            active: backupStatus.connectionPoolActive,
+            idle: backupStatus.connectionPoolIdle,
+            max: backupStatus.connectionPoolMax,
+          },
+        },
+      };
+    } catch (error) {
+      return {
+        name: 'backup',
+        status: 'unhealthy',
+        latency: Date.now() - startTime,
+        message: 'Backup monitoring failed',
+        details: {
+          error: error instanceof Error ? error.message : 'Unknown error',
+        },
+      };
+    }
   }
   
   /**

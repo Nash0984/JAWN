@@ -219,6 +219,29 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
   // Startup probe (has service completed startup?)
   app.get("/startup", startupCheck);
   
+  // Database backup monitoring endpoints
+  const { databaseBackupService } = await import("./services/databaseBackup.service");
+  
+  app.get("/api/backup/status", asyncHandler(async (req: Request, res: Response) => {
+    const status = await databaseBackupService.getBackupStatus();
+    res.json(status);
+  }));
+  
+  app.get("/api/backup/metrics", asyncHandler(async (req: Request, res: Response) => {
+    const metrics = await databaseBackupService.getBackupMetrics();
+    res.json(metrics);
+  }));
+  
+  app.get("/api/backup/verify", asyncHandler(async (req: Request, res: Response) => {
+    const verification = await databaseBackupService.verifyBackupRestoration();
+    res.json(verification);
+  }));
+  
+  app.get("/api/backup/recommendations", asyncHandler(async (req: Request, res: Response) => {
+    const recommendations = await databaseBackupService.getBackupRecommendations();
+    res.json({ recommendations });
+  }));
+  
   // Legacy comprehensive health check endpoint (kept for backwards compatibility)
   app.get("/api/health", asyncHandler(async (req: Request, res: Response) => {
     const healthStatus: any = {
