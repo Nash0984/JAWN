@@ -5382,6 +5382,296 @@ export type InsertTenantBranding = z.infer<typeof insertTenantBrandingSchema>;
 export type TenantBranding = typeof tenantBranding.$inferSelect;
 
 // ============================================================================
+// PHONE SYSTEM TABLES - Voice Call Infrastructure
+// ============================================================================
+
+// Phone System Configuration for Multi-tenant Setup
+export const phoneSystemConfigs = pgTable("phone_system_configs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").references((): any => tenants.id).notNull(),
+  systemType: text("system_type").notNull(), // twilio, asterisk, freepbx, cisco, custom_sip
+  systemName: text("system_name").notNull(),
+  
+  // SIP/PBX Configuration
+  sipHost: text("sip_host"), // SIP server hostname/IP
+  sipPort: integer("sip_port").default(5060),
+  sipUsername: text("sip_username"),
+  sipPassword: text("sip_password"), // encrypted
+  sipDomain: text("sip_domain"),
+  sipTransport: text("sip_transport").default("udp"), // udp, tcp, tls
+  
+  // Twilio Configuration
+  twilioAccountSid: text("twilio_account_sid"),
+  twilioAuthToken: text("twilio_auth_token"), // encrypted
+  twilioPhoneNumber: text("twilio_phone_number"),
+  twilioApiKey: text("twilio_api_key"),
+  twilioApiSecret: text("twilio_api_secret"), // encrypted
+  
+  // WebRTC Configuration
+  stunServers: jsonb("stun_servers"), // Array of STUN server URLs
+  turnServers: jsonb("turn_servers"), // Array of TURN server configs
+  
+  // Features
+  supportsRecording: boolean("supports_recording").default(true),
+  supportsTranscription: boolean("supports_transcription").default(false),
+  supportsWhisper: boolean("supports_whisper").default(false),
+  supportsDTMF: boolean("supports_dtmf").default(true),
+  
+  priority: integer("priority").default(0), // Higher priority systems tried first
+  isActive: boolean("is_active").default(true).notNull(),
+  isDefault: boolean("is_default").default(false), // Default system for tenant
+  
+  metadata: jsonb("metadata"), // Additional system-specific config
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  tenantIdIdx: index("phone_system_configs_tenant_id_idx").on(table.tenantId),
+  tenantActiveIdx: index("phone_system_configs_tenant_active_idx").on(table.tenantId, table.isActive),
+}));
+
+// Phone Call Records - Main call tracking table
+export const phoneCallRecords = pgTable("phone_call_records", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").references((): any => tenants.id).notNull(),
+  systemConfigId: varchar("system_config_id").references(() => phoneSystemConfigs.id),
+  
+  // Call identifiers
+  callId: text("call_id").notNull().unique(), // Unique call identifier (SID for Twilio, UUID for others)
+  parentCallId: text("parent_call_id"), // For transfers/conferences
+  sessionId: text("session_id"), // WebRTC session ID if applicable
+  
+  // Call parties
+  fromNumber: text("from_number").notNull(),
+  toNumber: text("to_number").notNull(),
+  agentId: varchar("agent_id").references(() => users.id),
+  clientId: varchar("client_id").references(() => users.id),
+  
+  // Call details
+  direction: text("direction").notNull(), // inbound, outbound
+  status: text("status").notNull(), // queued, ringing, in-progress, completed, failed, busy, no-answer
+  disposition: text("disposition"), // answered, voicemail, abandoned, transferred
+  
+  // Timestamps
+  queuedAt: timestamp("queued_at"),
+  startTime: timestamp("start_time"),
+  answerTime: timestamp("answer_time"),
+  endTime: timestamp("end_time"),
+  duration: integer("duration"), // seconds
+  talkTime: integer("talk_time"), // actual talk time in seconds
+  holdTime: integer("hold_time"), // total hold time in seconds
+  
+  // Recording & Transcription
+  recordingUrl: text("recording_url"),
+  recordingDuration: integer("recording_duration"),
+  transcriptionText: text("transcription_text"),
+  transcriptionUrl: text("transcription_url"),
+  consentGiven: boolean("consent_given").default(false),
+  consentTimestamp: timestamp("consent_timestamp"),
+  
+  // IVR Navigation
+  ivrPath: jsonb("ivr_path"), // Array of IVR menu selections
+  ivrCompletedAt: timestamp("ivr_completed_at"),
+  dtmfInputs: jsonb("dtmf_inputs"), // DTMF tones pressed
+  
+  // Quality & Analytics
+  qualityScore: real("quality_score"), // 0-1 call quality score
+  sentimentScore: real("sentiment_score"), // -1 to 1 sentiment analysis
+  audioQualityMetrics: jsonb("audio_quality_metrics"), // jitter, packet loss, etc.
+  
+  // Cost tracking
+  cost: integer("cost"), // in cents
+  billingDuration: integer("billing_duration"), // billable duration in seconds
+  
+  notes: text("notes"),
+  metadata: jsonb("metadata"), // Additional call-specific data
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  callIdIdx: index("phone_call_records_call_id_idx").on(table.callId),
+  tenantIdIdx: index("phone_call_records_tenant_id_idx").on(table.tenantId),
+  agentIdIdx: index("phone_call_records_agent_id_idx").on(table.agentId),
+  clientIdIdx: index("phone_call_records_client_id_idx").on(table.clientId),
+  statusIdx: index("phone_call_records_status_idx").on(table.status),
+  startTimeIdx: index("phone_call_records_start_time_idx").on(table.startTime),
+}));
+
+// IVR Menu Configuration
+export const ivrMenus = pgTable("ivr_menus", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").references((): any => tenants.id).notNull(),
+  menuId: text("menu_id").notNull(), // Unique menu identifier
+  parentMenuId: text("parent_menu_id"), // For nested menus
+  
+  // Menu properties
+  name: text("name").notNull(),
+  description: text("description"),
+  greetingText: text("greeting_text").notNull(), // Text to be spoken
+  greetingAudioUrl: text("greeting_audio_url"), // Pre-recorded audio
+  
+  // Language support
+  language: text("language").default("en").notNull(), // en, es, etc.
+  voiceGender: text("voice_gender").default("female"), // male, female
+  voiceName: text("voice_name"), // Specific TTS voice name
+  
+  // Input handling
+  inputType: text("input_type").default("dtmf").notNull(), // dtmf, voice, both
+  maxDigits: integer("max_digits").default(1),
+  timeout: integer("timeout").default(5), // seconds to wait for input
+  maxRetries: integer("max_retries").default(3),
+  
+  // Natural language understanding (for voice input)
+  speechModel: text("speech_model"), // Speech recognition model
+  intentKeywords: jsonb("intent_keywords"), // Keywords for voice recognition
+  
+  isActive: boolean("is_active").default(true).notNull(),
+  priority: integer("priority").default(0), // Menu ordering
+  metadata: jsonb("metadata"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  tenantMenuIdx: index("ivr_menus_tenant_menu_idx").on(table.tenantId, table.menuId),
+  parentMenuIdx: index("ivr_menus_parent_menu_idx").on(table.parentMenuId),
+}));
+
+// IVR Menu Options
+export const ivrMenuOptions = pgTable("ivr_menu_options", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  menuId: varchar("menu_id").references(() => ivrMenus.id, { onDelete: "cascade" }).notNull(),
+  
+  // Option trigger
+  dtmfKey: text("dtmf_key"), // "1", "2", "#", "*", etc.
+  voiceKeyword: text("voice_keyword"), // "benefits", "status", etc.
+  
+  // Option details
+  label: text("label").notNull(), // "Benefit Screening"
+  promptText: text("prompt_text").notNull(), // "Press 1 for benefit screening"
+  
+  // Action
+  actionType: text("action_type").notNull(), // menu, transfer, callback, hangup, record
+  actionTarget: text("action_target"), // Menu ID, phone number, queue name
+  actionMetadata: jsonb("action_metadata"), // Additional action-specific data
+  
+  priority: integer("priority").default(0),
+  isActive: boolean("is_active").default(true).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+  menuIdIdx: index("ivr_menu_options_menu_id_idx").on(table.menuId),
+  dtmfKeyIdx: index("ivr_menu_options_dtmf_key_idx").on(table.menuId, table.dtmfKey),
+}));
+
+// Call Queue Management
+export const callQueues = pgTable("call_queues", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").references((): any => tenants.id).notNull(),
+  
+  queueName: text("queue_name").notNull(),
+  description: text("description"),
+  
+  // Queue configuration
+  maxWaitTime: integer("max_wait_time").default(1800), // seconds (30 min default)
+  maxQueueSize: integer("max_queue_size").default(100),
+  priorityEnabled: boolean("priority_enabled").default(false),
+  
+  // Music/Messages
+  holdMusicUrl: text("hold_music_url"),
+  positionAnnouncementInterval: integer("position_announcement_interval").default(60), // seconds
+  waitTimeAnnouncementInterval: integer("wait_time_announcement_interval").default(120), // seconds
+  
+  // Routing
+  routingStrategy: text("routing_strategy").default("round_robin"), // round_robin, least_recent, skills_based
+  overflowQueueId: varchar("overflow_queue_id"), // Transfer to another queue if full
+  
+  // Operating hours
+  operatingHours: jsonb("operating_hours"), // Schedule by day of week
+  afterHoursAction: text("after_hours_action"), // voicemail, transfer, message
+  afterHoursTarget: text("after_hours_target"),
+  
+  isActive: boolean("is_active").default(true).notNull(),
+  metadata: jsonb("metadata"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  tenantQueueIdx: index("call_queues_tenant_queue_idx").on(table.tenantId, table.queueName),
+}));
+
+// Call Queue Entries - Active calls in queue
+export const callQueueEntries = pgTable("call_queue_entries", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  queueId: varchar("queue_id").references(() => callQueues.id, { onDelete: "cascade" }).notNull(),
+  callRecordId: varchar("call_record_id").references(() => phoneCallRecords.id).notNull(),
+  
+  position: integer("position").notNull(),
+  priority: integer("priority").default(0), // Higher priority served first
+  
+  joinedAt: timestamp("joined_at").defaultNow().notNull(),
+  abandonedAt: timestamp("abandoned_at"),
+  answeredAt: timestamp("answered_at"),
+  
+  estimatedWaitTime: integer("estimated_wait_time"), // seconds
+  actualWaitTime: integer("actual_wait_time"), // seconds
+  
+  status: text("status").notNull(), // waiting, abandoned, answered
+  metadata: jsonb("metadata"),
+}, (table) => ({
+  queueIdIdx: index("call_queue_entries_queue_id_idx").on(table.queueId),
+  statusIdx: index("call_queue_entries_status_idx").on(table.status),
+  positionIdx: index("call_queue_entries_position_idx").on(table.queueId, table.position),
+}));
+
+// Call Recording Consent Tracking
+export const callRecordingConsents = pgTable("call_recording_consents", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  callRecordId: varchar("call_record_id").references(() => phoneCallRecords.id).notNull(),
+  
+  consentType: text("consent_type").notNull(), // verbal, dtmf, written
+  consentGiven: boolean("consent_given").notNull(),
+  consentTimestamp: timestamp("consent_timestamp").defaultNow().notNull(),
+  
+  // Consent details
+  consentMethod: text("consent_method"), // How consent was obtained
+  consentText: text("consent_text"), // What was said/shown
+  dtmfResponse: text("dtmf_response"), // DTMF key pressed for consent
+  
+  // Legal compliance
+  stateCode: text("state_code"), // State where call originated
+  requiresTwoPartyConsent: boolean("requires_two_party_consent"),
+  
+  metadata: jsonb("metadata"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+  callRecordIdx: index("call_recording_consents_call_record_idx").on(table.callRecordId),
+}));
+
+// Agent Call Status - Real-time agent availability
+export const agentCallStatus = pgTable("agent_call_status", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  agentId: varchar("agent_id").references(() => users.id).notNull().unique(),
+  
+  status: text("status").notNull(), // available, busy, on_call, after_call_work, break, offline
+  currentCallId: varchar("current_call_id").references(() => phoneCallRecords.id),
+  
+  // Statistics
+  callsHandledToday: integer("calls_handled_today").default(0),
+  totalTalkTimeToday: integer("total_talk_time_today").default(0), // seconds
+  averageHandleTime: integer("average_handle_time"), // seconds
+  
+  // Availability
+  availableSince: timestamp("available_since"),
+  lastCallEndedAt: timestamp("last_call_ended_at"),
+  nextAvailableAt: timestamp("next_available_at"),
+  
+  // Queue assignments
+  assignedQueues: jsonb("assigned_queues"), // Array of queue IDs
+  skills: jsonb("skills"), // Array of skill tags for routing
+  
+  metadata: jsonb("metadata"),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  statusIdx: index("agent_call_status_status_idx").on(table.status),
+  agentIdIdx: index("agent_call_status_agent_id_idx").on(table.agentId),
+}));
+
+// ============================================================================
 // MONITORING METRICS - Error tracking and performance monitoring
 // ============================================================================
 
