@@ -986,6 +986,145 @@ export const clientCases = pgTable("client_cases", {
   createdAtIdx: index("client_cases_created_at_idx").on(table.createdAt),
 }));
 
+// Cross-Enrollment Intelligence Tables
+export const crossEnrollmentRecommendations = pgTable("cross_enrollment_recommendations", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  householdProfileId: varchar("household_profile_id").references(() => householdProfiles.id, { onDelete: "cascade" }),
+  clientCaseId: varchar("client_case_id").references(() => clientCases.id, { onDelete: "cascade" }),
+  
+  // Program recommendations
+  recommendedProgramId: varchar("recommended_program_id").references(() => benefitPrograms.id).notNull(),
+  currentEnrollments: jsonb("current_enrollments"), // Array of currently enrolled programs
+  
+  // AI Predictions
+  eligibilityConfidence: real("eligibility_confidence").notNull(), // 0-1 confidence score
+  estimatedBenefitAmount: integer("estimated_benefit_amount"), // in cents
+  impactScore: real("impact_score"), // 0-100 score of potential impact
+  priority: text("priority").notNull().default("medium"), // low, medium, high, critical
+  
+  // Recommendation details
+  recommendationType: text("recommendation_type").notNull(), // new_enrollment, renewal, recertification, appeal
+  explanation: text("explanation").notNull(), // AI-generated explanation
+  requirements: jsonb("requirements"), // List of requirements to qualify
+  estimatedProcessingTime: integer("estimated_processing_time"), // in days
+  applicationDeadline: timestamp("application_deadline"),
+  
+  // Status tracking
+  status: text("status").notNull().default("pending"), // pending, accepted, declined, applied, enrolled
+  userResponse: text("user_response"), // User's response to recommendation
+  respondedAt: timestamp("responded_at"),
+  appliedAt: timestamp("applied_at"),
+  enrolledAt: timestamp("enrolled_at"),
+  
+  // Metadata
+  modelVersion: text("model_version"),
+  predictionMetadata: jsonb("prediction_metadata"), // Additional AI model outputs
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  householdIdx: index("cross_enrollment_household_idx").on(table.householdProfileId),
+  statusIdx: index("cross_enrollment_status_idx").on(table.status),
+  priorityIdx: index("cross_enrollment_priority_idx").on(table.priority),
+}));
+
+// Predictive Analytics History
+export const predictionHistory = pgTable("prediction_history", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  predictionType: text("prediction_type").notNull(), // case_outcome, processing_time, renewal_likelihood, benefit_amount, resource_allocation
+  
+  // Reference to entity
+  entityType: text("entity_type").notNull(), // client_case, household_profile, benefit_program, office
+  entityId: varchar("entity_id").notNull(),
+  
+  // Prediction details
+  prediction: jsonb("prediction").notNull(), // Actual prediction values
+  confidence: real("confidence"), // 0-1 confidence score
+  features: jsonb("features"), // Input features used for prediction
+  modelName: text("model_name").notNull(),
+  modelVersion: text("model_version").notNull(),
+  
+  // Outcome tracking (for model improvement)
+  actualOutcome: jsonb("actual_outcome"), // Actual outcome when known
+  outcomeRecordedAt: timestamp("outcome_recorded_at"),
+  predictionAccuracy: real("prediction_accuracy"), // 0-1 accuracy score
+  
+  // Metadata
+  metadata: jsonb("metadata"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+  entityIdx: index("prediction_history_entity_idx").on(table.entityType, table.entityId),
+  typeIdx: index("prediction_history_type_idx").on(table.predictionType),
+  createdAtIdx: index("prediction_history_created_idx").on(table.createdAt),
+}));
+
+// ML Model Registry
+export const mlModels = pgTable("ml_models", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  modelName: text("model_name").notNull(),
+  modelType: text("model_type").notNull(), // classification, regression, clustering, anomaly_detection
+  targetVariable: text("target_variable").notNull(),
+  version: text("version").notNull(),
+  
+  // Model details
+  algorithm: text("algorithm"), // random_forest, xgboost, neural_network, etc.
+  features: jsonb("features").notNull(), // List of feature names and types
+  hyperparameters: jsonb("hyperparameters"),
+  
+  // Performance metrics
+  trainingMetrics: jsonb("training_metrics"), // accuracy, precision, recall, f1, etc.
+  validationMetrics: jsonb("validation_metrics"),
+  testMetrics: jsonb("test_metrics"),
+  
+  // Training data
+  trainingDataSize: integer("training_data_size"),
+  trainingStartDate: timestamp("training_start_date"),
+  trainingEndDate: timestamp("training_end_date"),
+  lastRetrainedAt: timestamp("last_retrained_at"),
+  
+  // Deployment
+  status: text("status").notNull().default("development"), // development, staging, production, deprecated
+  deployedAt: timestamp("deployed_at"),
+  deployedBy: varchar("deployed_by").references(() => users.id),
+  
+  // Monitoring
+  driftThreshold: real("drift_threshold"), // Threshold for data drift detection
+  lastDriftCheck: timestamp("last_drift_check"),
+  driftDetected: boolean("drift_detected").default(false),
+  
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  modelNameVersionIdx: uniqueIndex("ml_models_name_version_idx").on(table.modelName, table.version),
+  statusIdx: index("ml_models_status_idx").on(table.status),
+}));
+
+// Analytics Aggregations
+export const analyticsAggregations = pgTable("analytics_aggregations", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  aggregationType: text("aggregation_type").notNull(), // daily, weekly, monthly
+  metricCategory: text("metric_category").notNull(), // cross_enrollment, predictions, processing_times, outcomes
+  
+  // Time period
+  periodStart: timestamp("period_start").notNull(),
+  periodEnd: timestamp("period_end").notNull(),
+  
+  // Dimensions
+  programId: varchar("program_id").references(() => benefitPrograms.id),
+  officeLocation: text("office_location"),
+  countyCode: text("county_code"),
+  
+  // Metrics
+  metrics: jsonb("metrics").notNull(), // Aggregated metrics
+  
+  // Metadata
+  calculatedAt: timestamp("calculated_at").defaultNow().notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+  periodIdx: index("analytics_aggregations_period_idx").on(table.periodStart, table.periodEnd),
+  categoryIdx: index("analytics_aggregations_category_idx").on(table.metricCategory),
+  programIdx: index("analytics_aggregations_program_idx").on(table.programId),
+}));
+
 // Relations for Rules as Code tables
 export const povertyLevelsRelations = relations(povertyLevels, ({ one }) => ({
   creator: one(users, {
@@ -7507,6 +7646,40 @@ export type HipaaSecurityIncident = typeof hipaaSecurityIncidents.$inferSelect;
 export type InsertHipaaSecurityIncident = z.infer<typeof insertHipaaSecurityIncidentSchema>;
 export type HipaaAuditLog = typeof hipaaAuditLogs.$inferSelect;
 export type InsertHipaaAuditLog = z.infer<typeof insertHipaaAuditLogSchema>;
+
+// Insert schemas for Cross-Enrollment and Predictive Analytics
+export const insertCrossEnrollmentRecommendationSchema = createInsertSchema(crossEnrollmentRecommendations).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertPredictionHistorySchema = createInsertSchema(predictionHistory).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertMlModelSchema = createInsertSchema(mlModels).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertAnalyticsAggregationSchema = createInsertSchema(analyticsAggregations).omit({
+  id: true,
+  calculatedAt: true,
+  createdAt: true,
+});
+
+// Types for Cross-Enrollment and Predictive Analytics
+export type CrossEnrollmentRecommendation = typeof crossEnrollmentRecommendations.$inferSelect;
+export type InsertCrossEnrollmentRecommendation = z.infer<typeof insertCrossEnrollmentRecommendationSchema>;
+export type PredictionHistory = typeof predictionHistory.$inferSelect;
+export type InsertPredictionHistory = z.infer<typeof insertPredictionHistorySchema>;
+export type MlModel = typeof mlModels.$inferSelect;
+export type InsertMlModel = z.infer<typeof insertMlModelSchema>;
+export type AnalyticsAggregation = typeof analyticsAggregations.$inferSelect;
+export type InsertAnalyticsAggregation = z.infer<typeof insertAnalyticsAggregationSchema>;
 
 // ============================================================================
 // BENEFITS ACCESS REVIEW MODULE - Autonomous case monitoring system

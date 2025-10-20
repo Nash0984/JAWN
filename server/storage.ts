@@ -5404,6 +5404,108 @@ export class DatabaseStorage implements IStorage {
   async deleteCrossStateRuleApplication(id: string): Promise<void> {
     await db.delete(crossStateRuleApplications).where(eq(crossStateRuleApplications.id, id));
   }
+
+  // ============================================================================
+  // CROSS-ENROLLMENT AND ANALYTICS METHODS
+  // ============================================================================
+  
+  async createApplication(data: any): Promise<any> {
+    const [created] = await db.insert(clientCases).values({
+      ...data,
+      createdAt: new Date(),
+      updatedAt: new Date()
+    }).returning();
+    return created;
+  }
+  
+  async deleteHouseholdProfile(id: string): Promise<void> {
+    await db.delete(householdProfiles).where(eq(householdProfiles.id, id));
+  }
+  
+  async getPredictionMetrics(timeRange: string): Promise<any> {
+    // Mock implementation - would query actual prediction history
+    return [
+      { label: "Case Approval Rate", value: 78, change: 3.2, trend: "up", confidence: 0.89 },
+      { label: "Avg Processing Time", value: 21, change: -2.5, trend: "down", confidence: 0.92 },
+      { label: "Renewal Rate", value: 85, change: 1.8, trend: "up", confidence: 0.87 },
+      { label: "Cross-Enrollment Rate", value: 42, change: 8.5, trend: "up", confidence: 0.84 },
+    ];
+  }
+  
+  async getCrossEnrollmentOpportunities(): Promise<any[]> {
+    // Mock implementation - would query cross-enrollment recommendations
+    return [
+      { program: "SNAP", households: 1250, potentialBenefit: 312500, confidence: 0.92, priority: "high" },
+      { program: "WIC", households: 890, potentialBenefit: 89000, confidence: 0.88, priority: "high" },
+      { program: "LIHEAP", households: 2100, potentialBenefit: 420000, confidence: 0.85, priority: "critical" },
+      { program: "Medicaid", households: 560, potentialBenefit: 280000, confidence: 0.91, priority: "medium" },
+      { program: "TANF", households: 320, potentialBenefit: 160000, confidence: 0.79, priority: "medium" },
+    ];
+  }
+  
+  async getProcessingTimeForecasts(office?: string): Promise<any[]> {
+    // Mock implementation - would query prediction history
+    return [
+      { program: "SNAP", currentAvg: 21, predictedAvg: 18, complexity: "medium", bottlenecks: ["Income verification"] },
+      { program: "Medicaid", currentAvg: 35, predictedAvg: 30, complexity: "high", bottlenecks: ["Medical review", "Documentation"] },
+      { program: "TANF", currentAvg: 28, predictedAvg: 25, complexity: "medium", bottlenecks: ["Work requirements"] },
+      { program: "WIC", currentAvg: 14, predictedAvg: 12, complexity: "low", bottlenecks: [] },
+    ];
+  }
+  
+  async getResourceUtilization(office?: string): Promise<any[]> {
+    // Mock implementation - would query analytics aggregations
+    return [
+      { office: "Baltimore", currentLoad: 85, predictedLoad: 92, staffing: 12, efficiency: 78 },
+      { office: "Montgomery", currentLoad: 72, predictedLoad: 75, staffing: 10, efficiency: 85 },
+      { office: "Prince George's", currentLoad: 90, predictedLoad: 88, staffing: 14, efficiency: 72 },
+      { office: "Anne Arundel", currentLoad: 68, predictedLoad: 70, staffing: 8, efficiency: 88 },
+    ];
+  }
+  
+  async getTrendData(timeRange: string): Promise<any[]> {
+    // Mock implementation - would query historical data
+    const days = timeRange === '7d' ? 7 : timeRange === '30d' ? 30 : 90;
+    return Array.from({ length: days }, (_, i) => {
+      const date = new Date();
+      date.setDate(date.getDate() - (days - i - 1));
+      return {
+        date: date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+        predictions: Math.floor(Math.random() * 50) + 100,
+        actual: Math.floor(Math.random() * 50) + 95,
+        confidence: Math.random() * 0.2 + 0.8,
+      };
+    });
+  }
+  
+  async generateAnalyticsReport(params: { type: string; range: string; office?: string }): Promise<any> {
+    // Generate comprehensive analytics report
+    const [metrics, opportunities, processing, resources, trends] = await Promise.all([
+      this.getPredictionMetrics(params.range),
+      this.getCrossEnrollmentOpportunities(),
+      this.getProcessingTimeForecasts(params.office),
+      this.getResourceUtilization(params.office),
+      this.getTrendData(params.range)
+    ]);
+    
+    return {
+      reportType: params.type,
+      dateRange: params.range,
+      office: params.office || 'all',
+      generatedAt: new Date(),
+      metrics,
+      opportunities,
+      processing,
+      resources,
+      trends,
+      summary: {
+        totalHouseholdsAnalyzed: opportunities.reduce((sum, o) => sum + o.households, 0),
+        totalPotentialBenefit: opportunities.reduce((sum, o) => sum + o.potentialBenefit, 0),
+        avgConfidence: opportunities.reduce((sum, o) => sum + o.confidence, 0) / opportunities.length,
+        highPriorityCount: opportunities.filter(o => o.priority === 'high' || o.priority === 'critical').length
+      }
+    };
+  }
 }
 
 export const storage = new DatabaseStorage();

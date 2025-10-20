@@ -11099,6 +11099,285 @@ If the question cannot be answered with the available information, say so clearl
   }));
 
   // ============================================================================
+  // CROSS-ENROLLMENT ENGINE ENDPOINTS
+  // ============================================================================
+  
+  const { crossEnrollmentEngineService } = await import("./services/crossEnrollmentEngine.service");
+  const { predictiveAnalyticsService } = await import("./services/predictiveAnalytics.service");
+  
+  // Analyze household for cross-enrollment opportunities
+  app.get("/api/cross-enrollment/analyze/:householdId", requireAuth, asyncHandler(async (req: Request, res: Response) => {
+    const { householdId } = req.params;
+    
+    const analysis = await crossEnrollmentEngineService.analyzeHousehold(householdId);
+    
+    res.json(analysis);
+  }));
+  
+  // Bulk analyze households
+  app.post("/api/cross-enrollment/analyze", requireAuth, asyncHandler(async (req: Request, res: Response) => {
+    const { householdData } = req.body;
+    
+    if (!householdData) {
+      throw validationError("householdData is required");
+    }
+    
+    // Create temporary household profile for analysis
+    const tempHouseholdId = `temp_${Date.now()}`;
+    await storage.createHouseholdProfile({
+      id: tempHouseholdId,
+      ...householdData,
+      tenantId: req.user!.tenantId
+    });
+    
+    const analysis = await crossEnrollmentEngineService.analyzeHousehold(tempHouseholdId);
+    
+    // Clean up temporary profile
+    await storage.deleteHouseholdProfile(tempHouseholdId);
+    
+    res.json(analysis);
+  }));
+  
+  // Get cross-enrollment recommendations for household
+  app.get("/api/cross-enrollment/recommendations/:householdId", requireAuth, asyncHandler(async (req: Request, res: Response) => {
+    const { householdId } = req.params;
+    
+    const recommendations = await crossEnrollmentEngineService.identifyUnclaimedBenefits(householdId);
+    
+    res.json(recommendations);
+  }));
+  
+  // Generate what-if scenarios
+  app.post("/api/cross-enrollment/what-if", requireAuth, asyncHandler(async (req: Request, res: Response) => {
+    const { householdId, scenarios } = req.body;
+    
+    if (!householdId || !scenarios || !Array.isArray(scenarios)) {
+      throw validationError("householdId and scenarios array are required");
+    }
+    
+    const results = await crossEnrollmentEngineService.generateWhatIfScenarios(householdId, scenarios);
+    
+    res.json(results);
+  }));
+  
+  // Apply for multiple benefits (bundle applications)
+  app.post("/api/cross-enrollment/apply", requireAuth, asyncHandler(async (req: Request, res: Response) => {
+    const { householdId, programIds } = req.body;
+    
+    if (!householdId || !programIds || !Array.isArray(programIds)) {
+      throw validationError("householdId and programIds array are required");
+    }
+    
+    // Create bundled applications
+    const applications = await Promise.all(
+      programIds.map(async (programId) => {
+        return await storage.createApplication({
+          householdProfileId: householdId,
+          benefitProgramId: programId,
+          status: 'pending',
+          submittedBy: req.user!.id,
+          submittedAt: new Date(),
+          source: 'cross_enrollment_wizard'
+        });
+      })
+    );
+    
+    res.json({
+      message: `Successfully submitted ${applications.length} benefit applications`,
+      applications
+    });
+  }));
+  
+  // Batch analyze multiple households
+  app.post("/api/cross-enrollment/batch-analyze", requireAuth, requireStaff, asyncHandler(async (req: Request, res: Response) => {
+    const { householdIds } = req.body;
+    
+    if (!householdIds || !Array.isArray(householdIds)) {
+      throw validationError("householdIds array is required");
+    }
+    
+    const results = await crossEnrollmentEngineService.batchAnalyze(householdIds);
+    
+    res.json({
+      analyzed: results.size,
+      results: Array.from(results.entries()).map(([id, analysis]) => ({
+        householdId: id,
+        ...analysis
+      }))
+    });
+  }));
+  
+  // ============================================================================
+  // PREDICTIVE ANALYTICS ENDPOINTS
+  // ============================================================================
+  
+  // Get predictions dashboard data
+  app.get("/api/analytics/predictions", requireAuth, asyncHandler(async (req: Request, res: Response) => {
+    const { timeRange } = req.query;
+    
+    // Get key metrics
+    const metrics = await storage.getPredictionMetrics(timeRange as string || '7d');
+    
+    res.json({
+      metrics,
+      timestamp: new Date()
+    });
+  }));
+  
+  // Get cross-enrollment analytics
+  app.get("/api/analytics/cross-enrollment", requireAuth, asyncHandler(async (req: Request, res: Response) => {
+    const opportunities = await storage.getCrossEnrollmentOpportunities();
+    
+    res.json({
+      opportunities,
+      timestamp: new Date()
+    });
+  }));
+  
+  // Get insights for office/program
+  app.get("/api/analytics/insights", requireAuth, asyncHandler(async (req: Request, res: Response) => {
+    const { timeRange, office } = req.query;
+    
+    const [processing, resources, anomalies] = await Promise.all([
+      storage.getProcessingTimeForecasts(office as string),
+      storage.getResourceUtilization(office as string),
+      predictiveAnalyticsService.detectAnomalies('client_case', 24)
+    ]);
+    
+    res.json({
+      processing,
+      resources,
+      anomalies,
+      timestamp: new Date()
+    });
+  }));
+  
+  // Get trend data
+  app.get("/api/analytics/trends", requireAuth, asyncHandler(async (req: Request, res: Response) => {
+    const { timeRange } = req.query;
+    
+    const trendData = await storage.getTrendData(timeRange as string || '30d');
+    
+    res.json({
+      data: trendData,
+      timestamp: new Date()
+    });
+  }));
+  
+  // Predict case outcome
+  app.post("/api/analytics/predict-outcome", requireAuth, requireStaff, asyncHandler(async (req: Request, res: Response) => {
+    const { caseId } = req.body;
+    
+    if (!caseId) {
+      throw validationError("caseId is required");
+    }
+    
+    const prediction = await predictiveAnalyticsService.predictCaseOutcome(caseId);
+    
+    res.json(prediction);
+  }));
+  
+  // Estimate processing time
+  app.post("/api/analytics/estimate-processing", requireAuth, asyncHandler(async (req: Request, res: Response) => {
+    const { programId, caseAttributes } = req.body;
+    
+    if (!programId || !caseAttributes) {
+      throw validationError("programId and caseAttributes are required");
+    }
+    
+    const estimate = await predictiveAnalyticsService.estimateProcessingTime(programId, caseAttributes);
+    
+    res.json(estimate);
+  }));
+  
+  // Predict renewal likelihood
+  app.get("/api/analytics/renewal-prediction/:householdId", requireAuth, asyncHandler(async (req: Request, res: Response) => {
+    const { householdId } = req.params;
+    
+    const prediction = await predictiveAnalyticsService.predictRenewalLikelihood(householdId);
+    
+    res.json(prediction);
+  }));
+  
+  // Forecast benefit amounts
+  app.post("/api/analytics/forecast-benefits", requireAuth, asyncHandler(async (req: Request, res: Response) => {
+    const { householdId, programId, months } = req.body;
+    
+    if (!householdId || !programId) {
+      throw validationError("householdId and programId are required");
+    }
+    
+    const forecast = await predictiveAnalyticsService.forecastBenefitAmount(householdId, programId, months || 6);
+    
+    res.json(forecast);
+  }));
+  
+  // Predict resource allocation
+  app.post("/api/analytics/resource-allocation", requireAuth, requireStaff, asyncHandler(async (req: Request, res: Response) => {
+    const { office, targetDate } = req.body;
+    
+    if (!office || !targetDate) {
+      throw validationError("office and targetDate are required");
+    }
+    
+    const prediction = await predictiveAnalyticsService.predictResourceAllocation(office, new Date(targetDate));
+    
+    res.json(prediction);
+  }));
+  
+  // Analyze seasonal trends
+  app.get("/api/analytics/seasonal-trends", requireAuth, asyncHandler(async (req: Request, res: Response) => {
+    const { metric, period } = req.query;
+    
+    if (!metric) {
+      throw validationError("metric parameter is required");
+    }
+    
+    const trends = await predictiveAnalyticsService.analyzeSeasonalTrends(metric as string, period as string || 'monthly');
+    
+    res.json(trends);
+  }));
+  
+  // Train ML models (admin only)
+  app.post("/api/analytics/train-models", requireAuth, requireAdmin, asyncHandler(async (req: Request, res: Response) => {
+    // Start training asynchronously
+    predictiveAnalyticsService.trainModels().catch(error => {
+      console.error("Model training failed:", error);
+      auditService.logError({
+        message: "ML model training failed",
+        statusCode: 500,
+        method: "POST",
+        path: "/api/analytics/train-models",
+        userId: req.user!.id,
+        details: error
+      });
+    });
+    
+    res.json({
+      message: "Model training initiated",
+      status: "in_progress"
+    });
+  }));
+  
+  // Export analytics report
+  app.get("/api/analytics/export", requireAuth, asyncHandler(async (req: Request, res: Response) => {
+    const { type, range, office } = req.query;
+    
+    // Generate report based on type
+    const reportData = await storage.generateAnalyticsReport({
+      type: type as string || 'full',
+      range: range as string || '30d',
+      office: office as string
+    });
+    
+    // Set headers for download
+    res.setHeader('Content-Type', 'application/json');
+    res.setHeader('Content-Disposition', `attachment; filename="analytics-report-${Date.now()}.json"`);
+    
+    res.json(reportData);
+  }));
+
+  // ============================================================================
   // WEBHOOK MANAGEMENT ENDPOINTS (Admin)
   // ============================================================================
 

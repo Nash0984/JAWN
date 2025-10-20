@@ -76,6 +76,7 @@ import VitaKnowledgeBase from "@/pages/VitaKnowledgeBase";
 import EvaluationFramework from "@/pages/EvaluationFramework";
 import HouseholdProfiler from "@/pages/HouseholdProfiler";
 import VitaIntake from "@/pages/VitaIntake";
+import Analytics from "@/pages/Analytics";
 import VitaDocuments from "@/pages/VitaDocuments";
 import AppointmentsCalendar from "@/pages/AppointmentsCalendar";
 import { IntakeAssistant } from "@/pages/IntakeAssistant";
@@ -380,6 +381,13 @@ function Router() {
             {() => (
               <ProtectedRoute requireStaff>
                 <HouseholdProfiler />
+              </ProtectedRoute>
+            )}
+          </Route>
+          <Route path="/analytics">
+            {() => (
+              <ProtectedRoute requireStaff>
+                <Analytics />
               </ProtectedRoute>
             )}
           </Route>
