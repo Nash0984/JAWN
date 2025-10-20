@@ -9,23 +9,23 @@ import { unifiedExportService } from "./services/unified/UnifiedExportService";
 import { unifiedIngestionService } from "./services/unified/UnifiedIngestionService";
 // Cross-State Rules
 import { registerCrossStateRulesRoutes } from "./api/crossStateRules.routes";
-// SMS Screening Service
-import { 
-  generateScreeningLink, 
-  validateScreeningLink, 
-  saveScreeningProgress,
-  completeScreening, 
-  getScreeningStatus,
-  hashPhoneNumber,
-  getScreeningLinkAnalytics
-} from "./services/smsScreeningService";
-// SMS Rate Limiting
-import { 
-  smsScreeningRateLimit, 
-  smsGeneralRateLimit,
-  ipRateLimit,
-  getRateLimitStatus
-} from "./middleware/smsRateLimiter";
+// SMS Screening Service - COMMENTED OUT DURING SCHEMA ROLLBACK
+// import { 
+//   generateScreeningLink, 
+//   validateScreeningLink, 
+//   saveScreeningProgress,
+//   completeScreening, 
+//   getScreeningStatus,
+//   hashPhoneNumber,
+//   getScreeningLinkAnalytics
+// } from "./services/smsScreeningService";
+// SMS Rate Limiting - COMMENTED OUT DURING SCHEMA ROLLBACK
+// import { 
+//   smsScreeningRateLimit, 
+//   smsGeneralRateLimit,
+//   ipRateLimit,
+//   getRateLimitStatus
+// } from "./middleware/smsRateLimiter";
 
 // Legacy services (to be gradually migrated)
 const documentProcessor = unifiedDocumentService; // Alias for backward compatibility
@@ -9724,9 +9724,11 @@ If the question cannot be answered with the available information, say so clearl
 
   // ===========================
   // SMS SCREENING LINK ROUTES
+  // COMMENTED OUT DURING SCHEMA ROLLBACK
   // ===========================
   
   // Generate screening link (with rate limiting)
+  /*
   app.post("/api/sms/screening/generate", requireAuth, smsScreeningRateLimit, asyncHandler(async (req: Request, res: Response) => {
     const schema = z.object({
       phoneNumber: z.string(),
@@ -9846,6 +9848,7 @@ If the question cannot be answered with the available information, say so clearl
     
     res.json(analytics);
   }));
+  */
 
   // ===========================
   // GAMIFICATION ROUTES - Navigator KPIs
@@ -10864,15 +10867,17 @@ If the question cannot be answered with the available information, say so clearl
 
   // ============================================================================
   // Mount E-File Routes - IRS Electronic Filing Infrastructure
+  // COMMENTED OUT DURING SCHEMA ROLLBACK
   // ============================================================================
-  const { registerEFileRoutes } = await import('./api/efile.routes');
-  registerEFileRoutes(app);
+  // const { registerEFileRoutes } = await import('./api/efile.routes');
+  // registerEFileRoutes(app);
   
   // ============================================================================
   // Mount Maryland E-File Routes - Maryland iFile Infrastructure
+  // COMMENTED OUT DURING SCHEMA ROLLBACK
   // ============================================================================
-  const marylandEFileRouter = (await import('./api/marylandEfile.routes')).default;
-  app.use('/api/maryland/efile', marylandEFileRouter);
+  // const marylandEFileRouter = (await import('./api/marylandEfile.routes')).default;
+  // app.use('/api/maryland/efile', marylandEFileRouter);
 
   // ============================================================================
   // Mount GDPR Compliance Routes - Data Subject Rights & Privacy
