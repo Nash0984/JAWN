@@ -94,6 +94,7 @@ import Footer from "@/components/Footer";
 import Demo from "@/pages/Demo";
 import APIExplorer from "@/pages/APIExplorer";
 import Developers from "@/pages/Developers";
+import EFileDashboard from "@/pages/EFileDashboard";
 // COMMENTED OUT DURING SCHEMA ROLLBACK
 // import MobileScreening from "@/pages/MobileScreening";
 
@@ -264,6 +265,13 @@ function Router() {
             {() => (
               <ProtectedRoute>
                 <TaxPreparation />
+              </ProtectedRoute>
+            )}
+          </Route>
+          <Route path="/efile">
+            {() => (
+              <ProtectedRoute>
+                <EFileDashboard />
               </ProtectedRoute>
             )}
           </Route>

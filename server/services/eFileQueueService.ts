@@ -522,6 +522,125 @@ export class EFileQueueService {
   }
 
   /**
+   * Submit a Maryland tax return for e-filing
+   * Validates data, generates XML, and updates status to "ready"
+   */
+  async submitMarylandForEFile(marylandReturnId: string): Promise<{
+    success: boolean;
+    marylandReturnId: string;
+    efileStatus: string;
+    errors?: string[];
+    xmlGenerated?: boolean;
+  }> {
+    try {
+      // 1. Fetch the Maryland tax return
+      const marylandReturn = await storage.getMarylandTaxReturn(marylandReturnId);
+      if (!marylandReturn) {
+        return {
+          success: false,
+          marylandReturnId,
+          efileStatus: 'draft',
+          errors: ['Maryland tax return not found']
+        };
+      }
+
+      // 2. Fetch associated federal return (required for Maryland)
+      const federalReturn = await storage.getFederalTaxReturn(marylandReturn.federalReturnId);
+      if (!federalReturn) {
+        return {
+          success: false,
+          marylandReturnId,
+          efileStatus: 'draft',
+          errors: ['Associated federal tax return not found']
+        };
+      }
+
+      // 3. Generate Form 502 XML
+      const form502Xml = await this.generateForm502XML(federalReturn, marylandReturn);
+
+      // 4. Update Maryland return with XML and status
+      await storage.updateMarylandTaxReturn(marylandReturnId, {
+        form502Xml,
+        efileStatus: 'ready',
+        updatedAt: new Date()
+      });
+
+      return {
+        success: true,
+        marylandReturnId,
+        efileStatus: 'ready',
+        xmlGenerated: true
+      };
+    } catch (error) {
+      console.error('Error submitting Maryland return for e-file:', error);
+      return {
+        success: false,
+        marylandReturnId,
+        efileStatus: 'draft',
+        errors: [error instanceof Error ? error.message : 'Unknown error occurred']
+      };
+    }
+  }
+
+  /**
+   * Check Maryland e-file submission status
+   */
+  async checkMarylandStatus(marylandReturnId: string): Promise<{
+    status: string;
+    transmissionId?: string;
+    submittedAt?: Date;
+    acceptedAt?: Date;
+  }> {
+    const marylandReturn = await storage.getMarylandTaxReturn(marylandReturnId);
+    if (!marylandReturn) {
+      throw new Error('Maryland tax return not found');
+    }
+
+    return {
+      status: marylandReturn.efileStatus || 'draft',
+      transmissionId: marylandReturn.efileTransmissionId || undefined,
+      submittedAt: marylandReturn.efileSubmittedAt || undefined,
+      acceptedAt: marylandReturn.efileAcceptedAt || undefined
+    };
+  }
+
+  /**
+   * Retry a failed Maryland e-file submission
+   */
+  async retryMarylandSubmission(marylandReturnId: string): Promise<{
+    success: boolean;
+    marylandReturnId: string;
+    efileStatus: string;
+    errors?: string[];
+  }> {
+    const marylandReturn = await storage.getMarylandTaxReturn(marylandReturnId);
+    if (!marylandReturn) {
+      return {
+        success: false,
+        marylandReturnId,
+        efileStatus: 'draft',
+        errors: ['Maryland tax return not found']
+      };
+    }
+
+    if (marylandReturn.efileStatus !== 'rejected') {
+      return {
+        success: false,
+        marylandReturnId,
+        efileStatus: marylandReturn.efileStatus || 'draft',
+        errors: ['Only rejected submissions can be retried']
+      };
+    }
+
+    // Reset status and resubmit
+    await storage.updateMarylandTaxReturn(marylandReturnId, {
+      efileStatus: 'draft'
+    });
+
+    return await this.submitMarylandForEFile(marylandReturnId);
+  }
+
+  /**
    * Validate tax return data before e-filing
    */
   private async validateTaxReturn(federalReturn: FederalTaxReturn): Promise<ValidationResult> {
