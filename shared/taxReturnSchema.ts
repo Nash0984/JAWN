@@ -130,6 +130,12 @@ export const marylandTaxReturns = pgTable("maryland_tax_returns", {
   // Form 502 data
   form502Data: jsonb("form_502_data"), // Complete Maryland form data
   
+  // Personal Information (NEW FIELDS)
+  personalInfo: jsonb("personal_info"), // Form502PersonalInfo structure
+  taxInput: jsonb("tax_input"), // TaxHouseholdInput structure
+  marylandInput: jsonb("maryland_input"), // MarylandSpecificInput structure
+  marylandTaxResult: jsonb("maryland_tax_result"), // MarylandTaxResult structure
+  
   // Key Maryland values
   marylandAgi: real("maryland_agi"),
   marylandTaxableIncome: real("maryland_taxable_income"),
@@ -139,12 +145,19 @@ export const marylandTaxReturns = pgTable("maryland_tax_returns", {
   marylandRefundAmount: real("maryland_refund_amount"),
   marylandAmountOwed: real("maryland_amount_owed"),
   
+  // County Information (NEW FIELDS)
+  countyCode: text("county_code"), // BALTIMORE_CITY, MONTGOMERY, etc.
+  countyName: text("county_name"),
+  localTaxAmount: real("local_tax_amount"), // Actual county tax calculated
+  
   // E-filing status
   efileStatus: text("efile_status").notNull().default("draft"),
   
   // Maryland iFile tracking
   ifileTransmissionId: text("ifile_transmission_id"),
   ifileConfirmationNumber: text("ifile_confirmation_number"),
+  marylandConfirmationNumber: text("maryland_confirmation_number"), // MCF number from Maryland
+  marylandSubmissionStatus: text("maryland_submission_status"), // draft, submitted, accepted, rejected, pending
   
   // Submission tracking
   submissionAttempts: integer("submission_attempts").default(0).notNull(),
@@ -160,8 +173,22 @@ export const marylandTaxReturns = pgTable("maryland_tax_returns", {
   rejectionReason: text("rejection_reason"),
   
   // Queue management
-  queueStatus: text("queue_status"),
+  queueStatus: text("queue_status"), // queued, processing, retry, pending_federal, failed, completed
   submissionPriority: integer("submission_priority").default(0),
+  queuedAt: timestamp("queued_at"),
+  lastProcessedAt: timestamp("last_processed_at"),
+  
+  // Notification preferences (NEW FIELDS)
+  notifyOnStatusChange: boolean("notify_on_status_change").default(false),
+  
+  // Error tracking (NEW FIELDS)
+  lastError: text("last_error"),
+  failedAt: timestamp("failed_at"),
+  failureReason: text("failure_reason"),
+  
+  // Audit fields (NEW FIELDS)
+  submittedBy: varchar("submitted_by").references(() => users.id),
+  submissionStatus: text("submission_status"), // draft, submitted, accepted, rejected
   
   // XML generation
   xmlGenerated: boolean("xml_generated").default(false),
@@ -180,13 +207,18 @@ export const marylandTaxReturns = pgTable("maryland_tax_returns", {
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
   transmittedAt: timestamp("transmitted_at"),
   acceptedAt: timestamp("accepted_at"),
+  rejectedAt: timestamp("rejected_at"),
 }, (table) => ({
   federalReturnIdx: index("maryland_returns_federal_idx").on(table.federalReturnId),
   userIdIdx: index("maryland_returns_user_idx").on(table.userId),
   taxYearIdx: index("maryland_returns_tax_year_idx").on(table.taxYear),
   efileStatusIdx: index("maryland_returns_efile_status_idx").on(table.efileStatus),
   queueStatusIdx: index("maryland_returns_queue_status_idx").on(table.queueStatus),
+  priorityIdx: index("maryland_returns_priority_idx").on(table.submissionPriority),
   ifileTransmissionIdx: index("maryland_returns_ifile_idx").on(table.ifileTransmissionId),
+  countyCodeIdx: index("maryland_returns_county_idx").on(table.countyCode),
+  marylandStatusIdx: index("maryland_returns_md_status_idx").on(table.marylandSubmissionStatus),
+  nextRetryIdx: index("maryland_returns_next_retry_idx").on(table.nextRetryAt),
 }));
 
 // ============================================================================
