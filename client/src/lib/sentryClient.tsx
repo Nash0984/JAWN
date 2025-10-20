@@ -75,7 +75,9 @@ async function initializeSentry() {
 }
 
 // Initialize Sentry and store the promise
-initializationPromise = initializeSentry();
+if (typeof window !== 'undefined') {
+  initializationPromise = initializeSentry();
+}
 
 /**
  * Sentry Error Boundary Component
