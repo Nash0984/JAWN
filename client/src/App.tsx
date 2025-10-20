@@ -93,6 +93,7 @@ import Footer from "@/components/Footer";
 import Demo from "@/pages/Demo";
 import APIExplorer from "@/pages/APIExplorer";
 import Developers from "@/pages/Developers";
+import MobileScreening from "@/pages/MobileScreening";
 
 function Router() {
   const [location] = useLocation();
@@ -140,6 +141,10 @@ function Router() {
           <Route path="/screener" component={BenefitScreener} />
           <Route path="/public/quick-screener" component={QuickScreener} />
           <Route path="/public/fsa" component={FsaLanding} />
+          
+          {/* Mobile SMS Screening - No login required */}
+          <Route path="/screening/:token" component={MobileScreening} />
+          <Route path="/s/:token" component={MobileScreening} />
           
           {/* Legal Pages - Public access (no login required) */}
           <Route path="/legal" component={LegalHub} />
