@@ -12,6 +12,9 @@ interface TemplateContext {
   benefitAmount?: number;
   phoneNumber?: string;
   websiteUrl?: string;
+  link?: string;
+  expiresIn?: string;
+  completedDate?: string;
 }
 
 export const smsTemplates = {
@@ -89,6 +92,31 @@ export const smsTemplates = {
   
   sessionReset: () => 
     `Session reset. Reply SNAP, TAX, or HELP to start.`,
+    
+  // Screening Link Messages
+  screeningLinkWelcome: (ctx: TemplateContext) => 
+    `Welcome to Maryland Benefits Screening! Click this secure link to check your eligibility: ${ctx.link} (expires in ${ctx.expiresIn})`,
+  
+  screeningLinkExpired: () => 
+    `Your screening link has expired. Text START for a new one.`,
+  
+  screeningComplete: (ctx: TemplateContext) => 
+    `Your screening was completed on ${ctx.completedDate}. A navigator will contact you within 48 hours.`,
+  
+  screeningPending: (ctx: TemplateContext) => 
+    `You have an active screening link: ${ctx.link}. Click to continue your application.`,
+  
+  noActiveScreening: () => 
+    `No active screening found. Text START to begin checking your eligibility.`,
+  
+  resumeScreening: (ctx: TemplateContext) => 
+    `Continue your screening here: ${ctx.link}. Your progress has been saved.`,
+  
+  newScreeningLink: (ctx: TemplateContext) => 
+    `Here's your new screening link: ${ctx.link}. Click to start checking your eligibility.`,
+  
+  dailyLimitReached: () => 
+    `You've reached the daily limit for screening links. Please try again tomorrow or call for assistance.`,
 };
 
 /**

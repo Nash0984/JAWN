@@ -9,6 +9,23 @@ import { unifiedExportService } from "./services/unified/UnifiedExportService";
 import { unifiedIngestionService } from "./services/unified/UnifiedIngestionService";
 // Cross-State Rules
 import { registerCrossStateRulesRoutes } from "./api/crossStateRules.routes";
+// SMS Screening Service
+import { 
+  generateScreeningLink, 
+  validateScreeningLink, 
+  saveScreeningProgress,
+  completeScreening, 
+  getScreeningStatus,
+  hashPhoneNumber,
+  getScreeningLinkAnalytics
+} from "./services/smsScreeningService";
+// SMS Rate Limiting
+import { 
+  smsScreeningRateLimit, 
+  smsGeneralRateLimit,
+  ipRateLimit,
+  getRateLimitStatus
+} from "./middleware/smsRateLimiter";
 
 // Legacy services (to be gradually migrated)
 const documentProcessor = unifiedDocumentService; // Alias for backward compatibility
@@ -9703,6 +9720,131 @@ If the question cannot be answered with the available information, say so clearl
       });
       res.status(201).json(branding);
     }
+  }));
+
+  // ===========================
+  // SMS SCREENING LINK ROUTES
+  // ===========================
+  
+  // Generate screening link (with rate limiting)
+  app.post("/api/sms/screening/generate", requireAuth, smsScreeningRateLimit, asyncHandler(async (req: Request, res: Response) => {
+    const schema = z.object({
+      phoneNumber: z.string(),
+      metadata: z.any().optional()
+    });
+    
+    const validated = schema.parse(req.body);
+    
+    const result = await generateScreeningLink(
+      validated.phoneNumber,
+      req.user!.tenantId || 'default',
+      undefined,
+      validated.metadata
+    );
+    
+    if (!result.success) {
+      throw validationError(result.error || 'Failed to generate screening link');
+    }
+    
+    res.json({
+      success: true,
+      token: result.token,
+      fullUrl: result.fullUrl,
+      shortUrl: result.shortUrl,
+      expiresAt: result.expiresAt
+    });
+  }));
+  
+  // Validate screening link (with IP rate limiting for public access)
+  app.get("/api/sms/screening/validate/:token", ipRateLimit, asyncHandler(async (req: Request, res: Response) => {
+    const ipAddress = req.ip;
+    
+    const result = await validateScreeningLink(req.params.token, ipAddress);
+    
+    if (!result.valid) {
+      return res.status(400).json({
+        valid: false,
+        error: result.error
+      });
+    }
+    
+    res.json({
+      valid: true,
+      link: {
+        token: result.link.token,
+        expiresAt: result.link.expiresAt,
+        captchaRequired: result.link.captchaRequired,
+        screeningData: result.link.screeningData
+      }
+    });
+  }));
+  
+  // Save screening progress
+  app.post("/api/sms/screening/progress/:token", asyncHandler(async (req: Request, res: Response) => {
+    const schema = z.object({
+      screeningData: z.any()
+    });
+    
+    const validated = schema.parse(req.body);
+    
+    const result = await saveScreeningProgress(
+      req.params.token,
+      validated.screeningData
+    );
+    
+    if (!result.success) {
+      throw validationError(result.error || 'Failed to save progress');
+    }
+    
+    res.json({ success: true });
+  }));
+  
+  // Complete screening
+  app.post("/api/sms/screening/complete", asyncHandler(async (req: Request, res: Response) => {
+    const schema = z.object({
+      token: z.string(),
+      completionData: z.any()
+    });
+    
+    const validated = schema.parse(req.body);
+    
+    const result = await completeScreening(
+      validated.token,
+      validated.completionData
+    );
+    
+    if (!result.success) {
+      throw validationError(result.error || 'Failed to complete screening');
+    }
+    
+    res.json({ 
+      success: true,
+      message: 'Screening completed successfully. A navigator will contact you within 48 hours.'
+    });
+  }));
+  
+  // Get screening status by phone
+  app.get("/api/sms/screening/status/:phoneNumber", requireAuth, asyncHandler(async (req: Request, res: Response) => {
+    // Only allow staff to check status by phone number
+    if (!['navigator', 'caseworker', 'admin', 'super_admin'].includes(req.user!.role)) {
+      throw authorizationError('Access denied');
+    }
+    
+    const status = await getScreeningStatus(req.params.phoneNumber);
+    
+    res.json(status);
+  }));
+  
+  // Get screening link analytics
+  app.get("/api/sms/screening/analytics", requireStaff, asyncHandler(async (req: Request, res: Response) => {
+    const days = parseInt(req.query.days as string) || 30;
+    
+    const analytics = await getScreeningLinkAnalytics(
+      req.user!.tenantId || 'default',
+      days
+    );
+    
+    res.json(analytics);
   }));
 
   // ===========================

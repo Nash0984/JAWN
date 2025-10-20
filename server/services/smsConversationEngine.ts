@@ -1,6 +1,7 @@
 /**
  * SMS Conversation State Machine
  * Handles conversational flows for benefit screening and intake via SMS
+ * Now with secure link-based screening to protect user privacy
  */
 
 import { db } from "../db";
@@ -8,6 +9,11 @@ import { smsConversations, tenants } from "@shared/schema";
 import { eq, and, desc } from "drizzle-orm";
 import { smsTemplates } from "../templates/smsTemplates";
 import { GoogleGenAI } from "@google/genai";
+import { 
+  generateScreeningLink, 
+  getScreeningStatus,
+  hashPhoneNumber 
+} from "./smsScreeningService";
 
 interface ConversationContext {
   zipCode?: string;
@@ -58,11 +64,106 @@ export async function processConversationMessage(
   }
   
   if (upperMessage === 'START') {
+    // Generate secure screening link
+    const linkResult = await generateScreeningLink(
+      conversation.phoneNumber,
+      conversation.tenantId,
+      conversation.id
+    );
+    
+    if (!linkResult.success) {
+      return {
+        response: linkResult.error || smsTemplates.error(),
+        newState: state,
+        newContext: context
+      };
+    }
+    
+    const response = smsTemplates.screeningLinkWelcome({
+      link: linkResult.shortUrl || linkResult.fullUrl!,
+      expiresIn: '24 hours'
+    });
+    
     return {
-      response: smsTemplates.startConfirmation({ tenantName: await getTenantName(conversation.tenantId) }),
-      newState: 'started',
-      newContext: {}
+      response,
+      newState: 'link_sent',
+      newContext: { 
+        ...context, 
+        screeningToken: linkResult.token,
+        linkSentAt: new Date().toISOString()
+      }
     };
+  }
+  
+  if (upperMessage === 'STATUS') {
+    // Check screening status
+    const status = await getScreeningStatus(conversation.phoneNumber);
+    
+    if (status.hasCompletedScreening) {
+      return {
+        response: smsTemplates.screeningComplete({
+          completedDate: status.lastScreeningDate?.toLocaleDateString() || 'recently'
+        }),
+        newState: state,
+        newContext: context
+      };
+    } else if (status.hasActiveLink) {
+      return {
+        response: smsTemplates.screeningPending({
+          link: status.activeLink?.shortUrl || status.activeLink?.fullUrl
+        }),
+        newState: state,
+        newContext: context
+      };
+    } else {
+      return {
+        response: smsTemplates.noActiveScreening(),
+        newState: state,
+        newContext: context
+      };
+    }
+  }
+  
+  if (upperMessage === 'RESUME') {
+    // Check for existing active link
+    const status = await getScreeningStatus(conversation.phoneNumber);
+    
+    if (status.hasActiveLink && status.activeLink) {
+      return {
+        response: smsTemplates.resumeScreening({
+          link: status.activeLink.shortUrl || status.activeLink.fullUrl
+        }),
+        newState: state,
+        newContext: context
+      };
+    } else {
+      // Generate new link if none exists
+      const linkResult = await generateScreeningLink(
+        conversation.phoneNumber,
+        conversation.tenantId,
+        conversation.id
+      );
+      
+      if (!linkResult.success) {
+        return {
+          response: linkResult.error || smsTemplates.error(),
+          newState: state,
+          newContext: context
+        };
+      }
+      
+      return {
+        response: smsTemplates.newScreeningLink({
+          link: linkResult.shortUrl || linkResult.fullUrl!
+        }),
+        newState: 'link_sent',
+        newContext: { 
+          ...context, 
+          screeningToken: linkResult.token,
+          linkSentAt: new Date().toISOString()
+        }
+      };
+    }
   }
   
   if (upperMessage === 'RESET' || upperMessage === 'RESTART') {

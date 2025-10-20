@@ -6576,6 +6576,59 @@ export const crossStateRuleApplications = pgTable("cross_state_rule_applications
   outcomeIdx: index("cross_state_applications_outcome_idx").on(table.outcome),
 }));
 
+
+// SMS Screening Links - Secure, time-limited screening URLs
+export const smsScreeningLinks = pgTable("sms_screening_links", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  token: text("token").notNull().unique(), // Unique nanoid token for URL
+  phoneHash: text("phone_hash").notNull(), // SHA-256 hash of phone number
+  tenantId: varchar("tenant_id").references((): any => tenants.id).notNull(),
+  conversationId: varchar("conversation_id").references(() => smsConversations.id),
+  
+  // Link properties
+  shortUrl: text("short_url"), // Optional custom short URL
+  fullUrl: text("full_url").notNull(), // Full screening URL with token
+  
+  // Usage tracking
+  usageCount: integer("usage_count").default(0).notNull(),
+  maxUsage: integer("max_usage").default(1).notNull(), // Default one-time use
+  lastAccessedAt: timestamp("last_accessed_at"),
+  lastAccessIp: text("last_access_ip"),
+  
+  // Validity
+  expiresAt: timestamp("expires_at").notNull(),
+  status: text("status").notNull().default("pending"), // pending, accessed, used, expired, revoked
+  
+  // Screening data
+  screeningData: jsonb("screening_data"), // Saved progress data
+  completedAt: timestamp("completed_at"),
+  completionData: jsonb("completion_data"), // Final screening results
+  
+  // Rate limiting
+  dailyLinkCount: integer("daily_link_count").default(1), // Links generated today for this phone
+  lastGeneratedDate: date("last_generated_date"), // Date of last link generation
+  
+  // Security
+  ipRestriction: text("ip_restriction"), // Optional IP whitelist
+  captchaRequired: boolean("captcha_required").default(true).notNull(),
+  captchaCompleted: boolean("captcha_completed").default(false),
+  
+  // Analytics
+  source: text("source"), // Where link was requested from
+  campaign: text("campaign"), // Marketing campaign identifier
+  metadata: jsonb("metadata"), // Additional tracking data
+  
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  tokenIdx: uniqueIndex("sms_screening_links_token_idx").on(table.token),
+  phoneHashIdx: index("sms_screening_links_phone_hash_idx").on(table.phoneHash),
+  tenantIdIdx: index("sms_screening_links_tenant_id_idx").on(table.tenantId),
+  statusIdx: index("sms_screening_links_status_idx").on(table.status),
+  expiresAtIdx: index("sms_screening_links_expires_at_idx").on(table.expiresAt),
+  createdAtIdx: index("sms_screening_links_created_at_idx").on(table.createdAt),
+}));
+
 // ============================================================================
 // GDPR COMPLIANCE TABLES - Data Protection and Privacy Management
 // ============================================================================
