@@ -49,7 +49,7 @@ const RATE_LIMIT_TIERS = {
   },
   anonymous: {
     windowMs: 15 * 60 * 1000,
-    max: 20, // Strict limits for unauthenticated users
+    max: 100, // Increased limit for anonymous users to use AI features
     message: 'Too many requests. Please log in for higher limits.'
   }
 };
@@ -146,7 +146,7 @@ export const aiRateLimiter: RateLimitRequestHandler = rateLimit({
   windowMs: 60 * 1000, // 1 minute
   max: (req: Request) => {
     const user = (req as any).user;
-    if (!user) return 2; // Very limited for anonymous
+    if (!user) return 30; // Increased limit for anonymous AI usage
     if (user.role === 'admin') return 30;
     if (user.role === 'navigator' || user.role === 'caseworker') return 20;
     return 10; // applicants
