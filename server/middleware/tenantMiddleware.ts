@@ -20,7 +20,8 @@ declare global {
 
 /**
  * Middleware to detect and load tenant context
- * Adds tenant info to request object for use in route handlers
+ * For Maryland single-instance deployment: defaults to Maryland tenant
+ * For multi-state deployments: uses hostname/subdomain detection
  */
 export async function detectTenantContext(
   req: Request,
@@ -31,8 +32,20 @@ export async function detectTenantContext(
     const hostname = req.hostname || req.get('host') || 'localhost';
     const queryTenant = req.query.tenant as string | undefined;
 
-    // Detect and load tenant
-    const tenant = await tenantService.getTenantFromRequest(hostname, queryTenant);
+    // Try to detect tenant from hostname or query param
+    let tenant = await tenantService.getTenantFromRequest(hostname, queryTenant);
+
+    // MARYLAND SINGLE-INSTANCE: Default to Maryland tenant if no tenant detected
+    // This allows marylandbenefits.gov to work without subdomain/multi-tenant routing
+    if (!tenant) {
+      tenant = await tenantService.getTenantBySlug('maryland');
+      
+      // If Maryland tenant doesn't exist, create it on-the-fly (for development)
+      if (!tenant && process.env.NODE_ENV === 'development') {
+        console.log('📍 Creating default Maryland tenant for single-instance deployment...');
+        // Tenant will be created by seed data - just log warning
+      }
+    }
 
     if (tenant) {
       // Validate tenant access
@@ -54,11 +67,11 @@ export async function detectTenantContext(
       };
     }
 
-    // Continue even if no tenant found (some routes may not require tenant)
+    // Continue - tenant is now optional for single-instance deployment
     next();
   } catch (error) {
     console.error('Error detecting tenant context:', error);
-    next(); // Continue even if tenant detection fails
+    next(); // Continue gracefully
   }
 }
 

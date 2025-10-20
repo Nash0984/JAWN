@@ -24,6 +24,7 @@ import { corsOptions, logCorsConfig } from "./middleware/corsConfig";
 import { helmetConfig, additionalSecurityHeaders, logSecurityHeadersConfig } from "./middleware/securityHeaders";
 import { initializeSystemData } from "./seedData";
 import { seedCountiesAndGamification } from "./seedCountiesAndGamification";
+import { seedMarylandLDSS } from "./seedMarylandLDSS";
 import { setupVite, serveStatic, log } from "./vite";
 import { errorHandler } from "./middleware/errorHandler";
 import { requestLoggerMiddleware, timingHeadersMiddleware, performanceMonitoringMiddleware } from "./middleware/requestLogger";
@@ -296,6 +297,9 @@ app.use("/api/", apiVersionMiddleware);
   
   // Seed multi-county and gamification data
   await seedCountiesAndGamification();
+  
+  // Seed 24 Maryland LDSS offices for single-instance deployment
+  await seedMarylandLDSS();
   
   // Start Smart Scheduler with source-specific intervals
   // Checks each data source based on realistic update frequencies (70-80% reduction in API calls)
