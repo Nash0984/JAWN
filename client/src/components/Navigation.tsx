@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Link, useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
-import { File, Search, FileText, HelpCircle, Menu, User, Calculator, BookOpen, FileCheck, Users, Shield, LogOut, LogIn, UserPlus, Settings, Globe, Activity, LayoutDashboard } from "lucide-react";
+import { File, Search, FileText, HelpCircle, Menu, User, Calculator, BookOpen, FileCheck, Users, Shield, LogOut, LogIn, UserPlus, Settings, Globe, Activity, LayoutDashboard, Upload } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import LanguageSelector from "./LanguageSelector";
 import NotificationBell from "./NotificationBell";
@@ -37,6 +37,7 @@ export default function Navigation() {
     { name: "Applicant Tools", href: "/public/documents", icon: Globe, roles: ["public", "client", "navigator", "caseworker", "admin", "super_admin"] },
     { name: "Eligibility Check", href: "/eligibility", icon: Calculator, roles: ["client", "navigator", "caseworker", "admin", "super_admin"] },
     { name: "VITA Tax Help", href: "/vita", icon: BookOpen, roles: ["navigator", "caseworker", "admin", "super_admin"] },
+    { name: "E-Filing", href: "/efile", icon: Upload, roles: ["navigator", "caseworker", "admin", "super_admin"] },
     { name: "Verify Documents", href: "/verify", icon: FileCheck, roles: ["navigator", "caseworker", "admin", "super_admin"] },
     { name: "Navigator Workspace", href: "/navigator", icon: Users, roles: ["navigator", "caseworker", "admin", "super_admin"] },
     { name: "Consent Forms", href: "/consent", icon: Shield, roles: ["navigator", "caseworker", "admin", "super_admin"] },

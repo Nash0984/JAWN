@@ -10870,17 +10870,15 @@ If the question cannot be answered with the available information, say so clearl
 
   // ============================================================================
   // Mount E-File Routes - IRS Electronic Filing Infrastructure
-  // COMMENTED OUT DURING SCHEMA ROLLBACK
   // ============================================================================
-  // const { registerEFileRoutes } = await import('./api/efile.routes');
-  // registerEFileRoutes(app);
+  const { registerEFileRoutes } = await import('./api/efile.routes');
+  registerEFileRoutes(app);
   
   // ============================================================================
   // Mount Maryland E-File Routes - Maryland iFile Infrastructure
-  // COMMENTED OUT DURING SCHEMA ROLLBACK
   // ============================================================================
-  // const marylandEFileRouter = (await import('./api/marylandEfile.routes')).default;
-  // app.use('/api/maryland/efile', marylandEFileRouter);
+  const marylandEFileRouter = (await import('./api/marylandEfile.routes')).default;
+  app.use('/api/maryland/efile', marylandEFileRouter);
 
   // ============================================================================
   // Mount GDPR Compliance Routes - Data Subject Rights & Privacy
