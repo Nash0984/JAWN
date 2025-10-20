@@ -7665,6 +7665,11 @@ export const caseLifecycleEvents = pgTable("case_lifecycle_events", {
   aiAlerted: boolean("ai_alerted").default(false), // true if AI flagged this event
   aiAlertReason: text("ai_alert_reason"), // why AI flagged this
   
+  // Notification tracking (BAR)
+  notificationSentAt: timestamp("notification_sent_at"), // when last notification was sent
+  reminderSentDays: integer("reminder_sent_days").array(), // which day-before reminders were sent (e.g., [3, 1])
+  overdueAlertSentAt: timestamp("overdue_alert_sent_at"), // when overdue alert was sent
+  
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 }, (table) => ({
