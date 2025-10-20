@@ -205,6 +205,57 @@ export function createCustomRateLimiter(
 }
 
 /**
+ * Public endpoint rate limiter - More permissive for accessibility
+ * Designed for /screener and /public/* endpoints
+ */
+export const publicRateLimiter: RateLimitRequestHandler = rateLimit({
+  windowMs: 1 * 60 * 1000, // 1 minute
+  max: 100, // 100 requests per minute
+  message: {
+    error: 'Rate Limit Exceeded',
+    message: 'Too many requests to public endpoints. Please wait a moment before trying again.',
+    retryAfter: 60
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req: Request) => `public:${createSafeIpKey(req.ip)}`,
+  handler: (req, res) => {
+    console.warn(`⚠️  Public endpoint rate limit exceeded: ${req.method} ${req.path} from ${req.ip}`);
+    
+    res.status(429).json({
+      error: 'Rate Limit Exceeded',
+      message: 'Too many requests. Please wait a moment before trying again.',
+      retryAfter: 60
+    });
+  }
+});
+
+/**
+ * Aggressive rate limiter for abuse prevention
+ * Applied to IPs that exceed limits repeatedly
+ */
+export const aggressiveRateLimiter: RateLimitRequestHandler = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 10, // Only 10 requests per 15 minutes
+  skipSuccessfulRequests: false,
+  message: {
+    error: 'IP Blocked - Rate Limit Abuse',
+    message: 'Your IP has been temporarily blocked due to excessive requests. Please contact support if this is an error.',
+    retryAfter: 900
+  },
+  keyGenerator: (req: Request) => `blocked:${createSafeIpKey(req.ip)}`,
+  handler: (req, res) => {
+    console.error(`🚨 IP BLOCKED due to rate limit abuse: ${req.ip} - ${req.method} ${req.path}`);
+    
+    res.status(429).json({
+      error: 'IP Temporarily Blocked',
+      message: 'Your IP has been temporarily blocked due to excessive requests. This block will expire in 15 minutes.',
+      retryAfter: 900
+    });
+  }
+});
+
+/**
  * Export endpoint-specific limiters
  */
 export const rateLimiters = {
@@ -212,5 +263,7 @@ export const rateLimiters = {
   auth: authRateLimiter,
   ai: aiRateLimiter,
   upload: uploadRateLimiter,
+  public: publicRateLimiter,
+  aggressive: aggressiveRateLimiter,
   custom: createCustomRateLimiter
 };
