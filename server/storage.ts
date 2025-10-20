@@ -2526,6 +2526,197 @@ export class DatabaseStorage implements IStorage {
     await db.delete(abawdExemptionVerifications).where(eq(abawdExemptionVerifications.id, id));
   }
 
+  // Tax Preparation - Federal Returns
+  async createFederalTaxReturn(taxReturn: InsertFederalTaxReturn): Promise<FederalTaxReturn> {
+    const [newReturn] = await db.insert(federalTaxReturns).values(taxReturn).returning();
+    return newReturn;
+  }
+
+  async getFederalTaxReturn(id: string): Promise<FederalTaxReturn | undefined> {
+    const [taxReturn] = await db
+      .select()
+      .from(federalTaxReturns)
+      .where(eq(federalTaxReturns.id, id));
+    return taxReturn;
+  }
+
+  async getFederalTaxReturns(filters?: { 
+    scenarioId?: string; 
+    preparerId?: string; 
+    taxYear?: number; 
+    efileStatus?: string 
+  }): Promise<FederalTaxReturn[]> {
+    let query = db.select().from(federalTaxReturns);
+
+    const conditions = [];
+    if (filters?.scenarioId) {
+      conditions.push(eq(federalTaxReturns.scenarioId, filters.scenarioId));
+    }
+    if (filters?.preparerId) {
+      conditions.push(eq(federalTaxReturns.preparerId, filters.preparerId));
+    }
+    if (filters?.taxYear) {
+      conditions.push(eq(federalTaxReturns.taxYear, filters.taxYear));
+    }
+    if (filters?.efileStatus) {
+      conditions.push(eq(federalTaxReturns.efileStatus, filters.efileStatus));
+    }
+
+    if (conditions.length > 0) {
+      query = query.where(and(...conditions));
+    }
+
+    return await query.orderBy(desc(federalTaxReturns.createdAt));
+  }
+
+  async getFederalTaxReturnsByScenario(scenarioId: string): Promise<FederalTaxReturn[]> {
+    return await db
+      .select()
+      .from(federalTaxReturns)
+      .where(eq(federalTaxReturns.scenarioId, scenarioId))
+      .orderBy(desc(federalTaxReturns.createdAt));
+  }
+
+  async getFederalTaxReturnsByPreparer(preparerId: string, taxYear?: number): Promise<FederalTaxReturn[]> {
+    let query = db
+      .select()
+      .from(federalTaxReturns)
+      .where(eq(federalTaxReturns.preparerId, preparerId));
+    
+    if (taxYear) {
+      query = query.where(and(
+        eq(federalTaxReturns.preparerId, preparerId),
+        eq(federalTaxReturns.taxYear, taxYear)
+      ));
+    }
+
+    return await query.orderBy(desc(federalTaxReturns.createdAt));
+  }
+
+  async updateFederalTaxReturn(id: string, updates: Partial<FederalTaxReturn>): Promise<FederalTaxReturn> {
+    const [updated] = await db
+      .update(federalTaxReturns)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(federalTaxReturns.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteFederalTaxReturn(id: string): Promise<void> {
+    await db.delete(federalTaxReturns).where(eq(federalTaxReturns.id, id));
+  }
+
+  // Tax Preparation - Maryland Returns
+  async createMarylandTaxReturn(taxReturn: InsertMarylandTaxReturn): Promise<MarylandTaxReturn> {
+    const [newReturn] = await db.insert(marylandTaxReturns).values(taxReturn).returning();
+    return newReturn;
+  }
+
+  async getMarylandTaxReturn(id: string): Promise<MarylandTaxReturn | undefined> {
+    const [taxReturn] = await db
+      .select()
+      .from(marylandTaxReturns)
+      .where(eq(marylandTaxReturns.id, id));
+    return taxReturn;
+  }
+
+  async getMarylandTaxReturnByFederalId(federalReturnId: string): Promise<MarylandTaxReturn | undefined> {
+    const [taxReturn] = await db
+      .select()
+      .from(marylandTaxReturns)
+      .where(eq(marylandTaxReturns.federalReturnId, federalReturnId));
+    return taxReturn;
+  }
+
+  async updateMarylandTaxReturn(id: string, updates: Partial<MarylandTaxReturn>): Promise<MarylandTaxReturn> {
+    const [updated] = await db
+      .update(marylandTaxReturns)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(marylandTaxReturns.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteMarylandTaxReturn(id: string): Promise<void> {
+    await db.delete(marylandTaxReturns).where(eq(marylandTaxReturns.id, id));
+  }
+
+  // Tax Preparation - Tax Documents
+  async createTaxDocument(taxDoc: InsertTaxDocument): Promise<TaxDocument> {
+    const [newDoc] = await db.insert(taxDocuments).values(taxDoc).returning();
+    return newDoc;
+  }
+
+  async getTaxDocument(id: string): Promise<TaxDocument | undefined> {
+    const [doc] = await db
+      .select()
+      .from(taxDocuments)
+      .where(eq(taxDocuments.id, id));
+    return doc;
+  }
+
+  async getTaxDocuments(filters?: { 
+    scenarioId?: string; 
+    federalReturnId?: string; 
+    vitaSessionId?: string; 
+    documentType?: string; 
+    verificationStatus?: string 
+  }): Promise<TaxDocument[]> {
+    let query = db.select().from(taxDocuments);
+
+    const conditions = [];
+    if (filters?.scenarioId) {
+      conditions.push(eq(taxDocuments.scenarioId, filters.scenarioId));
+    }
+    if (filters?.federalReturnId) {
+      conditions.push(eq(taxDocuments.federalReturnId, filters.federalReturnId));
+    }
+    if (filters?.vitaSessionId) {
+      conditions.push(eq(taxDocuments.vitaSessionId, filters.vitaSessionId));
+    }
+    if (filters?.documentType) {
+      conditions.push(eq(taxDocuments.documentType, filters.documentType));
+    }
+    if (filters?.verificationStatus) {
+      conditions.push(eq(taxDocuments.verificationStatus, filters.verificationStatus));
+    }
+
+    if (conditions.length > 0) {
+      query = query.where(and(...conditions));
+    }
+
+    return await query.orderBy(desc(taxDocuments.uploadedAt));
+  }
+
+  async getTaxDocumentsByScenario(scenarioId: string): Promise<TaxDocument[]> {
+    return await db
+      .select()
+      .from(taxDocuments)
+      .where(eq(taxDocuments.scenarioId, scenarioId))
+      .orderBy(desc(taxDocuments.uploadedAt));
+  }
+
+  async getTaxDocumentsByFederalReturn(federalReturnId: string): Promise<TaxDocument[]> {
+    return await db
+      .select()
+      .from(taxDocuments)
+      .where(eq(taxDocuments.federalReturnId, federalReturnId))
+      .orderBy(desc(taxDocuments.uploadedAt));
+  }
+
+  async updateTaxDocument(id: string, updates: Partial<TaxDocument>): Promise<TaxDocument> {
+    const [updated] = await db
+      .update(taxDocuments)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(taxDocuments.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteTaxDocument(id: string): Promise<void> {
+    await db.delete(taxDocuments).where(eq(taxDocuments.id, id));
+  }
+
   // Cross-Enrollment Analysis
   async createProgramEnrollment(enrollment: InsertProgramEnrollment): Promise<ProgramEnrollment> {
     const [newEnrollment] = await db.insert(programEnrollments).values(enrollment).returning();

@@ -10725,6 +10725,12 @@ If the question cannot be answered with the available information, say so clearl
   // ============================================================================
   const { registerEFileRoutes } = await import('./api/efile.routes');
   registerEFileRoutes(app);
+  
+  // ============================================================================
+  // Mount Maryland E-File Routes - Maryland iFile Infrastructure
+  // ============================================================================
+  const marylandEFileRouter = (await import('./api/marylandEfile.routes')).default;
+  app.use('/api/maryland/efile', marylandEFileRouter);
 
   // ============================================================================
   // Mount GDPR Compliance Routes - Data Subject Rights & Privacy
