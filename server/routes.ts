@@ -89,6 +89,7 @@ import {
   insertTaxpayerMessageSchema,
   insertTaxpayerMessageAttachmentSchema,
   insertESignatureSchema,
+  insertReviewerFeedbackSchema,
   searchQueries,
   auditLogs,
   ruleChangeLogs,
@@ -108,7 +109,10 @@ import {
   alertHistory,
   consentForms,
   clientConsents,
-  appointments
+  appointments,
+  benefitsAccessReviews,
+  reviewerFeedback,
+  caseLifecycleEvents
 } from "@shared/schema";
 import { z } from "zod";
 import bcrypt from "bcryptjs";
@@ -1671,6 +1675,124 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
     const history = await alertService.getAlertHistory(parseInt(limit as string), tenantId);
     
     res.json({ success: true, data: history });
+  }));
+
+  // ============================================================================
+  // BENEFITS ACCESS REVIEW (BAR) - Case quality monitoring and supervisor reviews
+  // ============================================================================
+
+  // GET /api/bar/reviews - List reviews for supervisor dashboard
+  app.get('/api/bar/reviews', requireAuth, requireStaff, asyncHandler(async (req: Request, res: Response) => {
+    const { benefitsAccessReviewService } = await import("./services/benefitsAccessReview.service");
+    const { status, supervisorId } = req.query;
+    
+    // If user is not admin, only show their own reviews
+    const userId = req.user!.id;
+    const userRole = req.user!.role;
+    const effectiveSupervisorId = userRole === 'admin' || userRole === 'super_admin' 
+      ? (supervisorId as string | undefined) 
+      : userId;
+    
+    let reviews;
+    if (status === 'active') {
+      reviews = await benefitsAccessReviewService.getActiveReviews(effectiveSupervisorId);
+    } else {
+      // Get all reviews (optionally filtered by supervisor)
+      const query = db.select().from(benefitsAccessReviews);
+      reviews = effectiveSupervisorId
+        ? await query.where(eq(benefitsAccessReviews.supervisorId, effectiveSupervisorId))
+        : await query.limit(100).orderBy(desc(benefitsAccessReviews.createdAt));
+    }
+    
+    res.json({ success: true, data: reviews });
+  }));
+
+  // POST /api/bar/reviews/:id/feedback - Submit supervisor feedback
+  app.post('/api/bar/reviews/:id/feedback', requireAuth, requireStaff, asyncHandler(async (req: Request, res: Response) => {
+    const { benefitsAccessReviewService } = await import("./services/benefitsAccessReview.service");
+    const { id: reviewId } = req.params;
+    const userId = req.user!.id;
+    
+    // Verify this user is the assigned supervisor for this review
+    const [review] = await db.select()
+      .from(benefitsAccessReviews)
+      .where(eq(benefitsAccessReviews.id, reviewId));
+    
+    if (!review) {
+      return res.status(404).json({ success: false, error: 'Review not found' });
+    }
+    
+    if (review.supervisorId !== userId && req.user!.role !== 'admin' && req.user!.role !== 'super_admin') {
+      return res.status(403).json({ success: false, error: 'Not authorized to review this case' });
+    }
+    
+    // Validate and create feedback
+    const validatedData = insertReviewerFeedbackSchema.parse({
+      reviewId,
+      reviewerId: userId,
+      ...req.body
+    });
+    
+    const [feedback] = await db.insert(reviewerFeedback)
+      .values(validatedData)
+      .returning();
+    
+    // Update review status to completed
+    await db.update(benefitsAccessReviews)
+      .set({ 
+        reviewStatus: 'completed',
+        supervisorFeedbackId: feedback.id,
+        completedAt: new Date(),
+        updatedAt: new Date()
+      })
+      .where(eq(benefitsAccessReviews.id, reviewId));
+    
+    res.json({ success: true, data: feedback });
+  }));
+
+  // GET /api/bar/checkpoints/upcoming - Get upcoming checkpoints for dashboard
+  app.get('/api/bar/checkpoints/upcoming', requireAuth, requireStaff, asyncHandler(async (req: Request, res: Response) => {
+    const { daysAhead = '7' } = req.query;
+    const days = parseInt(daysAhead as string);
+    
+    const now = new Date();
+    const futureDate = new Date();
+    futureDate.setDate(futureDate.getDate() + days);
+    
+    const upcomingCheckpoints = await db.select()
+      .from(caseLifecycleEvents)
+      .where(
+        and(
+          eq(caseLifecycleEvents.status, 'pending'),
+          gte(caseLifecycleEvents.expectedDate, now),
+          lte(caseLifecycleEvents.expectedDate, futureDate)
+        )
+      )
+      .orderBy(caseLifecycleEvents.expectedDate)
+      .limit(50);
+    
+    res.json({ success: true, data: upcomingCheckpoints });
+  }));
+
+  // PATCH /api/bar/checkpoints/:id - Update checkpoint status
+  app.patch('/api/bar/checkpoints/:id', requireAuth, requireStaff, asyncHandler(async (req: Request, res: Response) => {
+    const { checkpointService } = await import("./services/benefitsAccessReview.service");
+    const { id } = req.params;
+    const { actualDate, notes } = req.body;
+    const userId = req.user!.id;
+    
+    if (!actualDate) {
+      return res.status(400).json({ success: false, error: 'actualDate is required' });
+    }
+    
+    const updated = await checkpointService.updateCheckpoint(
+      id,
+      new Date(actualDate),
+      userId,
+      notes
+    );
+    
+    res.json({ success: true, data: updated });
   }));
 
   // ============================================================================
