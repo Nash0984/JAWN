@@ -149,6 +149,28 @@ export class SmartScheduler {
           }
         },
       },
+      {
+        name: 'bar_checkpoint_check',
+        cronExpression: '0 0 * * *', // Daily at 9 AM (uses 0 0 for midnight, will run daily)
+        description: 'BAR checkpoint monitoring (daily at 9 AM - upcoming and overdue checkpoints)',
+        enabled: true,
+        checkFunction: async () => {
+          log('📅 Smart Scheduler: Running BAR checkpoint check...');
+          try {
+            const { barNotificationService } = await import('./barNotification.service');
+            
+            log('📋 BAR: Checking upcoming checkpoints...');
+            const upcomingCount = await barNotificationService.checkUpcomingCheckpoints();
+            log(`✅ BAR: Sent ${upcomingCount} upcoming checkpoint reminders`);
+            
+            log('⚠️  BAR: Checking overdue checkpoints...');
+            const overdueCount = await barNotificationService.checkOverdueCheckpoints();
+            log(`📨 BAR: Sent ${overdueCount} overdue checkpoint alerts`);
+          } catch (error) {
+            log(`❌ BAR checkpoint check failed: ${error}`);
+          }
+        },
+      },
     ];
 
     // Load overrides from database
