@@ -312,10 +312,24 @@ app.use("/api/", apiVersionMiddleware);
   
   const server = await registerRoutes(app, sessionMiddleware);
 
-  // importantly only setup vite in development and after
-  // setting up all the other routes so the catch-all route
-  // doesn't interfere with the other routes
+  // Add explicit middleware to intercept /api routes before Vite
   if (app.get("env") === "development") {
+    // This middleware ensures /api routes are not caught by Vite's catch-all
+    app.use((req, res, next) => {
+      // If it's an API route and hasn't been handled yet, return a 404 JSON response
+      if (req.url.startsWith('/api/') && !res.headersSent) {
+        // If we get here, the route wasn't found in our registered routes
+        // Return a proper JSON 404 instead of letting Vite serve HTML
+        return res.status(404).json({ 
+          error: 'API endpoint not found', 
+          path: req.url,
+          method: req.method 
+        });
+      }
+      // Not an API route, let Vite handle it
+      next();
+    });
+    
     await setupVite(app, server);
   } else {
     serveStatic(app);

@@ -70,7 +70,7 @@ export async function detectTenantContext(
     // Continue - tenant is now optional for single-instance deployment
     next();
   } catch (error) {
-    console.error('Error detecting tenant context:', error);
+    console.error('Error detecting tenant context:', error instanceof Error ? error.message : JSON.stringify(error));
     next(); // Continue gracefully
   }
 }

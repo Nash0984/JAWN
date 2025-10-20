@@ -200,7 +200,8 @@ export function createCustomRateLimiter(
       retryAfter: Math.ceil(windowMs / 1000)
     },
     standardHeaders: true,
-    legacyHeaders: false
+    legacyHeaders: false,
+    keyGenerator: (req: Request) => `custom:${createSafeIpKey(req.ip)}`
   });
 }
 

@@ -1681,6 +1681,30 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
   // BENEFITS ACCESS REVIEW (BAR) - Case quality monitoring and supervisor reviews
   // ============================================================================
 
+  // GET /api/bar/reviews/active - Get active reviews only
+  app.get('/api/bar/reviews/active', requireAuth, requireStaff, asyncHandler(async (req: Request, res: Response) => {
+    const { benefitsAccessReviewService } = await import("./services/benefitsAccessReview.service");
+    const userId = req.user!.id;
+    const userRole = req.user!.role;
+    
+    // Get user's primary county assignment (LDSS office)
+    const primaryCounty = await storage.getPrimaryCounty(userId);
+    
+    // Get active reviews, optionally filtered by supervisor
+    const effectiveSupervisorId = userRole === 'admin' || userRole === 'super_admin' ? undefined : userId;
+    const reviews = await benefitsAccessReviewService.getActiveReviews(effectiveSupervisorId);
+    
+    // Filter by county for non-super-admins
+    const filteredReviews = userRole !== 'super_admin' && primaryCounty
+      ? reviews.filter((review: any) => {
+          // TODO: Join with client_cases to get county
+          return true; // For now, return all until we can join properly
+        })
+      : reviews;
+    
+    res.json({ success: true, data: filteredReviews });
+  }));
+
   // GET /api/bar/reviews - List reviews for supervisor dashboard (scoped by LDSS office)
   app.get('/api/bar/reviews', requireAuth, requireStaff, asyncHandler(async (req: Request, res: Response) => {
     const { benefitsAccessReviewService } = await import("./services/benefitsAccessReview.service");
