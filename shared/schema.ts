@@ -7164,3 +7164,6 @@ export type HipaaSecurityIncident = typeof hipaaSecurityIncidents.$inferSelect;
 export type InsertHipaaSecurityIncident = z.infer<typeof insertHipaaSecurityIncidentSchema>;
 export type HipaaAuditLog = typeof hipaaAuditLogs.$inferSelect;
 export type InsertHipaaAuditLog = z.infer<typeof insertHipaaAuditLogSchema>;
+
+// Export tax return tables from taxReturnSchema
+export * from './taxReturnSchema';

@@ -10721,6 +10721,12 @@ If the question cannot be answered with the available information, say so clearl
   registerCrossStateRulesRoutes(app);
 
   // ============================================================================
+  // Mount E-File Routes - IRS Electronic Filing Infrastructure
+  // ============================================================================
+  const { registerEFileRoutes } = await import('./api/efile.routes');
+  registerEFileRoutes(app);
+
+  // ============================================================================
   // Mount GDPR Compliance Routes - Data Subject Rights & Privacy
   // ============================================================================
   const gdprRouter = (await import('./routes/gdpr.routes')).default;
