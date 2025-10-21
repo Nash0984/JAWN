@@ -62,14 +62,14 @@ class EmailService implements EmailServiceInterface {
     const { to, subject, html, text } = params;
 
     if (!this.isEmailConfigured) {
-      // Log email to console when SMTP not configured (this is not a failure - it's intentional fallback)
-      console.log('📧 [EMAIL SERVICE - NOT CONFIGURED]');
-      console.log('─'.repeat(60));
-      console.log(`To: ${to}`);
-      console.log(`Subject: ${subject}`);
-      console.log('─'.repeat(60));
-      console.log(text || html);
-      console.log('─'.repeat(60));
+      // Log email when SMTP not configured (this is not a failure - it's intentional fallback)
+      logger.info('📧 EMAIL SERVICE - NOT CONFIGURED', {
+        to,
+        subject,
+        body: text || html,
+        service: 'EmailService',
+        mode: 'console-fallback'
+      });
       return true; // Return true for successful console fallback
     }
 
@@ -84,7 +84,12 @@ class EmailService implements EmailServiceInterface {
           service: 'EmailService',
           action: 'Install with: npm install nodemailer @types/nodemailer'
         });
-        console.log(`[SMTP CONFIGURED BUT NODEMAILER MISSING] Would send email to ${to}: ${subject}`);
+        logger.warn('SMTP configured but nodemailer missing - would send email', {
+          to,
+          subject,
+          service: 'EmailService',
+          action: 'Install nodemailer to enable email sending'
+        });
         // Return true for console fallback (not a send failure)
         return true;
       }

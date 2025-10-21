@@ -6,6 +6,7 @@
 import { storage } from "../storage";
 import crypto from "crypto";
 import type { Webhook, InsertWebhookDeliveryLog } from "@shared/schema";
+import { logger } from "./logger.service";
 
 interface WebhookPayload {
   event: string;
@@ -105,19 +106,30 @@ export async function triggerWebhook(
   const webhook = await storage.getWebhook(webhookId);
   
   if (!webhook) {
-    console.error(`Webhook ${webhookId} not found`);
+    logger.error('Webhook not found', {
+      webhookId,
+      service: 'WebhookService'
+    });
     return;
   }
 
   // Check if webhook is active
   if (webhook.status !== "active") {
-    console.log(`Webhook ${webhookId} is ${webhook.status}, skipping delivery`);
+    logger.info('Webhook not active, skipping delivery', {
+      webhookId,
+      status: webhook.status,
+      service: 'WebhookService'
+    });
     return;
   }
 
   // Check if webhook is subscribed to this event
   if (!webhook.events.includes(eventType)) {
-    console.log(`Webhook ${webhookId} not subscribed to event ${eventType}`);
+    logger.debug('Webhook not subscribed to event', {
+      webhookId,
+      eventType,
+      service: 'WebhookService'
+    });
     return;
   }
 
@@ -166,14 +178,26 @@ export async function triggerWebhook(
         failureCount: 0,
       });
       
-      console.log(`✅ Webhook ${webhookId} delivered successfully for event ${eventType}`);
+      logger.info('Webhook delivered successfully', {
+        webhookId,
+        eventType,
+        status: result.httpStatus,
+        responseTime: result.responseTime,
+        service: 'WebhookService'
+      });
       return;
     }
 
     // If not the last attempt, wait before retrying
     if (attempt <= webhook.maxRetries) {
       const delay = getRetryDelay(attempt);
-      console.log(`⏳ Webhook ${webhookId} failed, retrying in ${delay}ms (attempt ${attempt + 1}/${webhook.maxRetries + 1})`);
+      logger.info('Webhook failed, retrying', {
+        webhookId,
+        delayMs: delay,
+        attempt: attempt + 1,
+        maxAttempts: webhook.maxRetries + 1,
+        service: 'WebhookService'
+      });
       await new Promise(resolve => setTimeout(resolve, delay));
     }
   }
@@ -195,10 +219,20 @@ export async function triggerWebhook(
     status: shouldPause ? "paused" : webhook.status,
   });
 
-  console.error(`❌ Webhook ${webhookId} failed after ${webhook.maxRetries + 1} attempts for event ${eventType}`);
+  logger.error('Webhook failed after all retries', {
+    webhookId,
+    eventType,
+    attempts: webhook.maxRetries + 1,
+    lastError: lastResult?.errorMessage,
+    service: 'WebhookService'
+  });
   
   if (shouldPause) {
-    console.warn(`⚠️  Webhook ${webhookId} paused after ${newFailureCount} consecutive failures`);
+    logger.warn('Webhook paused due to consecutive failures', {
+      webhookId,
+      failureCount: newFailureCount,
+      service: 'WebhookService'
+    });
   }
 }
 
@@ -220,7 +254,11 @@ export async function triggerWebhooksForEvent(
     webhook.events.includes(eventType)
   );
 
-  console.log(`📤 Triggering ${subscribedWebhooks.length} webhooks for event ${eventType}`);
+  logger.info('Triggering webhooks for event', {
+    eventType,
+    webhookCount: subscribedWebhooks.length,
+    service: 'WebhookService'
+  });
 
   // Trigger all webhooks in parallel
   await Promise.allSettled(

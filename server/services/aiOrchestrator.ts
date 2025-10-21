@@ -4,6 +4,9 @@ import { db } from "../db";
 import { monitoringMetrics } from "@shared/schema";
 import { PiiMaskingUtils } from "../utils/piiMasking";
 import { sql, and, gte, lte } from "drizzle-orm";
+import { createLogger } from './logger.service';
+
+const logger = createLogger('AIOrchestrator');
 
 /**
  * Unified AI Orchestration Layer
@@ -179,7 +182,12 @@ class AIOrchestrator {
         },
       });
     } catch (error) {
-      console.error('Error tracking AI usage:', PiiMaskingUtils.redactPII(String(error)));
+      logger.error('Error tracking AI usage', {
+        error: PiiMaskingUtils.redactPII(String(error)),
+        feature,
+        model,
+        service: 'AIOrchestrator'
+      });
     }
   }
 
@@ -288,19 +296,25 @@ class AIOrchestrator {
         request.retryCount++;
         const delay = BASE_DELAY * Math.pow(2, request.retryCount - 1);
         
-        console.log(
-          `Retrying request (attempt ${request.retryCount}/${MAX_RETRIES}) after ${delay}ms - Feature: ${request.feature}`
-        );
+        logger.info('Retrying request', {
+          attempt: request.retryCount,
+          maxRetries: MAX_RETRIES,
+          delayMs: delay,
+          feature: request.feature,
+          service: 'AIOrchestrator'
+        });
         
         await new Promise(resolve => setTimeout(resolve, delay));
         return this.executeWithRetry(request);
       }
 
       // Log error with PII masking
-      console.error(
-        `AI request failed - Feature: ${request.feature}, Model: ${request.model}`,
-        PiiMaskingUtils.redactPII(String(error))
-      );
+      logger.error('AI request failed', {
+        feature: request.feature,
+        model: request.model,
+        error: PiiMaskingUtils.redactPII(String(error)),
+        service: 'AIOrchestrator'
+      });
       
       throw error;
     }
@@ -529,7 +543,10 @@ class AIOrchestrator {
 
       return report;
     } catch (error) {
-      console.error('Error getting cost metrics:', PiiMaskingUtils.redactPII(String(error)));
+      logger.error('Error getting cost metrics', {
+        error: PiiMaskingUtils.redactPII(String(error)),
+        service: 'AIOrchestrator'
+      });
       return {
         totalCalls: 0,
         totalTokens: 0,

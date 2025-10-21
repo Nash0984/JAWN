@@ -1,4 +1,7 @@
 import axios, { AxiosInstance } from 'axios';
+import { createLogger } from './logger.service';
+
+const logger = createLogger('GovInfoClient');
 
 /**
  * GovInfo API Client
@@ -114,7 +117,12 @@ export class GovInfoClient {
       try {
         if (attempt > 0) {
           const delay = retryDelay * Math.pow(2, attempt - 1);
-          console.log(`⏳ Retry attempt ${attempt}/${retries} after ${delay}ms...`);
+          logger.info('Retrying request', {
+            attempt,
+            maxRetries: retries,
+            delayMs: delay,
+            service: 'GovInfoClient'
+          });
           await new Promise(resolve => setTimeout(resolve, delay));
         }
         
@@ -213,13 +221,20 @@ export class GovInfoClient {
       // Stop if we've reached the max page limit
       if (maxPages && pageCount >= maxPages) {
         if (hasMore) {
-          console.log(`📥 Reached max page limit (${maxPages} pages, ${allPackages.length} packages)`);
+          logger.info('Reached max page limit', {
+            maxPages,
+            totalPackages: allPackages.length,
+            service: 'GovInfoClient'
+          });
         }
         break;
       }
       
       if (hasMore) {
-        console.log(`📥 Fetched ${allPackages.length} packages, continuing...`);
+        logger.debug('Fetched packages, continuing', {
+          packagesCount: allPackages.length,
+          service: 'GovInfoClient'
+        });
       }
     }
     

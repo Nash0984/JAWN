@@ -1,5 +1,8 @@
 import { storage } from "../storage";
 import type { InsertLeaderboard, Leaderboard } from "@shared/schema";
+import { createLogger } from './logger.service';
+
+const logger = createLogger('Leaderboard');
 
 /**
  * Leaderboard Service
@@ -257,7 +260,9 @@ class LeaderboardService {
       }
     }
 
-    console.log('✅ Refreshed all leaderboards');
+    logger.info('✅ Refreshed all leaderboards', {
+      service: 'Leaderboard'
+    });
   }
 
   /**

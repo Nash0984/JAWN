@@ -13,6 +13,7 @@ import { generateEmbedding, cosineSimilarity } from "./gemini.service";
 import { unifiedDocumentService } from "./unified/UnifiedDocumentService";
 import { smartScheduler } from "./smartScheduler";
 import { notificationService } from "./notification.service";
+import { logger } from "./logger.service";
 
 interface ConversationContext {
   sessionId: string;
@@ -291,7 +292,11 @@ class AIIntakeAssistantService {
 
       return JSON.parse(response.text || '{}');
     } catch (error) {
-      console.error('Intent classification error:', error);
+      logger.error('Intent classification error', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+        errorDetails: error,
+        service: 'AIIntakeAssistantService'
+      });
       return {
         intent: this.intents.GENERAL_QUESTION,
         confidence: 0.5,
@@ -362,7 +367,11 @@ class AIIntakeAssistantService {
 
       return response.text || "I'd be happy to help you with that. Could you tell me more about what you need?";
     } catch (error) {
-      console.error('Response generation error:', error);
+      logger.error('Response generation error', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+        errorDetails: error,
+        service: 'AIIntakeAssistantService'
+      });
       return "I apologize for the technical difficulty. Let me connect you with a human counselor who can assist you better.";
     }
   }
@@ -429,7 +438,11 @@ class AIIntakeAssistantService {
       // Update form progress
       await this.updateFormProgress(context);
     } catch (error) {
-      console.error('Data extraction error:', error);
+      logger.error('Data extraction error', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+        errorDetails: error,
+        service: 'AIIntakeAssistantService'
+      });
     }
   }
 
@@ -577,7 +590,12 @@ class AIIntakeAssistantService {
           };
         }
       } catch (error) {
-        console.error('Attachment processing error:', error);
+        logger.error('Attachment processing error', {
+          attachment,
+          error: error instanceof Error ? error.message : 'Unknown error',
+          errorDetails: error,
+          service: 'AIIntakeAssistantService'
+        });
       }
     }
   }
@@ -602,7 +620,11 @@ class AIIntakeAssistantService {
       const langCode = response.text?.trim().toLowerCase() || 'unknown';
       return ['en', 'es', 'zh', 'ko'].includes(langCode) ? langCode : 'unknown';
     } catch (error) {
-      console.error('Language detection error:', error);
+      logger.error('Language detection error', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+        errorDetails: error,
+        service: 'AIIntakeAssistantService'
+      });
       return 'unknown';
     }
   }
@@ -653,7 +675,13 @@ class AIIntakeAssistantService {
         confidence: 0.9
       };
     } catch (error) {
-      console.error('Translation error:', error);
+      logger.error('Translation error', {
+        sourceLang,
+        targetLang,
+        error: error instanceof Error ? error.message : 'Unknown error',
+        errorDetails: error,
+        service: 'AIIntakeAssistantService'
+      });
       return {
         translatedText: text,
         originalLanguage: sourceLang,
@@ -750,7 +778,12 @@ class AIIntakeAssistantService {
       this.activeSessions.set(sessionId, context);
       return context;
     } catch (error) {
-      console.error('Session load error:', error);
+      logger.error('Session load error', {
+        sessionId,
+        error: error instanceof Error ? error.message : 'Unknown error',
+        errorDetails: error,
+        service: 'AIIntakeAssistantService'
+      });
       return null;
     }
   }
@@ -862,7 +895,11 @@ class AIIntakeAssistantService {
         };
       }
     } catch (error) {
-      console.error('Appointment scheduling error:', error);
+      logger.error('Appointment scheduling error', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+        errorDetails: error,
+        service: 'AIIntakeAssistantService'
+      });
     }
 
     return {
@@ -950,7 +987,11 @@ class AIIntakeAssistantService {
 
       context.householdProfileId = profile.id;
     } catch (error) {
-      console.error('Profile creation error:', error);
+      logger.error('Profile creation error', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+        errorDetails: error,
+        service: 'AIIntakeAssistantService'
+      });
     }
   }
 }

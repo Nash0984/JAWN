@@ -3,6 +3,9 @@ import { storage } from "../storage";
 import type { IntakeSession, IntakeMessage, ApplicationForm } from "@shared/schema";
 import { policyEngineService } from "./policyEngine.service";
 import type { PolicyEngineResponse } from "./policyEngine.service";
+import { createLogger } from './logger.service';
+
+const logger = createLogger('IntakeCopilot');
 
 interface ExtractedData {
   fields: Record<string, any>;
@@ -161,7 +164,11 @@ export class IntakeCopilotService {
         policyEngineResults: result
       };
     } catch (error) {
-      console.error("PolicyEngine check failed:", error);
+      logger.error("PolicyEngine check failed", {
+        error: error instanceof Error ? error.message : 'Unknown error',
+        errorDetails: error,
+        service: 'IntakeCopilot'
+      });
       return undefined;
     }
   }
@@ -281,7 +288,11 @@ Return JSON in this format:
         };
       }
     } catch (error) {
-      console.error("Data extraction error:", error);
+      logger.error("Data extraction error", {
+        error: error instanceof Error ? error.message : 'Unknown error',
+        errorDetails: error,
+        service: 'IntakeCopilot'
+      });
     }
 
     return { fields: {}, confidence: {} };
@@ -318,7 +329,11 @@ Return as a JSON array of strings: ["question1", "question2", "question3"]`;
         return questions.slice(0, 3);
       }
     } catch (error) {
-      console.error("Question generation error:", error);
+      logger.error("Question generation error", {
+        error: error instanceof Error ? error.message : 'Unknown error',
+        errorDetails: error,
+        service: 'IntakeCopilot'
+      });
     }
 
     return [];
@@ -408,7 +423,12 @@ Return as a JSON array of strings: ["question1", "question2", "question3"]`;
     // Warn if completeness is low
     const completeness = this.calculateCompleteness(extractedData, session.sessionType);
     if (completeness < 0.7) {
-      console.warn(`Generating form with low completeness (${Math.round(completeness * 100)}%). Consider collecting more data.`);
+      logger.warn('Generating form with low completeness', {
+        completenessPercent: Math.round(completeness * 100),
+        completeness,
+        message: 'Consider collecting more data',
+        service: 'IntakeCopilot'
+      });
     }
     
     const applicantInfo = {

@@ -6,6 +6,7 @@ import { Form1040XmlGenerator } from './form1040XmlGenerator';
 import { Form502XmlGenerator } from './form502XmlGenerator';
 import { eq, desc, and, or } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
+import { logger } from './logger.service';
 
 /**
  * E-File Queue Service for IRS/Maryland Tax Return Submission Management
@@ -179,7 +180,11 @@ export class EFileQueueService {
           }
         );
       } catch (error) {
-        console.error('Form 1040 XML generation error:', error);
+        logger.error('Form 1040 XML generation error', {
+          error: error instanceof Error ? error.message : 'Unknown error',
+          errorDetails: error,
+          service: 'EFileQueueService'
+        });
         xmlGenerationError = error instanceof Error ? error.message : 'Unknown XML generation error';
       }
       
@@ -280,7 +285,11 @@ export class EFileQueueService {
             }
           );
         } catch (error) {
-          console.error('Form 502 XML generation error:', error);
+          logger.error('Form 502 XML generation error', {
+            error: error instanceof Error ? error.message : 'Unknown error',
+            errorDetails: error,
+            service: 'EFileQueueService'
+          });
           const mdXmlError = error instanceof Error ? error.message : 'Unknown XML generation error';
           form502Xml = `<!-- Form 502 XML generation failed: ${mdXmlError} -->`;
         }
@@ -345,7 +354,12 @@ export class EFileQueueService {
       };
 
     } catch (error) {
-      console.error('E-file submission error:', error);
+      logger.error('E-file submission error', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+        errorDetails: error,
+        federalReturnId,
+        service: 'EFileQueueService'
+      });
       
       // Store error in database
       await storage.updateFederalTaxReturn(federalReturnId, {

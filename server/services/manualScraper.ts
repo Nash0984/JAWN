@@ -1,5 +1,6 @@
 import axios from 'axios';
 import * as cheerio from 'cheerio';
+import { logger } from './logger.service';
 
 const MANUAL_BASE_URL = 'https://dhs.maryland.gov/supplemental-nutrition-assistance-program/food-supplement-program-manual/';
 
@@ -20,7 +21,10 @@ export interface ScrapedSection {
  */
 export async function scrapeManualSections(): Promise<ScrapedSection[]> {
   try {
-    console.log(`Fetching manual page from ${MANUAL_BASE_URL}...`);
+    logger.info('Fetching manual page', {
+      url: MANUAL_BASE_URL,
+      service: 'ManualScraper'
+    });
     const response = await axios.get(MANUAL_BASE_URL, {
       timeout: 30000,
       headers: {
@@ -118,7 +122,9 @@ export async function scrapeManualSections(): Promise<ScrapedSection[]> {
 
     // Alternative parsing: Look for direct section structure
     if (sections.length === 0) {
-      console.log('Trying alternative parsing method...');
+      logger.info('Trying alternative parsing method', {
+        service: 'ManualScraper'
+      });
       
       // Find all links that point to documents
       $('a[href*=".pdf"], a[href*=".docx"], a[href*=".doc"]').each((index, element) => {
@@ -212,11 +218,18 @@ export async function scrapeManualSections(): Promise<ScrapedSection[]> {
       return aNum - bNum;
     });
 
-    console.log(`Successfully scraped ${uniqueSections.length} sections from Maryland DHS website`);
+    logger.info('Successfully scraped sections from Maryland DHS website', {
+      sectionCount: uniqueSections.length,
+      service: 'ManualScraper'
+    });
     
     return uniqueSections;
   } catch (error) {
-    console.error('Error scraping manual sections:', error);
+    logger.error('Error scraping manual sections', {
+      error: error instanceof Error ? error.message : 'Unknown error',
+      errorDetails: error,
+      service: 'ManualScraper'
+    });
     throw new Error(`Failed to scrape manual sections: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
 }
@@ -226,9 +239,18 @@ export async function scrapeManualSections(): Promise<ScrapedSection[]> {
  */
 export async function testScraper() {
   const sections = await scrapeManualSections();
-  console.log('Scraped sections:');
+  logger.info('Scraped sections', {
+    sectionCount: sections.length,
+    service: 'ManualScraper'
+  });
   sections.forEach(s => {
-    console.log(`${s.sectionNumber}: ${s.sectionTitle} (${s.fileType}, ${(s.fileSize / 1024).toFixed(2)} KB)`);
+    logger.debug('Section details', {
+      sectionNumber: s.sectionNumber,
+      sectionTitle: s.sectionTitle,
+      fileType: s.fileType,
+      fileSizeKB: (s.fileSize / 1024).toFixed(2),
+      service: 'ManualScraper'
+    });
   });
   return sections;
 }

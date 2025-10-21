@@ -1,5 +1,8 @@
 import axios from 'axios';
 import type { W2Data, Form1099MISCData, Form1099NECData } from './taxDocumentExtraction';
+import { createLogger } from './logger.service';
+
+const logger = createLogger('PolicyEngineTaxCalculation');
 
 /**
  * PolicyEngine Tax Calculation Service
@@ -369,7 +372,12 @@ export class PolicyEngineTaxCalculationService {
         effectiveTaxRate
       };
     } catch (error) {
-      console.error('PolicyEngine tax calculation error:', error);
+      logger.error('PolicyEngine tax calculation error', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+        errorDetails: error,
+        taxYear: input.taxYear,
+        service: 'PolicyEngineTaxCalculation'
+      });
       throw new Error(
         `Tax calculation failed: ${error instanceof Error ? error.message : 'Unknown error'}`
       );
@@ -424,7 +432,12 @@ export class PolicyEngineTaxCalculationService {
         totalFederalSupport
       };
     } catch (error) {
-      console.error('Combined calculation error:', error);
+      logger.error('Combined calculation error', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+        errorDetails: error,
+        taxYear: input.taxYear,
+        service: 'PolicyEngineTaxCalculation'
+      });
       throw error;
     }
   }

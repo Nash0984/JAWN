@@ -1,5 +1,6 @@
 import axios from 'axios';
 import NodeCache from 'node-cache';
+import { logger } from './logger.service';
 
 /**
  * PolicyEngine OAuth 2.0 Token Manager
@@ -43,13 +44,17 @@ class PolicyEngineOAuth {
     const expiryTime = tokenCache.get<number>(EXPIRY_CACHE_KEY);
 
     if (cachedToken && this.isTokenValid()) {
-      console.log('PolicyEngine OAuth: Using cached token');
+      logger.debug('Using cached token', {
+        service: 'PolicyEngineOAuth'
+      });
       return cachedToken;
     }
 
     // If a request is already in progress, wait for it
     if (this.requestInProgress) {
-      console.log('PolicyEngine OAuth: Token request already in progress, waiting...');
+      logger.debug('Token request already in progress, waiting', {
+        service: 'PolicyEngineOAuth'
+      });
       return this.requestInProgress;
     }
 
@@ -68,7 +73,9 @@ class PolicyEngineOAuth {
    * Force refresh token (ignores cache)
    */
   async refreshToken(): Promise<string> {
-    console.log('PolicyEngine OAuth: Force refreshing token');
+    logger.info('Force refreshing token', {
+      service: 'PolicyEngineOAuth'
+    });
     
     // Clear cache
     tokenCache.del(TOKEN_CACHE_KEY);
@@ -117,7 +124,10 @@ class PolicyEngineOAuth {
     };
 
     try {
-      console.log('PolicyEngine OAuth: Fetching new access token...');
+      logger.info('Fetching new access token', {
+        audience: AUDIENCE,
+        service: 'PolicyEngineOAuth'
+      });
       
       const response = await axios.post<TokenResponse>(TOKEN_ENDPOINT, payload, {
         headers: {
@@ -142,7 +152,10 @@ class PolicyEngineOAuth {
       tokenCache.set(EXPIRY_CACHE_KEY, expiryTime);
 
       const expiryDate = new Date(expiryTime).toISOString();
-      console.log(`PolicyEngine OAuth: Token acquired successfully (expires: ${expiryDate})`);
+      logger.info('Token acquired successfully', {
+        expiryDate,
+        service: 'PolicyEngineOAuth'
+      });
 
       return access_token;
     } catch (error) {
@@ -160,7 +173,11 @@ class PolicyEngineOAuth {
 
         // Network or server errors - retry logic
         if (!error.response || (status !== undefined && status >= 500)) {
-          console.error('PolicyEngine OAuth: Network/server error, will retry on next request');
+          logger.error('Network/server error, will retry on next request', {
+            status,
+            error: error.message,
+            service: 'PolicyEngineOAuth'
+          });
           throw new Error(
             `PolicyEngine OAuth network error: ${error.message}. ` +
             `Token will be retried on next API call.`
@@ -183,7 +200,9 @@ class PolicyEngineOAuth {
   clearCache(): void {
     tokenCache.del(TOKEN_CACHE_KEY);
     tokenCache.del(EXPIRY_CACHE_KEY);
-    console.log('PolicyEngine OAuth: Cache cleared');
+    logger.debug('Cache cleared', {
+      service: 'PolicyEngineOAuth'
+    });
   }
 
   /**

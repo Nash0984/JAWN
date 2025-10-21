@@ -1,5 +1,8 @@
 import axios from 'axios';
 import { policyEngineOAuth } from './policyEngineOAuth';
+import { createLogger } from './logger.service';
+
+const logger = createLogger('PolicyEngineHttpClient');
 
 /**
  * PolicyEngine HTTP API Client
@@ -184,10 +187,15 @@ export class PolicyEngineHttpClient {
       return await this._performCalculation(household);
     } catch (error) {
       if (axios.isAxiosError(error) && (error.response?.status === 401 || error.response?.status === 403)) {
-        console.warn('PolicyEngine auth failure detected, refreshing token and retrying...');
+        logger.warn('PolicyEngine auth failure detected, refreshing token and retrying', {
+          status: error.response?.status,
+          service: 'PolicyEngineHttpClient'
+        });
         
         await policyEngineOAuth.refreshToken();
-        console.log('PolicyEngine token refreshed successfully');
+        logger.info('PolicyEngine token refreshed successfully', {
+          service: 'PolicyEngineHttpClient'
+        });
         
         return await this._performCalculation(household);
       }
@@ -254,7 +262,7 @@ export class PolicyEngineHttpClient {
         const status = error.response?.status;
         const errorData = error.response?.data;
         
-        console.error('PolicyEngine API error:', {
+        logger.error('PolicyEngine API error', {
           status,
           data: errorData,
           message: error.message
@@ -307,10 +315,15 @@ export class PolicyEngineHttpClient {
       return await this._performTestConnection();
     } catch (error) {
       if (axios.isAxiosError(error) && (error.response?.status === 401 || error.response?.status === 403)) {
-        console.warn('PolicyEngine auth failure during test, refreshing token and retrying...');
+        logger.warn('PolicyEngine auth failure during test, refreshing token and retrying', {
+          status: error.response?.status,
+          service: 'PolicyEngineHttpClient'
+        });
         
         await policyEngineOAuth.refreshToken();
-        console.log('PolicyEngine token refreshed successfully');
+        logger.info('PolicyEngine token refreshed successfully', {
+          service: 'PolicyEngineHttpClient'
+        });
         
         return await this._performTestConnection();
       }

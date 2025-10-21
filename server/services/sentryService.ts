@@ -203,7 +203,11 @@ export function startTransaction(name: string, op: string, data?: Record<string,
       data,
     });
   } catch (error) {
-    console.error("Failed to start Sentry transaction:", error);
+    logger.error("Failed to start Sentry transaction", {
+      error: error instanceof Error ? error.message : 'Unknown error',
+      errorDetails: error,
+      service: 'SentryService'
+    });
     return null;
   }
 }
@@ -222,7 +226,11 @@ export function setUserContext(user: { id: string; username?: string; email?: st
       role: user.role,
     });
   } catch (error) {
-    console.error("Failed to set Sentry user context:", error);
+    logger.error("Failed to set Sentry user context", {
+      error: error instanceof Error ? error.message : 'Unknown error',
+      errorDetails: error,
+      service: 'SentryService'
+    });
   }
 }
 
@@ -238,7 +246,11 @@ export function setTenantContext(tenantId: string, tenantName?: string) {
       name: tenantName,
     });
   } catch (error) {
-    console.error("Failed to set Sentry tenant context:", error);
+    logger.error("Failed to set Sentry tenant context", {
+      error: error instanceof Error ? error.message : 'Unknown error',
+      errorDetails: error,
+      service: 'SentryService'
+    });
   }
 }
 
@@ -257,7 +269,11 @@ export function addBreadcrumb(message: string, category: string, data?: Record<s
       timestamp: Date.now() / 1000,
     });
   } catch (error) {
-    console.error("Failed to add Sentry breadcrumb:", error);
+    logger.error("Failed to add Sentry breadcrumb", {
+      error: error instanceof Error ? error.message : 'Unknown error',
+      errorDetails: error,
+      service: 'SentryService'
+    });
   }
 }
 
@@ -273,11 +289,13 @@ export function captureException(error: Error, context?: {
   request?: any;
 }) {
   if (!sentryEnabled) {
-    // Fallback to console logging
-    console.error("[ERROR]", error);
-    if (context?.extra) {
-      console.error("[CONTEXT]", JSON.stringify(context.extra, null, 2));
-    }
+    // Fallback to logger
+    logger.error("Error captured (Sentry not enabled)", {
+      error: error instanceof Error ? error.message : 'Unknown error',
+      errorDetails: error,
+      context: context?.extra,
+      service: 'SentryService'
+    });
     return null;
   }
   
@@ -302,7 +320,11 @@ export function captureException(error: Error, context?: {
       contexts: Object.keys(contexts).length > 0 ? contexts : undefined,
     });
   } catch (err) {
-    console.error("Failed to capture exception in Sentry:", err);
+    logger.error("Failed to capture exception in Sentry", {
+      error: err instanceof Error ? err.message : 'Unknown error',
+      errorDetails: err,
+      service: 'SentryService'
+    });
     return null;
   }
 }
@@ -312,8 +334,12 @@ export function captureException(error: Error, context?: {
  */
 export function captureMessage(message: string, level: 'fatal' | 'error' | 'warning' | 'info' | 'debug' = 'info', context?: Record<string, any>) {
   if (!sentryEnabled) {
-    const logLevel = level === 'fatal' || level === 'error' ? 'error' : level === 'warning' ? 'warn' : 'log';
-    console[logLevel](`[${level.toUpperCase()}]`, message, context || '');
+    const logFn = level === 'fatal' || level === 'error' ? logger.error : level === 'warning' ? logger.warn : logger.info;
+    logFn(message, {
+      level: level.toUpperCase(),
+      context,
+      service: 'SentryService'
+    });
     return null;
   }
   
@@ -323,7 +349,11 @@ export function captureMessage(message: string, level: 'fatal' | 'error' | 'warn
       extra: context,
     });
   } catch (error) {
-    console.error("Failed to capture message in Sentry:", error);
+    logger.error("Failed to capture message in Sentry", {
+      error: error instanceof Error ? error.message : 'Unknown error',
+      errorDetails: error,
+      service: 'SentryService'
+    });
     return null;
   }
 }

@@ -1,4 +1,7 @@
 import crypto from 'crypto';
+import { createLogger } from './logger.service';
+
+const logger = createLogger('Encryption');
 
 /**
  * Field-Level Encryption Service
@@ -43,7 +46,10 @@ class EncryptionService {
     if (!keyHex) {
       // In development, generate a warning key (NOT FOR PRODUCTION)
       if (process.env.NODE_ENV === 'development') {
-        console.warn(`⚠️  ${keyEnvVar} not set. Using development-only key. DO NOT USE IN PRODUCTION.`);
+        logger.warn(`⚠️  ${keyEnvVar} not set. Using development-only key. DO NOT USE IN PRODUCTION.`, {
+          keyEnvVar,
+          service: 'Encryption'
+        });
         // Generate deterministic dev key from env name
         return crypto.createHash('sha256').update(keyEnvVar + 'dev-only').digest();
       }
@@ -67,7 +73,9 @@ class EncryptionService {
     if (!prevKeyHex) return null;
     
     if (!/^[0-9a-f]{64}$/i.test(prevKeyHex)) {
-      console.error('ENCRYPTION_KEY_PREVIOUS has invalid format, ignoring');
+      logger.error('ENCRYPTION_KEY_PREVIOUS has invalid format, ignoring', {
+        service: 'Encryption'
+      });
       return null;
     }
     
@@ -100,7 +108,11 @@ class EncryptionService {
         keyVersion: this.currentKeyVersion,
       };
     } catch (error) {
-      console.error('Encryption failed:', error instanceof Error ? error.message : 'Unknown error');
+      logger.error('Encryption failed', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+        errorDetails: error,
+        service: 'Encryption'
+      });
       throw new Error('Failed to encrypt sensitive data');
     }
   }
@@ -125,13 +137,20 @@ class EncryptionService {
         // If decryption fails and previous key exists, try previous key
         const previousKey = this.getPreviousKey();
         if (previousKey) {
-          console.warn('Attempting decryption with previous key (key rotation in progress)');
+          logger.warn('Attempting decryption with previous key (key rotation in progress)', {
+            keyVersion: keyVersion || this.currentKeyVersion,
+            service: 'Encryption'
+          });
           return this.decryptWithKey(ciphertext, iv, authTag, previousKey);
         }
         throw error;
       }
     } catch (error) {
-      console.error('Decryption failed:', error instanceof Error ? error.message : 'Unknown error');
+      logger.error('Decryption failed', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+        errorDetails: error,
+        service: 'Encryption'
+      });
       throw new Error('Failed to decrypt sensitive data');
     }
   }

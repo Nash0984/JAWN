@@ -1,6 +1,9 @@
 import { PolicyEngineService } from './policyEngine.service';
 import type { IStorage } from '../storage';
 import type { InsertPolicyEngineVerification, PolicyEngineVerification } from '@shared/schema';
+import { createLogger } from './logger.service';
+
+const logger = createLogger('PolicyEngineVerification');
 
 interface VerificationResult {
   isMatch: boolean;
@@ -82,7 +85,12 @@ export class PolicyEngineVerificationService {
       
       return await this.storage.createPolicyEngineVerification(verification);
     } catch (error) {
-      console.error('PolicyEngine verification failed:', error);
+      logger.error('PolicyEngine verification failed', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+        errorDetails: error,
+        benefitProgramId: options.benefitProgramId,
+        service: 'PolicyEngineVerification'
+      });
       
       // Store failed verification
       const failedVerification: InsertPolicyEngineVerification = {
@@ -174,7 +182,12 @@ export class PolicyEngineVerificationService {
       
       return await this.storage.createPolicyEngineVerification(verification);
     } catch (error) {
-      console.error('Tax verification failed:', error);
+      logger.error('Tax verification failed', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+        errorDetails: error,
+        benefitProgramId: options.benefitProgramId,
+        service: 'PolicyEngineVerification'
+      });
       
       const failedVerification: InsertPolicyEngineVerification = {
         benefitProgramId: options.benefitProgramId,
@@ -252,7 +265,13 @@ export class PolicyEngineVerificationService {
       
       return await this.storage.createPolicyEngineVerification(verification);
     } catch (error) {
-      console.error('Eligibility verification failed:', error);
+      logger.error('Eligibility verification failed', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+        errorDetails: error,
+        benefitProgramId: options.benefitProgramId,
+        programCode,
+        service: 'PolicyEngineVerification'
+      });
       
       const failedVerification: InsertPolicyEngineVerification = {
         benefitProgramId: options.benefitProgramId,

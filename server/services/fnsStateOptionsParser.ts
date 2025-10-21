@@ -4,6 +4,7 @@ import { stateOptionsWaivers, marylandStateOptionStatus } from '@shared/schema';
 import type { InsertStateOptionWaiver, InsertMarylandStateOptionStatus } from '@shared/schema';
 import { GoogleGenAI } from '@google/genai';
 import { eq } from 'drizzle-orm';
+import { logger } from './logger.service';
 
 const GEMINI_API_KEY = process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY || '';
 
@@ -35,11 +36,19 @@ export class FNSStateOptionsParser {
     });
     
     if (existingData) {
-      console.log(`⏭️  FNS State Options Report Edition ${this.REPORT_EDITION} already in database - skipping download`);
+      logger.info('FNS State Options Report already in database - skipping download', {
+        edition: this.REPORT_EDITION,
+        service: 'FNSStateOptionsParser'
+      });
       return { optionsCreated: 0, marylandStatusCreated: 0 };
     }
     
-    console.log('📥 Downloading FNS State Options Report (17th Edition, August 2025)...');
+    logger.info('Downloading FNS State Options Report', {
+      edition: this.REPORT_EDITION,
+      date: this.REPORT_DATE,
+      url: this.FNS_REPORT_URL,
+      service: 'FNSStateOptionsParser'
+    });
     
     // Download PDF
     const response = await axios.get(this.FNS_REPORT_URL, {
@@ -51,7 +60,10 @@ export class FNSStateOptionsParser {
     });
     
     const pdfBuffer = Buffer.from(response.data);
-    console.log(`✅ Downloaded PDF (${Math.round(pdfBuffer.length / 1024 / 1024 * 10) / 10} MB)`);
+    logger.info('Downloaded PDF successfully', {
+      sizeMB: Math.round(pdfBuffer.length / 1024 / 1024 * 10) / 10,
+      service: 'FNSStateOptionsParser'
+    });
     
     // Extract text from PDF
     // Use createRequire to load CommonJS pdf-parse in ESM
@@ -61,15 +73,24 @@ export class FNSStateOptionsParser {
     const pdfData = await pdfParse(pdfBuffer);
     const pdfText = pdfData.text;
     
-    console.log(`📄 Extracted ${pdfText.length} characters from PDF`);
+    logger.info('Extracted text from PDF', {
+      characterCount: pdfText.length,
+      service: 'FNSStateOptionsParser'
+    });
     
     // Use Gemini to extract the 28 SNAP options
     const options = await this.extractOptionsWithGemini(pdfText);
-    console.log(`🔍 Gemini extracted ${options.length} SNAP options`);
+    logger.info('Gemini extracted SNAP options', {
+      optionCount: options.length,
+      service: 'FNSStateOptionsParser'
+    });
     
     // Use Gemini to identify Maryland's participation
     const marylandStatus = await this.extractMarylandStatusWithGemini(pdfText, options);
-    console.log(`🏛️  Identified Maryland participation for ${marylandStatus.length} options`);
+    logger.info('Identified Maryland participation status', {
+      optionCount: marylandStatus.length,
+      service: 'FNSStateOptionsParser'
+    });
     
     // Store in database
     const optionsCreated = await this.storeOptions(options);
@@ -132,14 +153,18 @@ ${pdfText.substring(0, 50000)}`;
         }
       }
       
-      console.log(`✅ Successfully extracted all 28 SNAP options`);
+      logger.info('Successfully extracted all SNAP options', {
+        optionCount: 28,
+        service: 'FNSStateOptionsParser'
+      });
       return options;
     } catch (error) {
-      console.error('❌ Error parsing Gemini response:', error);
-      if (error instanceof Error) {
-        console.error('Error message:', error.message);
-      }
-      console.error('Response text preview:', text.substring(0, 500));
+      logger.error('Error parsing Gemini response', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+        errorDetails: error,
+        responsePreview: text.substring(0, 500),
+        service: 'FNSStateOptionsParser'
+      });
       throw error instanceof Error ? error : new Error('Failed to extract SNAP options from FNS report');
     }
   }
@@ -205,15 +230,19 @@ ${marylandSection}`;
         }
       }
       
-      console.log(`✅ Successfully extracted Maryland status for all ${statusData.length} options`);
+      logger.info('Successfully extracted Maryland status', {
+        statusCount: statusData.length,
+        service: 'FNSStateOptionsParser'
+      });
       
       return statusData;
     } catch (error) {
-      console.error('❌ Error parsing Maryland status response:', error);
-      if (error instanceof Error) {
-        console.error('Error message:', error.message);
-      }
-      console.error('Response text preview:', text.substring(0, 500));
+      logger.error('Error parsing Maryland status response', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+        errorDetails: error,
+        responsePreview: text.substring(0, 500),
+        service: 'FNSStateOptionsParser'
+      });
       throw error instanceof Error ? error : new Error('Failed to extract Maryland participation status');
     }
   }
@@ -255,9 +284,18 @@ ${marylandSection}`;
           });
         
         created++;
-        console.log(`  ✅ Stored option: ${option.optionCode} - ${option.optionName}`);
+        logger.debug('Stored option', {
+          optionCode: option.optionCode,
+          optionName: option.optionName,
+          service: 'FNSStateOptionsParser'
+        });
       } catch (error) {
-        console.error(`  ❌ Error storing option ${option.optionCode}:`, error);
+        logger.error('Error storing option', {
+          optionCode: option.optionCode,
+          error: error instanceof Error ? error.message : 'Unknown error',
+          errorDetails: error,
+          service: 'FNSStateOptionsParser'
+        });
       }
     }
     
@@ -279,7 +317,10 @@ ${marylandSection}`;
           .limit(1);
         
         if (!option || option.length === 0) {
-          console.log(`  ⏭️  Skipping ${status.optionCode} - option not found`);
+          logger.warn('Skipping status - option not found', {
+            optionCode: status.optionCode,
+            service: 'FNSStateOptionsParser'
+          });
           continue;
         }
         
@@ -305,9 +346,18 @@ ${marylandSection}`;
         
         created++;
         const participationIcon = status.isParticipating ? '✅' : '❌';
-        console.log(`  ${participationIcon} Maryland ${status.optionCode}: ${status.isParticipating ? 'Participates' : 'Does not participate'}`);
+        logger.debug('Maryland option participation status', {
+          optionCode: status.optionCode,
+          participates: status.isParticipating,
+          service: 'FNSStateOptionsParser'
+        });
       } catch (error) {
-        console.error(`  ❌ Error storing Maryland status for ${status.optionCode}:`, error);
+        logger.error('Error storing Maryland status', {
+          optionCode: status.optionCode,
+          error: error instanceof Error ? error.message : 'Unknown error',
+          errorDetails: error,
+          service: 'FNSStateOptionsParser'
+        });
       }
     }
     

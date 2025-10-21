@@ -14,6 +14,9 @@ import { storage } from '../storage';
 import { programDetection, type ProgramMatch } from './programDetection';
 import { rulesEngineAdapter, type HybridEligibilityPayload, type HybridCalculationResult } from './rulesEngineAdapter';
 import { cacheService, CACHE_KEYS, generateHouseholdHash } from './cacheService';
+import { createLogger } from './logger.service';
+
+const logger = createLogger('HybridService');
 
 export interface HybridSearchResult {
   answer: string;
@@ -68,7 +71,11 @@ class HybridService {
     
     // Step 1: Classify the query
     const classification = queryClassifier.classify(query);
-    console.log('Query classification:', classification);
+    logger.debug('Query classification', {
+      classification,
+      queryLength: query.length,
+      service: 'HybridService'
+    });
 
     let result: HybridSearchResult;
 
@@ -118,7 +125,11 @@ class HybridService {
     // Step 3: Detect which program(s) the query is about
     // Pass program code instead of UUID for proper detection
     const programMatches = programDetection.detectProgram(query, programCode);
-    console.log('Detected programs:', programMatches);
+    logger.debug('Detected programs', {
+      programMatches,
+      matchCount: programMatches.length,
+      service: 'HybridService'
+    });
     
     // Step 4: Check if we can calculate directly from extracted parameters
     if (queryClassifier.canCalculateDirectly(classification) && classification.extractedParams) {
@@ -264,11 +275,17 @@ class HybridService {
     // Check cache first
     const cachedResult = cacheService.get<HybridSearchResult>(cacheKey);
     if (cachedResult) {
-      console.log(`✅ Hybrid cache hit for query (hash: ${householdHash})`);
+      logger.info('✅ Hybrid cache hit', {
+        householdHash,
+        service: 'HybridService'
+      });
       return cachedResult;
     }
     
-    console.log(`❌ Hybrid cache miss for query (hash: ${householdHash})`);
+    logger.info('❌ Hybrid cache miss', {
+      householdHash,
+      service: 'HybridService'
+    });
     
     // Run both Rules Engine and RAG in parallel
     const [calculationResult, ragResult] = await Promise.all([
@@ -350,7 +367,11 @@ class HybridService {
     
     // Cache the hybrid result
     cacheService.set(cacheKey, result);
-    console.log(`💾 Cached hybrid calculation result (hash: ${householdHash})`);
+    logger.info('💾 Cached hybrid calculation result', {
+      householdHash,
+      ttlMinutes: 60,
+      service: 'HybridService'
+    });
     
     return result;
   }

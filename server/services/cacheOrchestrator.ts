@@ -541,7 +541,11 @@ class CacheOrchestratorService {
     try {
       await db.insert(monitoringMetrics).values(data);
     } catch (error) {
-      console.error('Failed to log to monitoring:', error);
+      logger.error('Failed to log to monitoring', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+        errorDetails: error,
+        service: 'CacheOrchestrator'
+      });
     }
   }
 
@@ -550,14 +554,14 @@ class CacheOrchestratorService {
    */
   private async notifyAdmins(event: InvalidationEvent, rule: InvalidationRule): Promise<void> {
     // Log admin notification
-    console.log(`📧 ADMIN NOTIFICATION: ${rule.trigger}`);
-    console.log(`   Severity: ${rule.severity}`);
-    console.log(`   Reason: ${rule.reason}`);
-    console.log(`   Affected caches: ${event.affectedCaches.join(', ')}`);
-    
-    if (event.programCodes) {
-      console.log(`   Affected programs: ${event.programCodes.join(', ')}`);
-    }
+    logger.info('📧 ADMIN NOTIFICATION', {
+      trigger: rule.trigger,
+      severity: rule.severity,
+      reason: rule.reason,
+      affectedCaches: event.affectedCaches,
+      affectedPrograms: event.programCodes || [],
+      service: 'CacheOrchestrator'
+    });
 
     // TODO: Integrate with notification service when available
     // await notificationService.notifyAdmins({
@@ -631,7 +635,9 @@ class CacheOrchestratorService {
     // Disconnect Redis gracefully
     await redisCache.disconnect();
     
-    console.log('📦 Cache Orchestrator shutdown complete');
+    logger.info('📦 Cache Orchestrator shutdown complete', {
+      service: 'CacheOrchestrator'
+    });
   }
 }
 

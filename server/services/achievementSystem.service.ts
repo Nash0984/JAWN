@@ -1,5 +1,8 @@
 import { storage } from "../storage";
 import type { Achievement, NavigatorKpi, InsertNavigatorAchievement } from "@shared/schema";
+import { createLogger } from './logger.service';
+
+const logger = createLogger('AchievementSystem');
 
 /**
  * Achievement System Service
@@ -113,7 +116,14 @@ class AchievementSystemService {
     await storage.awardAchievement(award);
 
     // TODO: Send notification to navigator
-    console.log(`🏆 Achievement awarded: ${achievement.name} to navigator ${navigatorId}`);
+    logger.info('🏆 Achievement awarded', {
+      achievementName: achievement.name,
+      achievementId: achievement.id,
+      navigatorId,
+      triggerMetric: metric,
+      triggerValue,
+      service: 'AchievementSystem'
+    });
   }
 
   /**
@@ -292,7 +302,10 @@ class AchievementSystemService {
       await storage.createAchievement(achievement);
     }
 
-    console.log(`✅ Seeded ${defaultAchievements.length} default achievements`);
+    logger.info('✅ Seeded default achievements', {
+      count: defaultAchievements.length,
+      service: 'AchievementSystem'
+    });
   }
 
   /**

@@ -1,4 +1,7 @@
 import axios, { AxiosInstance } from 'axios';
+import { createLogger } from './logger.service';
+
+const logger = createLogger('CongressGovClient');
 
 /**
  * Congress.gov API Client
@@ -56,7 +59,7 @@ import axios, { AxiosInstance } from 'axios';
  * // Get details for a specific bill (includes laws[] array)
  * const details = await congressGovClient.getBillDetails(119, 'hr', '5376');
  * if (details.bill.laws && details.bill.laws.length > 0) {
- *   console.log('Bill is enacted:', details.bill.laws);
+ *   logger.info('Bill is enacted:', { laws: details.bill.laws });
  * }
  * ```
  * 
@@ -299,7 +302,12 @@ export class CongressGovClient {
       try {
         if (attempt > 0) {
           const delay = retryDelay * Math.pow(2, attempt - 1);
-          console.log(`⏳ Retry attempt ${attempt}/${retries} after ${delay}ms...`);
+          logger.info('Retrying request', {
+            attempt,
+            maxRetries: retries,
+            delayMs: delay,
+            service: 'CongressGovClient'
+          });
           await new Promise(resolve => setTimeout(resolve, delay));
         }
         
