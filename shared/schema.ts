@@ -13,7 +13,7 @@ export const users = pgTable("users", {
   phone: text("phone"),
   role: text("role").notNull().default("client"), // client, navigator, caseworker, admin, super_admin
   // Multi-tenant isolation
-  tenantId: varchar("tenant_id").references((): any => tenants.id), // References tenant for data isolation
+  tenantId: varchar("tenant_id"), // References tenant for data isolation - relation defined below
   // Maryland DHS staff fields
   dhsEmployeeId: text("dhs_employee_id"), // for navigators and caseworkers
   officeLocation: text("office_location"), // local DHS office location
@@ -94,7 +94,7 @@ export const documents = pgTable("documents", {
   fileSize: integer("file_size"), // in bytes
   mimeType: text("mime_type"),
   uploadedBy: varchar("uploaded_by").references(() => users.id),
-  tenantId: varchar("tenant_id").references((): any => tenants.id), // Multi-tenant isolation
+  tenantId: varchar("tenant_id"), // Multi-tenant isolation - relation defined below
   status: text("status").notNull().default("uploaded"), // uploaded, processing, processed, failed
   processingStatus: jsonb("processing_status"), // detailed processing info
   qualityScore: real("quality_score"), // 0-1 quality assessment
@@ -804,7 +804,7 @@ export const eligibilityCalculations = pgTable("eligibility_calculations", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   userId: varchar("user_id").references(() => users.id),
   benefitProgramId: varchar("benefit_program_id").references(() => benefitPrograms.id).notNull(),
-  tenantId: varchar("tenant_id").references((): any => tenants.id), // Multi-tenant isolation
+  tenantId: varchar("tenant_id"), // Multi-tenant isolation - relation defined below
   stateCode: text("state_code"), // Jurisdiction state code (MD, PA, etc.)
   householdSize: integer("household_size").notNull(),
   grossMonthlyIncome: integer("gross_monthly_income").notNull(), // in cents
@@ -965,7 +965,7 @@ export const clientCases = pgTable("client_cases", {
   clientIdentifier: text("client_identifier"), // Last 4 SSN or case number
   benefitProgramId: varchar("benefit_program_id").references(() => benefitPrograms.id).notNull(),
   assignedNavigator: varchar("assigned_navigator").references(() => users.id),
-  tenantId: varchar("tenant_id").references((): any => tenants.id), // Multi-tenant isolation
+  tenantId: varchar("tenant_id"), // Multi-tenant isolation - relation defined below
   stateCode: text("state_code"), // Jurisdiction state code (MD, PA, etc.)
   countyCode: text("county_code"), // County/locality code for sub-jurisdictions
   status: text("status").notNull().default("screening"), // screening, documents_pending, submitted, approved, denied
@@ -2827,7 +2827,7 @@ export const vitaIntakeSessions = pgTable("vita_intake_sessions", {
   
   // Ownership & session management
   userId: varchar("user_id").references(() => users.id).notNull(), // Navigator/preparer
-  tenantId: varchar("tenant_id").references((): any => tenants.id), // Multi-tenant isolation
+  tenantId: varchar("tenant_id"), // Multi-tenant isolation - relation defined below
   clientCaseId: varchar("client_case_id").references(() => clientCases.id),
   householdProfileId: varchar("household_profile_id").references(() => householdProfiles.id), // Optional pre-fill
   
@@ -4850,7 +4850,7 @@ export const tenants = pgTable("tenants", {
   slug: text("slug").notNull().unique(), // URL identifier: "maryland", "virginia", "baltimore-county"
   name: text("name").notNull(), // Display name: "Maryland Department of Human Services"
   type: text("type").notNull(), // "state" or "county"
-  parentTenantId: varchar("parent_tenant_id").references((): any => tenants.id), // For counties under states
+  parentTenantId: varchar("parent_tenant_id"), // For counties under states - self-referential relation
   status: text("status").notNull().default("active"), // active, inactive, demo
   domain: text("domain").unique(), // Custom domain: "benefits.maryland.gov"
   config: jsonb("config"), // Feature toggles, settings, etc.
@@ -5165,7 +5165,7 @@ export const apiKeys = pgTable("api_keys", {
   // Organization info
   name: text("name").notNull(), // Organization/partner name
   organizationId: varchar("organization_id"), // Optional link to organization entity
-  tenantId: varchar("tenant_id").references((): any => tenants.id).notNull(), // Multi-tenant isolation
+  tenantId: varchar("tenant_id").notNull(), // References tenants table // Multi-tenant isolation
   
   // Permissions and limits
   scopes: jsonb("scopes").notNull(), // Array of scopes: ['eligibility:read', 'documents:write', etc.]
@@ -5261,7 +5261,7 @@ export const webhooks = pgTable("webhooks", {
   apiKeyId: varchar("api_key_id").references(() => apiKeys.id, { onDelete: "cascade" }),
   
   // Multi-tenant support
-  tenantId: varchar("tenant_id").references((): any => tenants.id),
+  tenantId: varchar("tenant_id"), // References tenants table - relation defined below
   
   // Webhook config
   url: text("url").notNull(), // Partner's webhook URL
@@ -5527,7 +5527,7 @@ export type TenantBranding = typeof tenantBranding.$inferSelect;
 // Phone System Configuration for Multi-tenant Setup
 export const phoneSystemConfigs = pgTable("phone_system_configs", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  tenantId: varchar("tenant_id").references((): any => tenants.id).notNull(),
+  tenantId: varchar("tenant_id").notNull(), // References tenants table
   systemType: text("system_type").notNull(), // twilio, asterisk, freepbx, cisco, custom_sip
   systemName: text("system_name").notNull(),
   
@@ -5571,7 +5571,7 @@ export const phoneSystemConfigs = pgTable("phone_system_configs", {
 // Phone Call Records - Main call tracking table
 export const phoneCallRecords = pgTable("phone_call_records", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  tenantId: varchar("tenant_id").references((): any => tenants.id).notNull(),
+  tenantId: varchar("tenant_id").notNull(), // References tenants table
   systemConfigId: varchar("system_config_id").references(() => phoneSystemConfigs.id),
   
   // Call identifiers
@@ -5637,7 +5637,7 @@ export const phoneCallRecords = pgTable("phone_call_records", {
 // IVR Menu Configuration
 export const ivrMenus = pgTable("ivr_menus", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  tenantId: varchar("tenant_id").references((): any => tenants.id).notNull(),
+  tenantId: varchar("tenant_id").notNull(), // References tenants table
   menuId: text("menu_id").notNull(), // Unique menu identifier
   parentMenuId: text("parent_menu_id"), // For nested menus
   
@@ -5701,7 +5701,7 @@ export const ivrMenuOptions = pgTable("ivr_menu_options", {
 // Call Queue Management
 export const callQueues = pgTable("call_queues", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  tenantId: varchar("tenant_id").references((): any => tenants.id).notNull(),
+  tenantId: varchar("tenant_id").notNull(), // References tenants table
   
   queueName: text("queue_name").notNull(),
   description: text("description"),
@@ -6141,8 +6141,8 @@ export const vitaDocumentRequests = pgTable("vita_document_requests", {
   taxDocumentId: varchar("tax_document_id").references(() => taxDocuments.id, { onDelete: "set null" }),
   
   // TaxSlayer enhancement: Document replacement tracking
-  replacesDocumentId: varchar("replaces_document_id").references((): any => vitaDocumentRequests.id, { onDelete: "set null" }), // Points to previous version
-  replacedByDocumentId: varchar("replaced_by_document_id").references((): any => vitaDocumentRequests.id, { onDelete: "set null" }), // Points to newer version
+  replacesDocumentId: varchar("replaces_document_id"), // Points to previous version - self-reference
+  replacedByDocumentId: varchar("replaced_by_document_id"), // Points to newer version - self-reference
   replacementReason: text("replacement_reason"), // poor_quality, incomplete, wrong_document, updated_version
   
   // TaxSlayer enhancement: Quality validation metrics
@@ -6824,7 +6824,7 @@ export const jurisdictionHierarchies = pgTable("jurisdiction_hierarchies", {
   jurisdictionName: text("jurisdiction_name").notNull(),
   
   // Parent jurisdiction
-  parentJurisdictionId: varchar("parent_jurisdiction_id").references((): any => jurisdictionHierarchies.id),
+  parentJurisdictionId: varchar("parent_jurisdiction_id"), // Self-reference to parent jurisdiction
   
   // Hierarchy level (0 = federal, 1 = state, 2 = county, etc.)
   hierarchyLevel: integer("hierarchy_level").notNull(),
@@ -7011,7 +7011,7 @@ export const smsScreeningLinks = pgTable("sms_screening_links", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   token: text("token").notNull().unique(), // Unique nanoid token for URL
   phoneHash: text("phone_hash").notNull(), // SHA-256 hash of phone number
-  tenantId: varchar("tenant_id").references((): any => tenants.id).notNull(),
+  tenantId: varchar("tenant_id").notNull(), // References tenants table
   conversationId: varchar("conversation_id").references(() => smsConversations.id),
   
   // Link properties
@@ -7136,7 +7136,7 @@ export const gdprDataProcessingActivities = pgTable("gdpr_data_processing_activi
   automatedDecisionMaking: boolean("automated_decision_making").default(false),
   profilingUsed: boolean("profiling_used").default(false),
   dpiaRequired: boolean("dpia_required").default(false), // Data Protection Impact Assessment required
-  dpiaId: varchar("dpia_id").references((): any => gdprPrivacyImpactAssessments.id),
+  dpiaId: varchar("dpia_id"), // References privacy impact assessment
   responsiblePerson: varchar("responsible_person").references(() => users.id),
   dataProtectionOfficer: varchar("data_protection_officer").references(() => users.id),
   isActive: boolean("is_active").default(true).notNull(),
@@ -7158,7 +7158,7 @@ export const gdprPrivacyImpactAssessments = pgTable("gdpr_privacy_impact_assessm
   assessmentName: text("assessment_name").notNull(),
   assessmentCode: text("assessment_code").notNull().unique(),
   processingActivity: text("processing_activity").notNull(),
-  processingActivityId: varchar("processing_activity_id").references((): any => gdprDataProcessingActivities.id),
+  processingActivityId: varchar("processing_activity_id"), // References data processing activity
   description: text("description").notNull(),
   necessity: text("necessity").notNull(), // Why the processing is necessary
   proportionality: text("proportionality").notNull(), // Is it proportionate to the purpose
@@ -7719,7 +7719,7 @@ export const benefitsAccessReviews = pgTable("benefits_access_reviews", {
   aiAssessmentDate: timestamp("ai_assessment_date"),
   
   // Supervisor feedback
-  supervisorFeedbackId: varchar("supervisor_feedback_id").references((): any => reviewerFeedback.id),
+  supervisorFeedbackId: varchar("supervisor_feedback_id"), // References reviewer feedback - self-reference
   supervisorReviewDate: timestamp("supervisor_review_date"),
   supervisorScore: real("supervisor_score"), // 0-100 score
   
