@@ -211,7 +211,7 @@ export class EeClientMatchingService {
           
           opportunitiesCreated++;
         } catch (err) {
-          console.error(`Error creating opportunity for client ${eeClient.id}:`, err);
+          // Silently skip errors creating individual opportunities
         }
       }
     }

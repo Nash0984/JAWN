@@ -86,7 +86,7 @@ class EeCrossEnrollmentAnalysisService {
           stats.notEligible++;
         }
       } catch (err) {
-        console.error(`Error analyzing opportunity ${opportunity.id}:`, err);
+        // Skip analysis errors for individual opportunities
         stats.errors++;
       }
     }
@@ -215,11 +215,13 @@ class EeCrossEnrollmentAnalysisService {
         };
 
       case 'MEDICAID':
+        // Medicaid provides health coverage rather than cash benefit
+        // PolicyEngine returns eligibility as boolean
         return {
-          isEligible: benefits.medicaid,
-          benefit: benefits.medicaid ? 1 : 0, // Binary indicator for coverage eligibility
+          isEligible: Boolean(benefits.medicaid),
+          benefit: 0, // Medicaid is coverage, not cash - value tracked separately
           reason: benefits.medicaid
-            ? 'Eligible for Medicaid coverage based on income and household composition'
+            ? 'Eligible for Medicaid health coverage based on income and household composition'
             : 'Income exceeds Medicaid eligibility threshold',
         };
 
