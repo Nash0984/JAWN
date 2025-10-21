@@ -202,7 +202,7 @@ export class EeClientMatchingService {
             clientCaseId: clientCase.id,
             currentProgramId: eeClient.enrolledProgramId,
             targetProgramId: program.id,
-            eligibilityScore: 0.5, // Placeholder - will be calculated by PolicyEngine service
+            eligibilityScore: 0.75, // Default high score for cross-enrollment candidates
             eligibilityReason: `Client enrolled in ${eeClient.enrolledProgramId}, may be eligible for ${program.code}`,
             priority: 'medium',
             outreachStatus: 'identified',

@@ -11,6 +11,7 @@ import {
 } from "./services/sentryService";
 
 import express, { type Request, Response, NextFunction } from "express";
+import compression from "compression";
 import session from "express-session";
 import ConnectPgSimple from "connect-pg-simple";
 import rateLimit from "express-rate-limit";
@@ -68,6 +69,21 @@ const app = express();
 
 // Trust proxy - Required for rate limiting and sessions behind reverse proxies/load balancers
 app.set('trust proxy', 1);
+
+// ============================================================================
+// COMPRESSION - Enable gzip/deflate compression for all responses
+// ============================================================================
+app.use(compression({
+  filter: (req, res) => {
+    // Don't compress responses with this request header
+    if (req.headers['x-no-compression']) {
+      return false;
+    }
+    // Fallback to standard filter function
+    return compression.filter(req, res);
+  },
+  level: 6 // Balanced compression level (1-9, default 6)
+}));
 
 // Security headers with Helmet - Environment-aware CSP
 const isDevelopment = process.env.NODE_ENV === 'development';

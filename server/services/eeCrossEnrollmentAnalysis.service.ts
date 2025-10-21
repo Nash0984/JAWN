@@ -217,7 +217,7 @@ class EeCrossEnrollmentAnalysisService {
       case 'MEDICAID':
         return {
           isEligible: benefits.medicaid,
-          benefit: benefits.medicaid ? 500 : 0, // Placeholder value for coverage
+          benefit: benefits.medicaid ? 1 : 0, // Binary indicator for coverage eligibility
           reason: benefits.medicaid
             ? 'Eligible for Medicaid coverage based on income and household composition'
             : 'Income exceeds Medicaid eligibility threshold',
