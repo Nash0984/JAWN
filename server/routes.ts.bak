@@ -1021,7 +1021,7 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
       const { id } = req.params;
       const { policySourceScraper } = await import('./services/policySourceScraper.js');
       
-      logger.info(`Manual scrape triggered for policy source: ${id}`);
+      console.log(`Manual scrape triggered for policy source: ${id}`);
       const documentCount = await policySourceScraper.scrapeSource(id);
       
       res.json({ 
@@ -1030,7 +1030,7 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
         documentCount 
       });
     } catch (error: any) {
-      logger.error("Error scraping policy source:", error);
+      console.error("Error scraping policy source:", error);
       res.status(500).json({ 
         error: "Failed to scrape policy source",
         message: error.message 
@@ -1042,7 +1042,7 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
   app.post("/api/policy-sources/ecfr/bulk-download", requireAdmin, asyncHandler(async (req: Request, res: Response) => {
     const { ecfrBulkDownloader } = await import("./services/ecfrBulkDownloader");
     
-    logger.info("Starting eCFR Bulk Download Service...");
+    console.log("Starting eCFR Bulk Download Service...");
     
     const result = await ecfrBulkDownloader.downloadSNAPRegulations();
     
@@ -1118,7 +1118,7 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
   app.post("/api/policy-sources/fns-state-options", requireAdmin, asyncHandler(async (req: Request, res: Response) => {
     const { fnsStateOptionsParser } = await import("./services/fnsStateOptionsParser");
     
-    logger.info("Starting FNS State Options Report parsing...");
+    console.log("Starting FNS State Options Report parsing...");
     
     const result = await fnsStateOptionsParser.downloadAndParse();
     
@@ -1135,7 +1135,7 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
     const { govInfoBillStatusDownloader } = await import("./services/govInfoBillStatusDownloader");
     
     const congress = req.body.congress || 119; // Default to 119th Congress
-    logger.info(`Starting GovInfo Bill Status Download for Congress ${congress}...`);
+    console.log(`Starting GovInfo Bill Status Download for Congress ${congress}...`);
     
     const result = await govInfoBillStatusDownloader.downloadBillStatus(congress);
     
@@ -1155,7 +1155,7 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
     const { govInfoPublicLawsDownloader } = await import("./services/govInfoPublicLawsDownloader");
     
     const congress = req.body.congress || 119; // Default to 119th Congress
-    logger.info(`Starting GovInfo Public Laws Download for Congress ${congress}...`);
+    console.log(`Starting GovInfo Public Laws Download for Congress ${congress}...`);
     
     const result = await govInfoPublicLawsDownloader.downloadPublicLaws(congress);
     
@@ -1175,7 +1175,7 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
     const { govInfoVersionChecker } = await import("./services/govInfoVersionChecker");
     
     const { congress = 119 } = req.body;
-    logger.info('🔍 Manually triggering GovInfo version check...');
+    console.log('🔍 Manually triggering GovInfo version check...');
     
     const summary = await govInfoVersionChecker.checkAllVersions(congress);
     
@@ -1235,7 +1235,7 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
     const { smartScheduler } = await import("./services/smartScheduler");
     const { source } = req.params;
     
-    logger.info(`🔧 Manually triggering ${source} check...`);
+    console.log(`🔧 Manually triggering ${source} check...`);
     
     try {
       await smartScheduler.triggerCheck(source);
@@ -1513,7 +1513,7 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
         timestamp: new Date().toISOString(),
       });
     } catch (error) {
-      logger.error('Metrics polling error:', error);
+      console.error('Metrics polling error:', error);
       res.status(500).json({
         success: false,
         error: 'Failed to fetch metrics',
@@ -2128,7 +2128,7 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
       limit = 100
     } = req.body;
     
-    logger.info(`Searching Congress.gov for bills with keywords: ${keywords.join(', ')}`);
+    console.log(`Searching Congress.gov for bills with keywords: ${keywords.join(', ')}`);
     
     const result = await congressBillTracker.searchBills(keywords, congress, billType, limit);
     
@@ -2161,7 +2161,7 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
     const billType = billMatch[1].toLowerCase();
     const billNum = billMatch[2];
     
-    logger.info(`Tracking ${billType.toUpperCase()} ${billNum} from Congress ${congress}`);
+    console.log(`Tracking ${billType.toUpperCase()} ${billNum} from Congress ${congress}`);
     
     const result = await congressBillTracker.trackBill(congress, billType, billNum);
     
@@ -2186,7 +2186,7 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
   app.post("/api/legislative/congress-sync", requireAdmin, asyncHandler(async (req: Request, res: Response) => {
     const { congressBillTracker } = await import("./services/congressBillTracker");
     
-    logger.info("Starting sync of all tracked bills from Congress.gov...");
+    console.log("Starting sync of all tracked bills from Congress.gov...");
     
     const result = await congressBillTracker.syncTrackedBills();
     
@@ -2204,7 +2204,7 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
     const { marylandLegislatureScraper } = await import("./services/marylandLegislatureScraper");
     
     const session = req.body.session || '2025RS'; // Default to 2025 Regular Session
-    logger.info(`Starting Maryland Legislature scrape for session ${session}...`);
+    console.log(`Starting Maryland Legislature scrape for session ${session}...`);
     
     const result = await marylandLegislatureScraper.scrapeBills(session);
     
@@ -2224,7 +2224,7 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
       const models = await storage.getModelVersions();
       res.json(models);
     } catch (error) {
-      logger.error("Error fetching model versions:", error);
+      console.error("Error fetching model versions:", error);
       res.status(500).json({ error: "Failed to fetch model versions" });
     }
   });
@@ -2235,7 +2235,7 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
       const jobs = await storage.getTrainingJobs();
       res.json(jobs);
     } catch (error) {
-      logger.error("Error fetching training jobs:", error);
+      console.error("Error fetching training jobs:", error);
       res.status(500).json({ error: "Failed to fetch training jobs" });
     }
   });
@@ -2249,7 +2249,7 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
       if (error instanceof z.ZodError) {
         return res.status(400).json({ error: "Invalid job data", details: error.errors });
       }
-      logger.error("Error creating training job:", error);
+      console.error("Error creating training job:", error);
       res.status(500).json({ error: "Failed to create training job" });
     }
   });
@@ -2264,7 +2264,7 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
       });
       res.json(job);
     } catch (error) {
-      logger.error("Error updating training job:", error);
+      console.error("Error updating training job:", error);
       res.status(500).json({ error: "Failed to update training job" });
     }
   });
@@ -2290,7 +2290,7 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
       
       res.json(metrics);
     } catch (error) {
-      logger.error("Error fetching system status:", error);
+      console.error("Error fetching system status:", error);
       res.status(500).json({ error: "Failed to fetch system status" });
     }
   });
@@ -2298,7 +2298,7 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
   // Document Ingestion endpoints for Maryland SNAP manual
   app.post("/api/ingest/maryland-snap", requireAdmin, async (req: Request, res: Response) => {
     try {
-      logger.info('Starting Maryland SNAP manual ingestion...');
+      console.log('Starting Maryland SNAP manual ingestion...');
       const documentIds = await documentIngestionService.ingestAllDocuments();
       
       res.json({
@@ -2308,7 +2308,7 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
         timestamp: new Date().toISOString()
       });
     } catch (error) {
-      logger.error("Error ingesting Maryland SNAP documents:", error);
+      console.error("Error ingesting Maryland SNAP documents:", error);
       res.status(500).json({ 
         success: false,
         error: "Failed to ingest Maryland SNAP documents",
@@ -2328,7 +2328,7 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
         timestamp: new Date().toISOString()
       });
     } catch (error) {
-      logger.error("Error fetching golden source documents:", error);
+      console.error("Error fetching golden source documents:", error);
       res.status(500).json({ 
         success: false,
         error: "Failed to fetch golden source documents"
@@ -2349,7 +2349,7 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
         timestamp: new Date().toISOString()
       });
     } catch (error) {
-      logger.error("Error verifying document integrity:", error);
+      console.error("Error verifying document integrity:", error);
       res.status(500).json({ 
         success: false,
         error: "Failed to verify document integrity",
@@ -2378,7 +2378,7 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
         timestamp: new Date().toISOString()
       });
     } catch (error) {
-      logger.error("Error fetching audit trail:", error);
+      console.error("Error fetching audit trail:", error);
       res.status(500).json({ 
         success: false,
         error: "Failed to fetch audit trail"
@@ -2397,7 +2397,7 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
         timestamp: new Date().toISOString()
       });
     } catch (error) {
-      logger.error("Error fetching ingestion schedules:", error);
+      console.error("Error fetching ingestion schedules:", error);
       res.status(500).json({ 
         success: false,
         error: "Failed to fetch ingestion schedules"
@@ -2416,7 +2416,7 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
         timestamp: new Date().toISOString()
       });
     } catch (error) {
-      logger.error("Error during manual ingestion:", error);
+      console.error("Error during manual ingestion:", error);
       res.status(500).json({ 
         success: false,
         error: "Manual ingestion failed",
@@ -2446,7 +2446,7 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
         timestamp: new Date().toISOString()
       });
     } catch (error) {
-      logger.error("Error updating ingestion schedule:", error);
+      console.error("Error updating ingestion schedule:", error);
       res.status(500).json({ 
         success: false,
         error: "Failed to update ingestion schedule"
@@ -2474,7 +2474,7 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
         timestamp: new Date().toISOString()
       });
     } catch (error) {
-      logger.error("Error creating ingestion schedule:", error);
+      console.error("Error creating ingestion schedule:", error);
       res.status(500).json({ 
         success: false,
         error: "Failed to create ingestion schedule"
@@ -2553,7 +2553,7 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
         appliedRules: result.calculationBreakdown,
       });
     } catch (error) {
-      logger.error("Eligibility check error:", error);
+      console.error("Eligibility check error:", error);
       res.status(500).json({ error: "Failed to check eligibility" });
     }
   });
@@ -2634,7 +2634,7 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
         appliedRules: result.rulesSnapshot,
       });
     } catch (error) {
-      logger.error("Benefit calculation error:", error);
+      console.error("Benefit calculation error:", error);
       res.status(500).json({ error: "Failed to calculate benefit" });
     }
   });
@@ -2667,11 +2667,11 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
     // Check cache first
     const cachedResponse = cacheService.get<any>(cacheKey);
     if (cachedResponse) {
-      logger.info(`✅ Cache hit for hybrid calculation endpoint (${programCode}, hash: ${householdHash})`);
+      console.log(`✅ Cache hit for hybrid calculation endpoint (${programCode}, hash: ${householdHash})`);
       return res.json(cachedResponse);
     }
     
-    logger.info(`❌ Cache miss for hybrid calculation endpoint (${programCode}, hash: ${householdHash})`);
+    console.log(`❌ Cache miss for hybrid calculation endpoint (${programCode}, hash: ${householdHash})`);
     
     // For structured input (not natural language), call rulesEngineAdapter directly
     // to preserve all parameters including assets
@@ -2769,7 +2769,7 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
           };
         }
       } catch (error) {
-        logger.error('PolicyEngine verification failed:', error);
+        console.error('PolicyEngine verification failed:', error);
         response.verification = {
           error: 'Verification failed',
           source: 'policyengine',
@@ -2779,7 +2779,7 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
 
     // Cache the response
     cacheService.set(cacheKey, response);
-    logger.info(`💾 Cached hybrid calculation response (${programCode}, hash: ${householdHash})`);
+    console.log(`💾 Cached hybrid calculation response (${programCode}, hash: ${householdHash})`);
 
     res.json(response);
   }));
@@ -2819,7 +2819,7 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
 
       res.json(response);
     } catch (error) {
-      logger.error("Error fetching income limits:", error);
+      console.error("Error fetching income limits:", error);
       res.status(500).json({ error: "Failed to fetch income limits" });
     }
   });
@@ -2853,7 +2853,7 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
         data: limit,
       });
     } catch (error) {
-      logger.error("Error creating income limit:", error);
+      console.error("Error creating income limit:", error);
       res.status(500).json({ error: "Failed to create income limit" });
     }
   });
@@ -2885,7 +2885,7 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
         data: limit,
       });
     } catch (error) {
-      logger.error("Error updating income limit:", error);
+      console.error("Error updating income limit:", error);
       res.status(500).json({ error: "Failed to update income limit" });
     }
   });
@@ -2921,7 +2921,7 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
 
       res.json(response);
     } catch (error) {
-      logger.error("Error fetching deductions:", error);
+      console.error("Error fetching deductions:", error);
       res.status(500).json({ error: "Failed to fetch deductions" });
     }
   });
@@ -2957,7 +2957,7 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
 
       res.json(response);
     } catch (error) {
-      logger.error("Error fetching allotments:", error);
+      console.error("Error fetching allotments:", error);
       res.status(500).json({ error: "Failed to fetch allotments" });
     }
   });
@@ -2981,7 +2981,7 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
         count: activeRules.length,
       });
     } catch (error) {
-      logger.error("Error fetching categorical eligibility rules:", error);
+      console.error("Error fetching categorical eligibility rules:", error);
       res.status(500).json({ error: "Failed to fetch categorical eligibility rules" });
     }
   });
@@ -3005,7 +3005,7 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
         count: activeRequirements.length,
       });
     } catch (error) {
-      logger.error("Error fetching document requirements:", error);
+      console.error("Error fetching document requirements:", error);
       res.status(500).json({ error: "Failed to fetch document requirements" });
     }
   });
@@ -3042,7 +3042,7 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
         totalChanges: history.totalChanges,
       });
     } catch (error) {
-      logger.error("Error fetching rule snapshots:", error);
+      console.error("Error fetching rule snapshots:", error);
       res.status(500).json({ error: "Failed to fetch rule snapshots" });
     }
   });
@@ -3063,7 +3063,7 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
         data: snapshot,
       });
     } catch (error) {
-      logger.error("Error fetching snapshot:", error);
+      console.error("Error fetching snapshot:", error);
       res.status(500).json({ error: "Failed to fetch snapshot" });
     }
   });
@@ -3096,7 +3096,7 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
         message: "Rule snapshot created successfully",
       });
     } catch (error) {
-      logger.error("Error creating rule snapshot:", error);
+      console.error("Error creating rule snapshot:", error);
       res.status(500).json({ error: "Failed to create rule snapshot" });
     }
   });
@@ -3124,7 +3124,7 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
         data: comparison,
       });
     } catch (error: any) {
-      logger.error("Error comparing rule versions:", error);
+      console.error("Error comparing rule versions:", error);
       res.status(500).json({ error: "Failed to compare rule versions" });
     }
   });
@@ -3156,7 +3156,7 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
         data: effectiveRules,
       });
     } catch (error) {
-      logger.error("Error fetching effective rules:", error);
+      console.error("Error fetching effective rules:", error);
       res.status(500).json({ error: "Failed to fetch effective rules" });
     }
   });
@@ -3176,7 +3176,7 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
         count: calculations.length,
       });
     } catch (error) {
-      logger.error("Error fetching calculations:", error);
+      console.error("Error fetching calculations:", error);
       res.status(500).json({ error: "Failed to fetch calculations" });
     }
   });
@@ -3207,7 +3207,7 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
 
       res.json(response);
     } catch (error) {
-      logger.error("Error fetching manual sections:", error);
+      console.error("Error fetching manual sections:", error);
       res.status(500).json({ error: "Failed to fetch manual sections" });
     }
   });
@@ -3249,7 +3249,7 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
 
       res.json(response);
     } catch (error) {
-      logger.error("Error fetching section details:", error);
+      console.error("Error fetching section details:", error);
       res.status(500).json({ error: "Failed to fetch section details" });
     }
   });
@@ -3264,7 +3264,7 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
         total: manualIngestionService.getTotalSections(),
       });
     } catch (error) {
-      logger.error("Error fetching manual structure:", error);
+      console.error("Error fetching manual structure:", error);
       res.status(500).json({ error: "Failed to fetch manual structure" });
     }
   });
@@ -3281,7 +3281,7 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
         isComplete,
       });
     } catch (error) {
-      logger.error("Error fetching manual status:", error);
+      console.error("Error fetching manual status:", error);
       res.status(500).json({ error: "Failed to fetch manual status" });
     }
   });
@@ -3310,7 +3310,7 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
         ...status,
       });
     } catch (error) {
-      logger.error("Error ingesting manual metadata:", error);
+      console.error("Error ingesting manual metadata:", error);
       res.status(500).json({ error: "Failed to ingest manual metadata" });
     }
   });
@@ -3321,7 +3321,7 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
       // Import the full ingestion service
       const { ingestCompleteManual } = await import("./services/manualIngestionService");
       
-      logger.info("Starting complete manual ingestion pipeline...");
+      console.log("Starting complete manual ingestion pipeline...");
       
       // Run the complete ingestion
       const result = await ingestCompleteManual();
@@ -3339,7 +3339,7 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
         errors: result.errors,
       });
     } catch (error) {
-      logger.error("Error during full manual ingestion:", error);
+      console.error("Error during full manual ingestion:", error);
       res.status(500).json({ 
         error: "Failed to complete manual ingestion",
         details: error instanceof Error ? error.message : 'Unknown error',
@@ -3364,7 +3364,7 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
       return res.status(500).json({ error: "VITA program not found. Please seed benefit programs first." });
     }
     
-    logger.info("Starting IRS Publication 4012 ingestion...");
+    console.log("Starting IRS Publication 4012 ingestion...");
     
     const result = await vitaService.ingestPub4012(vitaProgram.id);
     
@@ -3379,7 +3379,7 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
   app.post("/api/vita/download-irs-publications", requireAdmin, asyncHandler(async (req: Request, res: Response) => {
     const { irsDirectDownloader } = await import("./services/irsDirectDownloader");
     
-    logger.info("Starting IRS Direct Download Service...");
+    console.log("Starting IRS Direct Download Service...");
     
     const documentIds = await irsDirectDownloader.downloadAllVITAPublications();
     
@@ -3492,7 +3492,7 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
         data: generated
       });
     } catch (error) {
-      logger.error("Error generating section text:", error);
+      console.error("Error generating section text:", error);
       res.status(500).json({ 
         error: "Failed to generate section text",
         details: error instanceof Error ? error.message : 'Unknown error'
@@ -3513,7 +3513,7 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
       const generated = await textGenerationService.generateIncomeLimitsText(snapProgram.id);
       res.json({ success: true, data: generated });
     } catch (error) {
-      logger.error("Error generating income limits text:", error);
+      console.error("Error generating income limits text:", error);
       res.status(500).json({ error: "Failed to generate income limits text" });
     }
   });
@@ -3531,7 +3531,7 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
       const generated = await textGenerationService.generateDeductionsText(snapProgram.id);
       res.json({ success: true, data: generated });
     } catch (error) {
-      logger.error("Error generating deductions text:", error);
+      console.error("Error generating deductions text:", error);
       res.status(500).json({ error: "Failed to generate deductions text" });
     }
   });
@@ -3549,7 +3549,7 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
       const generated = await textGenerationService.generateAllotmentsText(snapProgram.id);
       res.json({ success: true, data: generated });
     } catch (error) {
-      logger.error("Error generating allotments text:", error);
+      console.error("Error generating allotments text:", error);
       res.status(500).json({ error: "Failed to generate allotments text" });
     }
   });
@@ -5672,7 +5672,7 @@ If the question cannot be answered with the available information, say so clearl
           severity: change.severity,
           effectiveDate: change.effectiveDate
         }
-      }).catch(err => logger.error('Failed to send policy change notifications:', err));
+      }).catch(err => console.error('Failed to send policy change notifications:', err));
     }
     
     res.status(201).json(change);
@@ -5712,7 +5712,7 @@ If the question cannot be answered with the available information, say so clearl
           requiresAction: impact.requiresAction,
           actionRequiredBy: impact.actionRequiredBy
         }
-      }).catch(err => logger.error('Failed to send impact notification:', err));
+      }).catch(err => console.error('Failed to send impact notification:', err));
     }
     
     res.status(201).json(impact);
@@ -5770,7 +5770,7 @@ If the question cannot be answered with the available information, say so clearl
           policyChangeTitle: policyChange?.title,
           resolvedBy: req.user!.id
         }
-      }).catch(err => logger.error('Failed to send resolution notification:', err));
+      }).catch(err => console.error('Failed to send resolution notification:', err));
     }
     
     res.json(impact);
@@ -6246,11 +6246,11 @@ If the question cannot be answered with the available information, say so clearl
     // Check cache first
     const cachedResponse = cacheService.get<any>(cacheKey);
     if (cachedResponse) {
-      logger.info(`✅ Cache hit for hybrid summary endpoint (hash: ${householdHash})`);
+      console.log(`✅ Cache hit for hybrid summary endpoint (hash: ${householdHash})`);
       return res.json(cachedResponse);
     }
     
-    logger.info(`❌ Cache miss for hybrid summary endpoint (hash: ${householdHash})`);
+    console.log(`❌ Cache miss for hybrid summary endpoint (hash: ${householdHash})`);
     
     // Get benefit program for SNAP
     const snapProgram = await storage.getBenefitProgramByCode("MD_SNAP");
@@ -6290,7 +6290,7 @@ If the question cannot be answered with the available information, say so clearl
     try {
       policyEngineResult = await policyEngineService.calculateBenefits(validated);
     } catch (error) {
-      logger.error("PolicyEngine verification failed:", error);
+      console.error("PolicyEngine verification failed:", error);
       policyEngineResult = null;
     }
 
@@ -6348,7 +6348,7 @@ If the question cannot be answered with the available information, say so clearl
 
     // Cache the response
     cacheService.set(cacheKey, response);
-    logger.info(`💾 Cached hybrid summary response (hash: ${householdHash})`);
+    console.log(`💾 Cached hybrid summary response (hash: ${householdHash})`);
 
     res.json(response);
   }));
@@ -7619,10 +7619,10 @@ If the question cannot be answered with the available information, say so clearl
 
   // Create VITA intake session
   app.post("/api/vita-intake", requireStaff, asyncHandler(async (req: Request, res: Response) => {
-    logger.info('[VITA Auto-Save Debug] POST /api/vita-intake called');
-    logger.info('[VITA Auto-Save Debug] Request user:', req.user?.id, req.user?.username);
-    logger.info('[VITA Auto-Save Debug] Request body keys:', Object.keys(req.body));
-    logger.info('[VITA Auto-Save Debug] Request body sample:', {
+    console.log('[VITA Auto-Save Debug] POST /api/vita-intake called');
+    console.log('[VITA Auto-Save Debug] Request user:', req.user?.id, req.user?.username);
+    console.log('[VITA Auto-Save Debug] Request body keys:', Object.keys(req.body));
+    console.log('[VITA Auto-Save Debug] Request body sample:', {
       primaryFirstName: req.body.primaryFirstName,
       primaryLastName: req.body.primaryLastName,
       currentStep: req.body.currentStep,
@@ -7634,9 +7634,9 @@ If the question cannot be answered with the available information, say so clearl
       userId: req.user!.id
     });
     
-    logger.info('[VITA Auto-Save Debug] Validated data, calling storage.createVitaIntakeSession');
+    console.log('[VITA Auto-Save Debug] Validated data, calling storage.createVitaIntakeSession');
     const session = await storage.createVitaIntakeSession(validated);
-    logger.info('[VITA Auto-Save Debug] Session created successfully:', {
+    console.log('[VITA Auto-Save Debug] Session created successfully:', {
       id: session.id,
       userId: session.userId,
       currentStep: session.currentStep,
@@ -7852,7 +7852,7 @@ If the question cannot be answered with the available information, say so clearl
           appointment.googleCalendarEventId = eventId;
         }
       } catch (error) {
-        logger.error('Failed to sync appointment to Google Calendar:', error);
+        console.error('Failed to sync appointment to Google Calendar:', error);
         calendarSyncError = 'Failed to sync appointment to Google Calendar. The appointment was created in the database but may not appear in your calendar. Please try syncing manually or contact support.';
         
         // Log error for monitoring
@@ -7991,7 +7991,7 @@ If the question cannot be answered with the available information, say so clearl
 
         await updateCalendarEvent(appointment.googleCalendarEventId, calendarUpdate);
       } catch (error) {
-        logger.error('Failed to sync appointment update to Google Calendar:', error);
+        console.error('Failed to sync appointment update to Google Calendar:', error);
         calendarSyncError = 'Failed to sync appointment changes to Google Calendar. The appointment was updated in the database but calendar may be out of sync. Please try syncing manually or contact support.';
         
         // Log error for monitoring

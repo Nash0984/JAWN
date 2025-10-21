@@ -1,3 +1,4 @@
+import { logger } from "./services/logger.service";
 import { storage } from "./storage";
 import bcrypt from "bcryptjs";
 import { seedMarylandTestCases } from "./seedMarylandTestCases";
@@ -10,7 +11,7 @@ import { policySourceScraper } from "./services/policySourceScraper";
 
 export async function seedDemoUsers() {
   try {
-    console.log('Seeding demo users...');
+    logger.info('Seeding demo users...');
     
     const demoUsers = [
       {
@@ -61,25 +62,25 @@ export async function seedDemoUsers() {
         if (!existingUser) {
           await storage.createUser(userData);
           createdCount++;
-          console.log(`✓ Created demo user: ${userData.username} (${userData.role})`);
+          logger.info(`✓ Created demo user: ${userData.username} (${userData.role})`);
         } else {
-          console.log(`  Demo user already exists: ${userData.username}`);
+          logger.info(`  Demo user already exists: ${userData.username}`);
         }
       } catch (error) {
-        console.error(`  Error creating demo user ${userData.username}:`, error);
+        logger.error(`  Error creating demo user ${userData.username}:`, error);
       }
     }
 
     if (createdCount > 0) {
-      console.log(`✓ Seeded ${createdCount} demo users`);
-      console.log('\n📋 Demo Credentials:');
-      console.log('  Applicant   - username: demo.applicant   | password: Demo2024!');
-      console.log('  Navigator   - username: demo.navigator   | password: Demo2024!');
-      console.log('  Caseworker  - username: demo.caseworker  | password: Demo2024!');
-      console.log('  Admin       - username: demo.admin       | password: Demo2024!\n');
+      logger.info(`✓ Seeded ${createdCount} demo users`);
+      logger.info('\n📋 Demo Credentials:');
+      logger.info('  Applicant   - username: demo.applicant   | password: Demo2024!');
+      logger.info('  Navigator   - username: demo.navigator   | password: Demo2024!');
+      logger.info('  Caseworker  - username: demo.caseworker  | password: Demo2024!');
+      logger.info('  Admin       - username: demo.admin       | password: Demo2024!\n');
     }
   } catch (error) {
-    console.error('Error seeding demo users:', error);
+    logger.error('Error seeding demo users:', error);
     throw error;
   }
 }
@@ -200,9 +201,9 @@ export async function seedMarylandBenefitPrograms() {
         try {
           await storage.createBenefitProgram(programData);
           createdCount++;
-          console.log(`✓ Created program: ${programData.name} (${programData.code})`);
+          logger.info(`✓ Created program: ${programData.name} (${programData.code})`);
         } catch (error) {
-          console.error(`  Error creating program ${programData.code}:`, error);
+          logger.error(`  Error creating program ${programData.code}:`, error);
         }
       } else {
         // Update existing program to match seed data
@@ -222,21 +223,21 @@ export async function seedMarylandBenefitPrograms() {
             })
             .where(eq(benefitPrograms.code, programData.code));
           updatedCount++;
-          console.log(`✓ Updated program: ${programData.name} (${programData.code})`);
+          logger.info(`✓ Updated program: ${programData.name} (${programData.code})`);
         } catch (error) {
-          console.error(`  Error updating program ${programData.code}:`, error);
+          logger.error(`  Error updating program ${programData.code}:`, error);
         }
       }
     }
 
     if (createdCount > 0) {
-      console.log(`✓ Seeded ${createdCount} benefit programs`);
+      logger.info(`✓ Seeded ${createdCount} benefit programs`);
     }
     if (updatedCount > 0) {
-      console.log(`✓ Updated ${updatedCount} benefit programs to match seed configuration`);
+      logger.info(`✓ Updated ${updatedCount} benefit programs to match seed configuration`);
     }
   } catch (error) {
-    console.error('Error seeding benefit programs:', error);
+    logger.error('Error seeding benefit programs:', error);
     throw error;
   }
 }
@@ -280,29 +281,29 @@ export async function seedDocumentTypes() {
       if (!existing) {
         await storage.createDocumentType(docType);
         seededCount++;
-        console.log(`✓ Seeded document type: ${docType.name}`);
+        logger.info(`✓ Seeded document type: ${docType.name}`);
       }
     }
 
     if (seededCount > 0) {
-      console.log(`✓ Seeded ${seededCount} new document types`);
+      logger.info(`✓ Seeded ${seededCount} new document types`);
     } else {
-      console.log('✓ Document types already exist');
+      logger.info('✓ Document types already exist');
     }
   } catch (error) {
-    console.error('Error seeding document types:', error);
+    logger.error('Error seeding document types:', error);
     throw error;
   }
 }
 
 export async function seedMarylandDemoScenarios() {
   try {
-    console.log('Seeding Maryland geographic demo scenarios...');
+    logger.info('Seeding Maryland geographic demo scenarios...');
     
     // Get demo navigator user to assign scenarios
     const demoNavigator = await storage.getUserByUsername('demo.navigator');
     if (!demoNavigator) {
-      console.log('  Skipping scenario seeding - demo navigator not found');
+      logger.info('  Skipping scenario seeding - demo navigator not found');
       return;
     }
 
@@ -503,33 +504,33 @@ export async function seedMarylandDemoScenarios() {
         if (!alreadyExists) {
           await storage.createHouseholdScenario(scenarioData);
           createdCount++;
-          console.log(`  ✓ Created demo scenario: ${scenarioData.name}`);
+          logger.info(`  ✓ Created demo scenario: ${scenarioData.name}`);
         } else {
-          console.log(`  Demo scenario already exists: ${scenarioData.name}`);
+          logger.info(`  Demo scenario already exists: ${scenarioData.name}`);
         }
       } catch (error) {
-        console.error(`  Error creating demo scenario ${scenarioData.name}:`, error);
+        logger.error(`  Error creating demo scenario ${scenarioData.name}:`, error);
       }
     }
 
     if (createdCount > 0) {
-      console.log(`✓ Seeded ${createdCount} Maryland geographic demo scenarios`);
-      console.log('\n📍 Demo Scenarios by Location:');
-      console.log('  • Baltimore City (21224) - Single parent, part-time employment');
-      console.log('  • Baltimore County (21228) - Elderly couple, high medical costs');
-      console.log('  • Garrett County (21550) - Rural family with disability');
-      console.log('  • Montgomery County (20910) - Working family, high living costs');
-      console.log('  • Prince George\'s County (20782) - Large multi-generational family\n');
+      logger.info(`✓ Seeded ${createdCount} Maryland geographic demo scenarios`);
+      logger.info('\n📍 Demo Scenarios by Location:');
+      logger.info('  • Baltimore City (21224) - Single parent, part-time employment');
+      logger.info('  • Baltimore County (21228) - Elderly couple, high medical costs');
+      logger.info('  • Garrett County (21550) - Rural family with disability');
+      logger.info('  • Montgomery County (20910) - Working family, high living costs');
+      logger.info('  • Prince George\'s County (20782) - Large multi-generational family\n');
     }
   } catch (error) {
-    console.error('Error seeding Maryland demo scenarios:', error);
+    logger.error('Error seeding Maryland demo scenarios:', error);
     throw error;
   }
 }
 
 // Initialize all required data
 export async function initializeSystemData() {
-  console.log('Initializing Maryland Benefits Navigator system data...');
+  logger.info('Initializing Maryland Benefits Navigator system data...');
   
   try {
     await seedDemoUsers();
@@ -541,9 +542,9 @@ export async function initializeSystemData() {
     await seedQCData();
     await seedDhsForms();
     
-    console.log('✓ System data initialization complete');
+    logger.info('✓ System data initialization complete');
   } catch (error) {
-    console.error('System data initialization failed:', error);
+    logger.error('System data initialization failed:', error);
     throw error;
   }
 }

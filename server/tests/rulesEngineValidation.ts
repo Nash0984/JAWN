@@ -1,3 +1,4 @@
+import { logger } from "../services/logger.service";
 import { ohepRulesEngine } from "../services/ohepRulesEngine";
 import { tanfRulesEngine } from "../services/tanfRulesEngine";
 import { medicaidRulesEngine } from "../services/medicaidRulesEngine";
@@ -9,15 +10,15 @@ import { vitaTaxRulesEngine } from "../services/vitaTaxRulesEngine";
  * This tests the Maryland Rules-as-Code implementation with realistic scenarios
  */
 
-console.log("🧪 Testing OHEP and TANF Rules Engines\n");
-console.log("=".repeat(70));
+logger.info("🧪 Testing OHEP and TANF Rules Engines");
+logger.info("=".repeat(70));
 
 async function testOHEPEngine() {
-  console.log("\n📋 OHEP (Energy Assistance) Rules Engine Tests\n");
+  logger.info("📋 OHEP (Energy Assistance) Rules Engine Tests");
 
   // Test Case 1: Eligible household with crisis situation
-  console.log("Test 1: Single parent with child, crisis situation (disconnect notice)");
-  console.log("-".repeat(70));
+  logger.info("Test 1: Single parent with child, crisis situation (disconnect notice)");
+  logger.info("-".repeat(70));
   
   const ohepCase1 = await ohepRulesEngine.calculateEligibility({
     size: 2,
@@ -31,21 +32,22 @@ async function testOHEPEngine() {
     heatingFuelType: "gas",
   });
 
-  console.log(`✅ Result: ${ohepCase1.isEligible ? "ELIGIBLE" : "INELIGIBLE"}`);
-  console.log(`   Income Test: ${ohepCase1.incomeTest.passed ? "PASS" : "FAIL"}`);
-  console.log(`   Percent of FPL: ${ohepCase1.incomeTest.percentOfFPL}%`);
-  console.log(`   Benefit Type: ${ohepCase1.benefitType}`);
-  console.log(`   Benefit Amount: $${(ohepCase1.benefitAmount / 100).toFixed(2)}`);
-  console.log(`   Season: ${ohepCase1.season}`);
-  if (ohepCase1.priorityGroup) {
-    console.log(`   Priority Group: ${ohepCase1.priorityGroup}`);
-  }
-  console.log("\n   Calculation Breakdown:");
-  ohepCase1.calculationBreakdown.forEach(line => console.log(`     ${line}`));
+  logger.info(`✅ Result: ${ohepCase1.isEligible ? "ELIGIBLE" : "INELIGIBLE"}`, {
+    incomeTest: ohepCase1.incomeTest.passed ? "PASS" : "FAIL",
+    percentOfFPL: `${ohepCase1.incomeTest.percentOfFPL}%`,
+    benefitType: ohepCase1.benefitType,
+    benefitAmount: `$${(ohepCase1.benefitAmount / 100).toFixed(2)}`,
+    season: ohepCase1.season,
+    priorityGroup: ohepCase1.priorityGroup || undefined
+  });
+  
+  logger.info("Calculation Breakdown:", {
+    breakdown: ohepCase1.calculationBreakdown
+  });
 
   // Test Case 2: Ineligible due to income
-  console.log("\n\nTest 2: Household exceeds income limit");
-  console.log("-".repeat(70));
+  logger.info("Test 2: Household exceeds income limit");
+  logger.info("-".repeat(70));
   
   const ohepCase2 = await ohepRulesEngine.calculateEligibility({
     size: 3,
@@ -58,16 +60,16 @@ async function testOHEPEngine() {
     hasArrearage: true,
   });
 
-  console.log(`❌ Result: ${ohepCase2.isEligible ? "ELIGIBLE" : "INELIGIBLE"}`);
-  console.log(`   Income Test: ${ohepCase2.incomeTest.passed ? "PASS" : "FAIL"}`);
-  console.log(`   Percent of FPL: ${ohepCase2.incomeTest.percentOfFPL}%`);
-  console.log(`   Reason: ${ohepCase2.reason}`);
-  console.log("\n   Calculation Breakdown:");
-  ohepCase2.calculationBreakdown.forEach(line => console.log(`     ${line}`));
+  logger.info(`❌ Result: ${ohepCase2.isEligible ? "ELIGIBLE" : "INELIGIBLE"}`, {
+    incomeTest: ohepCase2.incomeTest.passed ? "PASS" : "FAIL",
+    percentOfFPL: `${ohepCase2.incomeTest.percentOfFPL}%`,
+    reason: ohepCase2.reason,
+    breakdown: ohepCase2.calculationBreakdown
+  });
 
   // Test Case 3: Regular assistance, elderly household
-  console.log("\n\nTest 3: Elderly couple, regular heating assistance");
-  console.log("-".repeat(70));
+  logger.info("Test 3: Elderly couple, regular heating assistance");
+  logger.info("-".repeat(70));
   
   const ohepCase3 = await ohepRulesEngine.calculateEligibility({
     size: 2,
@@ -81,16 +83,17 @@ async function testOHEPEngine() {
     heatingFuelType: "oil",
   });
 
-  console.log(`✅ Result: ${ohepCase3.isEligible ? "ELIGIBLE" : "INELIGIBLE"}`);
-  console.log(`   Income Test: ${ohepCase3.incomeTest.passed ? "PASS" : "FAIL"}`);
-  console.log(`   Percent of FPL: ${ohepCase3.incomeTest.percentOfFPL}%`);
-  console.log(`   Benefit Type: ${ohepCase3.benefitType}`);
-  console.log(`   Benefit Amount: $${(ohepCase3.benefitAmount / 100).toFixed(2)}`);
-  console.log(`   Priority Group: ${ohepCase3.priorityGroup}`);
+  logger.info(`✅ Result: ${ohepCase3.isEligible ? "ELIGIBLE" : "INELIGIBLE"}`, {
+    incomeTest: ohepCase3.incomeTest.passed ? "PASS" : "FAIL",
+    percentOfFPL: `${ohepCase3.incomeTest.percentOfFPL}%`,
+    benefitType: ohepCase3.benefitType,
+    benefitAmount: `$${(ohepCase3.benefitAmount / 100).toFixed(2)}`,
+    priorityGroup: ohepCase3.priorityGroup
+  });
 
   // Test Case 4: Arrearage assistance - REGRESSION TEST for $300 limit
-  console.log("\n\nTest 4: Arrearage assistance (REGRESSION TEST - must be $300 max)");
-  console.log("-".repeat(70));
+  logger.info("Test 4: Arrearage assistance (REGRESSION TEST - must be $300 max)");
+  logger.info("-".repeat(70));
   
   const ohepCase4 = await ohepRulesEngine.calculateEligibility({
     size: 4,
@@ -104,10 +107,11 @@ async function testOHEPEngine() {
     heatingFuelType: "electric",
   });
 
-  console.log(`✅ Result: ${ohepCase4.isEligible ? "ELIGIBLE" : "INELIGIBLE"}`);
-  console.log(`   Income Test: ${ohepCase4.incomeTest.passed ? "PASS" : "FAIL"}`);
-  console.log(`   Benefit Type: ${ohepCase4.benefitType}`);
-  console.log(`   Benefit Amount: $${(ohepCase4.benefitAmount / 100).toFixed(2)}`);
+  logger.info(`✅ Result: ${ohepCase4.isEligible ? "ELIGIBLE" : "INELIGIBLE"}`, {
+    incomeTest: ohepCase4.incomeTest.passed ? "PASS" : "FAIL",
+    benefitType: ohepCase4.benefitType,
+    benefitAmount: `$${(ohepCase4.benefitAmount / 100).toFixed(2)}`
+  });
   
   // CRITICAL ASSERTION: Arrearage benefit must be exactly $300
   if (ohepCase4.benefitAmount !== 30000) {
@@ -117,15 +121,15 @@ async function testOHEPEngine() {
       `This is a compliance violation - check seed data and DHS policy!`
     );
   }
-  console.log(`   ✓ REGRESSION TEST PASSED: Arrearage benefit correctly capped at $300`);
+  logger.info("✓ REGRESSION TEST PASSED: Arrearage benefit correctly capped at $300");
 }
 
 async function testTANFEngine() {
-  console.log("\n\n📋 TANF (Temporary Cash Assistance) Rules Engine Tests\n");
+  logger.info("📋 TANF (Temporary Cash Assistance) Rules Engine Tests");
 
   // Test Case 1: Eligible single parent household
-  console.log("Test 1: Single parent, 2 children, meeting all requirements");
-  console.log("-".repeat(70));
+  logger.info("Test 1: Single parent, 2 children, meeting all requirements");
+  logger.info("-".repeat(70));
   
   const tanfCase1 = await tanfRulesEngine.calculateEligibility({
     size: 3,
@@ -141,18 +145,18 @@ async function testTANFEngine() {
     hasHardshipExemption: false,
   });
 
-  console.log(`✅ Result: ${tanfCase1.isEligible ? "ELIGIBLE" : "INELIGIBLE"}`);
-  console.log(`   Income Test: ${tanfCase1.incomeTest.passed ? "PASS" : "FAIL"} ($${(tanfCase1.incomeTest.countableIncome / 100).toFixed(2)} vs $${(tanfCase1.incomeTest.needsStandard / 100).toFixed(2)} limit)`);
-  console.log(`   Asset Test: ${tanfCase1.assetTest.passed ? "PASS" : "FAIL"} ($${(tanfCase1.assetTest.actualLiquidAssets / 100).toFixed(2)} vs $${(tanfCase1.assetTest.liquidAssetLimit / 100).toFixed(2)} limit)`);
-  console.log(`   Work Requirements: ${tanfCase1.workRequirements.requirementsMet ? "MET" : "NOT MET"} (${tanfCase1.workRequirements.actualHours}/${tanfCase1.workRequirements.requiredHours} hours)`);
-  console.log(`   Time Limits: ${tanfCase1.timeLimits.withinLimits ? "OK" : "EXCEEDED"} (${tanfCase1.timeLimits.lifetimeMonthsUsed}/${tanfCase1.timeLimits.lifetimeMonthsUsed + tanfCase1.timeLimits.lifetimeMonthsRemaining} months used)`);
-  console.log(`   Monthly Benefit: $${(tanfCase1.monthlyBenefit / 100).toFixed(2)}`);
-  console.log("\n   Calculation Breakdown:");
-  tanfCase1.calculationBreakdown.forEach(line => console.log(`     ${line}`));
+  logger.info(`✅ Result: ${tanfCase1.isEligible ? "ELIGIBLE" : "INELIGIBLE"}`, {
+    incomeTest: `${tanfCase1.incomeTest.passed ? "PASS" : "FAIL"} ($${(tanfCase1.incomeTest.countableIncome / 100).toFixed(2)} vs $${(tanfCase1.incomeTest.needsStandard / 100).toFixed(2)} limit)`,
+    assetTest: `${tanfCase1.assetTest.passed ? "PASS" : "FAIL"} ($${(tanfCase1.assetTest.actualLiquidAssets / 100).toFixed(2)} vs $${(tanfCase1.assetTest.liquidAssetLimit / 100).toFixed(2)} limit)`,
+    workRequirements: `${tanfCase1.workRequirements.requirementsMet ? "MET" : "NOT MET"} (${tanfCase1.workRequirements.actualHours}/${tanfCase1.workRequirements.requiredHours} hours)`,
+    timeLimits: `${tanfCase1.timeLimits.withinLimits ? "OK" : "EXCEEDED"} (${tanfCase1.timeLimits.lifetimeMonthsUsed}/${tanfCase1.timeLimits.lifetimeMonthsUsed + tanfCase1.timeLimits.lifetimeMonthsRemaining} months used)`,
+    monthlyBenefit: `$${(tanfCase1.monthlyBenefit / 100).toFixed(2)}`,
+    breakdown: tanfCase1.calculationBreakdown
+  });
 
   // Test Case 2: Income too high
-  console.log("\n\nTest 2: Income exceeds needs standard");
-  console.log("-".repeat(70));
+  logger.info("Test 2: Income exceeds needs standard");
+  logger.info("-".repeat(70));
   
   const tanfCase2 = await tanfRulesEngine.calculateEligibility({
     size: 4,
@@ -167,17 +171,15 @@ async function testTANFEngine() {
     hasHardshipExemption: false,
   });
 
-  console.log(`❌ Result: ${tanfCase2.isEligible ? "ELIGIBLE" : "INELIGIBLE"}`);
-  console.log(`   Reason: ${tanfCase2.reason}`);
-  console.log(`   Income Test: ${tanfCase2.incomeTest.passed ? "PASS" : "FAIL"}`);
-  if (tanfCase2.ineligibilityReasons) {
-    console.log("\n   Ineligibility Reasons:");
-    tanfCase2.ineligibilityReasons.forEach(reason => console.log(`     • ${reason}`));
-  }
+  logger.info(`❌ Result: ${tanfCase2.isEligible ? "ELIGIBLE" : "INELIGIBLE"}`, {
+    reason: tanfCase2.reason,
+    incomeTest: tanfCase2.incomeTest.passed ? "PASS" : "FAIL",
+    ineligibilityReasons: tanfCase2.ineligibilityReasons || []
+  });
 
   // Test Case 3: Asset test failure
-  console.log("\n\nTest 3: Assets exceed limit");
-  console.log("-".repeat(70));
+  logger.info("Test 3: Assets exceed limit");
+  logger.info("-".repeat(70));
   
   const tanfCase3 = await tanfRulesEngine.calculateEligibility({
     size: 2,
@@ -193,17 +195,15 @@ async function testTANFEngine() {
     hasHardshipExemption: false,
   });
 
-  console.log(`❌ Result: ${tanfCase3.isEligible ? "ELIGIBLE" : "INELIGIBLE"}`);
-  console.log(`   Reason: ${tanfCase3.reason}`);
-  console.log(`   Asset Test: ${tanfCase3.assetTest.passed ? "PASS" : "FAIL"}`);
-  if (tanfCase3.ineligibilityReasons) {
-    console.log("\n   Ineligibility Reasons:");
-    tanfCase3.ineligibilityReasons.forEach(reason => console.log(`     • ${reason}`));
-  }
+  logger.info(`❌ Result: ${tanfCase3.isEligible ? "ELIGIBLE" : "INELIGIBLE"}`, {
+    reason: tanfCase3.reason,
+    assetTest: tanfCase3.assetTest.passed ? "PASS" : "FAIL",
+    ineligibilityReasons: tanfCase3.ineligibilityReasons || []
+  });
 
   // Test Case 4: Work requirement not met
-  console.log("\n\nTest 4: Work requirement not met (would result in sanction)");
-  console.log("-".repeat(70));
+  logger.info("Test 4: Work requirement not met (would result in sanction)");
+  logger.info("-".repeat(70));
   
   const tanfCase4 = await tanfRulesEngine.calculateEligibility({
     size: 3,
@@ -218,14 +218,15 @@ async function testTANFEngine() {
     hasHardshipExemption: false,
   });
 
-  console.log(`✅ Result: ${tanfCase4.isEligible ? "ELIGIBLE" : "INELIGIBLE"} (but sanctions may apply)`);
-  console.log(`   Work Requirements: ${tanfCase4.workRequirements.requirementsMet ? "MET" : "NOT MET"} (${tanfCase4.workRequirements.actualHours}/${tanfCase4.workRequirements.requiredHours} hours)`);
-  console.log(`   Monthly Benefit: $${(tanfCase4.monthlyBenefit / 100).toFixed(2)} (before sanctions)`);
-  console.log("\n   Note: Sanctions would reduce benefit by 25% for first violation");
+  logger.info(`✅ Result: ${tanfCase4.isEligible ? "ELIGIBLE" : "INELIGIBLE"} (but sanctions may apply)`, {
+    workRequirements: `${tanfCase4.workRequirements.requirementsMet ? "MET" : "NOT MET"} (${tanfCase4.workRequirements.actualHours}/${tanfCase4.workRequirements.requiredHours} hours)`,
+    monthlyBenefit: `$${(tanfCase4.monthlyBenefit / 100).toFixed(2)} (before sanctions)`,
+    note: "Sanctions would reduce benefit by 25% for first violation"
+  });
 
   // Test Case 5: Exempt from work requirements
-  console.log("\n\nTest 5: Work requirement exempt (disabled)");
-  console.log("-".repeat(70));
+  logger.info("Test 5: Work requirement exempt (disabled)");
+  logger.info("-".repeat(70));
   
   const tanfCase5 = await tanfRulesEngine.calculateEligibility({
     size: 2,
@@ -241,18 +242,19 @@ async function testTANFEngine() {
     hasHardshipExemption: false,
   });
 
-  console.log(`✅ Result: ${tanfCase5.isEligible ? "ELIGIBLE" : "INELIGIBLE"}`);
-  console.log(`   Work Requirements: ${tanfCase5.workRequirements.requirementsMet ? "MET" : "NOT MET"} (${tanfCase5.workRequirements.isExempt ? "EXEMPT" : "NOT EXEMPT"})`);
-  console.log(`   Exemption Reason: ${tanfCase5.workRequirements.exemptionReason}`);
-  console.log(`   Monthly Benefit: $${(tanfCase5.monthlyBenefit / 100).toFixed(2)}`);
+  logger.info(`✅ Result: ${tanfCase5.isEligible ? "ELIGIBLE" : "INELIGIBLE"}`, {
+    workRequirements: `${tanfCase5.workRequirements.requirementsMet ? "MET" : "NOT MET"} (${tanfCase5.workRequirements.isExempt ? "EXEMPT" : "NOT EXEMPT"})`,
+    exemptionReason: tanfCase5.workRequirements.exemptionReason,
+    monthlyBenefit: `$${(tanfCase5.monthlyBenefit / 100).toFixed(2)}`
+  });
 }
 
 async function testMedicaidEngine() {
-  console.log("\n\n📋 Medicaid (Health Coverage) Rules Engine Tests\n");
+  logger.info("📋 Medicaid (Health Coverage) Rules Engine Tests");
 
   // Test Case 1: MAGI Adult (19-64, under 138% FPL)
-  console.log("Test 1: MAGI Adult eligible (ACA expansion)");
-  console.log("-".repeat(70));
+  logger.info("Test 1: MAGI Adult eligible (ACA expansion)");
+  logger.info("-".repeat(70));
   
   const medicaidCase1 = await medicaidRulesEngine.calculateEligibility({
     size: 2,
@@ -266,17 +268,17 @@ async function testMedicaidEngine() {
     isElderly: false,
   });
 
-  console.log(`✅ Result: ${medicaidCase1.isEligible ? "ELIGIBLE" : "INELIGIBLE"}`);
-  console.log(`   Category: ${medicaidCase1.categoryName} (${medicaidCase1.pathway})`);
-  console.log(`   Income Test: ${medicaidCase1.incomeTest.passed ? "PASS" : "FAIL"}`);
-  console.log(`   Percent of FPL: ${medicaidCase1.incomeTest.percentOfFPL}%`);
-  console.log(`   Coverage: ${medicaidCase1.coverageType}`);
-  console.log("\n   Calculation Breakdown:");
-  medicaidCase1.calculationBreakdown.forEach(line => console.log(`     ${line}`));
+  logger.info(`✅ Result: ${medicaidCase1.isEligible ? "ELIGIBLE" : "INELIGIBLE"}`, {
+    category: `${medicaidCase1.categoryName} (${medicaidCase1.pathway})`,
+    incomeTest: medicaidCase1.incomeTest.passed ? "PASS" : "FAIL",
+    percentOfFPL: `${medicaidCase1.incomeTest.percentOfFPL}%`,
+    coverageType: medicaidCase1.coverageType,
+    breakdown: medicaidCase1.calculationBreakdown
+  });
 
   // Test Case 2: MAGI Child eligible (under 322% FPL includes CHIP)
-  console.log("\n\nTest 2: MAGI Child eligible (high income - CHIP)");
-  console.log("-".repeat(70));
+  logger.info("Test 2: MAGI Child eligible (high income - CHIP)");
+  logger.info("-".repeat(70));
   
   const medicaidCase2 = await medicaidRulesEngine.calculateEligibility({
     size: 3,
@@ -287,14 +289,15 @@ async function testMedicaidEngine() {
     isSSIRecipient: false,
   });
 
-  console.log(`✅ Result: ${medicaidCase2.isEligible ? "ELIGIBLE" : "INELIGIBLE"}`);
-  console.log(`   Category: ${medicaidCase2.categoryName} (${medicaidCase2.pathway})`);
-  console.log(`   Income Test: ${medicaidCase2.incomeTest.passed ? "PASS" : "FAIL"}`);
-  console.log(`   Coverage: ${medicaidCase2.coverageType}`);
+  logger.info(`✅ Result: ${medicaidCase2.isEligible ? "ELIGIBLE" : "INELIGIBLE"}`, {
+    category: `${medicaidCase2.categoryName} (${medicaidCase2.pathway})`,
+    incomeTest: medicaidCase2.incomeTest.passed ? "PASS" : "FAIL",
+    coverageType: medicaidCase2.coverageType
+  });
 
   // Test Case 3: MAGI Pregnant eligible (264% FPL)
-  console.log("\n\nTest 3: MAGI Pregnant woman eligible");
-  console.log("-".repeat(70));
+  logger.info("Test 3: MAGI Pregnant woman eligible");
+  logger.info("-".repeat(70));
   
   const medicaidCase3 = await medicaidRulesEngine.calculateEligibility({
     size: 2,
@@ -305,14 +308,15 @@ async function testMedicaidEngine() {
     isSSIRecipient: false,
   });
 
-  console.log(`✅ Result: ${medicaidCase3.isEligible ? "ELIGIBLE" : "INELIGIBLE"}`);
-  console.log(`   Category: ${medicaidCase3.categoryName} (${medicaidCase3.pathway})`);
-  console.log(`   Income Test: ${medicaidCase3.incomeTest.passed ? "PASS" : "FAIL"}`);
-  console.log(`   Coverage: ${medicaidCase3.coverageType}`);
+  logger.info(`✅ Result: ${medicaidCase3.isEligible ? "ELIGIBLE" : "INELIGIBLE"}`, {
+    category: `${medicaidCase3.categoryName} (${medicaidCase3.pathway})`,
+    incomeTest: medicaidCase3.incomeTest.passed ? "PASS" : "FAIL",
+    coverageType: medicaidCase3.coverageType
+  });
 
   // Test Case 4: SSI recipient - automatic eligibility
-  console.log("\n\nTest 4: SSI recipient - automatic eligibility");
-  console.log("-".repeat(70));
+  logger.info("Test 4: SSI recipient - automatic eligibility");
+  logger.info("-".repeat(70));
   
   const medicaidCase4 = await medicaidRulesEngine.calculateEligibility({
     size: 1,
@@ -323,14 +327,15 @@ async function testMedicaidEngine() {
     isElderly: true,
   });
 
-  console.log(`✅ Result: ${medicaidCase4.isEligible ? "ELIGIBLE" : "INELIGIBLE"}`);
-  console.log(`   Category: ${medicaidCase4.categoryName} (${medicaidCase4.pathway})`);
-  console.log(`   Income Test: ${medicaidCase4.incomeTest.testType}`);
-  console.log(`   Coverage: ${medicaidCase4.coverageType}`);
+  logger.info(`✅ Result: ${medicaidCase4.isEligible ? "ELIGIBLE" : "INELIGIBLE"}`, {
+    category: `${medicaidCase4.categoryName} (${medicaidCase4.pathway})`,
+    incomeTest: medicaidCase4.incomeTest.testType,
+    coverageType: medicaidCase4.coverageType
+  });
 
   // Test Case 5: Non-MAGI Aged/Blind/Disabled eligible
-  console.log("\n\nTest 5: Non-MAGI Aged/Blind/Disabled eligible");
-  console.log("-".repeat(70));
+  logger.info("Test 5: Non-MAGI Aged/Blind/Disabled eligible");
+  logger.info("-".repeat(70));
   
   const medicaidCase5 = await medicaidRulesEngine.calculateEligibility({
     size: 1,
@@ -342,15 +347,16 @@ async function testMedicaidEngine() {
     countableAssets: 150000,  // $1,500 - under $2,000 limit
   });
 
-  console.log(`✅ Result: ${medicaidCase5.isEligible ? "ELIGIBLE" : "INELIGIBLE"}`);
-  console.log(`   Category: ${medicaidCase5.categoryName} (${medicaidCase5.pathway})`);
-  console.log(`   Income Test: ${medicaidCase5.incomeTest.passed ? "PASS" : "FAIL"}`);
-  console.log(`   Asset Test: ${medicaidCase5.assetTest?.passed ? "PASS" : "FAIL"}`);
-  console.log(`   Coverage: ${medicaidCase5.coverageType}`);
+  logger.info(`✅ Result: ${medicaidCase5.isEligible ? "ELIGIBLE" : "INELIGIBLE"}`, {
+    category: `${medicaidCase5.categoryName} (${medicaidCase5.pathway})`,
+    incomeTest: medicaidCase5.incomeTest.passed ? "PASS" : "FAIL",
+    assetTest: medicaidCase5.assetTest?.passed ? "PASS" : "FAIL",
+    coverageType: medicaidCase5.coverageType
+  });
 
   // Test Case 6: MAGI Adult ineligible (income too high)
-  console.log("\n\nTest 6: MAGI Adult ineligible (exceeds 138% FPL)");
-  console.log("-".repeat(70));
+  logger.info("Test 6: MAGI Adult ineligible (exceeds 138% FPL)");
+  logger.info("-".repeat(70));
   
   const medicaidCase6 = await medicaidRulesEngine.calculateEligibility({
     size: 1,
@@ -361,21 +367,22 @@ async function testMedicaidEngine() {
     isSSIRecipient: false,
   });
 
-  console.log(`❌ Result: ${medicaidCase6.isEligible ? "ELIGIBLE" : "INELIGIBLE"}`);
-  console.log(`   Category: ${medicaidCase6.categoryName} (${medicaidCase6.pathway})`);
-  console.log(`   Income Test: ${medicaidCase6.incomeTest.passed ? "PASS" : "FAIL"}`);
-  console.log(`   Reason: ${medicaidCase6.reason}`);
-  if (medicaidCase6.coverageType === "Medically Needy" && medicaidCase6.hasSpenddown) {
-    console.log(`   May qualify for Medically Needy with spenddown: $${(medicaidCase6.spenddownAmount! / 100).toFixed(2)}/month`);
-  }
+  logger.info(`❌ Result: ${medicaidCase6.isEligible ? "ELIGIBLE" : "INELIGIBLE"}`, {
+    category: `${medicaidCase6.categoryName} (${medicaidCase6.pathway})`,
+    incomeTest: medicaidCase6.incomeTest.passed ? "PASS" : "FAIL",
+    reason: medicaidCase6.reason,
+    spenddown: medicaidCase6.coverageType === "Medically Needy" && medicaidCase6.hasSpenddown 
+      ? `May qualify with spenddown: $${(medicaidCase6.spenddownAmount! / 100).toFixed(2)}/month` 
+      : undefined
+  });
 }
 
 async function testVITATaxEngine() {
-  console.log("\n\n📋 VITA Tax (Federal + Maryland State) Rules Engine Tests\n");
+  logger.info("📋 VITA Tax (Federal + Maryland State) Rules Engine Tests");
 
   // Test Case 1: Low-income single filer with 2 children (EITC eligible)
-  console.log("Test 1: Low-income single parent with 2 children (EITC + CTC)");
-  console.log("-".repeat(70));
+  logger.info("Test 1: Low-income single parent with 2 children (EITC + CTC)");
+  logger.info("-".repeat(70));
   
   const taxCase1 = await vitaTaxRulesEngine.calculateTax({
     filingStatus: "single",
@@ -388,16 +395,18 @@ async function testVITATaxEngine() {
     marylandResidentMonths: 12,
   });
 
-  console.log(`Federal Tax: $${(taxCase1.federalTax.totalFederalTax / 100).toFixed(2)}`);
-  console.log(`   EITC: $${(taxCase1.federalTax.eitc / 100).toFixed(2)}`);
-  console.log(`   CTC: $${(taxCase1.federalTax.childTaxCredit / 100).toFixed(2)}`);
-  console.log(`Maryland Tax: $${(taxCase1.marylandTax.totalMarylandTax / 100).toFixed(2)}`);
-  console.log(`   Maryland EITC: $${(taxCase1.marylandTax.marylandEITC / 100).toFixed(2)}`);
-  console.log(`✅ TOTAL REFUND: $${(taxCase1.totalRefund / 100).toFixed(2)}`);
+  logger.info("Tax calculation results", {
+    federalTax: `$${(taxCase1.federalTax.totalFederalTax / 100).toFixed(2)}`,
+    eitc: `$${(taxCase1.federalTax.eitc / 100).toFixed(2)}`,
+    ctc: `$${(taxCase1.federalTax.childTaxCredit / 100).toFixed(2)}`,
+    marylandTax: `$${(taxCase1.marylandTax.totalMarylandTax / 100).toFixed(2)}`,
+    marylandEITC: `$${(taxCase1.marylandTax.marylandEITC / 100).toFixed(2)}`,
+    totalRefund: `✅ $${(taxCase1.totalRefund / 100).toFixed(2)}`
+  });
 
   // Test Case 2: Middle-income married filing jointly with 1 child
-  console.log("\n\nTest 2: Middle-income married couple with 1 child");
-  console.log("-".repeat(70));
+  logger.info("Test 2: Middle-income married couple with 1 child");
+  logger.info("-".repeat(70));
   
   const taxCase2 = await vitaTaxRulesEngine.calculateTax({
     filingStatus: "married_joint",
@@ -410,16 +419,18 @@ async function testVITATaxEngine() {
     marylandResidentMonths: 12,
   });
 
-  console.log(`Federal Tax: $${(taxCase2.federalTax.totalFederalTax / 100).toFixed(2)}`);
-  console.log(`   Income Tax Before Credits: $${(taxCase2.federalTax.incomeTaxBeforeCredits / 100).toFixed(2)}`);
-  console.log(`   CTC: $${(taxCase2.federalTax.childTaxCredit / 100).toFixed(2)}`);
-  console.log(`Maryland Tax: $${(taxCase2.marylandTax.totalMarylandTax / 100).toFixed(2)}`);
-  console.log(`   State + ${taxCase2.marylandTax.countyName} County`);
-  console.log(`Total Tax Owed: $${(taxCase2.totalTaxLiability / 100).toFixed(2)}`);
+  logger.info("Tax calculation results", {
+    federalTax: `$${(taxCase2.federalTax.totalFederalTax / 100).toFixed(2)}`,
+    incomeTaxBeforeCredits: `$${(taxCase2.federalTax.incomeTaxBeforeCredits / 100).toFixed(2)}`,
+    ctc: `$${(taxCase2.federalTax.childTaxCredit / 100).toFixed(2)}`,
+    marylandTax: `$${(taxCase2.marylandTax.totalMarylandTax / 100).toFixed(2)}`,
+    jurisdiction: `State + ${taxCase2.marylandTax.countyName} County`,
+    totalTaxOwed: `$${(taxCase2.totalTaxLiability / 100).toFixed(2)}`
+  });
 
   // Test Case 3: Head of household with 3 children (maximum EITC)
-  console.log("\n\nTest 3: Head of household with 3 children (maximum EITC scenario)");
-  console.log("-".repeat(70));
+  logger.info("Test 3: Head of household with 3 children (maximum EITC scenario)");
+  logger.info("-".repeat(70));
   
   const taxCase3 = await vitaTaxRulesEngine.calculateTax({
     filingStatus: "head_of_household",
@@ -432,15 +443,17 @@ async function testVITATaxEngine() {
     marylandResidentMonths: 12,
   });
 
-  console.log(`Federal Tax: $${(taxCase3.federalTax.totalFederalTax / 100).toFixed(2)}`);
-  console.log(`   EITC: $${(taxCase3.federalTax.eitc / 100).toFixed(2)}`);
-  console.log(`   CTC: $${(taxCase3.federalTax.childTaxCredit / 100).toFixed(2)}`);
-  console.log(`Maryland Tax: $${(taxCase3.marylandTax.totalMarylandTax / 100).toFixed(2)}`);
-  console.log(`✅ TOTAL REFUND: $${(taxCase3.totalRefund / 100).toFixed(2)}`);
+  logger.info("Tax calculation results", {
+    federalTax: `$${(taxCase3.federalTax.totalFederalTax / 100).toFixed(2)}`,
+    eitc: `$${(taxCase3.federalTax.eitc / 100).toFixed(2)}`,
+    ctc: `$${(taxCase3.federalTax.childTaxCredit / 100).toFixed(2)}`,
+    marylandTax: `$${(taxCase3.marylandTax.totalMarylandTax / 100).toFixed(2)}`,
+    totalRefund: `✅ $${(taxCase3.totalRefund / 100).toFixed(2)}`
+  });
 
   // Test Case 4: Single filer, no children, moderate income
-  console.log("\n\nTest 4: Single filer, no children, moderate income");
-  console.log("-".repeat(70));
+  logger.info("Test 4: Single filer, no children, moderate income");
+  logger.info("-".repeat(70));
   
   const taxCase4 = await vitaTaxRulesEngine.calculateTax({
     filingStatus: "single",
@@ -453,14 +466,16 @@ async function testVITATaxEngine() {
     marylandResidentMonths: 12,
   });
 
-  console.log(`Federal Tax: $${(taxCase4.federalTax.totalFederalTax / 100).toFixed(2)}`);
-  console.log(`   Income Tax Before Credits: $${(taxCase4.federalTax.incomeTaxBeforeCredits / 100).toFixed(2)}`);
-  console.log(`Maryland Tax: $${(taxCase4.marylandTax.totalMarylandTax / 100).toFixed(2)}`);
-  console.log(`Total Tax Owed: $${(taxCase4.totalTaxLiability / 100).toFixed(2)}`);
+  logger.info("Tax calculation results", {
+    federalTax: `$${(taxCase4.federalTax.totalFederalTax / 100).toFixed(2)}`,
+    incomeTaxBeforeCredits: `$${(taxCase4.federalTax.incomeTaxBeforeCredits / 100).toFixed(2)}`,
+    marylandTax: `$${(taxCase4.marylandTax.totalMarylandTax / 100).toFixed(2)}`,
+    totalTaxOwed: `$${(taxCase4.totalTaxLiability / 100).toFixed(2)}`
+  });
 
   // Test Case 5: County tax rate comparison (Talbot vs Baltimore City)
-  console.log("\n\nTest 5: County tax rate impact - Talbot County (lowest) vs Baltimore City (highest)");
-  console.log("-".repeat(70));
+  logger.info("Test 5: County tax rate impact - Talbot County (lowest) vs Baltimore City (highest)");
+  logger.info("-".repeat(70));
   
   const taxCase5a = await vitaTaxRulesEngine.calculateTax({
     filingStatus: "married_joint",
@@ -484,16 +499,21 @@ async function testVITATaxEngine() {
     marylandResidentMonths: 12,
   });
 
-  console.log(`Talbot County (2.25% rate):`);
-  console.log(`   County Tax: $${(taxCase5a.marylandTax.countyTax / 100).toFixed(2)}`);
-  console.log(`   Total Maryland Tax: $${(taxCase5a.marylandTax.totalMarylandTax / 100).toFixed(2)}`);
-  
-  console.log(`\nBaltimore City (3.20% rate):`);
-  console.log(`   County Tax: $${(taxCase5b.marylandTax.countyTax / 100).toFixed(2)}`);
-  console.log(`   Total Maryland Tax: $${(taxCase5b.marylandTax.totalMarylandTax / 100).toFixed(2)}`);
-  
   const countyDifference = taxCase5b.marylandTax.countyTax - taxCase5a.marylandTax.countyTax;
-  console.log(`\n💡 County Tax Difference: $${(countyDifference / 100).toFixed(2)} higher in Baltimore City`);
+  
+  logger.info("County tax comparison", {
+    talbotCounty: {
+      rate: "2.25%",
+      countyTax: `$${(taxCase5a.marylandTax.countyTax / 100).toFixed(2)}`,
+      totalMarylandTax: `$${(taxCase5a.marylandTax.totalMarylandTax / 100).toFixed(2)}`
+    },
+    baltimoreCity: {
+      rate: "3.20%",
+      countyTax: `$${(taxCase5b.marylandTax.countyTax / 100).toFixed(2)}`,
+      totalMarylandTax: `$${(taxCase5b.marylandTax.totalMarylandTax / 100).toFixed(2)}`
+    },
+    difference: `💡 County Tax Difference: $${(countyDifference / 100).toFixed(2)} higher in Baltimore City`
+  });
 }
 
 async function runValidationTests() {
@@ -503,17 +523,20 @@ async function runValidationTests() {
     await testMedicaidEngine();
     await testVITATaxEngine();
     
-    console.log("\n\n" + "=".repeat(70));
-    console.log("✅ All validation tests completed successfully!");
-    console.log("   - OHEP: 4 test scenarios (energy assistance)");
-    console.log("   - TANF: 5 test scenarios (cash assistance)");
-    console.log("   - Medicaid: 6 test scenarios (health coverage)");
-    console.log("   - VITA Tax: 5 test scenarios (federal + state tax)");
-    console.log("=".repeat(70));
+    logger.info("=".repeat(70));
+    logger.info("✅ All validation tests completed successfully!", {
+      testsCompleted: {
+        ohep: "4 test scenarios (energy assistance)",
+        tanf: "5 test scenarios (cash assistance)",
+        medicaid: "6 test scenarios (health coverage)",
+        vitaTax: "5 test scenarios (federal + state tax)"
+      }
+    });
+    logger.info("=".repeat(70));
     
     process.exit(0);
   } catch (error) {
-    console.error("\n❌ Validation tests failed:", error);
+    logger.error("❌ Validation tests failed:", error);
     process.exit(1);
   }
 }

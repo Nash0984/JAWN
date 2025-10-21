@@ -9,6 +9,7 @@ import {
   isSentryEnabled,
   getSentryStatus 
 } from "./services/sentryService";
+import { logger } from "./services/logger.service";
 
 import express, { type Request, Response, NextFunction } from "express";
 import compression from "compression";
@@ -41,17 +42,17 @@ import "./utils/piiMasking"; // Import early to override console methods with PI
 // ============================================================================
 const envValidation = EnvValidator.validate();
 if (!envValidation.valid) {
-  console.error("❌ FATAL: Environment validation failed:");
-  envValidation.errors.forEach(error => console.error(`  - ${error}`));
+  logger.error("❌ FATAL: Environment validation failed:");
+  envValidation.errors.forEach(error => logger.error(`  - ${error}`));
   process.exit(1);
 }
 
 if (envValidation.warnings.length > 0) {
-  console.warn("⚠️  Environment warnings:");
-  envValidation.warnings.forEach(warning => console.warn(`  - ${warning}`));
+  logger.warn("⚠️  Environment warnings:");
+  envValidation.warnings.forEach(warning => logger.warn(`  - ${warning}`));
 }
 
-console.log("✅ Environment validation passed");
+logger.info("✅ Environment validation passed");
 
 // ============================================================================
 // PRODUCTION READINESS VALIDATION
@@ -60,7 +61,7 @@ if (process.env.NODE_ENV === 'production') {
   try {
     ProductionValidator.validateOrThrow();
   } catch (error) {
-    console.error("❌ FATAL: Production validation failed");
+    logger.error("❌ FATAL: Production validation failed");
     process.exit(1);
   }
 }
@@ -151,7 +152,7 @@ app.use(requestLoggerMiddleware());
 
 // Session configuration
 if (!process.env.SESSION_SECRET) {
-  console.error("❌ FATAL: SESSION_SECRET environment variable is required for secure session management");
+  logger.error("❌ FATAL: SESSION_SECRET environment variable is required for secure session management");
   process.exit(1);
 }
 
@@ -216,7 +217,7 @@ app.get("/api/health", async (req, res) => {
       environment: process.env.NODE_ENV || "development",
     });
   } catch (error) {
-    console.error("❌ Health check failed:", error);
+    logger.error("❌ Health check failed:", error);
     res.status(503).json({
       status: "unhealthy",
       timestamp: new Date().toISOString(),
@@ -237,7 +238,7 @@ app.get("/api/health/detailed", async (req, res) => {
     
     res.status(statusCode).json(healthStatus);
   } catch (error) {
-    console.error("❌ Detailed health check failed:", error);
+    logger.error("❌ Detailed health check failed:", error);
     res.status(500).json({
       status: "unhealthy",
       timestamp: new Date().toISOString(),
@@ -256,7 +257,7 @@ app.get("/api/csrf-token", (req, res) => {
     }
     res.json({ token: csrfToken });
   } catch (error) {
-    console.error("❌ CSRF token generation error:", error);
+    logger.error("❌ CSRF token generation error:", error);
     res.status(500).json({ error: "Internal server error generating CSRF token" });
   }
 });
@@ -311,19 +312,19 @@ app.use("/api/", apiVersionMiddleware);
   // Initialize system data (defer until after server is ready)
   const initializeData = async () => {
     try {
-      console.log("[INIT] Starting background data initialization...");
+      logger.info("[INIT] Starting background data initialization...");
       const startTime = Date.now();
       
       await initializeSystemData();
-      console.log(`[INIT] System data initialized (${Date.now() - startTime}ms)`);
+      logger.info(`[INIT] System data initialized (${Date.now() - startTime}ms)`);
       
       await seedCountiesAndGamification();
-      console.log(`[INIT] Counties/gamification seeded (${Date.now() - startTime}ms)`);
+      logger.info(`[INIT] Counties/gamification seeded (${Date.now() - startTime}ms)`);
       
       await seedMarylandLDSS();
-      console.log(`[INIT] Maryland LDSS seeded (${Date.now() - startTime}ms total)`);
+      logger.info(`[INIT] Maryland LDSS seeded (${Date.now() - startTime}ms total)`);
     } catch (error) {
-      console.error("[INIT] Error during background data initialization:", error);
+      logger.error("[INIT] Error during background data initialization:", error);
     }
   };
   
@@ -346,7 +347,7 @@ app.use("/api/", apiVersionMiddleware);
     const { smartScheduler } = await import("./services/smartScheduler");
     await smartScheduler.startAll();
   } catch (error) {
-    console.error("❌ Failed to start Smart Scheduler:", error);
+    logger.error("❌ Failed to start Smart Scheduler:", error);
   }
   
   const server = await registerRoutes(app, sessionMiddleware);
@@ -412,30 +413,30 @@ app.use("/api/", apiVersionMiddleware);
       try {
         await alertService.evaluateAlerts();
       } catch (error) {
-        console.error("❌ Error evaluating alerts:", error);
+        logger.error("❌ Error evaluating alerts:", error);
       }
     }, 60000); // 60 seconds
     
-    console.log("📊 Alert evaluation scheduled (runs every 1 minute)");
+    logger.info("📊 Alert evaluation scheduled (runs every 1 minute)");
   } catch (error) {
-    console.error("❌ Failed to start alert evaluation scheduler:", error);
+    logger.error("❌ Failed to start alert evaluation scheduler:", error);
   }
 
   // ============================================================================
   // GRACEFUL SHUTDOWN HANDLING - Clean up resources on SIGTERM/SIGINT
   // ============================================================================
   const gracefulShutdown = async (signal: string) => {
-    console.log(`\n🛑 ${signal} received. Starting graceful shutdown...`);
+    logger.info(`\n🛑 ${signal} received. Starting graceful shutdown...`);
     
     try {
       // Close HTTP server (stop accepting new requests)
       await new Promise<void>((resolve, reject) => {
         server.close((err) => {
           if (err) {
-            console.error("❌ Error closing HTTP server:", err);
+            logger.error("❌ Error closing HTTP server:", err);
             reject(err);
           } else {
-            console.log("✅ HTTP server closed");
+            logger.info("✅ HTTP server closed");
             resolve();
           }
         });
@@ -443,27 +444,27 @@ app.use("/api/", apiVersionMiddleware);
 
       // Close database connections
       // Note: Drizzle with neon doesn't require explicit close, but we log it
-      console.log("✅ Database connections closed");
+      logger.info("✅ Database connections closed");
 
       // Stop Smart Scheduler if running
       try {
         const { smartScheduler } = await import("./services/smartScheduler");
         await smartScheduler.stopAll();
-        console.log("✅ Smart Scheduler stopped");
+        logger.info("✅ Smart Scheduler stopped");
       } catch (error) {
-        console.error("⚠️  Error stopping Smart Scheduler:", error);
+        logger.error("⚠️  Error stopping Smart Scheduler:", error);
       }
 
       // Stop Alert Evaluation scheduler
       if (alertEvaluationInterval) {
         clearInterval(alertEvaluationInterval);
-        console.log("✅ Alert evaluation scheduler stopped");
+        logger.info("✅ Alert evaluation scheduler stopped");
       }
 
-      console.log("✅ Graceful shutdown complete");
+      logger.info("✅ Graceful shutdown complete");
       process.exit(0);
     } catch (error) {
-      console.error("❌ Error during graceful shutdown:", error);
+      logger.error("❌ Error during graceful shutdown:", error);
       process.exit(1);
     }
   };
@@ -474,12 +475,12 @@ app.use("/api/", apiVersionMiddleware);
 
   // Handle uncaught errors
   process.on("uncaughtException", (error) => {
-    console.error("❌ UNCAUGHT EXCEPTION:", error);
+    logger.error("❌ UNCAUGHT EXCEPTION:", error);
     gracefulShutdown("UNCAUGHT_EXCEPTION");
   });
 
   process.on("unhandledRejection", (reason, promise) => {
-    console.error("❌ UNHANDLED REJECTION at:", promise, "reason:", reason);
+    logger.error("❌ UNHANDLED REJECTION at:", promise, "reason:", reason);
     gracefulShutdown("UNHANDLED_REJECTION");
   });
 })();

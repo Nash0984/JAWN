@@ -1,3 +1,4 @@
+import { logger } from "./services/logger.service";
 import { db } from "./db";
 import { tenants, tenantBranding, apiKeys, users, qcErrorPatterns, flaggedCases, jobAids, trainingInterventions } from "@shared/schema";
 import { nanoid } from "nanoid";
@@ -16,7 +17,7 @@ import { seedIRSConsentForm } from './seeds/irsConsentForm';
  * Run this with: npm run seed or tsx server/seed.ts
  */
 async function seedTenants() {
-  console.log("🌱 Seeding tenant data...");
+  logger.info("🌱 Seeding tenant data...");
 
   try {
     // Maryland State Tenant
@@ -53,7 +54,7 @@ async function seedTenants() {
       footerHtml: null,
     }).onConflictDoNothing();
 
-    console.log("✅ Maryland tenant created");
+    logger.info("✅ Maryland tenant created");
 
     // Baltimore City County Tenant (under Maryland)
     const baltimoreId = nanoid();
@@ -86,7 +87,7 @@ async function seedTenants() {
       footerHtml: null,
     }).onConflictDoNothing();
 
-    console.log("✅ Baltimore City tenant created");
+    logger.info("✅ Baltimore City tenant created");
 
     // Virginia State Tenant (Demo)
     const virginiaId = nanoid();
@@ -118,7 +119,7 @@ async function seedTenants() {
       footerHtml: null,
     }).onConflictDoNothing();
 
-    console.log("✅ Virginia tenant created");
+    logger.info("✅ Virginia tenant created");
 
     // Generic Template Tenant
     const templateId = nanoid();
@@ -150,13 +151,13 @@ async function seedTenants() {
       footerHtml: null,
     }).onConflictDoNothing();
 
-    console.log("✅ Template tenant created");
+    logger.info("✅ Template tenant created");
 
     // ========================================================================
     // DEMO API KEYS - For testing third-party integrations
     // ========================================================================
     
-    console.log("🔑 Creating demo API keys...");
+    logger.info("🔑 Creating demo API keys...");
     
     // Demo API key for Maryland tenant
     const demoApiKey = `md_demo_${nanoid()}`;
@@ -172,17 +173,17 @@ async function seedTenants() {
       status: 'active',
     }).onConflictDoNothing();
     
-    console.log("✅ Demo API key created for Maryland tenant");
-    console.log(`   API Key: ${demoApiKey}`);
-    console.log(`   Scopes: eligibility:read, documents:write, screener:read, programs:read`);
-    console.log(`   Rate Limit: 1000 requests/hour`);
-    console.log(`   ⚠️  Save this key - it won't be shown again!`);
+    logger.info("✅ Demo API key created for Maryland tenant");
+    logger.info(`   API Key: ${demoApiKey}`);
+    logger.info(`   Scopes: eligibility:read, documents:write, screener:read, programs:read`);
+    logger.info(`   Rate Limit: 1000 requests/hour`);
+    logger.info(`   ⚠️  Save this key - it won't be shown again!`);
 
     // ========================================================================
     // QC ANALYTICS - Synthetic Data for Maryland SNAP Predictive Analytics
     // ========================================================================
     
-    console.log("📊 Seeding QC Analytics data...");
+    logger.info("📊 Seeding QC Analytics data...");
 
     // Create demo users for caseworkers and supervisors
     const demoCaseworker1 = nanoid();
@@ -241,14 +242,14 @@ async function seedTenants() {
       isActive: true,
     }).onConflictDoNothing();
 
-    console.log("✅ Demo users created");
+    logger.info("✅ Demo users created");
 
     // Generate and insert QC Error Patterns
     const errorPatterns = generateQCErrorPatterns();
     for (const pattern of errorPatterns) {
       await db.insert(qcErrorPatterns).values(pattern).onConflictDoNothing();
     }
-    console.log(`✅ Created ${errorPatterns.length} QC error patterns`);
+    logger.info(`✅ Created ${errorPatterns.length} QC error patterns`);
 
     // Generate and insert Flagged Cases
     const flaggedCases1 = generateFlaggedCases(demoCaseworker1, 12);
@@ -258,14 +259,14 @@ async function seedTenants() {
     for (const flaggedCase of [...flaggedCases1, ...flaggedCases2, ...flaggedCasesNavigator]) {
       await db.insert(flaggedCases).values(flaggedCase).onConflictDoNothing();
     }
-    console.log(`✅ Created ${flaggedCases1.length + flaggedCases2.length + flaggedCasesNavigator.length} flagged cases`);
+    logger.info(`✅ Created ${flaggedCases1.length + flaggedCases2.length + flaggedCasesNavigator.length} flagged cases`);
 
     // Generate and insert Job Aids
     const jobAidsList = generateJobAids();
     for (const jobAid of jobAidsList) {
       await db.insert(jobAids).values(jobAid).onConflictDoNothing();
     }
-    console.log(`✅ Created ${jobAidsList.length} job aids`);
+    logger.info(`✅ Created ${jobAidsList.length} job aids`);
 
     // Generate and insert Training Interventions
     const allUserIds = [demoCaseworker1, demoCaseworker2, demoNavigator, demoSupervisor];
@@ -273,13 +274,13 @@ async function seedTenants() {
     for (const intervention of interventions) {
       await db.insert(trainingInterventions).values(intervention).onConflictDoNothing();
     }
-    console.log(`✅ Created ${interventions.length} training interventions`);
+    logger.info(`✅ Created ${interventions.length} training interventions`);
 
-    console.log("\n📈 QC Analytics Summary:");
-    console.log("   • Error Patterns: Showing 500% spike in Shelter & Utility errors (Q4 2024)");
-    console.log("   • Flagged Cases: High-risk cases ready for supervisor review");
-    console.log("   • Job Aids: Comprehensive training materials for caseworkers");
-    console.log("   • Training Impact: Demonstrating measurable error rate improvements");
+    logger.info("\n📈 QC Analytics Summary:");
+    logger.info("   • Error Patterns: Showing 500% spike in Shelter & Utility errors (Q4 2024)");
+    logger.info("   • Flagged Cases: High-risk cases ready for supervisor review");
+    logger.info("   • Job Aids: Comprehensive training materials for caseworkers");
+    logger.info("   • Training Impact: Demonstrating measurable error rate improvements");
     
     // Seed demo metrics for monitoring dashboard
     await seedDemoMetrics();
@@ -287,9 +288,9 @@ async function seedTenants() {
     // Seed IRS Use & Disclosure consent form
     await seedIRSConsentForm();
     
-    console.log("\n🎉 Tenant, API key, QC Analytics, Demo Metrics, and IRS Consent Form seeding completed successfully!");
+    logger.info("\n🎉 Tenant, API key, QC Analytics, Demo Metrics, and IRS Consent Form seeding completed successfully!");
   } catch (error) {
-    console.error("❌ Error seeding tenants:", error);
+    logger.error("❌ Error seeding tenants:", error);
     throw error;
   }
 }
@@ -301,11 +302,11 @@ const isMainModule = import.meta.url === `file://${process.argv[1]}`;
 if (isMainModule) {
   seedTenants()
     .then(() => {
-      console.log("Seed completed");
+      logger.info("Seed completed");
       process.exit(0);
     })
     .catch((error) => {
-      console.error("Seed failed:", error);
+      logger.error("Seed failed:", error);
       process.exit(1);
     });
 }
