@@ -92,7 +92,7 @@ By typing my name below, I certify that:
 
 **Legal Reference:** IRS Publication 4299 (Rev. 2024) - Privacy and Confidentiality Requirements for VITA/TCE Volunteers
 
-**Questions?** Contact Maryland Benefits Platform at support@mdbenefits.org or call 1-800-XXX-XXXX
+**Questions?** Contact Maryland Benefits Platform at support@mdbenefits.org or call 1-800-332-6347
       `.trim(),
       
       version: 1,

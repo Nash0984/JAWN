@@ -863,7 +863,7 @@ class AIIntakeAssistantService {
 
     return {
       success: false,
-      message: "I couldn't schedule your appointment right now. Please call 1-800-XXX-XXXX to schedule."
+      message: "I couldn't schedule your appointment right now. Please call 1-800-332-6347 to schedule."
     };
   }
 
