@@ -1,6 +1,7 @@
 import { createHash } from 'crypto';
 import NodeCache from 'node-cache';
 import { redisCache, tieredCacheGet } from './redisCache';
+import { logger } from './logger.service';
 
 /**
  * Document Analysis Cache Service
@@ -138,7 +139,7 @@ class DocumentAnalysisCacheService {
     const key = `docanalysis:${baseKey}`;
     this.cache.del(key);
     // Note: Redis invalidation would happen through pub/sub in production
-    console.log(`📦 Invalidated document analysis cache for ${documentId}`);
+    logger.info('📦 Invalidated document analysis cache', { documentId });
   }
   
   /**
@@ -166,7 +167,7 @@ class DocumentAnalysisCacheService {
    */
   clear(): void {
     this.cache.flushAll();
-    console.log('📦 Document analysis cache cleared');
+    logger.info('📦 Document analysis cache cleared', { service: 'DocumentAnalysisCache' });
   }
   
   /**

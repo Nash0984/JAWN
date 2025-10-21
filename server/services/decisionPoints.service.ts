@@ -26,6 +26,7 @@ import { db } from '../db';
 import { clientCases, documents, eligibilityCalculations, notifications } from '@shared/schema';
 import { eq, and, or, gte, lte, desc, sql, between } from 'drizzle-orm';
 import { cacheService } from './cacheService';
+import { logger } from './logger.service';
 
 export interface DecisionPoint {
   id: string;
@@ -98,7 +99,9 @@ export class DecisionPointsService {
     const apiKey = process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY;
     
     if (!apiKey) {
-      console.warn('⚠️ Decision Points: No Gemini API key found. Using fallback mode.');
+      logger.warn('⚠️ Decision Points: No Gemini API key found. Using fallback mode.', {
+        service: 'DecisionPoints'
+      });
     } else {
       this.gemini = new GoogleGenAI({ apiKey });
     }
@@ -361,7 +364,10 @@ export class DecisionPointsService {
         return this.formatDecisionPoints(rawPoints, clientCase);
       }
     } catch (error) {
-      console.error('Error analyzing case with AI:', error);
+      logger.error('Error analyzing case with AI', { 
+        error: error instanceof Error ? error.message : String(error),
+        service: 'DecisionPoints'
+      });
     }
 
     return [];
@@ -469,7 +475,11 @@ export class DecisionPointsService {
 
       return await this.analyzeCase(clientCase);
     } catch (error) {
-      console.error('Error getting decision points:', error);
+      logger.error('Error getting decision points', { 
+        error: error instanceof Error ? error.message : String(error),
+        caseId,
+        service: 'DecisionPoints'
+      });
       return [];
     }
   }
@@ -497,7 +507,10 @@ export class DecisionPointsService {
 
       return true;
     } catch (error) {
-      console.error('Error scheduling intervention:', error);
+      logger.error('Error scheduling intervention', { 
+        error: error instanceof Error ? error.message : String(error),
+        service: 'DecisionPoints'
+      });
       return false;
     }
   }

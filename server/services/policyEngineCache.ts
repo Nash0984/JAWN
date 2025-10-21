@@ -2,6 +2,7 @@ import NodeCache from 'node-cache';
 import type { PolicyEngineHousehold, BenefitResult } from './policyEngine.service';
 import { generateHouseholdHash } from './cacheService';
 import { redisCache, tieredCacheGet } from './redisCache';
+import { logger } from './logger.service';
 
 /**
  * PolicyEngine Calculation Cache Service
@@ -157,7 +158,10 @@ class PolicyEngineCacheService {
   invalidateScenario(household: PolicyEngineHousehold): void {
     const key = this.generateKey(household);
     this.cache.del(key);
-    console.log(`📦 Invalidated PolicyEngine cache for scenario ${key.substring(0, 8)}...`);
+    logger.info('📦 Invalidated PolicyEngine cache for scenario', { 
+      scenarioId: key.substring(0, 8),
+      service: 'PolicyEngineCache'
+    });
   }
   
   /**
@@ -185,7 +189,7 @@ class PolicyEngineCacheService {
    */
   clear(): void {
     this.cache.flushAll();
-    console.log('📦 PolicyEngine cache cleared');
+    logger.info('📦 PolicyEngine cache cleared', { service: 'PolicyEngineCache' });
   }
   
   /**

@@ -569,7 +569,11 @@ export class UnifiedExportService {
             }
           }
         } catch (error) {
-          console.error(`Error loading client case ${session.clientCaseId}:`, error);
+          logger.error('Error loading client case', {
+            error: error instanceof Error ? error.message : String(error),
+            clientCaseId: session.clientCaseId,
+            service: 'UnifiedExportService'
+          });
         }
       }
 
@@ -587,7 +591,11 @@ export class UnifiedExportService {
             pending: docs.filter(d => d.verificationStatus === 'pending').length,
           };
         } catch (error) {
-          console.error(`Error loading documents for session ${session.id}:`, error);
+          logger.error('Error loading documents for session', {
+            error: error instanceof Error ? error.message : String(error),
+            sessionId: session.id,
+            service: 'UnifiedExportService'
+          });
         }
       }
 

@@ -1,6 +1,7 @@
 import { createHash } from 'crypto';
 import NodeCache from 'node-cache';
 import { redisCache, tieredCacheGet } from './redisCache';
+import { logger } from './logger.service';
 
 /**
  * Embedding Cache Service
@@ -135,7 +136,7 @@ class EmbeddingCacheService {
    */
   clear(): void {
     this.cache.flushAll();
-    console.log('📦 Embedding cache cleared');
+    logger.info('📦 Embedding cache cleared', { service: 'EmbeddingCache' });
   }
   
   /**

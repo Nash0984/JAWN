@@ -4,6 +4,7 @@ import { documentAnalysisCache } from './documentAnalysisCache';
 import { policyEngineCache } from './policyEngineCache';
 import { cacheService } from './cacheService';
 import { redisCache } from './redisCache';
+import { logger } from './logger.service';
 
 /**
  * Cache Metrics Aggregation Service
@@ -210,7 +211,7 @@ class CacheMetricsService {
         ragCache.clear();
         documentAnalysisCache.clear();
         policyEngineCache.clear();
-        console.log('📦 All caches cleared');
+        logger.info('📦 All caches cleared', { action: 'clearCache', type: 'all' });
         break;
     }
   }
@@ -223,7 +224,7 @@ class CacheMetricsService {
     ragCache.resetMetrics();
     documentAnalysisCache.resetMetrics();
     policyEngineCache.resetMetrics();
-    console.log('📊 All cache metrics reset');
+    logger.info('📊 All cache metrics reset', { action: 'resetMetrics' });
   }
 
   /**

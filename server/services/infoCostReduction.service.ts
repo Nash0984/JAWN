@@ -25,6 +25,7 @@ import { db } from '../db';
 import { documents } from '@shared/schema';
 import { eq, and, desc } from 'drizzle-orm';
 import { cacheService } from './cacheService';
+import { logger } from './logger.service';
 // Reading level service can be imported if needed
 // import { analyzeReadingLevel } from './readingLevelService';
 
@@ -128,7 +129,9 @@ export class InfoCostReductionService {
     const apiKey = process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY;
     
     if (!apiKey) {
-      console.warn('⚠️ Info Cost Reduction: No Gemini API key found. Using fallback mode.');
+      logger.warn('⚠️ Info Cost Reduction: No Gemini API key found. Using fallback mode.', {
+        service: 'InfoCostReduction'
+      });
     } else {
       this.gemini = new GoogleGenAI({ apiKey });
     }
@@ -243,7 +246,10 @@ export class InfoCostReductionService {
         };
       }
     } catch (error) {
-      console.error('Error simplifying with AI:', error);
+      logger.error('Error simplifying with AI', {
+        error: error instanceof Error ? error.message : String(error),
+        service: 'InfoCostReduction'
+      });
     }
 
     return this.fallbackSimplify(request);
@@ -316,7 +322,10 @@ export class InfoCostReductionService {
         return explanation;
       }
     } catch (error) {
-      console.error('Error explaining policy with AI:', error);
+      logger.error('Error explaining policy with AI', {
+        error: error instanceof Error ? error.message : String(error),
+        service: 'InfoCostReduction'
+      });
     }
 
     return this.createBasicExplanation(policyText);
@@ -358,7 +367,10 @@ export class InfoCostReductionService {
         return JSON.parse(jsonMatch[0]);
       }
     } catch (error) {
-      console.error('Error creating decision tree:', error);
+      logger.error('Error creating decision tree', {
+        error: error instanceof Error ? error.message : String(error),
+        service: 'InfoCostReduction'
+      });
     }
 
     return this.createBasicDecisionTree();

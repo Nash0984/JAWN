@@ -1,6 +1,7 @@
 import { createHash } from 'crypto';
 import NodeCache from 'node-cache';
 import { redisCache, tieredCacheGet } from './redisCache';
+import { logger } from './logger.service';
 
 /**
  * RAG Query Cache Service
@@ -154,7 +155,11 @@ class RAGCacheService {
       }
     }
     
-    console.log(`📦 Invalidated ${invalidated} RAG cache entries for program ${programId}`);
+    logger.info('📦 Invalidated RAG cache entries for program', { 
+      invalidated,
+      programId,
+      service: 'RAGCache'
+    });
   }
   
   /**
@@ -182,7 +187,7 @@ class RAGCacheService {
    */
   clear(): void {
     this.cache.flushAll();
-    console.log('📦 RAG cache cleared');
+    logger.info('📦 RAG cache cleared', { service: 'RAGCache' });
   }
   
   /**

@@ -4,6 +4,7 @@ import { db } from '../db';
 import { countyTaxRates } from '@shared/schema';
 import { eq, and } from 'drizzle-orm';
 import { getTaxYearConfig } from './taxYearConfig';
+import { logger } from './logger.service';
 
 /**
  * Maryland Form 502 PDF Generator
@@ -300,7 +301,11 @@ export class Form502Generator {
       }
       return null;
     } catch (error) {
-      console.error('Error fetching county tax rates from database:', error);
+      logger.error('Error fetching county tax rates from database', { 
+        error: error instanceof Error ? error.message : String(error),
+        county,
+        taxYear 
+      });
       return null;
     }
   }

@@ -27,6 +27,7 @@ import { db } from '../db';
 import { clientCases, eligibilityCalculations } from '@shared/schema';
 import { eq, and, or, inArray } from 'drizzle-orm';
 import { cacheService } from './cacheService';
+import { logger } from './logger.service';
 
 export interface StateRule {
   state: string;
@@ -156,7 +157,9 @@ export class MultiStateRulesService {
     const apiKey = process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY;
     
     if (!apiKey) {
-      console.warn('⚠️ Multi-State Rules: No Gemini API key found. Using fallback mode.');
+      logger.warn('⚠️ Multi-State Rules: No Gemini API key found. Using fallback mode.', {
+        service: 'MultiStateRules'
+      });
     } else {
       this.gemini = new GoogleGenAI({ apiKey });
     }
@@ -371,7 +374,10 @@ export class MultiStateRulesService {
         }));
       }
     } catch (error) {
-      console.error('Error getting state rules with AI:', error);
+      logger.error('Error getting state rules with AI', {
+        error: error instanceof Error ? error.message : String(error),
+        service: 'MultiStateRules'
+      });
     }
 
     return this.getFallbackRules(state, program);

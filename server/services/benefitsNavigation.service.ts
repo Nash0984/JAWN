@@ -24,6 +24,7 @@ import { db } from '../db';
 import { clientCases, documents, eligibilityCalculations } from '@shared/schema';
 import { eq, and, or, gte, lte, desc, sql } from 'drizzle-orm';
 import { cacheService } from './cacheService';
+import { logger } from './logger.service';
 
 export interface BenefitPathway {
   id: string;
@@ -82,7 +83,9 @@ export class BenefitsNavigationService {
     const apiKey = process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY;
     
     if (!apiKey) {
-      console.warn('⚠️ Benefits Navigation: No Gemini API key found. Using fallback mode.');
+      logger.warn('⚠️ Benefits Navigation: No Gemini API key found. Using fallback mode.', {
+        service: 'BenefitsNavigation'
+      });
     } else {
       this.gemini = new GoogleGenAI({ apiKey });
     }
@@ -193,7 +196,10 @@ export class BenefitsNavigationService {
         return this.formatPathways(rawPathways);
       }
     } catch (error) {
-      console.error('Error discovering pathways with AI:', error);
+      logger.error('Error discovering pathways with AI', { 
+        error: error instanceof Error ? error.message : String(error),
+        service: 'BenefitsNavigation'
+      });
     }
 
     return this.getFallbackPathways(situation);
@@ -393,7 +399,11 @@ export class BenefitsNavigationService {
       const analysis = await this.analyzeHousehold(situation);
       return analysis.discoveredPathways;
     } catch (error) {
-      console.error('Error getting recommendations:', error);
+      logger.error('Error getting recommendations', { 
+        error: error instanceof Error ? error.message : String(error),
+        caseId,
+        service: 'BenefitsNavigation'
+      });
       return [];
     }
   }

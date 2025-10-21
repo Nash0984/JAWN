@@ -14,6 +14,7 @@ import type { IStorage } from '../storage';
 import { db } from '../db';
 import { maiveTestCases, maiveEvaluations, maiveTestRuns } from '@shared/schema';
 import { eq, desc, and, gte } from 'drizzle-orm';
+import { logger } from './logger.service';
 
 interface TestCase {
   id: string;
@@ -61,7 +62,9 @@ export class MAIVEService {
     const apiKey = process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY;
     
     if (!apiKey) {
-      console.warn('⚠️ MAIVE: No Gemini API key found. Using mock judge for development.');
+      logger.warn('⚠️ MAIVE: No Gemini API key found. Using mock judge for development.', {
+        service: 'MAIVE'
+      });
       this.useMockJudge = true;
     } else {
       this.gemini = new GoogleGenAI({ 
@@ -399,7 +402,11 @@ Format your response as JSON:
         }
         totalAccuracy += result.accuracy;
       } catch (error) {
-        console.error(`Error evaluating test case ${testCaseId}:`, error);
+        logger.error('Error evaluating test case', {
+          error: error instanceof Error ? error.message : String(error),
+          testCaseId,
+          service: 'MAIVE'
+        });
         // Count as failed
         results.push({
           testCaseId,

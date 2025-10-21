@@ -2,6 +2,7 @@ import { storage } from "./storage";
 import { db } from "./db";
 import { benefitPrograms } from "../shared/schema";
 import { eq } from "drizzle-orm";
+import { logger } from "./services/logger.service";
 
 /**
  * Seed Maryland SNAP Rules for FY 2025 (October 2024 - September 2025)
@@ -14,7 +15,7 @@ import { eq } from "drizzle-orm";
  */
 
 async function seedMarylandSNAPRules() {
-  console.log("🌱 Seeding Maryland SNAP Rules...");
+  logger.info("🌱 Seeding Maryland SNAP Rules...", { service: "SeedRules" });
 
   // Get or create Maryland SNAP program
   const [snapProgram] = await db
@@ -24,7 +25,7 @@ async function seedMarylandSNAPRules() {
     .limit(1);
 
   if (!snapProgram) {
-    console.error("❌ Maryland SNAP program not found! Please seed benefit programs first.");
+    logger.error("❌ Maryland SNAP program not found! Please seed benefit programs first.", { service: "SeedRules" });
     return;
   }
 
@@ -32,12 +33,16 @@ async function seedMarylandSNAPRules() {
   const effectiveDate = new Date("2024-10-01");
   const endDate = new Date("2025-09-30");
 
-  console.log(`✓ Found Maryland SNAP program: ${snapProgram.name} (${benefitProgramId})`);
+  logger.info("✓ Found Maryland SNAP program", { 
+    programName: snapProgram.name,
+    benefitProgramId,
+    service: "SeedRules"
+  });
 
   // ============================================================================
   // 1. FEDERAL POVERTY LEVELS 2024
   // ============================================================================
-  console.log("\n📊 Seeding 2024 Federal Poverty Levels...");
+  logger.info("📊 Seeding 2024 Federal Poverty Levels...", { service: "SeedRules" });
 
   const povertyLevelsData = [
     { size: 1, monthly: 115050, annual: 1380600 },   // $1,150.50/month, $13,806/year
@@ -63,12 +68,15 @@ async function seedMarylandSNAPRules() {
     });
   }
 
-  console.log(`✓ Seeded ${povertyLevelsData.length} poverty level records`);
+  logger.info("✓ Seeded poverty level records", { 
+    count: povertyLevelsData.length,
+    service: "SeedRules"
+  });
 
   // ============================================================================
   // 2. SNAP INCOME LIMITS (200% FPL gross, 100% FPL net)
   // ============================================================================
-  console.log("\n💰 Seeding SNAP Income Limits...");
+  logger.info("💰 Seeding SNAP Income Limits...", { service: "SeedRules" });
 
   const incomeLimitsData = [
     { size: 1, gross: 230100, net: 115050 },  // $2,301/month gross, $1,150.50 net
@@ -98,12 +106,15 @@ async function seedMarylandSNAPRules() {
     });
   }
 
-  console.log(`✓ Seeded ${incomeLimitsData.length} income limit records`);
+  logger.info("✓ Seeded income limit records", {
+    count: incomeLimitsData.length,
+    service: "SeedRules"
+  });
 
   // ============================================================================
   // 3. SNAP DEDUCTIONS
   // ============================================================================
-  console.log("\n📉 Seeding SNAP Deductions...");
+  logger.info("📉 Seeding SNAP Deductions...", { service: "SeedRules" });
 
   const deductions = [
     {
@@ -176,12 +187,15 @@ async function seedMarylandSNAPRules() {
     });
   }
 
-  console.log(`✓ Seeded ${deductions.length} deduction rules`);
+  logger.info("✓ Seeded deduction rules", {
+    count: deductions.length,
+    service: "SeedRules"
+  });
 
   // ============================================================================
   // 4. SNAP MAXIMUM ALLOTMENTS (FY 2025)
   // ============================================================================
-  console.log("\n🍽️  Seeding SNAP Maximum Allotments...");
+  logger.info("🍽️  Seeding SNAP Maximum Allotments...", { service: "SeedRules" });
 
   const allotmentsData = [
     { size: 1, max: 29100, min: 2300 },  // $291/month, $23 min
@@ -210,12 +224,15 @@ async function seedMarylandSNAPRules() {
     });
   }
 
-  console.log(`✓ Seeded ${allotmentsData.length} allotment records`);
+  logger.info("✓ Seeded allotment records", {
+    count: allotmentsData.length,
+    service: "SeedRules"
+  });
 
   // ============================================================================
   // 5. CATEGORICAL ELIGIBILITY RULES
   // ============================================================================
-  console.log("\n✅ Seeding Categorical Eligibility Rules...");
+  logger.info("✅ Seeding Categorical Eligibility Rules...", { service: "SeedRules" });
 
   const categoricalRules = [
     {
@@ -270,12 +287,15 @@ async function seedMarylandSNAPRules() {
     });
   }
 
-  console.log(`✓ Seeded ${categoricalRules.length} categorical eligibility rules`);
+  logger.info("✓ Seeded categorical eligibility rules", {
+    count: categoricalRules.length,
+    service: "SeedRules"
+  });
 
   // ============================================================================
   // 6. DOCUMENT REQUIREMENT RULES
   // ============================================================================
-  console.log("\n📄 Seeding Document Requirement Rules...");
+  logger.info("📄 Seeding Document Requirement Rules...", { service: "SeedRules" });
 
   const documentRules = [
     {
@@ -389,9 +409,12 @@ async function seedMarylandSNAPRules() {
     });
   }
 
-  console.log(`✓ Seeded ${documentRules.length} document requirement rules`);
+  logger.info("✓ Seeded document requirement rules", {
+    count: documentRules.length,
+    service: "SeedRules"
+  });
 
-  console.log("\n✨ Maryland SNAP Rules seeding complete!\n");
+  logger.info("✨ Maryland SNAP Rules seeding complete!", { service: "SeedRules" });
 }
 
 export { seedMarylandSNAPRules };
@@ -399,10 +422,13 @@ export { seedMarylandSNAPRules };
 // Run the seed script if executed directly
 seedMarylandSNAPRules()
   .then(() => {
-    console.log("✓ Seeding completed successfully");
+    logger.info("✓ Seeding completed successfully", { service: "SeedRules" });
     process.exit(0);
   })
   .catch((error) => {
-    console.error("❌ Seeding failed:", error);
+    logger.error("❌ Seeding failed", {
+      error: error instanceof Error ? error.message : String(error),
+      service: "SeedRules"
+    });
     process.exit(1);
   });

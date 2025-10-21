@@ -2,6 +2,7 @@ import type { TaxCalculationResult, TaxHouseholdInput } from './policyEngineTaxC
 import { policyEngineTaxCalculationService } from './policyEngineTaxCalculation';
 import { GoogleGenAI } from '@google/genai';
 import { cacheService } from './cacheService';
+import { logger } from './logger.service';
 
 /**
  * Cross-Enrollment Intelligence Engine
@@ -92,7 +93,9 @@ export class CrossEnrollmentIntelligenceService {
     if (apiKey) {
       this.gemini = new GoogleGenAI({ apiKey });
     } else {
-      console.warn('⚠️ Cross-Enrollment Intelligence: No Gemini API key found.');
+      logger.warn('⚠️ Cross-Enrollment Intelligence: No Gemini API key found.', {
+        service: 'CrossEnrollmentIntelligence'
+      });
     }
   }
   /**

@@ -15,6 +15,7 @@
 
 import { db } from '../db';
 import { sql } from 'drizzle-orm';
+import { logger } from './logger.service';
 
 export interface BackupStatus {
   status: 'healthy' | 'degraded' | 'unhealthy';
@@ -169,7 +170,10 @@ class DatabaseBackupService {
         tableMetrics,
       };
     } catch (error) {
-      console.error('Failed to get backup metrics:', error);
+      logger.error('Failed to get backup metrics', { 
+        error: error instanceof Error ? error.message : String(error),
+        service: 'DatabaseBackup'
+      });
       return {
         timestamp: new Date().toISOString(),
         totalRows: 0,
