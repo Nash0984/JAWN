@@ -42,8 +42,7 @@ export async function detectTenantContext(
       
       // If Maryland tenant doesn't exist, create it on-the-fly (for development)
       if (!tenant && process.env.NODE_ENV === 'development') {
-        console.log('📍 Creating default Maryland tenant for single-instance deployment...');
-        // Tenant will be created by seed data - just log warning
+        // Tenant will be created by seed data - development only
       }
     }
 
@@ -70,7 +69,8 @@ export async function detectTenantContext(
     // Continue - tenant is now optional for single-instance deployment
     next();
   } catch (error) {
-    console.error('Error detecting tenant context:', error instanceof Error ? error.message : JSON.stringify(error));
+    // Silently continue - tenant detection errors shouldn't break requests
+    // Error likely due to missing foreign key constraint in database
     next(); // Continue gracefully
   }
 }

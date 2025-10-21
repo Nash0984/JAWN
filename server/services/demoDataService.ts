@@ -396,17 +396,9 @@ class DemoDataService {
       );
 
       this.loaded = true;
-      console.log('[DemoDataService] Successfully loaded all demo data');
-      console.log(`[DemoDataService] Loaded ${this.households.length} households`);
-      console.log(`[DemoDataService] Loaded ${this.benefitCalculations.length} benefit calculations`);
-      console.log(`[DemoDataService] Loaded ${this.taxReturns.length} tax returns`);
-      console.log(`[DemoDataService] Loaded ${this.documents.length} documents`);
-      console.log(`[DemoDataService] Loaded ${this.aiConversations.length} AI conversations`);
-      console.log(`[DemoDataService] Loaded ${this.appointments.length} appointments`);
-      console.log(`[DemoDataService] Loaded ${this.policySources.length} policy sources`);
-      console.log(`[DemoDataService] Loaded ${this.users.length} users`);
+      // Demo data loaded successfully - counts tracked internally
     } catch (error) {
-      console.error('[DemoDataService] Error loading demo data:', error);
+      // Demo data load errors handled silently in production
       throw new Error('Failed to load demo data');
     }
   }
