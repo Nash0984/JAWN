@@ -5,6 +5,9 @@ import type { Document, InsertDocument } from '@shared/schema';
 import { db } from '../db';
 import { documents, policySources } from '@shared/schema';
 import { eq, and } from 'drizzle-orm';
+import { createLogger } from './logger.service';
+
+const logger = createLogger('ECFRBulkDownloader');
 
 /**
  * eCFR Bulk Downloader Service
@@ -41,7 +44,7 @@ class ECFRBulkDownloader {
    */
   async downloadSNAPRegulations(benefitProgramId?: string): Promise<ECFRDownloadResult> {
     try {
-      console.log('📥 Downloading 7 CFR Title 7 from GovInfo...');
+      logger.info('Downloading 7 CFR Title 7 from GovInfo...');
       
       // Download XML
       const response = await axios.get(this.ECFR_TITLE_7_URL, {
@@ -49,7 +52,7 @@ class ECFRBulkDownloader {
         responseType: 'text',
       });
       
-      console.log('✅ Downloaded Title 7 CFR XML, parsing...');
+      logger.info('Downloaded Title 7 CFR XML, parsing...');
       
       // Parse XML
       const parsed = await parseStringPromise(response.data, {
@@ -60,7 +63,7 @@ class ECFRBulkDownloader {
       
       // Extract Part 273 sections
       const sections = this.extractPart273Sections(parsed);
-      console.log(`📄 Extracted ${sections.length} sections from Part 273`);
+      logger.info('Extracted sections from Part 273', { count: sections.length });
       
       // Process each section through documentProcessor
       const documentIds: string[] = [];
@@ -87,7 +90,7 @@ class ECFRBulkDownloader {
         
         // Skip if section exists and is current
         if (existingDoc && existingDoc.lastModifiedAt && existingDoc.lastModifiedAt >= remoteLastModified) {
-          console.log(`⏭️  Skipping 7 CFR § 273.${section.number} - already current`);
+          logger.debug('Skipping section - already current', { section: `7 CFR § 273.${section.number}` });
           documentIds.push(existingDoc.id);
           continue;
         }
@@ -109,7 +112,10 @@ class ECFRBulkDownloader {
         });
         
         if (!uploadResponse.ok) {
-          console.error(`❌ Upload failed for section ${section.number}: ${uploadResponse.statusText}`);
+          logger.error('Upload failed for section', { 
+            sectionNumber: section.number, 
+            status: uploadResponse.statusText 
+          });
           continue;
         }
         
@@ -139,7 +145,10 @@ class ECFRBulkDownloader {
           // Re-process through RAG pipeline
           await documentProcessor.processDocument(updatedDoc.id);
           documentIds.push(updatedDoc.id);
-          console.log(`🔄 Updated 7 CFR § 273.${section.number} - ${section.subject}`);
+          logger.info('Updated CFR section', { 
+            section: `7 CFR § 273.${section.number}`, 
+            subject: section.subject 
+          });
         } else {
           // Create new document record
           const docRecord: Partial<InsertDocument> = {
@@ -172,7 +181,10 @@ class ECFRBulkDownloader {
           await documentProcessor.processDocument(doc.id);
           
           documentIds.push(doc.id);
-          console.log(`✅ Created 7 CFR § 273.${section.number} - ${section.subject}`);
+          logger.info('Created CFR section', { 
+            section: `7 CFR § 273.${section.number}`, 
+            subject: section.subject 
+          });
         }
       }
       
@@ -186,7 +198,7 @@ class ECFRBulkDownloader {
       };
       
     } catch (error) {
-      console.error('❌ Error downloading eCFR:', error);
+      logger.error('Error downloading eCFR', error);
       return {
         success: false,
         documentIds: [],
@@ -204,7 +216,7 @@ class ECFRBulkDownloader {
     
     try {
       // Debug: Log XML root structure for diagnostics
-      console.log('🔍 XML Root:', Object.keys(parsed).join(', '));
+      logger.debug('XML Root', { keys: Object.keys(parsed).join(', ') });
       
       // GovInfo eCFR XML structure: DLPSTEXTCLASS > TEXT > BODY > ECFRBRWS > DIV1 (TYPE="TITLE")
       // ECFRBRWS is an array of volumes - we need to search ALL volumes for Part 273
@@ -216,7 +228,7 @@ class ECFRBulkDownloader {
           ? parsed.DLPSTEXTCLASS.TEXT.BODY.ECFRBRWS 
           : [parsed.DLPSTEXTCLASS.TEXT.BODY.ECFRBRWS];
         
-        console.log(`✓ Found ${ecfrbrws.length} volumes in ECFRBRWS array`);
+        logger.debug('Found volumes in ECFRBRWS array', { count: ecfrbrws.length });
         
         // Search through all volumes for Part 273
         for (let i = 0; i < ecfrbrws.length; i++) {
@@ -227,13 +239,17 @@ class ECFRBulkDownloader {
             
             // Find all parts in this volume
             const parts = this.findParts(volumeTitle);
-            console.log(`🔍 Volume ${i + 1} (${volumeName}): Found ${parts.length} parts`);
+            logger.debug('Found parts in volume', { 
+              volumeNumber: i + 1, 
+              volumeName, 
+              partCount: parts.length 
+            });
             
             // Check if Part 273 is in this volume
             part273 = parts.find((p: any) => this.getPartNumber(p) === this.SNAP_PART);
             
             if (part273) {
-              console.log(`✅ Found Part 273 in Volume ${i + 1}`);
+              logger.info('Found Part 273', { volumeNumber: i + 1 });
               break;
             }
           }
@@ -242,46 +258,46 @@ class ECFRBulkDownloader {
       // Pattern 2: ECFR > TITLE (legacy format - single volume)
       else if (parsed?.ECFR?.TITLE) {
         const title = parsed.ECFR.TITLE;
-        console.log('✓ Found TITLE via parsed.ECFR.TITLE');
+        logger.debug('Found TITLE via parsed.ECFR.TITLE');
         const parts = this.findParts(title);
-        console.log(`🔍 Found ${parts.length} total parts`);
+        logger.debug('Found total parts', { count: parts.length });
         part273 = parts.find((p: any) => this.getPartNumber(p) === this.SNAP_PART);
       }
       // Pattern 3: Direct TITLE root
       else if (parsed?.TITLE) {
         const title = parsed.TITLE;
-        console.log('✓ Found TITLE via parsed.TITLE');
+        logger.debug('Found TITLE via parsed.TITLE');
         const parts = this.findParts(title);
-        console.log(`🔍 Found ${parts.length} total parts`);
+        logger.debug('Found total parts', { count: parts.length });
         part273 = parts.find((p: any) => this.getPartNumber(p) === this.SNAP_PART);
       }
       // Pattern 4: CFR > TITLE
       else if (parsed?.CFR?.TITLE) {
         const title = parsed.CFR.TITLE;
-        console.log('✓ Found TITLE via parsed.CFR.TITLE');
+        logger.debug('Found TITLE via parsed.CFR.TITLE');
         const parts = this.findParts(title);
-        console.log(`🔍 Found ${parts.length} total parts`);
+        logger.debug('Found total parts', { count: parts.length });
         part273 = parts.find((p: any) => this.getPartNumber(p) === this.SNAP_PART);
       }
       // Pattern 5: USLM > TITLE (United States Legislative Markup)
       else if (parsed?.USLM?.TITLE) {
         const title = parsed.USLM.TITLE;
-        console.log('✓ Found TITLE via parsed.USLM.TITLE');
+        logger.debug('Found TITLE via parsed.USLM.TITLE');
         const parts = this.findParts(title);
-        console.log(`🔍 Found ${parts.length} total parts`);
+        logger.debug('Found total parts', { count: parts.length });
         part273 = parts.find((p: any) => this.getPartNumber(p) === this.SNAP_PART);
       }
       
       if (!part273) {
-        console.warn('⚠️ Could not find Part 273 in any volume');
+        logger.warn('Could not find Part 273 in any volume');
         return sections;
       }
       
-      console.log('✅ Found Part 273, extracting sections...');
+      logger.info('Found Part 273, extracting sections...');
       
       // Extract all sections from Part 273
       const sectionElements = this.findSections(part273);
-      console.log(`🔍 Found ${sectionElements.length} section elements in Part 273`);
+      logger.debug('Found section elements in Part 273', { count: sectionElements.length });
       
       for (const sectionEl of sectionElements) {
         const section = this.parseSection(sectionEl);
@@ -291,7 +307,7 @@ class ECFRBulkDownloader {
       }
       
     } catch (error) {
-      console.error('❌ Error extracting Part 273 sections:', error);
+      logger.error('Error extracting Part 273 sections', error);
     }
     
     return sections;
@@ -404,7 +420,7 @@ class ECFRBulkDownloader {
       const content = this.extractTextContent(sectionEl);
       
       if (!sectionNumber || !content) {
-        console.warn(`⚠️ Skipping section - missing number or content (N: ${fullNumber})`);
+        logger.warn('Skipping section - missing number or content', { fullNumber });
         return null;
       }
       
@@ -415,7 +431,7 @@ class ECFRBulkDownloader {
         xmlStructure: sectionEl,
       };
     } catch (error) {
-      console.error('❌ Error parsing section:', error);
+      logger.error('Error parsing section', error);
       return null;
     }
   }
@@ -495,7 +511,7 @@ class ECFRBulkDownloader {
           .where(eq(policySources.id, source.id));
       }
     } catch (error) {
-      console.error('❌ Error updating policy source status:', error);
+      logger.error('Error updating policy source status', error);
     }
   }
   
@@ -532,7 +548,7 @@ class ECFRBulkDownloader {
         lastModified: remoteLastModified,
       };
     } catch (error) {
-      console.error('❌ Error checking for updates:', error);
+      logger.error('Error checking for updates', error);
       return {
         hasUpdate: false,
         lastModified: null,

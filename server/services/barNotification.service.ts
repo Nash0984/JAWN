@@ -26,6 +26,9 @@ import { emailService } from "./email.service";
 import { caseworkerReminderTemplate } from "../templates/bar/caseworkerReminder";
 import { supervisorReviewPromptTemplate } from "../templates/bar/supervisorReviewPrompt";
 import { overdueAlertTemplate } from "../templates/bar/overdueAlert";
+import { createLogger } from "./logger.service";
+
+const logger = createLogger('BARNotification');
 
 // ============================================================================
 // TYPES
@@ -64,7 +67,7 @@ export class BARNotificationService {
     checkpointId: string,
     daysUntil: number
   ): Promise<NotificationResult> {
-    console.log(`📧 BAR: Sending caseworker reminder for checkpoint ${checkpointId} (${daysUntil} days until due)`);
+    logger.info('Sending caseworker reminder', { checkpointId, daysUntil });
     
     try {
       // Get checkpoint data

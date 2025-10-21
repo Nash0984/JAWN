@@ -7888,6 +7888,98 @@ export type InsertReviewerFeedback = z.infer<typeof insertReviewerFeedbackSchema
 export type CaseLifecycleEvent = typeof caseLifecycleEvents.$inferSelect;
 export type InsertCaseLifecycleEvent = z.infer<typeof insertCaseLifecycleEventSchema>;
 
+// AI and ML Tables for Production Features
+export const crossEnrollmentPredictions = pgTable("cross_enrollment_predictions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  clientId: varchar("client_id").notNull(),
+  predictedProgram: text("predicted_program").notNull(), // SNAP, MEDICAID, TANF, etc.
+  confidenceScore: real("confidence_score").notNull(), // 0.0 to 1.0
+  predictionReason: jsonb("prediction_reason"), // Structured explanation
+  modelVersion: text("model_version").notNull(),
+  features: jsonb("features"), // Input features used for prediction
+  outcome: text("outcome"), // accepted, rejected, pending
+  outcomeDate: timestamp("outcome_date"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  clientIdIdx: index("cross_enrollment_predictions_client_id_idx").on(table.clientId),
+  programIdx: index("cross_enrollment_predictions_program_idx").on(table.predictedProgram),
+  confidenceIdx: index("cross_enrollment_predictions_confidence_idx").on(table.confidenceScore),
+  createdAtIdx: index("cross_enrollment_predictions_created_at_idx").on(table.createdAt),
+}));
+
+export const fraudDetectionAlerts = pgTable("fraud_detection_alerts", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  alertType: text("alert_type").notNull(), // unusual_pattern, duplicate_application, identity_mismatch, etc.
+  severity: text("severity").notNull(), // low, medium, high, critical
+  entityType: text("entity_type").notNull(), // client, application, document
+  entityId: varchar("entity_id").notNull(),
+  detectionMethod: text("detection_method").notNull(), // ml_model, rule_based, behavioral
+  anomalyScore: real("anomaly_score"), // 0.0 to 1.0
+  details: jsonb("details").notNull(), // Structured alert details
+  status: text("status").notNull().default("pending"), // pending, investigating, resolved, false_positive
+  investigatorId: varchar("investigator_id"),
+  resolution: text("resolution"),
+  resolvedAt: timestamp("resolved_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  entityIdx: index("fraud_detection_alerts_entity_idx").on(table.entityType, table.entityId),
+  severityIdx: index("fraud_detection_alerts_severity_idx").on(table.severity),
+  statusIdx: index("fraud_detection_alerts_status_idx").on(table.status),
+  createdAtIdx: index("fraud_detection_alerts_created_at_idx").on(table.createdAt),
+}));
+
+export const aiUsageLogs = pgTable("ai_usage_logs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  service: text("service").notNull(), // gemini, policyengine, ocr, rag, etc.
+  operation: text("operation").notNull(), // text_generation, document_extraction, embedding, etc.
+  userId: varchar("user_id"),
+  tenantId: varchar("tenant_id"),
+  model: text("model"), // gemini-1.5-flash, text-embedding-004, etc.
+  inputTokens: integer("input_tokens"),
+  outputTokens: integer("output_tokens"),
+  totalTokens: integer("total_tokens"),
+  estimatedCost: real("estimated_cost"), // In USD
+  responseTime: integer("response_time"), // In milliseconds
+  success: boolean("success").notNull().default(true),
+  errorMessage: text("error_message"),
+  metadata: jsonb("metadata"), // Additional context
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+  serviceIdx: index("ai_usage_logs_service_idx").on(table.service),
+  userIdx: index("ai_usage_logs_user_idx").on(table.userId),
+  tenantIdx: index("ai_usage_logs_tenant_idx").on(table.tenantId),
+  createdAtIdx: index("ai_usage_logs_created_at_idx").on(table.createdAt),
+  costIdx: index("ai_usage_logs_cost_idx").on(table.estimatedCost),
+}));
+
+// Create schemas and types for the new tables
+export const insertCrossEnrollmentPredictionSchema = createInsertSchema(crossEnrollmentPredictions).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertFraudDetectionAlertSchema = createInsertSchema(fraudDetectionAlerts).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertAiUsageLogSchema = createInsertSchema(aiUsageLogs).omit({
+  id: true,
+  createdAt: true,
+});
+
+// Types for AI/ML tables
+export type CrossEnrollmentPrediction = typeof crossEnrollmentPredictions.$inferSelect;
+export type InsertCrossEnrollmentPrediction = z.infer<typeof insertCrossEnrollmentPredictionSchema>;
+export type FraudDetectionAlert = typeof fraudDetectionAlerts.$inferSelect;
+export type InsertFraudDetectionAlert = z.infer<typeof insertFraudDetectionAlertSchema>;
+export type AiUsageLog = typeof aiUsageLogs.$inferSelect;
+export type InsertAiUsageLog = z.infer<typeof insertAiUsageLogSchema>;
+
 // Export tax return tables from taxReturnSchema
 // COMMENTED OUT DURING SCHEMA ROLLBACK - taxReturnSchema.ts moved to backup
 // export * from './taxReturnSchema';

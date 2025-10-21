@@ -6,6 +6,9 @@ import type { InsertPolicySource, InsertDocument } from '../../shared/schema';
 import { unifiedDocumentService as documentProcessor } from './unified/UnifiedDocumentService';
 import { ecfrBulkDownloader } from './ecfrBulkDownloader';
 import { irsDirectDownloader } from './irsDirectDownloader';
+import { createLogger } from './logger.service';
+
+const logger = createLogger('PolicySourceScraper');
 
 // Official Policy Sources Configuration
 export const OFFICIAL_SOURCES: Omit<InsertPolicySource, 'benefitProgramId'>[] = [
@@ -501,7 +504,7 @@ export class PolicySourceScraper {
    */
   async seedPolicySources(): Promise<void> {
     try {
-      console.log('Seeding official policy sources...');
+      logger.info('Seeding official policy sources...');
       
       // Get all necessary programs first
       const snapProgram = await storage.getBenefitProgramByCode('MD_SNAP');
@@ -576,7 +579,7 @@ export class PolicySourceScraper {
             ...sourceConfig,
             benefitProgramId: programId
           });
-          console.log(`✓ Created policy source: ${sourceConfig.name} → ${programName}`);
+          logger.info('Created policy source', { name: sourceConfig.name, program: programName });
         } else {
           // Update existing source to ensure correct program association and sync settings
           await storage.updatePolicySource(existing.id, {
@@ -584,13 +587,13 @@ export class PolicySourceScraper {
             syncSchedule: sourceConfig.syncSchedule,
             maxAllowedFrequency: sourceConfig.maxAllowedFrequency
           });
-          console.log(`✓ Updated policy source: ${sourceConfig.name} → ${programName}`);
+          logger.info('Updated policy source', { name: sourceConfig.name, program: programName });
         }
       }
       
-      console.log('✓ Policy sources seeded successfully');
+      logger.info('Policy sources seeded successfully');
     } catch (error) {
-      console.error('Error seeding policy sources:', error);
+      logger.error('Error seeding policy sources', error);
       throw error;
     }
   }
@@ -642,9 +645,9 @@ export class PolicySourceScraper {
           }
         });
         
-        console.log(`✓ Found ${documents.length} ${documentType} documents for ${year}`);
+        logger.info('Found documents', { count: documents.length, documentType, year });
       } catch (error) {
-        console.error(`Error scraping ${documentType} for ${year}:`, error);
+        logger.error(`Error scraping ${documentType} for ${year}`, error);
       }
     }
     
@@ -685,10 +688,10 @@ export class PolicySourceScraper {
             }
           });
           
-          console.log(`✓ Scraped 7 CFR §${section}`);
+          logger.info('Scraped CFR section', { section: `7 CFR §${section}` });
         }
       } catch (error) {
-        console.error(`Error scraping 7 CFR §${section}:`, error);
+        logger.error(`Error scraping 7 CFR §${section}`, error);
       }
     }
     
@@ -731,9 +734,9 @@ export class PolicySourceScraper {
         }
       });
       
-      console.log(`✓ Found ${documents.length} FNS memos`);
+      logger.info('Found FNS memos', { count: documents.length });
     } catch (error) {
-      console.error('Error scraping FNS memos:', error);
+      logger.error('Error scraping FNS memos', error);
     }
     
     return documents;
@@ -774,9 +777,9 @@ export class PolicySourceScraper {
         }
       });
       
-      console.log('✓ Found OHEP Operations Manual PDF');
+      logger.info('Found OHEP Operations Manual PDF');
     } catch (error) {
-      console.error('Error scraping OHEP manual PDF:', error);
+      logger.error('Error scraping OHEP manual PDF', error);
     }
     
     return documents;
@@ -854,9 +857,9 @@ export class PolicySourceScraper {
         }
       });
       
-      console.log(`✓ Found ${documents.length} OHEP forms and documents`);
+      logger.info('Found OHEP forms and documents', { count: documents.length });
     } catch (error) {
-      console.error('Error scraping OHEP forms page:', error);
+      logger.error('Error scraping OHEP forms page', error);
     }
     
     return documents;
@@ -978,9 +981,9 @@ export class PolicySourceScraper {
         }
       });
       
-      console.log(`✓ Found ${documents.length} Medicaid manual documents`);
+      logger.info('Found Medicaid manual documents', { count: documents.length });
     } catch (error) {
-      console.error('Error scraping Medicaid manual:', error);
+      logger.error('Error scraping Medicaid manual', error);
     }
     
     return documents;
@@ -1060,9 +1063,9 @@ export class PolicySourceScraper {
         }
       });
       
-      console.log(`✓ Found ${documents.length} TCA forms and resources`);
+      logger.info('Found TCA forms and resources', { count: documents.length });
     } catch (error) {
-      console.error('Error scraping TCA main page:', error);
+      logger.error('Error scraping TCA main page', error);
     }
     
     return documents;
@@ -1144,9 +1147,9 @@ export class PolicySourceScraper {
         }
       });
       
-      console.log(`✓ Found ${documents.length} TCA manual documents`);
+      logger.info('Found TCA manual documents', { count: documents.length });
     } catch (error) {
-      console.error('Error scraping TCA manual directory:', error);
+      logger.error('Error scraping TCA manual directory', error);
     }
     
     return documents;
@@ -1192,9 +1195,9 @@ export class PolicySourceScraper {
         }
       });
       
-      console.log(`✓ Found ${documents.length} SDAT tax credit documents`);
+      logger.info('Found SDAT tax credit documents', { count: documents.length });
     } catch (error) {
-      console.error('Error scraping SDAT tax credits portal:', error);
+      logger.error('Error scraping SDAT tax credits portal', error);
     }
     
     return documents;
@@ -1257,9 +1260,9 @@ export class PolicySourceScraper {
         }
       });
       
-      console.log(`✓ Found ${documents.length} Renters' Tax Credit documents`);
+      logger.info('Found Renters Tax Credit documents', { count: documents.length });
     } catch (error) {
-      console.error('Error scraping Renters\' Tax Credit:', error);
+      logger.error('Error scraping Renters Tax Credit', error);
     }
     
     return documents;
@@ -1327,9 +1330,9 @@ export class PolicySourceScraper {
         }
       });
       
-      console.log(`✓ Found ${documents.length} Homeowners' Tax Credit documents`);
+      logger.info('Found Homeowners Tax Credit documents', { count: documents.length });
     } catch (error) {
-      console.error('Error scraping Homeowners\' Tax Credit:', error);
+      logger.error('Error scraping Homeowners Tax Credit', error);
     }
     
     return documents;
@@ -1380,9 +1383,9 @@ export class PolicySourceScraper {
         }
       });
       
-      console.log(`✓ Found ${documents.length} Comptroller tax credit documents`);
+      logger.info('Found Comptroller tax credit documents', { count: documents.length });
     } catch (error) {
-      console.error('Error scraping Comptroller tax credits:', error);
+      logger.error('Error scraping Comptroller tax credits', error);
     }
     
     return documents;
@@ -1437,9 +1440,9 @@ export class PolicySourceScraper {
         }
       });
       
-      console.log(`✓ Found ${documents.length} OneStop tax credit forms`);
+      logger.info('Found OneStop tax credit forms', { count: documents.length });
     } catch (error) {
-      console.error('Error scraping OneStop tax forms:', error);
+      logger.error('Error scraping OneStop tax forms', error);
     }
     
     return documents;
@@ -1465,7 +1468,7 @@ export class PolicySourceScraper {
       const { publicationNumber, formNumber } = config;
       
       // Download PDF
-      console.log(`Downloading IRS VITA PDF from: ${url}`);
+      logger.info('Downloading IRS VITA PDF', { url });
       const response = await axios.get(url, {
         responseType: 'arraybuffer',
         timeout: 60000,
@@ -1524,7 +1527,11 @@ export class PolicySourceScraper {
         `IRS Publication ${publicationNumber}${extractedRevision ? ` (${extractedRevision})` : ''}` :
         `IRS Form ${formNumber}${extractedRevision ? ` (${extractedRevision})` : ''}`;
       
-      console.log(`✓ ${docTitle}${extractedRevision ? ` - ${extractedRevision}` : ''} (${pdfData.numpages} pages)`);
+      logger.info('Downloaded VITA document', {
+        title: docTitle,
+        revision: extractedRevision,
+        pages: pdfData.numpages
+      });
       
       // Store the document immediately (we already have the PDF buffer)
       const scrapedDoc: ScrapedDocument = {
@@ -1592,12 +1599,12 @@ export class PolicySourceScraper {
       };
       
       const createdDocument = await storage.createDocument(document);
-      console.log(`  → Stored in database: ${createdDocument.id}`);
+      logger.info('Stored in database', { documentId: createdDocument.id });
       
       documents.push(scrapedDoc);
       
     } catch (error: any) {
-      console.error(`Error scraping IRS VITA PDF:`, error.message);
+      logger.error('Error scraping IRS VITA PDF', error);
     }
     
     return documents;
@@ -1636,7 +1643,7 @@ export class PolicySourceScraper {
         filename = `${scrapedDoc.sectionNumber || 'content'}.html`;
         mimeType = 'text/html';
       } else {
-        console.log(`⚠ No content available for: ${scrapedDoc.title}`);
+        logger.warn('No content available for document', { title: scrapedDoc.title });
         return null;
       }
       
@@ -1668,7 +1675,7 @@ export class PolicySourceScraper {
         }
       };
       
-      console.log(`📝 Creating document record:`, {
+      logger.debug('Creating document record', {
         filename,
         title: scrapedDoc.title,
         size: content.length,
@@ -1677,21 +1684,25 @@ export class PolicySourceScraper {
       });
       
       const createdDocument = await storage.createDocument(document);
-      console.log(`✓ Downloaded and stored: ${scrapedDoc.title} (ID: ${createdDocument.id})`);
+      logger.info('Downloaded and stored document', {
+        title: scrapedDoc.title,
+        documentId: createdDocument.id
+      });
       
       // Queue document for processing (OCR, chunking, embedding generation)
       try {
-        console.log(`  → Starting document processing pipeline for: ${createdDocument.id}`);
+        logger.debug('Starting document processing pipeline', { documentId: createdDocument.id });
         await documentProcessor.processDocument(createdDocument.id);
-        console.log(`  ✓ Document processed successfully (chunked, embedded, indexed)`);
+        logger.info('Document processed successfully (chunked, embedded, indexed)');
       } catch (processingError: any) {
-        console.error(`  ⚠ Document processing failed, but document is stored: ${processingError.message}`);
+        logger.warn('Document processing failed, but document is stored', processingError);
         // Don't fail the entire operation if processing fails - document is already saved
       }
       
       return { documentId: createdDocument.id, document: createdDocument };
     } catch (error: any) {
-      console.error(`❌ Error downloading/storing document "${scrapedDoc.title}":`, {
+      logger.error('Error downloading/storing document', {
+        title: scrapedDoc.title,
         message: error.message,
         stack: error.stack?.split('\n').slice(0, 3).join('\n'),
         url: scrapedDoc.url
@@ -1747,9 +1758,9 @@ export class PolicySourceScraper {
         }
       });
       
-      console.log(`✓ Found ${documents.length} Maryland SNAP Manual sections`);
+      logger.info('Found Maryland SNAP Manual sections', { count: documents.length });
     } catch (error) {
-      console.error('Error scraping Maryland SNAP Manual:', error);
+      logger.error('Error scraping Maryland SNAP Manual', error);
     }
     
     return documents;
@@ -1817,9 +1828,9 @@ export class PolicySourceScraper {
         }
       }
       
-      console.log(`✓ Found ${documents.length} COMAR 07.03.17 SNAP regulation sections`);
+      logger.info('Found COMAR 07.03.17 SNAP regulation sections', { count: documents.length });
     } catch (error) {
-      console.error('Error scraping COMAR SNAP regulations:', error);
+      logger.error('Error scraping COMAR SNAP regulations', error);
     }
     
     return documents;
@@ -1884,9 +1895,9 @@ export class PolicySourceScraper {
         }
       }
       
-      console.log(`✓ Found ${documents.length} COMAR 10.09.24 Medicaid regulation sections`);
+      logger.info('Found COMAR 10.09.24 Medicaid regulation sections', { count: documents.length });
     } catch (error) {
-      console.error('Error scraping COMAR Medicaid:', error);
+      logger.error('Error scraping COMAR Medicaid', error);
     }
     
     return documents;
@@ -1902,7 +1913,7 @@ export class PolicySourceScraper {
         throw new Error(`Policy source ${policySourceId} not found`);
       }
       
-      console.log(`Starting scrape for: ${source.name}`);
+      logger.info('Starting scrape', { sourceName: source.name });
       
       // Update sync status
       await storage.updatePolicySource(policySourceId, {
@@ -1915,7 +1926,7 @@ export class PolicySourceScraper {
       
       // Handle bulk download services (they already create documents and process them)
       if (config?.scrapeType === 'ecfr_bulk_download') {
-        console.log('📥 Using eCFR Bulk Download Service...');
+        logger.info('Using eCFR Bulk Download Service');
         const result = await ecfrBulkDownloader.downloadSNAPRegulations(source.benefitProgramId || undefined);
         
         if (result.success) {

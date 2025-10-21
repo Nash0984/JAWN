@@ -18,6 +18,9 @@ import {
 import { db } from '../db';
 import { monitoringMetrics } from '@shared/schema';
 import cron from 'node:timers/promises';
+import { createLogger } from './logger.service';
+
+const logger = createLogger('CacheOrchestrator');
 
 /**
  * Unified Cache Orchestrator
@@ -106,7 +109,7 @@ class CacheOrchestratorService {
       this.checkTaxYearRollover();
     }, 60 * 60 * 1000); // Every hour
 
-    console.log('📅 Tax year rollover detection initialized');
+    logger.info('Tax year rollover detection initialized');
   }
 
   /**
@@ -118,15 +121,18 @@ class CacheOrchestratorService {
 
     // Detect if we've rolled over to a new year
     if (year > this.currentTaxYear) {
-      console.log(`📅 TAX YEAR ROLLOVER DETECTED: ${this.currentTaxYear} → ${year}`);
+      logger.info('TAX YEAR ROLLOVER DETECTED', { 
+        previousYear: this.currentTaxYear, 
+        newYear: year 
+      });
       
       try {
         await this.invalidateOnTaxYearChange(year);
         this.currentTaxYear = year;
         
-        console.log(`✅ Tax year rollover complete. Now using tax year ${year}`);
+        logger.info('Tax year rollover complete', { currentTaxYear: year });
       } catch (error) {
-        console.error('❌ Error during tax year rollover:', error);
+        logger.error('Error during tax year rollover', error);
         
         // Log critical error to monitoring (with safe error handling)
         try {
@@ -140,7 +146,7 @@ class CacheOrchestratorService {
             }
           });
         } catch (logError) {
-          console.error('❌ Failed to log tax year rollover error:', logError);
+          logger.error('Failed to log tax year rollover error', logError);
           // Swallow this error to prevent interval crash during DB outages
         }
       }
@@ -154,10 +160,12 @@ class CacheOrchestratorService {
     const rule = getInvalidationRule(trigger);
     const affectedCaches = rule.affectedCaches;
 
-    console.log(`🔄 Invalidating caches for trigger: ${trigger}`);
-    console.log(`   Affected caches: ${affectedCaches.join(', ')}`);
-    console.log(`   Severity: ${rule.severity}`);
-    console.log(`   Reason: ${rule.reason}`);
+    logger.info('Invalidating caches', {
+      trigger,
+      affectedCaches,
+      severity: rule.severity,
+      reason: rule.reason
+    });
 
     const event: InvalidationEvent = {
       trigger,
@@ -181,14 +189,14 @@ class CacheOrchestratorService {
       await this.notifyAdmins(event, rule);
     }
 
-    console.log(`✅ Cache invalidation complete for: ${trigger}`);
+    logger.info('Cache invalidation complete', { trigger });
   }
 
   /**
    * Invalidate caches on tax year change (January 1)
    */
   async invalidateOnTaxYearChange(newYear: number): Promise<void> {
-    console.log(`📅 Clearing caches for tax year rollover: ${newYear}`);
+    logger.info('Clearing caches for tax year rollover', { newYear });
 
     const rule = getInvalidationRule('tax_year_rollover');
     const affectedCaches = rule.affectedCaches;
@@ -212,14 +220,14 @@ class CacheOrchestratorService {
     // Always notify admins for tax year rollover
     await this.notifyAdmins(event, rule);
 
-    console.log(`✅ Tax year ${newYear} cache invalidation complete`);
+    logger.info('Tax year cache invalidation complete', { newYear });
   }
 
   /**
    * Invalidate caches on policy update for specific program
    */
   async invalidateOnPolicyUpdate(programCode: string, changeType?: string): Promise<void> {
-    console.log(`📋 Invalidating caches for policy update: ${programCode}`);
+    logger.info('Invalidating caches for policy update', { programCode });
 
     const rule = getInvalidationRule('policy_change');
     const affectedCaches = rule.affectedCaches;
@@ -240,14 +248,14 @@ class CacheOrchestratorService {
     // Log event
     await this.logInvalidationEvent(event, 'high');
 
-    console.log(`✅ Policy update cache invalidation complete for: ${programCode}`);
+    logger.info('Policy update cache invalidation complete', { programCode });
   }
 
   /**
    * Invalidate caches when Maryland rules are updated
    */
   async invalidateOnMarylandRuleUpdate(programCode?: string): Promise<void> {
-    console.log(`🏛️  Invalidating caches for Maryland rule update`);
+    logger.info('Invalidating caches for Maryland rule update');
 
     const rule = getInvalidationRule('maryland_rule_update');
     const affectedCaches = rule.affectedCaches;
@@ -269,14 +277,14 @@ class CacheOrchestratorService {
       await this.notifyAdmins(event, rule);
     }
 
-    console.log(`✅ Maryland rule update cache invalidation complete`);
+    logger.info('Maryland rule update cache invalidation complete');
   }
 
   /**
    * Invalidate caches when DHS forms are updated
    */
   async invalidateOnDhsFormUpdate(formNumber: string, formType?: string): Promise<void> {
-    console.log(`📝 Invalidating caches for DHS form update: ${formNumber}`);
+    logger.info('Invalidating caches for DHS form update', { formNumber });
 
     const rule = getInvalidationRule('dhs_form_update');
     const affectedCaches = rule.affectedCaches;
@@ -294,7 +302,7 @@ class CacheOrchestratorService {
     this.lastInvalidation = event;
     await this.logInvalidationEvent(event, 'medium');
 
-    console.log(`✅ DHS form update cache invalidation complete`);
+    logger.info('DHS form update cache invalidation complete');
   }
 
   /**
@@ -308,7 +316,7 @@ class CacheOrchestratorService {
         case 'embedding':
           embeddingCache.clear();
           patternsToInvalidate.push('embedding:');
-          console.log('  ✓ Cleared embedding cache (L1+L2)');
+          logger.debug('Cleared embedding cache (L1+L2)');
           break;
 
         case 'rag':
@@ -322,19 +330,19 @@ class CacheOrchestratorService {
             ragCache.clear();
             patternsToInvalidate.push('rag:');
           }
-          console.log('  ✓ Cleared RAG cache (L1+L2)');
+          logger.debug('Cleared RAG cache (L1+L2)');
           break;
 
         case 'document_analysis':
           // documentAnalysisCache.clear(); // Not implemented yet
           patternsToInvalidate.push('document:');
-          console.log('  ✓ Cleared document analysis cache (L1+L2)');
+          logger.debug('Cleared document analysis cache (L1+L2)');
           break;
 
         case 'policy_engine':
           policyEngineCache.clear();
           patternsToInvalidate.push('pe:');
-          console.log('  ✓ Cleared PolicyEngine cache (L1+L2)');
+          logger.debug('Cleared PolicyEngine cache (L1+L2)');
           break;
 
         case 'rules_engine':
@@ -348,7 +356,7 @@ class CacheOrchestratorService {
             cacheService.invalidatePattern('rules:');
             patternsToInvalidate.push('rules:');
           }
-          console.log('  ✓ Cleared rules engine cache (L1+L2)');
+          logger.debug('Cleared rules engine cache (L1+L2)');
           break;
 
         case 'hybrid_calc':
@@ -362,21 +370,21 @@ class CacheOrchestratorService {
             cacheService.invalidatePattern('hybrid:');
             patternsToInvalidate.push('hybrid:');
           }
-          console.log('  ✓ Cleared hybrid calculation cache (L1+L2)');
+          logger.debug('Cleared hybrid calculation cache (L1+L2)');
           break;
 
         case 'benefit_summary':
           // Clear benefit summary caches
           cacheService.invalidatePattern('pe:summary:');
           patternsToInvalidate.push('pe:summary:');
-          console.log('  ✓ Cleared benefit summary cache (L1+L2)');
+          logger.debug('Cleared benefit summary cache (L1+L2)');
           break;
 
         case 'manual_sections':
           // Clear manual section caches
           cacheService.invalidatePattern('manual_section');
           patternsToInvalidate.push('manual_section');
-          console.log('  ✓ Cleared manual sections cache (L1+L2)');
+          logger.debug('Cleared manual sections cache (L1+L2)');
           break;
 
         case 'all':
@@ -387,7 +395,7 @@ class CacheOrchestratorService {
           policyEngineCache.clear();
           cacheService.flush();
           patternsToInvalidate.push('*'); // Clear all Redis keys
-          console.log('  ✓ Cleared ALL caches (L1+L2)');
+          logger.debug('Cleared ALL caches (L1+L2)');
           break;
       }
     }
@@ -517,7 +525,7 @@ class CacheOrchestratorService {
         tenantId: event.tenantId
       });
     } catch (error) {
-      console.error('Failed to log invalidation event:', error);
+      logger.error('Failed to log invalidation event', error);
     }
   }
 
