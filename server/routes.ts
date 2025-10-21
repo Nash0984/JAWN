@@ -3116,7 +3116,7 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
       });
     } catch (error: any) {
       console.error("Error comparing rule versions:", error);
-      res.status(500).json({ error: error.message || "Failed to compare rule versions" });
+      res.status(500).json({ error: "Failed to compare rule versions" });
     }
   });
 
