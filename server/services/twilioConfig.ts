@@ -4,6 +4,8 @@
  * Gracefully handles when Twilio is not available
  */
 
+import { logger } from './logger.service';
+
 interface TwilioConfig {
   accountSid: string;
   authToken: string;
@@ -70,7 +72,7 @@ export function getTwilioClient() {
   const config = getTwilioConfig();
   
   if (!config.isConfigured) {
-    console.warn(`⚠️  Twilio not configured: ${config.reason}`);
+    logger.warn('Twilio not configured', { reason: config.reason });
     return null;
   }
 
@@ -79,7 +81,7 @@ export function getTwilioClient() {
     const twilio = require('twilio');
     return twilio(config.accountSid, config.authToken);
   } catch (error) {
-    console.error('❌ Twilio package not installed. Run: npm install twilio');
+    logger.error('Twilio package not installed', { message: 'Run: npm install twilio' });
     return null;
   }
 }
@@ -95,7 +97,7 @@ export function validateTwilioSignature(
   const config = getTwilioConfig();
   
   if (!config.isConfigured) {
-    console.warn('⚠️  Cannot validate Twilio signature - Twilio not configured');
+    logger.warn('Cannot validate Twilio signature - Twilio not configured');
     return false;
   }
 
@@ -108,7 +110,7 @@ export function validateTwilioSignature(
       params
     );
   } catch (error) {
-    console.error('❌ Error validating Twilio signature:', error);
+    logger.error('Error validating Twilio signature', { error });
     return false;
   }
 }
@@ -116,8 +118,10 @@ export function validateTwilioSignature(
 // Log Twilio configuration status on module load
 const config = getTwilioConfig();
 if (config.isConfigured) {
-  console.log('✅ Twilio SMS configured:', config.phoneNumber);
+  logger.info('Twilio SMS configured', { phoneNumber: config.phoneNumber });
 } else {
-  console.warn(`⚠️  Twilio SMS not configured: ${config.reason}`);
-  console.warn('   SMS features will be disabled. Configure environment variables to enable.');
+  logger.warn('Twilio SMS not configured', { 
+    reason: config.reason,
+    message: 'SMS features will be disabled. Configure environment variables to enable.'
+  });
 }

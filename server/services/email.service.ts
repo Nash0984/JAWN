@@ -13,6 +13,8 @@
  *   - SMTP_FROM_EMAIL
  */
 
+import { logger } from './logger.service';
+
 export interface EmailParams {
   to: string;
   subject: string;
@@ -45,8 +47,10 @@ class EmailService implements EmailServiceInterface {
     );
 
     if (!this.isEmailConfigured) {
-      console.warn('⚠️ Email service not configured. Email notifications will be logged to console.');
-      console.warn('   To enable email: Set SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, SMTP_FROM_EMAIL');
+      logger.warn('Email service not configured. Email notifications will be logged to console.', {
+        service: 'EmailService',
+        hint: 'To enable email: Set SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, SMTP_FROM_EMAIL'
+      });
     }
   }
 
@@ -76,7 +80,10 @@ class EmailService implements EmailServiceInterface {
         const nodemailerModule = await import('nodemailer');
         nodemailer = nodemailerModule.default || nodemailerModule;
       } catch (err) {
-        console.error('❌ nodemailer package not found. Install with: npm install nodemailer @types/nodemailer');
+        logger.error('nodemailer package not found', {
+          service: 'EmailService',
+          action: 'Install with: npm install nodemailer @types/nodemailer'
+        });
         console.log(`[SMTP CONFIGURED BUT NODEMAILER MISSING] Would send email to ${to}: ${subject}`);
         // Return true for console fallback (not a send failure)
         return true;
@@ -100,10 +107,19 @@ class EmailService implements EmailServiceInterface {
         text: text || html.replace(/<[^>]*>/g, '') // Strip HTML for text fallback
       });
 
-      console.log(`✅ Email sent to ${to}: ${subject}`);
+      logger.info('Email sent successfully', {
+        service: 'EmailService',
+        to,
+        subject
+      });
       return true;
     } catch (error) {
-      console.error('❌ Failed to send email:', error);
+      logger.error('Failed to send email', {
+        service: 'EmailService',
+        to,
+        subject,
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
       return false;
     }
   }

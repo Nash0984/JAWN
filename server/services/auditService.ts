@@ -1,6 +1,7 @@
 import { storage } from "../storage";
 import { db } from "../db";
 import { auditLogs, type InsertAuditLog } from "@shared/schema";
+import { logger } from './logger.service';
 
 export interface AuditLogEntry {
   action: string;
@@ -70,9 +71,8 @@ export class AuditService {
 
       await db.insert(auditLogs).values(log);
     } catch (error) {
-      // Log to console if database logging fails
-      console.error("Failed to write audit log:", error);
-      console.log("Audit event:", entry);
+      // Log to structured logger if database logging fails
+      logger.error("Failed to write audit log", { error, entry });
     }
   }
 
@@ -125,7 +125,7 @@ export class AuditService {
         searchType: params.searchType,
       });
     } catch (error) {
-      console.error("Failed to log search query:", error);
+      logger.error("Failed to log search query", { error, params });
     }
   }
 
@@ -318,7 +318,7 @@ export class AuditService {
       // For now, return empty array as we need to implement the storage method
       return [];
     } catch (error) {
-      console.error("Failed to retrieve audit logs:", error);
+      logger.error("Failed to retrieve audit logs", { error, params });
       return [];
     }
   }
@@ -367,7 +367,7 @@ export class AuditService {
 
       return report;
     } catch (error) {
-      console.error("Failed to generate audit report:", error);
+      logger.error("Failed to generate audit report", { error, params });
       throw error;
     }
   }

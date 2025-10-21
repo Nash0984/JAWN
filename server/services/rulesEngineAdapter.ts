@@ -11,6 +11,7 @@ import { tanfRulesEngine } from './tanfRulesEngine';
 import { medicaidRulesEngine } from './medicaidRulesEngine';
 import { vitaTaxRulesEngine } from './vitaTaxRulesEngine';
 import { cacheService, CACHE_KEYS, generateHouseholdHash } from './cacheService';
+import { logger } from './logger.service';
 
 export interface HybridEligibilityPayload {
   // Common household fields
@@ -107,7 +108,10 @@ class RulesEngineAdapterService {
     const adapter = this.adapters[programCode];
     
     if (!adapter) {
-      console.warn(`No adapter found for program: ${programCode}`);
+      logger.warn('No adapter found for program', {
+        service: 'RulesEngineAdapter',
+        programCode
+      });
       return null;
     }
 
@@ -119,23 +123,39 @@ class RulesEngineAdapterService {
       // Check cache first
       const cachedResult = cacheService.get<HybridCalculationResult>(cacheKey);
       if (cachedResult) {
-        console.log(`✅ Cache hit for ${programCode} calculation (hash: ${householdHash})`);
+        logger.debug('Cache hit for calculation', {
+          service: 'RulesEngineAdapter',
+          programCode,
+          householdHash
+        });
         return cachedResult;
       }
       
       // Cache miss - compute using adapter
-      console.log(`❌ Cache miss for ${programCode} calculation (hash: ${householdHash})`);
+      logger.debug('Cache miss for calculation', {
+        service: 'RulesEngineAdapter',
+        programCode,
+        householdHash
+      });
       const result = await adapter(input);
       
       // Cache the result before returning (default TTL: 300 seconds)
       if (result) {
         cacheService.set(cacheKey, result);
-        console.log(`💾 Cached ${programCode} calculation result (hash: ${householdHash})`);
+        logger.debug('Cached calculation result', {
+          service: 'RulesEngineAdapter',
+          programCode,
+          householdHash
+        });
       }
       
       return result;
     } catch (error) {
-      console.error(`Error in ${programCode} adapter:`, error);
+      logger.error('Error in adapter', {
+        service: 'RulesEngineAdapter',
+        programCode,
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
       return null;
     }
   }

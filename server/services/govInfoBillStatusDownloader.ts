@@ -5,6 +5,7 @@ import { federalBills, documents, policySources, benefitPrograms } from '@shared
 import { eq, and, sql } from 'drizzle-orm';
 import { ObjectStorageService } from '../objectStorage';
 import { unifiedDocumentService as documentProcessor } from './unified/UnifiedDocumentService';
+import { logger } from './logger.service';
 
 /**
  * GovInfo Bill Status Downloader
@@ -66,7 +67,7 @@ export class GovInfoBillStatusDownloader {
    * Download bill status data for a specific Congress
    */
   async downloadBillStatus(congress: number = 119): Promise<BillStatusDownloadResult> {
-    console.log(`\n🏛️  GovInfo Bill Status Downloader - Congress ${congress}\n`);
+    logger.info('GovInfo Bill Status Downloader started', { congress });
     
     const result: BillStatusDownloadResult = {
       success: true,
@@ -79,21 +80,21 @@ export class GovInfoBillStatusDownloader {
 
     try {
       // Fetch all packages from BILLSTATUS collection for the entire Congress
-      console.log(`📥 Fetching bill list from GovInfo API...`);
+      logger.info('Fetching bill list from GovInfo API');
       const packages = await govInfoClient.getAllPackages(
         'BILLSTATUS',
         undefined,
         undefined,
         { congress: congress.toString() }
       );
-      console.log(`✅ Found ${packages.length} bills in Congress ${congress}\n`);
+      logger.info('Bills found in Congress', { count: packages.length, congress });
 
       // Filter bills by policy keywords
       const relevantBills = packages.filter(pkg => 
         this.isPolicyRelevant(pkg.title)
       );
       
-      console.log(`🎯 Filtered to ${relevantBills.length} policy-relevant bills\n`);
+      logger.info('Policy-relevant bills filtered', { count: relevantBills.length });
 
       // Process each relevant bill
       for (const pkg of relevantBills) {
@@ -101,7 +102,7 @@ export class GovInfoBillStatusDownloader {
           await this.processBill(pkg.packageId, congress, result);
         } catch (error) {
           const errorMsg = `Error processing ${pkg.packageId}: ${error instanceof Error ? error.message : 'Unknown error'}`;
-          console.error(`❌ ${errorMsg}`);
+          logger.error('Error processing bill', { error: errorMsg });
           result.errors.push(errorMsg);
           result.success = false;
         }
@@ -110,17 +111,18 @@ export class GovInfoBillStatusDownloader {
       // Update policy source sync status
       await this.updatePolicySourceStatus(congress, result);
 
-      console.log(`\n✅ Bill Status Download Complete:`);
-      console.log(`   Processed: ${result.billsProcessed}`);
-      console.log(`   Updated: ${result.billsUpdated}`);
-      console.log(`   Skipped: ${result.billsSkipped}`);
-      console.log(`   Documents: ${result.documentsCreated}`);
-      console.log(`   Errors: ${result.errors.length}`);
+      logger.info('Bill Status Download Complete', {
+        processed: result.billsProcessed,
+        updated: result.billsUpdated,
+        skipped: result.billsSkipped,
+        documents: result.documentsCreated,
+        errors: result.errors.length
+      });
 
     } catch (error) {
       result.success = false;
       const errorMsg = `Fatal error: ${error instanceof Error ? error.message : 'Unknown error'}`;
-      console.error(`❌ ${errorMsg}`);
+      logger.error('Bill Status Download failed', { error: errorMsg });
       result.errors.push(errorMsg);
     }
 
@@ -151,7 +153,7 @@ export class GovInfoBillStatusDownloader {
     const metadata = await govInfoClient.getPackageMetadata(packageId);
     
     if (!metadata.download.xmlLink) {
-      console.log(`⏭️  Skipping ${packageId} - no XML available`);
+      logger.debug('Skipping bill - no XML available', { packageId });
       result.billsSkipped++;
       return;
     }
@@ -176,12 +178,12 @@ export class GovInfoBillStatusDownloader {
 
     // Skip if bill exists and hasn't been modified
     if (existingBill?.lastSyncedAt && existingBill.lastSyncedAt >= lastModified) {
-      console.log(`⏭️  Skipping ${billNumber} - already up-to-date`);
+      logger.debug('Skipping bill - already up-to-date', { billNumber });
       result.billsSkipped++;
       return;
     }
 
-    console.log(`📥 Downloading ${billNumber}...`);
+    logger.info('Downloading bill', { billNumber });
 
     // Download XML
     const xmlContent = await govInfoClient.downloadXML(metadata.download.xmlLink);
@@ -221,7 +223,7 @@ export class GovInfoBillStatusDownloader {
         })
         .where(eq(federalBills.id, existingBill.id));
       
-      console.log(`🔄 Updated ${billNumber}`);
+      logger.info('Bill updated', { billNumber });
     } else {
       await db.insert(federalBills).values({
         ...billData,
@@ -231,7 +233,7 @@ export class GovInfoBillStatusDownloader {
         lastSyncedAt: new Date(),
       });
       
-      console.log(`✨ Created ${billNumber}`);
+      logger.info('Bill created', { billNumber });
     }
 
     result.billsUpdated++;
@@ -488,7 +490,7 @@ export class GovInfoBillStatusDownloader {
 
       return document.id;
     } catch (error) {
-      console.error(`Error creating document record: ${error}`);
+      logger.error('Error creating document record', { error });
       return null;
     }
   }
@@ -532,7 +534,7 @@ export class GovInfoBillStatusDownloader {
         await db.insert(policySources).values(sourceData);
       }
     } catch (error) {
-      console.error(`Error updating policy source status: ${error}`);
+      logger.error('Error updating policy source status', { error });
     }
   }
 }

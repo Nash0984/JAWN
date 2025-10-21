@@ -4,6 +4,7 @@ import { documents, benefitPrograms, documentTypes } from '@shared/schema';
 import { eq, and } from 'drizzle-orm';
 import type { InsertDocument } from '@shared/schema';
 import { ObjectStorageService } from '../objectStorage';
+import { logger } from './logger.service';
 
 interface IRSPublication {
   number: string;
@@ -97,7 +98,9 @@ export class IRSDirectDownloader {
    * Download all VITA publications
    */
   async downloadAllVITAPublications(): Promise<string[]> {
-    console.log('🏛️  Starting IRS VITA Direct Download Service\n');
+    logger.info('Starting IRS VITA Direct Download Service', {
+      service: 'IRSDirectDownloader'
+    });
     
     const vitaProgramId = await this.getVITAProgramId();
     const allDocumentIds: string[] = [];
@@ -107,11 +110,19 @@ export class IRSDirectDownloader {
         const documentIds = await this.downloadPublication(publication, vitaProgramId);
         allDocumentIds.push(...documentIds);
       } catch (error) {
-        console.error(`❌ Error downloading ${publication.name}:`, error);
+        logger.error('Error downloading publication', {
+          service: 'IRSDirectDownloader',
+          publicationName: publication.name,
+          publicationNumber: publication.number,
+          error: error instanceof Error ? error.message : 'Unknown error'
+        });
       }
     }
     
-    console.log(`\n✅ IRS VITA download complete: ${allDocumentIds.length} documents processed`);
+    logger.info('IRS VITA download complete', {
+      service: 'IRSDirectDownloader',
+      documentsProcessed: allDocumentIds.length
+    });
     return allDocumentIds;
   }
 
@@ -119,7 +130,11 @@ export class IRSDirectDownloader {
    * Download a specific IRS publication
    */
   async downloadPublication(publication: IRSPublication, vitaProgramId: string): Promise<string[]> {
-    console.log(`\n📥 Downloading ${publication.name}...`);
+    logger.info('Downloading publication', {
+      service: 'IRSDirectDownloader',
+      publicationName: publication.name,
+      publicationNumber: publication.number
+    });
     
     try {
       // Download PDF
@@ -153,7 +168,10 @@ export class IRSDirectDownloader {
       
       // Skip if document exists and is current
       if (existingDoc && existingDoc.lastModifiedAt && existingDoc.lastModifiedAt >= remoteLastModified) {
-        console.log(`⏭️  Skipping ${publication.name} - already current`);
+        logger.info('Skipping publication - already current', {
+          service: 'IRSDirectDownloader',
+          publicationName: publication.name
+        });
         return [existingDoc.id];
       }
       
@@ -170,7 +188,11 @@ export class IRSDirectDownloader {
       });
       
       if (!uploadResponse.ok) {
-        console.error(`❌ Upload failed for ${publication.name}: ${uploadResponse.statusText}`);
+        logger.error('Upload failed for publication', {
+          service: 'IRSDirectDownloader',
+          publicationName: publication.name,
+          statusText: uploadResponse.statusText
+        });
         return [];
       }
       
@@ -209,7 +231,11 @@ export class IRSDirectDownloader {
         const { documentProcessor } = await import('./documentProcessor');
         await documentProcessor.processDocument(updatedDoc.id);
         
-        console.log(`🔄 Updated ${publication.name} - ${revisionInfo || 'Latest version'}`);
+        logger.info('Updated publication', {
+          service: 'IRSDirectDownloader',
+          publicationName: publication.name,
+          revisionInfo: revisionInfo || 'Latest version'
+        });
         return [updatedDoc.id];
       } else {
         // Create new document record
@@ -243,11 +269,19 @@ export class IRSDirectDownloader {
         const { documentProcessor } = await import('./documentProcessor');
         await documentProcessor.processDocument(doc.id);
         
-        console.log(`✅ Created ${publication.name} - ${revisionInfo || 'Latest version'}`);
+        logger.info('Created publication', {
+          service: 'IRSDirectDownloader',
+          publicationName: publication.name,
+          revisionInfo: revisionInfo || 'Latest version'
+        });
         return [doc.id];
       }
     } catch (error) {
-      console.error(`❌ Error downloading ${publication.name}:`, error);
+      logger.error('Error downloading publication', {
+        service: 'IRSDirectDownloader',
+        publicationName: publication.name,
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
       return [];
     }
   }
@@ -293,7 +327,10 @@ export class IRSDirectDownloader {
       
       return null;
     } catch (error) {
-      console.error('Error extracting revision info:', error);
+      logger.error('Error extracting revision info', {
+        service: 'IRSDirectDownloader',
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
       return null;
     }
   }

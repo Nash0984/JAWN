@@ -1,4 +1,5 @@
 import { GoogleGenAI } from "@google/genai";
+import { logger } from './logger.service';
 
 // Using Gemini for all AI operations
 let gemini: GoogleGenAI | null = null;
@@ -70,7 +71,7 @@ class AIService {
       
       return JSON.parse(response.text || "{}");
     } catch (error) {
-      console.error("Field extraction error:", error);
+      logger.error("Field extraction error", { error, documentType });
       return { error: "Failed to extract fields", confidence: 0 };
     }
   }
@@ -97,7 +98,7 @@ class AIService {
       
       return response.text || "Summary generation failed";
     } catch (error) {
-      console.error("Summary generation error:", error);
+      logger.error("Summary generation error", { error, maxLength });
       return "Summary generation failed";
     }
   }
@@ -144,7 +145,7 @@ class AIService {
       
       return JSON.parse(response.text || "{}");
     } catch (error) {
-      console.error("Change detection error:", error);
+      logger.error("Change detection error", { error });
       return { 
         hasChanges: false, 
         changesSummary: "Change detection failed",
@@ -188,7 +189,7 @@ class AIService {
       
       return JSON.parse(response.text || "{}");
     } catch (error) {
-      console.error("Compliance validation error:", error);
+      logger.error("Compliance validation error", { error, benefitProgram });
       return {
         complianceScore: 0.5,
         passedChecks: [],
@@ -240,7 +241,7 @@ class AIService {
       
       return trainingExamples;
     } catch (error) {
-      console.error("Training data generation error:", error);
+      logger.error("Training data generation error", { error });
       return [];
     }
   }
@@ -339,7 +340,7 @@ class AIService {
       
       return response.text || "Report generation failed";
     } catch (error) {
-      console.error("Model report generation error:", error);
+      logger.error("Model report generation error", { error, modelType });
       return "Failed to generate model report";
     }
   }

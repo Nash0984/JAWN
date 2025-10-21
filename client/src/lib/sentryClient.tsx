@@ -204,6 +204,7 @@ export function isSentryEnabled(): boolean {
   return sentryEnabled;
 }
 
+// Also export as default for backward compatibility
 export default {
   SentryErrorBoundary,
   getSentryErrorBoundary,

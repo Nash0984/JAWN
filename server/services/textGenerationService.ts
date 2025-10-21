@@ -1,5 +1,6 @@
 import { GoogleGenAI } from "@google/genai";
 import { db } from "../db";
+import { logger } from './logger.service';
 import { 
   snapIncomeLimits,
   snapDeductions,
@@ -22,13 +23,13 @@ function getGemini(): GoogleGenAI | null {
   if (!genAI) {
     const apiKey = process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY;
     if (!apiKey) {
-      console.warn("Warning: No Gemini API key found for text generation");
+      logger.warn("No Gemini API key found for text generation");
       return null;
     }
     try {
       genAI = new GoogleGenAI({ apiKey });
     } catch (error) {
-      console.error('Failed to initialize Gemini API:', error);
+      logger.error('Failed to initialize Gemini API', { error });
       return null;
     }
   }
@@ -96,7 +97,7 @@ Format the response as markdown with headers, tables, and clear paragraphs. DO N
     try {
       const ai = getGemini();
       if (!ai) {
-        console.error("Gemini API not available for text generation");
+        logger.error("Gemini API not available for text generation", { benefitProgramId, sectionId });
         return {
           content: "⚠️ AI text generation is temporarily unavailable. Please view the original policy manual section or try again later.",
           ruleCount: limits.length,
@@ -118,7 +119,7 @@ Format the response as markdown with headers, tables, and clear paragraphs. DO N
         sourceRules: limits.map(l => `income_limit_${l.id}`)
       };
     } catch (error) {
-      console.error("Error generating income limits text:", error);
+      logger.error("Error generating income limits text", { error, benefitProgramId, sectionId });
       return {
         content: "⚠️ Error generating policy text. Please try again or view the original policy manual section.",
         ruleCount: limits.length,
@@ -177,7 +178,7 @@ Format as markdown. DO NOT include code blocks - just return the markdown text d
     try {
       const ai = getGemini();
       if (!ai) {
-        console.error("Gemini API not available for text generation");
+        logger.error("Gemini API not available for text generation", { benefitProgramId, sectionId });
         return {
           content: "⚠️ AI text generation is temporarily unavailable. Please view the original policy manual section or try again later.",
           ruleCount: deductions.length,
@@ -199,7 +200,7 @@ Format as markdown. DO NOT include code blocks - just return the markdown text d
         sourceRules: deductions.map(d => `deduction_${d.id}`)
       };
     } catch (error) {
-      console.error("Error generating deductions text:", error);
+      logger.error("Error generating deductions text", { error, benefitProgramId, sectionId });
       return {
         content: "⚠️ Error generating policy text. Please try again or view the original policy manual section.",
         ruleCount: deductions.length,
@@ -258,7 +259,7 @@ Format as markdown. DO NOT include code blocks - just return the markdown text d
     try {
       const ai = getGemini();
       if (!ai) {
-        console.error("Gemini API not available for text generation");
+        logger.error("Gemini API not available for text generation", { benefitProgramId, sectionId });
         return {
           content: "⚠️ AI text generation is temporarily unavailable. Please view the original policy manual section or try again later.",
           ruleCount: allotments.length,
@@ -280,7 +281,7 @@ Format as markdown. DO NOT include code blocks - just return the markdown text d
         sourceRules: allotments.map(a => `allotment_${a.id}`)
       };
     } catch (error) {
-      console.error("Error generating allotments text:", error);
+      logger.error("Error generating allotments text", { error, benefitProgramId, sectionId });
       return {
         content: "⚠️ Error generating policy text. Please try again or view the original policy manual section.",
         ruleCount: allotments.length,
@@ -338,7 +339,7 @@ Format as markdown. DO NOT include code blocks - just return the markdown text d
     try {
       const ai = getGemini();
       if (!ai) {
-        console.error("Gemini API not available for text generation");
+        logger.error("Gemini API not available for text generation", { benefitProgramId, sectionId });
         return {
           content: "⚠️ AI text generation is temporarily unavailable. Please view the original policy manual section or try again later.",
           ruleCount: rules.length,
@@ -360,7 +361,7 @@ Format as markdown. DO NOT include code blocks - just return the markdown text d
         sourceRules: rules.map(r => `categorical_${r.id}`)
       };
     } catch (error) {
-      console.error("Error generating categorical eligibility text:", error);
+      logger.error("Error generating categorical eligibility text", { error, benefitProgramId, sectionId });
       return {
         content: "⚠️ Error generating policy text. Please try again or view the original policy manual section.",
         ruleCount: rules.length,
@@ -418,7 +419,7 @@ Format as markdown. DO NOT include code blocks - just return the markdown text d
     try {
       const ai = getGemini();
       if (!ai) {
-        console.error("Gemini API not available for text generation");
+        logger.error("Gemini API not available for text generation", { benefitProgramId, sectionId });
         return {
           content: "⚠️ AI text generation is temporarily unavailable. Please view the original policy manual section or try again later.",
           ruleCount: rules.length,
@@ -440,7 +441,7 @@ Format as markdown. DO NOT include code blocks - just return the markdown text d
         sourceRules: rules.map(r => `document_req_${r.id}`)
       };
     } catch (error) {
-      console.error("Error generating document requirements text:", error);
+      logger.error("Error generating document requirements text", { error, benefitProgramId, sectionId });
       return {
         content: "⚠️ Error generating policy text. Please try again or view the original policy manual section.",
         ruleCount: rules.length,

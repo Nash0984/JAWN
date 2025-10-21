@@ -7,6 +7,7 @@ import type { MonitoringDashboardMetrics } from "@shared/monitoring";
 import { db } from "../db";
 import { users } from "@shared/schema";
 import { eq } from "drizzle-orm";
+import { logger } from './logger.service';
 
 interface AuthenticatedWebSocket extends WebSocket {
   userId?: string;
@@ -45,7 +46,7 @@ export class WebSocketService {
     this.startHeartbeat();
     this.startMetricsBroadcast();
 
-    console.log("WebSocket server initialized on /ws/notifications");
+    logger.info("WebSocket server initialized on /ws/notifications");
   }
 
   private verifyClient(info: any, callback: (result: boolean, code?: number, message?: string) => void) {
@@ -54,7 +55,7 @@ export class WebSocketService {
       const session = (info.req as any).session;
       
       if (!session || !session.passport?.user) {
-        console.error("WebSocket connection rejected: not authenticated");
+        logger.error("WebSocket connection rejected: not authenticated");
         callback(false, 401, "Unauthorized");
         return;
       }
@@ -69,7 +70,7 @@ export class WebSocketService {
     const userId = (req as any).authenticatedUserId;
 
     if (!userId) {
-      console.error("WebSocket connection rejected: missing authenticated userId");
+      logger.error("WebSocket connection rejected: missing authenticated userId");
       ws.close(1008, "Authentication required");
       return;
     }
@@ -83,7 +84,7 @@ export class WebSocketService {
     }
     this.clients.get(userId)!.add(ws);
 
-    console.log(`WebSocket client connected: ${userId}`);
+    logger.info(`WebSocket client connected`, { userId });
 
     // Set up ping/pong for connection health
     ws.on("pong", () => {
@@ -95,7 +96,7 @@ export class WebSocketService {
         const data = JSON.parse(message.toString());
         this.handleMessage(ws, data);
       } catch (error) {
-        console.error("WebSocket message parse error:", error);
+        logger.error("WebSocket message parse error", { error });
       }
     });
 
@@ -104,7 +105,7 @@ export class WebSocketService {
     });
 
     ws.on("error", (error) => {
-      console.error("WebSocket error:", error);
+      logger.error("WebSocket error", { error, userId: ws.userId });
       this.handleDisconnect(ws);
     });
 
@@ -145,7 +146,7 @@ export class WebSocketService {
         this.metricsSubscribers.delete(ws.userId);
       }
       
-      console.log(`WebSocket client disconnected: ${ws.userId}`);
+      logger.info(`WebSocket client disconnected`, { userId: ws.userId });
     }
   }
 
@@ -158,7 +159,7 @@ export class WebSocketService {
       this.wss.clients.forEach((ws: AuthenticatedWebSocket) => {
         if (ws.isAlive === false) {
           deadConnections++;
-          console.warn(`🔌 WebSocket: Terminating dead connection for user ${ws.userId || 'unknown'}`);
+          logger.warn(`WebSocket: Terminating dead connection`, { userId: ws.userId || 'unknown' });
           return ws.terminate();
         }
         
@@ -168,7 +169,7 @@ export class WebSocketService {
       });
       
       if (deadConnections > 0) {
-        console.log(`💓 WebSocket Heartbeat: ${activeConnections} active, ${deadConnections} terminated`);
+        logger.info(`WebSocket Heartbeat`, { activeConnections, deadConnections });
       }
     }, 30000);
   }
@@ -184,7 +185,7 @@ export class WebSocketService {
         const metrics = await metricsService.getAllMetrics();
         this.broadcastMetrics(metrics);
       } catch (error) {
-        console.error('Metrics broadcast error:', error);
+        logger.error('Metrics broadcast error', { error });
       }
     }, 30000); // 30 seconds
   }
@@ -238,7 +239,7 @@ export class WebSocketService {
         timestamp: new Date().toISOString(),
       }));
     } catch (error) {
-      console.error('Error sending metrics snapshot:', error);
+      logger.error('Error sending metrics snapshot', { error, userId });
       ws.send(JSON.stringify({
         type: 'error',
         message: 'Failed to fetch metrics snapshot',
@@ -270,7 +271,7 @@ export class WebSocketService {
         }
       });
 
-      console.log(`Notification sent to user ${userId} (${userSockets.size} connections)`);
+      logger.info(`Notification sent to user`, { userId, connectionCount: userSockets.size });
       return true;
     }
     return false;
@@ -307,7 +308,7 @@ export class WebSocketService {
       }
     });
 
-    console.log(`Broadcast notification sent to ${sentCount} clients`);
+    logger.info(`Broadcast notification sent`, { clientCount: sentCount });
     return sentCount;
   }
 
@@ -361,7 +362,7 @@ export class WebSocketService {
       clearInterval(this.metricsInterval);
     }
     this.wss.close();
-    console.log("WebSocket server shut down");
+    logger.info("WebSocket server shut down");
   }
 }
 

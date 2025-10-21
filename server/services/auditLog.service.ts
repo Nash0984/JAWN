@@ -1,6 +1,7 @@
 import { storage } from '../storage';
 import type { InsertAuditLog, InsertSecurityEvent } from '../../shared/schema';
 import type { Request } from 'express';
+import { logger } from './logger.service';
 
 /**
  * Audit Logging Service
@@ -66,7 +67,7 @@ class AuditLogService {
       await storage.createAuditLog(auditLog);
     } catch (error) {
       // Never fail the main operation due to audit logging failure
-      console.error('[AUDIT LOG ERROR]', error);
+      logger.error('Audit log error', { error, action: options.action, resource: options.resource });
     }
   }
   
@@ -201,7 +202,7 @@ class AuditLogService {
       }
     } catch (error) {
       // Never fail the main operation
-      console.error('[SECURITY EVENT LOG ERROR]', error);
+      logger.error('Security event log error', { error, eventType: options.eventType, severity: options.severity });
     }
   }
   

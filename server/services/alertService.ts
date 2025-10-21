@@ -11,6 +11,7 @@ import { eq, and, or, inArray } from "drizzle-orm";
 import { metricsService } from "./metricsService";
 import { notificationService } from "./notification.service";
 import { emailService } from "./email.service";
+import { logger } from './logger.service';
 // COMMENTED OUT DURING SCHEMA ROLLBACK
 // import { sendSMS } from "./smsService";
 
@@ -37,7 +38,7 @@ export class AlertService {
         await this.evaluateRule(rule, metrics);
       }
     } catch (error) {
-      console.error('Error evaluating alerts:', error);
+      logger.error('Error evaluating alerts', { error, tenantId });
     }
   }
 
@@ -81,7 +82,7 @@ export class AlertService {
         await this.triggerAlert(rule, metricValue);
       }
     } catch (error) {
-      console.error(`Error evaluating rule ${rule.id}:`, error);
+      logger.error('Error evaluating rule', { ruleId: rule.id, error });
     }
   }
 
@@ -108,7 +109,7 @@ export class AlertService {
     // Send notifications via channels
     await this.sendNotifications(rule, metricValue, message);
     
-    console.log(`🚨 Alert triggered: ${rule.name} (${rule.severity}) - Value: ${metricValue}`);
+    logger.info('Alert triggered', { ruleName: rule.name, severity: rule.severity, value: metricValue });
   }
 
   /**
@@ -120,7 +121,7 @@ export class AlertService {
       const recipients = await this.getRecipients(rule);
       
       if (recipients.length === 0) {
-        console.warn(`No recipients found for alert rule: ${rule.name}`);
+        logger.warn('No recipients found for alert rule', { ruleName: rule.name });
         return;
       }
 
@@ -136,7 +137,7 @@ export class AlertService {
               priority: rule.severity === 'critical' ? 'urgent' : 'high',
             });
           } catch (error) {
-            console.error(`Failed to create in-app notification for user ${user.id}:`, error);
+            logger.error('Failed to create in-app notification', { userId: user.id, error });
           }
         }
 
@@ -149,7 +150,7 @@ export class AlertService {
               message
             );
           } catch (error) {
-            console.error(`Failed to send email to ${user.email}:`, error);
+            logger.error('Failed to send alert email', { email: user.email, error });
           }
         }
 
@@ -167,7 +168,7 @@ export class AlertService {
         // }
       }
     } catch (error) {
-      console.error('Error sending notifications:', error);
+      logger.error('Error sending notifications', { error, ruleName: rule.name });
     }
   }
 
@@ -255,7 +256,7 @@ export class AlertService {
       return extractor();
     }
 
-    console.warn(`Unknown metric type: ${metricType}`);
+    logger.warn('Unknown metric type', { metricType });
     return null;
   }
 
@@ -275,7 +276,7 @@ export class AlertService {
       case 'less_than_or_equal':
         return value <= threshold;
       default:
-        console.warn(`Unknown comparison operator: ${comparison}`);
+        logger.warn('Unknown comparison operator', { comparison });
         return false;
     }
   }
@@ -342,4 +343,4 @@ export class AlertService {
 
 export const alertService = new AlertService();
 
-console.log("📊 Database-driven Alert Service initialized");
+logger.info("Database-driven Alert Service initialized");

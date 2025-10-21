@@ -1,5 +1,6 @@
 import { db } from "../db";
 import { eq, and, or, lte, gte, desc, sql } from "drizzle-orm";
+import { logger } from './logger.service';
 import {
   gdprConsents,
   gdprDataSubjectRequests,

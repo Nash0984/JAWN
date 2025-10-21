@@ -26,6 +26,7 @@ import { storage } from '../../storage';
 import { ObjectStorageService } from '../../objectStorage';
 import { DocumentVersioningService } from '../documentVersioning';
 import { ragService } from '../ragService';
+import { logger } from '../logger.service';
 import {
   documents,
   documentChunks,
@@ -236,7 +237,11 @@ class MarylandSNAPAdapter implements IngestionAdapter {
       
       return discoveredDocs.length > 0 ? discoveredDocs : this.MANUAL_STRUCTURE;
     } catch (error) {
-      console.warn('Failed to discover documents dynamically, using fallback:', error);
+      logger.warn('Failed to discover documents dynamically, using fallback', {
+        service: 'UnifiedIngestionService',
+        adapter: 'MarylandSNAPAdapter',
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
       return this.MANUAL_STRUCTURE;
     }
   }
@@ -253,7 +258,12 @@ class MarylandSNAPAdapter implements IngestionAdapter {
       
       return Buffer.from(response.data);
     } catch (error) {
-      console.error(`Failed to download ${metadata.sectionNumber}:`, error);
+      logger.error('Failed to download document', {
+        service: 'UnifiedIngestionService',
+        adapter: 'MarylandSNAPAdapter',
+        section: metadata.sectionNumber,
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
       throw new Error(`Download failed for section ${metadata.sectionNumber}`);
     }
   }
@@ -411,7 +421,11 @@ export class UnifiedIngestionService {
       
       // Discover documents
       const documents = await adapter.discover();
-      console.log(`📚 Discovered ${documents.length} documents from ${adapter.name}`);
+      logger.info('Discovered documents from adapter', {
+        service: 'UnifiedIngestionService',
+        adapter: adapter.name,
+        documentCount: documents.length
+      });
       
       // Process each document
       for (const docMetadata of documents) {
@@ -548,7 +562,10 @@ export class UnifiedIngestionService {
               toSectionNumber: ref.toSectionNumber,
               referenceType: ref.referenceType,
               context: ref.context
-            }).catch(e => console.warn('Cross-reference insert failed:', e));
+            }).catch(e => logger.warn('Cross-reference insert failed', {
+              service: 'UnifiedIngestionService',
+              error: e instanceof Error ? e.message : 'Unknown error'
+            }));
           }
           
           // Update document status
@@ -564,14 +581,22 @@ export class UnifiedIngestionService {
           
         } catch (docError) {
           const errorMsg = `Failed to process ${docMetadata.sectionNumber}: ${docError instanceof Error ? docError.message : String(docError)}`;
-          console.error(errorMsg);
+          logger.error('Failed to process document', {
+            service: 'UnifiedIngestionService',
+            section: docMetadata.sectionNumber,
+            error: docError instanceof Error ? docError.message : String(docError)
+          });
           errors.push(errorMsg);
         }
       }
       
     } catch (error) {
       const errorMsg = `Ingestion failed: ${error instanceof Error ? error.message : String(error)}`;
-      console.error(errorMsg);
+      logger.error('Ingestion failed', {
+        service: 'UnifiedIngestionService',
+        source,
+        error: error instanceof Error ? error.message : String(error)
+      });
       errors.push(errorMsg);
       throw error;
     }
@@ -680,7 +705,12 @@ Return ONLY valid JSON.`;
         summary: typeof parsed.summary === 'string' ? parsed.summary : ''
       };
     } catch (error) {
-      console.error(`Rule extraction failed for chunk ${chunkIndex}:`, error);
+      logger.error('Rule extraction failed for chunk', {
+        service: 'UnifiedIngestionService',
+        method: 'extractRules',
+        chunkIndex,
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
       return { rules: [], topics: [], summary: '' };
     }
   }
@@ -697,7 +727,11 @@ Return ONLY valid JSON.`;
       });
       return result.embedding.values;
     } catch (error) {
-      console.error('Embedding generation failed:', error);
+      logger.error('Embedding generation failed', {
+        service: 'UnifiedIngestionService',
+        method: 'generateEmbedding',
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
       return [];
     }
   }
@@ -786,7 +820,12 @@ Return ONLY valid JSON.`;
     
     const runIngestion = async () => {
       try {
-        console.log(`🔄 Running scheduled ingestion: ${schedule.id}`);
+        logger.info('Running scheduled ingestion', {
+          service: 'UnifiedIngestionService',
+          method: 'runIngestionJob',
+          scheduleId: schedule.id,
+          source: schedule.source
+        });
         await this.ingest(schedule.source, schedule.config);
         
         // Update last run time
@@ -801,7 +840,12 @@ Return ONLY valid JSON.`;
           this.scheduleTimers.set(schedule.id, timer);
         }
       } catch (error) {
-        console.error(`Scheduled ingestion failed for ${schedule.id}:`, error);
+        logger.error('Scheduled ingestion failed', {
+          service: 'UnifiedIngestionService',
+          method: 'runIngestionJob',
+          scheduleId: schedule.id,
+          error: error instanceof Error ? error.message : 'Unknown error'
+        });
         
         if (schedule.autoRetry) {
           // Retry after 1 hour
@@ -811,7 +855,12 @@ Return ONLY valid JSON.`;
         
         if (schedule.notifyOnFailure) {
           // Send notification (implement notification service)
-          console.error(`NOTIFICATION: Ingestion failed for ${schedule.id}`);
+          logger.error('Ingestion notification required', {
+            service: 'UnifiedIngestionService',
+            method: 'runIngestionJob',
+            scheduleId: schedule.id,
+            message: `Ingestion failed for ${schedule.id}`
+          });
         }
       }
     };
@@ -890,7 +939,12 @@ Return ONLY valid JSON.`;
       return new Date(existing.downloadedAt!) < thirtyDaysAgo;
       
     } catch (error) {
-      console.error('Error checking if document needs update:', error);
+      logger.error('Error checking if document needs update', {
+        service: 'UnifiedIngestionService',
+        method: 'needsUpdate',
+        url,
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
       return true; // Assume update needed if check fails
     }
   }

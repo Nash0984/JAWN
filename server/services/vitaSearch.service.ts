@@ -1,5 +1,6 @@
 import { eq, and, sql } from 'drizzle-orm';
 import { generateEmbedding, cosineSimilarity, generateTextWithGemini } from './gemini.service';
+import { logger } from './logger.service';
 import type { IStorage } from '../storage';
 
 export interface VitaSearchResult {
@@ -42,7 +43,10 @@ export class VitaSearchService {
       ruleTypes
     } = options;
 
-    console.log(`Searching VITA knowledge for: "${query}"`);
+    logger.debug('Searching VITA knowledge', {
+      service: 'VitaSearchService',
+      query
+    });
 
     // 1. Generate embedding for the query
     const queryEmbedding = await generateEmbedding(query);
@@ -60,7 +64,10 @@ export class VitaSearchService {
     });
 
     if (documents.length === 0) {
-      console.warn('No VITA documents found. Has IRS Pub 4012 been ingested?');
+      logger.warn('No VITA documents found. Has IRS Pub 4012 been ingested?', {
+        service: 'VitaSearchService',
+        method: 'searchVitaKnowledge'
+      });
       return [];
     }
 
@@ -72,7 +79,10 @@ export class VitaSearchService {
     }
 
     if (allChunks.length === 0) {
-      console.warn('No VITA chunks found. Has IRS Pub 4012 been processed with embeddings?');
+      logger.warn('No VITA chunks found. Has IRS Pub 4012 been processed with embeddings?', {
+        service: 'VitaSearchService',
+        method: 'searchVitaKnowledge'
+      });
       return [];
     }
 
@@ -85,7 +95,12 @@ export class VitaSearchService {
         try {
           chunkEmbedding = JSON.parse(chunk.embeddings as string);
         } catch (error) {
-          console.error(`Error parsing embeddings for chunk ${chunk.id}:`, error);
+          logger.error('Error parsing embeddings for chunk', {
+            service: 'VitaSearchService',
+            method: 'searchVitaKnowledge',
+            chunkId: chunk.id,
+            error: error instanceof Error ? error.message : 'Unknown error'
+          });
           return null;
         }
 
@@ -149,7 +164,12 @@ export class VitaSearchService {
       });
     }
 
-    console.log(`✓ Found ${results.length} relevant chunks (scores: ${results.map(r => r.relevanceScore.toFixed(2)).join(', ')})`);
+    logger.debug('Found relevant chunks', {
+      service: 'VitaSearchService',
+      method: 'searchVitaKnowledge',
+      resultCount: results.length,
+      scores: results.map(r => r.relevanceScore.toFixed(2))
+    });
 
     return results;
   }

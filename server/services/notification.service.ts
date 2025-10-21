@@ -10,6 +10,7 @@ import {
 import { eq, and, desc, isNull, count, or } from "drizzle-orm";
 import { getWebSocketService } from "./websocket.service";
 import { emailService } from "./email.service";
+import { logger } from "./logger.service";
 
 export interface CreateNotificationParams {
   userId: string;
@@ -109,9 +110,17 @@ class NotificationService implements NotificationServiceInterface {
             message,
             actionUrl
           );
-          console.log(`📧 Email backup sent to offline user: ${user.email}`);
+          logger.info('Email backup sent to offline user', {
+            service: 'NotificationService',
+            method: 'createNotification',
+            email: user.email
+          });
         } catch (error) {
-          console.error('Failed to send email backup:', error);
+          logger.error('Failed to send email backup', {
+            service: 'NotificationService',
+            method: 'createNotification',
+            error: error instanceof Error ? error.message : 'Unknown error'
+          });
         }
       }
     }
@@ -131,7 +140,11 @@ class NotificationService implements NotificationServiceInterface {
     });
 
     if (!template) {
-      console.error(`Notification template not found: ${templateCode}`);
+      logger.error('Notification template not found', {
+        service: 'NotificationService',
+        method: 'createNotificationFromTemplate',
+        templateCode
+      });
       return;
     }
 

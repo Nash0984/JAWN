@@ -308,14 +308,37 @@ app.use("/api/", apiVersionMiddleware);
   app.use(getSentryRequestHandler()); // Request context and tracing
   app.use(getSentryTracingHandler()); // Performance monitoring
   
-  // Initialize system data (benefit programs, etc.)
-  await initializeSystemData();
+  // Initialize system data (defer until after server is ready)
+  const initializeData = async () => {
+    try {
+      console.log("[INIT] Starting background data initialization...");
+      const startTime = Date.now();
+      
+      await initializeSystemData();
+      console.log(`[INIT] System data initialized (${Date.now() - startTime}ms)`);
+      
+      await seedCountiesAndGamification();
+      console.log(`[INIT] Counties/gamification seeded (${Date.now() - startTime}ms)`);
+      
+      await seedMarylandLDSS();
+      console.log(`[INIT] Maryland LDSS seeded (${Date.now() - startTime}ms total)`);
+    } catch (error) {
+      console.error("[INIT] Error during background data initialization:", error);
+    }
+  };
   
-  // Seed multi-county and gamification data
-  await seedCountiesAndGamification();
-  
-  // Seed 24 Maryland LDSS offices for single-instance deployment
-  await seedMarylandLDSS();
+  // Delay initialization until after first request
+  let initialized = false;
+  app.use((req, res, next) => {
+    if (!initialized) {
+      initialized = true;
+      // Start initialization AFTER first request completes
+      res.on('finish', () => {
+        setTimeout(initializeData, 100);
+      });
+    }
+    next();
+  });
   
   // Start Smart Scheduler with source-specific intervals
   // Checks each data source based on realistic update frequencies (70-80% reduction in API calls)

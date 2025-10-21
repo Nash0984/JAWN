@@ -5,6 +5,7 @@
  */
 
 import { BasePhoneSystemAdapter } from "./phoneSystemAdapter";
+import { logger } from "./logger.service";
 import type { 
   CallInitiateOptions, 
   CallTransferOptions, 
@@ -62,9 +63,12 @@ export class SIPAdapter extends BasePhoneSystemAdapter {
       const registerer = new SIP.Registerer(this.sipClient);
       await registerer.register();
 
-      console.log(`✅ SIP client registered: ${this.config.sipUsername}@${this.config.sipDomain}`);
+      logger.info('SIP client registered', { 
+        username: this.config.sipUsername, 
+        domain: this.config.sipDomain 
+      });
     } catch (error) {
-      console.error("❌ Failed to initialize SIP client:", error);
+      logger.error('Failed to initialize SIP client', { error });
     }
   }
 
@@ -120,10 +124,10 @@ export class SIPAdapter extends BasePhoneSystemAdapter {
         }
       });
 
-      console.log(`📞 SIP call initiated: ${callId} to ${target}`);
+      logger.info('SIP call initiated', { callId, target });
       return callId;
     } catch (error: any) {
-      console.error("❌ Failed to initiate SIP call:", error);
+      logger.error('Failed to initiate SIP call', { error });
       throw new Error(`SIP call initiation failed: ${error.message}`);
     }
   }
@@ -171,7 +175,7 @@ export class SIPAdapter extends BasePhoneSystemAdapter {
       await this.updateCallStatus(options.callId, "transferred");
       return true;
     } catch (error) {
-      console.error("❌ SIP transfer failed:", error);
+      logger.error('SIP transfer failed', { error });
       return false;
     }
   }
@@ -190,7 +194,7 @@ export class SIPAdapter extends BasePhoneSystemAdapter {
       
       return true;
     } catch (error) {
-      console.error("❌ Failed to hold SIP call:", error);
+      logger.error('Failed to hold SIP call', { error });
       return false;
     }
   }
@@ -209,7 +213,7 @@ export class SIPAdapter extends BasePhoneSystemAdapter {
       
       return true;
     } catch (error) {
-      console.error("❌ Failed to resume SIP call:", error);
+      logger.error('Failed to resume SIP call', { error });
       return false;
     }
   }
@@ -239,7 +243,7 @@ export class SIPAdapter extends BasePhoneSystemAdapter {
         };
         
         await session.info(info);
-        console.log(`🎙️ SIP recording started for call ${options.callId}`);
+        logger.info('SIP recording started', { callId: options.callId });
       } else {
         // Stop recording
         const info = {
@@ -251,12 +255,12 @@ export class SIPAdapter extends BasePhoneSystemAdapter {
         };
         
         await session.info(info);
-        console.log(`⏹️ SIP recording stopped for call ${options.callId}`);
+        logger.info('SIP recording stopped', { callId: options.callId });
       }
 
       return true;
     } catch (error) {
-      console.error("❌ Failed to manage SIP recording:", error);
+      logger.error('Failed to manage SIP recording', { error });
       return false;
     }
   }
@@ -276,7 +280,7 @@ export class SIPAdapter extends BasePhoneSystemAdapter {
 
       return true;
     } catch (error) {
-      console.error("❌ Failed to end SIP call:", error);
+      logger.error('Failed to end SIP call', { error });
       return false;
     }
   }
@@ -297,7 +301,7 @@ export class SIPAdapter extends BasePhoneSystemAdapter {
 
       return true;
     } catch (error) {
-      console.error("❌ Failed to mute/unmute SIP call:", error);
+      logger.error('Failed to mute/unmute SIP call', { error });
       return false;
     }
   }
@@ -319,7 +323,7 @@ export class SIPAdapter extends BasePhoneSystemAdapter {
 
       return true;
     } catch (error) {
-      console.error("❌ Failed to send DTMF:", error);
+      logger.error('Failed to send DTMF', { error });
       return false;
     }
   }
@@ -331,7 +335,7 @@ export class SIPAdapter extends BasePhoneSystemAdapter {
     try {
       // This typically requires a conference bridge or mixer
       // Implementation depends on PBX capabilities
-      console.log(`Whisper to agent on call ${callId}: ${message}`);
+      logger.info('Whisper to agent', { callId, message });
       
       // For basic implementation, we could:
       // 1. Put client on hold
@@ -340,7 +344,7 @@ export class SIPAdapter extends BasePhoneSystemAdapter {
       
       return true;
     } catch (error) {
-      console.error("❌ Failed to whisper:", error);
+      logger.error('Failed to whisper', { error });
       return false;
     }
   }
@@ -363,7 +367,7 @@ export class SIPAdapter extends BasePhoneSystemAdapter {
       await inviter.invite();
       return inviter;
     } catch (error) {
-      console.error("❌ Failed to create consultation call:", error);
+      logger.error('Failed to create consultation call', { error });
       return null;
     }
   }
@@ -390,7 +394,7 @@ export class SIPAdapter extends BasePhoneSystemAdapter {
 
       return answer;
     } catch (error) {
-      console.error("❌ Failed to handle WebRTC offer:", error);
+      logger.error('Failed to handle WebRTC offer', { error });
       throw error;
     }
   }
@@ -434,7 +438,7 @@ export class AsteriskAdapter extends SIPAdapter {
   async connectAMI(): Promise<void> {
     // Connect to Asterisk Manager Interface for advanced control
     // This would use the asterisk-manager npm package
-    console.log("Connecting to Asterisk AMI...");
+    logger.info('Connecting to Asterisk AMI');
   }
 
   /**
@@ -442,7 +446,7 @@ export class AsteriskAdapter extends SIPAdapter {
    */
   async monitorQueues(): Promise<void> {
     // Use AMI to monitor queue status
-    console.log("Monitoring Asterisk queues...");
+    logger.info('Monitoring Asterisk queues');
   }
 }
 
@@ -460,7 +464,7 @@ export class FreePBXAdapter extends AsteriskAdapter {
    */
   async configureViaAPI(): Promise<void> {
     // FreePBX provides REST APIs for configuration
-    console.log("Configuring via FreePBX API...");
+    logger.info('Configuring via FreePBX API');
   }
 }
 
@@ -478,7 +482,7 @@ export class CiscoAdapter extends SIPAdapter {
    */
   async connectFinesse(): Promise<void> {
     // Connect to Cisco Finesse for agent desktop features
-    console.log("Connecting to Cisco Finesse...");
+    logger.info('Connecting to Cisco Finesse');
   }
 
   /**
@@ -486,6 +490,6 @@ export class CiscoAdapter extends SIPAdapter {
    */
   async connectJTAPI(): Promise<void> {
     // Java Telephony API for Cisco systems
-    console.log("Connecting to JTAPI...");
+    logger.info('Connecting to JTAPI');
   }
 }

@@ -4,6 +4,7 @@ import { documents, federalBills, publicLaws, versionCheckLogs } from '@shared/s
 import type { InsertVersionCheckLog } from '@shared/schema';
 import { eq, and, desc, sql } from 'drizzle-orm';
 import { govInfoClient } from './govInfoClient';
+import { logger } from './logger.service';
 
 /**
  * GovInfo Version Checker Service
@@ -44,7 +45,7 @@ export class GovInfoVersionChecker {
    * Check eCFR Title 7 version using HEAD request
    */
   async checkECFRVersion(): Promise<VersionCheckResult> {
-    console.log('\n🔍 Checking eCFR Title 7 version...');
+    logger.info('Checking eCFR Title 7 version');
     
     const result: VersionCheckResult = {
       source: 'ecfr',
@@ -86,17 +87,18 @@ export class GovInfoVersionChecker {
         if (latestVersion > currentDocs[0].lastModifiedAt) {
           result.hasUpdate = true;
           result.needsSync = true;
-          console.log(`✅ eCFR update detected!`);
-          console.log(`   Current: ${currentDocs[0].lastModifiedAt.toISOString()}`);
-          console.log(`   Latest:  ${latestVersion.toISOString()}`);
+          logger.info('eCFR update detected', {
+            current: currentDocs[0].lastModifiedAt.toISOString(),
+            latest: latestVersion.toISOString()
+          });
         } else {
-          console.log(`✅ eCFR is up-to-date (${latestVersion.toISOString()})`);
+          logger.info('eCFR is up-to-date', { version: latestVersion.toISOString() });
         }
       } else {
         // No current version - first sync needed
         result.hasUpdate = true;
         result.needsSync = true;
-        console.log(`✅ No eCFR data found - initial sync needed`);
+        logger.info('No eCFR data found - initial sync needed');
       }
       
       // Log the check
@@ -113,7 +115,7 @@ export class GovInfoVersionChecker {
     } catch (error) {
       result.hasError = true;
       result.errorMessage = `eCFR version check failed: ${error instanceof Error ? error.message : 'Unknown error'}`;
-      console.error(`❌ ${result.errorMessage}`);
+      logger.error('Version check failed', { errorMessage: result.errorMessage });
       
       // Log the failed check
       await this.logVersionCheck({
@@ -130,7 +132,7 @@ export class GovInfoVersionChecker {
    * Check Bill Status updates for policy-relevant bills
    */
   async checkBillStatusUpdates(congress: number = this.DEFAULT_CONGRESS, maxPages?: number): Promise<VersionCheckResult> {
-    console.log(`\n🔍 Checking Bill Status updates for Congress ${congress}...`);
+    logger.info('Checking Bill Status updates', { congress });
     
     const result: VersionCheckResult = {
       source: 'bill_status',
@@ -143,7 +145,7 @@ export class GovInfoVersionChecker {
 
     try {
       // Get recent bill packages from GovInfo API using rolling 30-day window
-      console.log('📥 Fetching recent bills from GovInfo API (last 30 days)...');
+      logger.info('Fetching recent bills from GovInfo API', { period: 'last 30 days' });
       
       // Calculate rolling 30-day window
       const now = new Date();
@@ -153,7 +155,7 @@ export class GovInfoVersionChecker {
       const startDate = thirtyDaysAgo.toISOString().split('.')[0] + 'Z';
       const endDate = now.toISOString().split('.')[0] + 'Z';
       
-      console.log(`   Date range: ${startDate} to ${endDate}`);
+      logger.debug('Date range', { startDate, endDate });
       
       const packages = await govInfoClient.getAllPackages(
         'BILLSTATUS',
@@ -170,7 +172,10 @@ export class GovInfoVersionChecker {
         this.isPolicyRelevant(pkg.title)
       );
       
-      console.log(`   Found ${packages.length} total bills, ${relevantPackages.length} policy-relevant`);
+      logger.info('Bills fetched from GovInfo', { 
+        totalBills: packages.length, 
+        policyRelevant: relevantPackages.length 
+      });
       
       // Check each relevant bill for updates
       let updatesFound = 0;
@@ -201,9 +206,9 @@ export class GovInfoVersionChecker {
       if (updatesFound > 0) {
         result.hasUpdate = true;
         result.needsSync = true;
-        console.log(`✅ ${updatesFound} bill(s) need updating`);
+        logger.info('Bill updates detected', { count: updatesFound });
       } else {
-        console.log(`✅ All bills are up-to-date`);
+        logger.info('All bills are up-to-date');
       }
       
       // Get most recent bill modified date as "latest version"
@@ -243,7 +248,7 @@ export class GovInfoVersionChecker {
     } catch (error) {
       result.hasError = true;
       result.errorMessage = `Bill Status check failed: ${error instanceof Error ? error.message : 'Unknown error'}`;
-      console.error(`❌ ${result.errorMessage}`);
+      logger.error('Version check failed', { errorMessage: result.errorMessage });
       
       // Log the failed check
       await this.logVersionCheck({
@@ -261,7 +266,7 @@ export class GovInfoVersionChecker {
    * Check Public Laws updates
    */
   async checkPublicLawsUpdates(congress: number = this.DEFAULT_CONGRESS, maxPages?: number): Promise<VersionCheckResult> {
-    console.log(`\n🔍 Checking Public Laws updates for Congress ${congress}...`);
+    logger.info('Checking Public Laws updates', { congress });
     
     const result: VersionCheckResult = {
       source: 'public_laws',
@@ -274,7 +279,7 @@ export class GovInfoVersionChecker {
 
     try {
       // Get recent public law packages from GovInfo API using rolling 30-day window
-      console.log('📥 Fetching recent public laws from GovInfo API (last 30 days)...');
+      logger.info('Fetching recent public laws from GovInfo API', { period: 'last 30 days' });
       
       // Calculate rolling 30-day window
       const now = new Date();
@@ -284,7 +289,7 @@ export class GovInfoVersionChecker {
       const startDate = thirtyDaysAgo.toISOString().split('.')[0] + 'Z';
       const endDate = now.toISOString().split('.')[0] + 'Z';
       
-      console.log(`   Date range: ${startDate} to ${endDate}`);
+      logger.debug('Date range', { startDate, endDate });
       
       const packages = await govInfoClient.getAllPackages(
         'PLAW',
@@ -301,7 +306,10 @@ export class GovInfoVersionChecker {
         this.isPolicyRelevant(pkg.title)
       );
       
-      console.log(`   Found ${packages.length} total laws, ${relevantPackages.length} policy-relevant`);
+      logger.info('Public laws fetched from GovInfo', { 
+        totalLaws: packages.length, 
+        policyRelevant: relevantPackages.length 
+      });
       
       // Check each relevant law for updates
       let updatesFound = 0;
@@ -332,9 +340,9 @@ export class GovInfoVersionChecker {
       if (updatesFound > 0) {
         result.hasUpdate = true;
         result.needsSync = true;
-        console.log(`✅ ${updatesFound} public law(s) need updating`);
+        logger.info('Public law updates detected', { count: updatesFound });
       } else {
-        console.log(`✅ All public laws are up-to-date`);
+        logger.info('All public laws are up-to-date');
       }
       
       // Get most recent law modified date as "latest version"
@@ -374,7 +382,7 @@ export class GovInfoVersionChecker {
     } catch (error) {
       result.hasError = true;
       result.errorMessage = `Public Laws check failed: ${error instanceof Error ? error.message : 'Unknown error'}`;
-      console.error(`❌ ${result.errorMessage}`);
+      logger.error('Version check failed', { errorMessage: result.errorMessage });
       
       // Log the failed check
       await this.logVersionCheck({
@@ -395,8 +403,8 @@ export class GovInfoVersionChecker {
    * @param maxPages - Maximum pages to fetch per check (optional, for faster version checks)
    */
   async checkAllVersions(congress: number = this.DEFAULT_CONGRESS, maxPages?: number): Promise<VersionCheckSummary> {
-    console.log('\n🔍 GovInfo Version Checker - Running all checks...\n');
-    console.log('═'.repeat(60));
+    logger.info('GovInfo Version Checker - Running all checks');
+    logger.info('═'.repeat(60));
     
     const results: VersionCheckResult[] = [];
     
@@ -412,8 +420,8 @@ export class GovInfoVersionChecker {
     const totalUpdatesDetected = results.filter(r => r.hasUpdate).length;
     const overallNeedsSync = results.some(r => r.needsSync);
     
-    console.log('\n' + '═'.repeat(60));
-    console.log('📊 Version Check Summary:');
+    logger.info('═'.repeat(60));
+    logger.info('Version Check Summary');
     
     // Helper function to format status
     const formatStatus = (result: VersionCheckResult): string => {
@@ -429,12 +437,13 @@ export class GovInfoVersionChecker {
       return '✅ Up-to-date';
     };
     
-    console.log(`   eCFR:         ${formatStatus(ecfrResult)}`);
-    console.log(`   Bill Status:  ${formatStatus(billStatusResult)}`);
-    console.log(`   Public Laws:  ${formatStatus(publicLawsResult)}`);
-    console.log(`   Total Updates: ${totalUpdatesDetected}`);
-    console.log(`   Sync Needed:  ${overallNeedsSync ? 'YES' : 'NO'}`);
-    console.log('═'.repeat(60) + '\n');
+    logger.info('Version check results', {
+      ecfr: formatStatus(ecfrResult),
+      billStatus: formatStatus(billStatusResult),
+      publicLaws: formatStatus(publicLawsResult),
+      totalUpdates: totalUpdatesDetected,
+      syncNeeded: overallNeedsSync
+    });
     
     return {
       timestamp: new Date(),
@@ -450,12 +459,12 @@ export class GovInfoVersionChecker {
   scheduleVersionChecks(intervalHours: number = 6): NodeJS.Timeout {
     const intervalMs = intervalHours * 60 * 60 * 1000;
     
-    console.log(`📅 Scheduling version checks every ${intervalHours} hours`);
+    logger.info('Scheduling version checks', { intervalHours });
     
     // Run initial check immediately with a page limit to avoid API overload
     // Limit to 5 pages (500 packages) for version checks - enough to detect updates
     this.checkAllVersions(this.DEFAULT_CONGRESS, 5).catch(error => {
-      console.error('❌ Initial version check failed:', error);
+      logger.error('Initial version check failed', { error });
     });
     
     // Schedule periodic checks
@@ -463,7 +472,7 @@ export class GovInfoVersionChecker {
       try {
         await this.checkAllVersions(this.DEFAULT_CONGRESS, 5);
       } catch (error) {
-        console.error('❌ Scheduled version check failed:', error);
+        logger.error('Scheduled version check failed', { error });
       }
     }, intervalMs);
     
@@ -532,7 +541,7 @@ export class GovInfoVersionChecker {
     try {
       await db.insert(versionCheckLogs).values(log as InsertVersionCheckLog);
     } catch (error) {
-      console.error('Failed to log version check:', error);
+      logger.error('Failed to log version check', { error });
     }
   }
 

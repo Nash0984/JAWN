@@ -26,6 +26,7 @@ import { db } from '../../db';
 import { storage } from '../../storage';
 import { ObjectStorageService } from '../../objectStorage';
 import { ragService } from '../ragService';
+import { logger } from '../logger.service';
 import { 
   documents,
   documentChunks,
@@ -47,7 +48,9 @@ function getGemini(): GoogleGenAI {
   if (!gemini) {
     const apiKey = process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY;
     if (!apiKey) {
-      console.warn('⚠️ Google API key not found - document analysis will be limited');
+      logger.warn('Google API key not found - document analysis will be limited', {
+        context: 'UnifiedDocumentService.getGemini'
+      });
       throw new Error('GOOGLE_API_KEY or GEMINI_API_KEY environment variable is required');
     }
     gemini = new GoogleGenAI({ apiKey });
@@ -369,7 +372,10 @@ class DocumentAnalysisCacheService {
   
   clear(): void {
     this.cache.flushAll();
-    console.log('📦 Document analysis cache cleared');
+    logger.info('Document analysis cache cleared', {
+      service: 'UnifiedDocumentService',
+      cache: 'DocumentAnalysisCache'
+    });
   }
 }
 
@@ -423,7 +429,10 @@ export class UnifiedDocumentService {
     // Check cache first
     const cached = this.analysisCache.get(base64Image);
     if (cached) {
-      console.log('📦 Using cached document analysis');
+      logger.debug('Using cached document analysis', {
+        service: 'UnifiedDocumentService',
+        method: 'analyzeDocument'
+      });
       return cached;
     }
 
@@ -461,7 +470,11 @@ Return as JSON with documentType, extractedData, quality, and confidence fields.
       
       return analysis;
     } catch (error) {
-      console.error('Document analysis failed:', error);
+      logger.error('Document analysis failed', {
+        service: 'UnifiedDocumentService',
+        method: 'analyzeDocument',
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
       throw new Error(`Failed to analyze document: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }

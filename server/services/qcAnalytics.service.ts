@@ -24,6 +24,7 @@ import {
 import { eq, and, gte, lte, desc, sql, inArray, notInArray } from 'drizzle-orm';
 import { GoogleGenAI } from '@google/genai';
 import { cacheService } from './cacheService';
+import { logger } from './logger.service';
 
 const gemini = process.env.GEMINI_API_KEY 
   ? new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY })
@@ -98,7 +99,11 @@ class QCAnalyticsService {
         .limit(limit);
       return cases;
     } catch (error) {
-      console.error('Error fetching recent cases:', error);
+      logger.error('Error fetching recent cases', {
+        service: 'QCAnalyticsService',
+        method: 'getRecentCases',
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
       return [];
     }
   }
@@ -166,7 +171,11 @@ class QCAnalyticsService {
             aiAnalysis = JSON.parse(jsonMatch[0]);
           }
         } catch (error) {
-          console.error('AI analysis failed:', error);
+          logger.error('AI analysis failed', {
+            service: 'QCAnalyticsService',
+            method: 'analyzeCase',
+            error: error instanceof Error ? error.message : 'Unknown error'
+          });
         }
       }
 
@@ -194,7 +203,12 @@ class QCAnalyticsService {
       return flaggedCase;
 
     } catch (error) {
-      console.error('Error analyzing case:', error);
+      logger.error('Error analyzing case', {
+        service: 'QCAnalyticsService',
+        method: 'analyzeCase',
+        caseId,
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
       return null;
     }
   }
@@ -270,7 +284,11 @@ class QCAnalyticsService {
             }));
           }
         } catch (error) {
-          console.error('AI pattern detection failed:', error);
+          logger.error('AI pattern detection failed', {
+            service: 'QCAnalyticsService',
+            method: 'detectPatterns',
+            error: error instanceof Error ? error.message : 'Unknown error'
+          });
         }
       }
 
@@ -296,7 +314,11 @@ class QCAnalyticsService {
       return aiPatterns;
 
     } catch (error) {
-      console.error('Error detecting patterns:', error);
+      logger.error('Error detecting patterns', {
+        service: 'QCAnalyticsService',
+        method: 'detectPatterns',
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
       return [];
     }
   }
@@ -365,7 +387,11 @@ class QCAnalyticsService {
             aiAnalysis = JSON.parse(jsonMatch[0]);
           }
         } catch (error) {
-          console.error('AI performance analysis failed:', error);
+          logger.error('AI performance analysis failed', {
+            service: 'QCAnalyticsService',
+            method: 'analyzeCaseworkerPerformance',
+            error: error instanceof Error ? error.message : 'Unknown error'
+          });
         }
       }
 
@@ -388,7 +414,12 @@ class QCAnalyticsService {
       return performance;
 
     } catch (error) {
-      console.error('Error analyzing caseworker:', error);
+      logger.error('Error analyzing caseworker', {
+        service: 'QCAnalyticsService',
+        method: 'analyzeCaseworkerPerformance',
+        caseworkerId,
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
       return null;
     }
   }
@@ -448,7 +479,11 @@ class QCAnalyticsService {
             aiPrediction = JSON.parse(jsonMatch[0]);
           }
         } catch (error) {
-          console.error('AI prediction failed:', error);
+          logger.error('AI prediction failed', {
+            service: 'QCAnalyticsService',
+            method: 'getQCMetrics',
+            error: error instanceof Error ? error.message : 'Unknown error'
+          });
         }
       }
 
@@ -469,7 +504,11 @@ class QCAnalyticsService {
       return metrics;
 
     } catch (error) {
-      console.error('Error getting QC metrics:', error);
+      logger.error('Error getting QC metrics', {
+        service: 'QCAnalyticsService',
+        method: 'getQCMetrics',
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
       return {
         overallErrorRate: 0,
         errorTrend: 'stable',
@@ -529,7 +568,11 @@ class QCAnalyticsService {
             return recommendations;
           }
         } catch (error) {
-          console.error('AI training recommendations failed:', error);
+          logger.error('AI training recommendations failed', {
+            service: 'QCAnalyticsService',
+            method: 'getTrainingRecommendations',
+            error: error instanceof Error ? error.message : 'Unknown error'
+          });
         }
       }
 
@@ -547,7 +590,12 @@ class QCAnalyticsService {
       return fallback;
 
     } catch (error) {
-      console.error('Error getting training recommendations:', error);
+      logger.error('Error getting training recommendations', {
+        service: 'QCAnalyticsService',
+        method: 'getTrainingRecommendations',
+        caseworkerId,
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
       return [];
     }
   }

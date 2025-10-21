@@ -15,6 +15,7 @@ import {
 } from "@shared/schema";
 import { eq, and, desc } from "drizzle-orm";
 import { getWebSocketService } from "./websocket.service";
+import { logger } from "./logger.service";
 
 // ============================================================================
 // Type Definitions
@@ -129,7 +130,7 @@ export abstract class BasePhoneSystemAdapter implements PhoneSystemAdapter {
         ...queueInfo
       };
     } catch (error) {
-      console.error("Error getting call status:", error);
+      logger.error('Error getting call status', { error });
       return null;
     }
   }
@@ -170,7 +171,7 @@ export abstract class BasePhoneSystemAdapter implements PhoneSystemAdapter {
         isActive: queue.isActive
       };
     } catch (error) {
-      console.error("Error getting queue status:", error);
+      logger.error('Error getting queue status', { error });
       return null;
     }
   }
@@ -240,7 +241,7 @@ export abstract class BasePhoneSystemAdapter implements PhoneSystemAdapter {
     const requiresTwoParty = this.requiresTwoPartyConsent(options.stateCode);
     
     if (!options.consentGiven && requiresTwoParty) {
-      console.warn(`Recording consent required for state ${options.stateCode} but not given`);
+      logger.warn('Recording consent required but not given', { stateCode: options.stateCode });
       return false;
     }
 
@@ -319,7 +320,10 @@ export class PhoneSystemManager {
       const adapter = await this.createAdapter(config);
       if (adapter) {
         this.adapters.set(config.id, adapter);
-        console.log(`✅ Initialized ${config.systemType} adapter: ${config.systemName}`);
+        logger.info('Initialized phone system adapter', { 
+          systemType: config.systemType, 
+          systemName: config.systemName 
+        });
       }
     }
   }
@@ -348,11 +352,14 @@ export class PhoneSystemManager {
           return new SIPAdapter(config, this.tenantId);
         
         default:
-          console.warn(`Unknown phone system type: ${config.systemType}`);
+          logger.warn('Unknown phone system type', { systemType: config.systemType });
           return null;
       }
     } catch (error) {
-      console.error(`Failed to create adapter for ${config.systemType}:`, error);
+      logger.error('Failed to create phone system adapter', { 
+        systemType: config.systemType, 
+        error 
+      });
       return null;
     }
   }
@@ -398,7 +405,7 @@ export class PhoneSystemManager {
       : await this.selectBestAdapter(options.to);
 
     if (!adapter) {
-      console.error("No phone system adapter available");
+      logger.error('No phone system adapter available');
       return null;
     }
 

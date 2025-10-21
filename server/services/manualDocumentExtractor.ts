@@ -2,6 +2,7 @@ import axios from 'axios';
 import mammoth from 'mammoth';
 import crypto from 'crypto';
 import { ScrapedSection } from './manualScraper';
+import { logger } from './logger.service';
 
 export interface ProcessedDocument {
   sectionNumber: string;
@@ -25,7 +26,11 @@ export interface ProcessedDocument {
  */
 export async function downloadDocument(url: string, timeout: number = 60000): Promise<Buffer> {
   try {
-    console.log(`Downloading document from ${url}...`);
+    logger.info('Downloading document', {
+      service: 'ManualDocumentExtractor',
+      method: 'downloadDocument',
+      url
+    });
     const response = await axios.get(url, {
       responseType: 'arraybuffer',
       timeout,
@@ -37,7 +42,12 @@ export async function downloadDocument(url: string, timeout: number = 60000): Pr
 
     return Buffer.from(response.data);
   } catch (error) {
-    console.error(`Error downloading document from ${url}:`, error);
+    logger.error('Error downloading document', {
+      service: 'ManualDocumentExtractor',
+      method: 'downloadDocument',
+      url,
+      error: error instanceof Error ? error.message : 'Unknown error'
+    });
     throw new Error(`Failed to download document: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
 }
@@ -57,7 +67,11 @@ export async function extractPdfText(buffer: Buffer): Promise<{ text: string; pa
       pageCount: (data as any).numpages,
     };
   } catch (error) {
-    console.error('Error extracting PDF text:', error);
+    logger.error('Error extracting PDF text', {
+      service: 'ManualDocumentExtractor',
+      method: 'extractPdfText',
+      error: error instanceof Error ? error.message : 'Unknown error'
+    });
     throw new Error(`Failed to extract PDF text: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
 }
@@ -72,7 +86,11 @@ export async function extractDocxText(buffer: Buffer): Promise<string> {
     const result = await mammoth.extractRawText({ buffer });
     return result.value;
   } catch (error) {
-    console.error('Error extracting DOCX text:', error);
+    logger.error('Error extracting DOCX text', {
+      service: 'ManualDocumentExtractor',
+      method: 'extractDocxText',
+      error: error instanceof Error ? error.message : 'Unknown error'
+    });
     throw new Error(`Failed to extract DOCX text: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
 }
@@ -133,7 +151,12 @@ export function extractEffectiveDate(text: string): Date | undefined {
  */
 export async function processDocument(section: ScrapedSection): Promise<ProcessedDocument> {
   try {
-    console.log(`Processing section ${section.sectionNumber}: ${section.sectionTitle}`);
+    logger.info('Processing document section', {
+      service: 'ManualDocumentExtractor',
+      method: 'processDocument',
+      sectionNumber: section.sectionNumber,
+      sectionTitle: section.sectionTitle
+    });
     
     // Download the document
     const buffer = await downloadDocument(section.sourceUrl);
@@ -172,7 +195,12 @@ export async function processDocument(section: ScrapedSection): Promise<Processe
       },
     };
   } catch (error) {
-    console.error(`Error processing section ${section.sectionNumber}:`, error);
+    logger.error('Error processing section', {
+      service: 'ManualDocumentExtractor',
+      method: 'processDocument',
+      sectionNumber: section.sectionNumber,
+      error: error instanceof Error ? error.message : 'Unknown error'
+    });
     throw error;
   }
 }
@@ -203,21 +231,36 @@ export async function processDocumentsBatch(
       try {
         const processed = await processDocument(section);
         successful.push(processed);
-        console.log(`✓ Successfully processed section ${section.sectionNumber}`);
+        logger.info('Successfully processed section', {
+          service: 'ManualDocumentExtractor',
+          method: 'processDocumentsBatch',
+          sectionNumber: section.sectionNumber
+        });
         break;
       } catch (error) {
         lastError = error as Error;
         retries++;
         
         if (retries < maxRetries) {
-          console.log(`✗ Failed to process section ${section.sectionNumber}, retrying (${retries}/${maxRetries})...`);
+          logger.warn('Failed to process section, retrying', {
+            service: 'ManualDocumentExtractor',
+            method: 'processDocumentsBatch',
+            sectionNumber: section.sectionNumber,
+            retries,
+            maxRetries
+          });
           await new Promise(resolve => setTimeout(resolve, delayMs));
         }
       }
     }
     
     if (lastError && retries === maxRetries) {
-      console.error(`✗ Failed to process section ${section.sectionNumber} after ${maxRetries} retries`);
+      logger.error('Failed to process section after max retries', {
+        service: 'ManualDocumentExtractor',
+        method: 'processDocumentsBatch',
+        sectionNumber: section.sectionNumber,
+        maxRetries
+      });
       failed.push({
         section,
         error: lastError.message,

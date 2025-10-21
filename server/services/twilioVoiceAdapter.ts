@@ -11,6 +11,7 @@ import type {
   CallStatus 
 } from "./phoneSystemAdapter";
 import { db } from "../db";
+import { logger } from "./logger.service";
 import { 
   phoneCallRecords, 
   ivrMenus, 
@@ -40,9 +41,16 @@ export class TwilioVoiceAdapter extends BasePhoneSystemAdapter {
         this.config.twilioAccountSid || process.env.TWILIO_ACCOUNT_SID,
         this.config.twilioAuthToken || process.env.TWILIO_AUTH_TOKEN
       );
-      console.log("✅ Twilio Voice client initialized");
+      logger.info("Twilio Voice client initialized", {
+        service: 'TwilioVoiceAdapter',
+        tenantId: this.tenantId
+      });
     } catch (error) {
-      console.error("❌ Failed to initialize Twilio client:", error);
+      logger.error("Failed to initialize Twilio client", {
+        service: 'TwilioVoiceAdapter',
+        tenantId: this.tenantId,
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
     }
   }
 
@@ -88,10 +96,20 @@ export class TwilioVoiceAdapter extends BasePhoneSystemAdapter {
         metadata: options.metadata
       });
 
-      console.log(`📞 Call initiated: ${call.sid} from ${options.from} to ${options.to}`);
+      logger.info('Call initiated', {
+        service: 'TwilioVoiceAdapter',
+        callSid: call.sid,
+        from: options.from,
+        to: options.to
+      });
       return call.sid;
     } catch (error: any) {
-      console.error("❌ Failed to initiate call:", error);
+      logger.error("Failed to initiate call", {
+        service: 'TwilioVoiceAdapter',
+        from: options.from,
+        to: options.to,
+        error: error?.message || 'Unknown error'
+      });
       throw new Error(`Call initiation failed: ${error.message}`);
     }
   }
@@ -139,7 +157,11 @@ export class TwilioVoiceAdapter extends BasePhoneSystemAdapter {
 
       return true;
     } catch (error) {
-      console.error("❌ Failed to transfer call:", error);
+      logger.error("Failed to transfer call", {
+        service: 'TwilioVoiceAdapter',
+        callId: options.callId,
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
       return false;
     }
   }
@@ -166,7 +188,11 @@ export class TwilioVoiceAdapter extends BasePhoneSystemAdapter {
 
       return true;
     } catch (error) {
-      console.error("❌ Failed to hold call:", error);
+      logger.error("Failed to hold call", {
+        service: 'TwilioVoiceAdapter',
+        callId,
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
       return false;
     }
   }
@@ -201,7 +227,11 @@ export class TwilioVoiceAdapter extends BasePhoneSystemAdapter {
 
       return true;
     } catch (error) {
-      console.error("❌ Failed to resume call:", error);
+      logger.error("Failed to resume call", {
+        service: 'TwilioVoiceAdapter',
+        callId,
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
       return false;
     }
   }
@@ -233,19 +263,29 @@ export class TwilioVoiceAdapter extends BasePhoneSystemAdapter {
           recordingStartTime: new Date()
         });
 
-        console.log(`🎙️ Recording started for call ${options.callId}`);
+        logger.info('Recording started for call', {
+          service: 'TwilioVoiceAdapter',
+          callId: options.callId
+        });
       } else {
         // Stop any active recordings
         const recordings = await call.recordings.list({ status: "in-progress" });
         for (const recording of recordings) {
           await recording.update({ status: "stopped" });
         }
-        console.log(`⏹️ Recording stopped for call ${options.callId}`);
+        logger.info('Recording stopped for call', {
+          service: 'TwilioVoiceAdapter',
+          callId: options.callId
+        });
       }
 
       return true;
     } catch (error) {
-      console.error("❌ Failed to manage recording:", error);
+      logger.error("Failed to manage recording", {
+        service: 'TwilioVoiceAdapter',
+        callId: options.callId,
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
       return false;
     }
   }
@@ -267,7 +307,11 @@ export class TwilioVoiceAdapter extends BasePhoneSystemAdapter {
 
       return true;
     } catch (error) {
-      console.error("❌ Failed to end call:", error);
+      logger.error("Failed to end call", {
+        service: 'TwilioVoiceAdapter',
+        callId,
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
       return false;
     }
   }
@@ -291,7 +335,12 @@ export class TwilioVoiceAdapter extends BasePhoneSystemAdapter {
 
       return true;
     } catch (error) {
-      console.error("❌ Failed to mute/unmute call:", error);
+      logger.error("Failed to mute/unmute call", {
+        service: 'TwilioVoiceAdapter',
+        callId,
+        isMuted,
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
       return false;
     }
   }
@@ -309,7 +358,11 @@ export class TwilioVoiceAdapter extends BasePhoneSystemAdapter {
 
       return true;
     } catch (error) {
-      console.error("❌ Failed to send DTMF:", error);
+      logger.error("Failed to send DTMF", {
+        service: 'TwilioVoiceAdapter',
+        callId,
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
       return false;
     }
   }
@@ -331,7 +384,11 @@ export class TwilioVoiceAdapter extends BasePhoneSystemAdapter {
 
       return true;
     } catch (error) {
-      console.error("❌ Failed to whisper to agent:", error);
+      logger.error("Failed to whisper to agent", {
+        service: 'TwilioVoiceAdapter',
+        callId,
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
       return false;
     }
   }
@@ -517,7 +574,12 @@ export class TwilioVoiceAdapter extends BasePhoneSystemAdapter {
 
       return true;
     } catch (error) {
-      console.error("❌ Failed to add call to queue:", error);
+      logger.error("Failed to add call to queue", {
+        service: 'TwilioVoiceAdapter',
+        callId: options.callId,
+        queueId: options.queueId,
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
       return false;
     }
   }
@@ -565,7 +627,11 @@ export class TwilioVoiceAdapter extends BasePhoneSystemAdapter {
 
       return callRecord;
     } catch (error) {
-      console.error("❌ Failed to get next call from queue:", error);
+      logger.error("Failed to get next call from queue", {
+        service: 'TwilioVoiceAdapter',
+        queueId,
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
       return null;
     }
   }

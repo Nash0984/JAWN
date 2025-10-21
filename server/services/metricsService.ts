@@ -22,6 +22,7 @@ import {
 import { eq, and, gte, lte, sql, desc, count, inArray } from "drizzle-orm";
 import { aiOrchestrator } from "./aiOrchestrator";
 import { cacheOrchestrator } from "./cacheOrchestrator";
+import { logger } from "./logger.service";
 import type { 
   MonitoringDashboardMetrics,
   ErrorMetrics,
@@ -181,7 +182,7 @@ export class MetricsService {
         })),
       };
     } catch (error) {
-      console.error('Error fetching error metrics:', error);
+      logger.error('Error fetching error metrics', { error });
       return {
         totalCount: 0,
         errorRate: 0,
@@ -294,7 +295,7 @@ export class MetricsService {
         })),
       };
     } catch (error) {
-      console.error('Error fetching security metrics:', error);
+      logger.error('Error fetching security metrics', { error });
       return {
         totalEvents: 0,
         highSeverityThreats: 0,
@@ -402,7 +403,7 @@ export class MetricsService {
         })),
       };
     } catch (error) {
-      console.error('Error fetching performance metrics:', error);
+      logger.error('Error fetching performance metrics', { error });
       return {
         avgResponseTime: 0,
         p95ResponseTime: 0,
@@ -512,7 +513,7 @@ export class MetricsService {
         })),
       };
     } catch (error) {
-      console.error('Error fetching e-filing metrics:', error);
+      logger.error('Error fetching e-filing metrics', { error });
       return {
         totalSubmissions: 0,
         errorRate: 0,
@@ -561,7 +562,7 @@ export class MetricsService {
         costTrend,
       };
     } catch (error) {
-      console.error('Error fetching AI metrics:', error);
+      logger.error('Error fetching AI metrics', { error });
       return {
         totalCost: 0,
         totalCalls: 0,
@@ -612,7 +613,7 @@ export class MetricsService {
         },
       };
     } catch (error) {
-      console.error('Error fetching cache metrics:', error);
+      logger.error('Error fetching cache metrics', { error });
       return {
         hitRate: 0,
         l1Status: 'critical',
@@ -769,7 +770,7 @@ export class MetricsService {
         },
       };
     } catch (error) {
-      console.error('Error fetching realtime update:', error);
+      logger.error('Error fetching realtime update', { error });
       return {
         timestamp: new Date(),
         errors: { count: 0, recent: [] },
@@ -801,7 +802,7 @@ export class MetricsService {
         timestamp: new Date(),
       });
     } catch (error) {
-      console.error("Failed to record metric:", error);
+      logger.error('Failed to record metric', { error });
       // Don't throw - metrics recording should never break the app
     }
   }
@@ -862,7 +863,7 @@ export class MetricsService {
         p99: percentile(99),
       };
     } catch (error) {
-      console.error("Failed to get metrics summary:", error);
+      logger.error('Failed to get metrics summary', { error });
       return null;
     }
   }
@@ -909,7 +910,7 @@ export class MetricsService {
         count: Number(t.count),
       }));
     } catch (error) {
-      console.error("Failed to calculate trends:", error);
+      logger.error('Failed to calculate trends', { error });
       return [];
     }
   }
@@ -952,7 +953,7 @@ export class MetricsService {
         lastOccurrence: new Date(e.lastOccurrence as any),
       }));
     } catch (error) {
-      console.error("Failed to get top errors:", error);
+      logger.error('Failed to get top errors', { error });
       return [];
     }
   }
@@ -997,7 +998,7 @@ export class MetricsService {
         count: Number(e.count),
       }));
     } catch (error) {
-      console.error("Failed to get slowest endpoints:", error);
+      logger.error('Failed to get slowest endpoints', { error });
       return [];
     }
   }
@@ -1033,7 +1034,7 @@ export class MetricsService {
       
       return durationMinutes > 0 ? errorCount / durationMinutes : 0;
     } catch (error) {
-      console.error("Failed to get error rate:", error);
+      logger.error('Failed to get error rate', { error });
       return 0;
     }
   }
@@ -1050,10 +1051,10 @@ export class MetricsService {
         .delete(monitoringMetrics)
         .where(lte(monitoringMetrics.timestamp, cutoffDate));
 
-      console.log(`Cleaned up metrics older than ${daysToKeep} days`);
+      logger.info('Cleaned up old metrics', { daysToKeep });
       return 0; // Drizzle doesn't return count for deletes
     } catch (error) {
-      console.error("Failed to cleanup old metrics:", error);
+      logger.error('Failed to cleanup old metrics', { error });
       return 0;
     }
   }

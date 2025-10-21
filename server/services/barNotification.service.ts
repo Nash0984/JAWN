@@ -74,7 +74,7 @@ export class BARNotificationService {
       const checkpointData = await this.getCheckpointData(checkpointId);
       if (!checkpointData) {
         const error = `Checkpoint ${checkpointId} not found`;
-        console.error(`❌ BAR: ${error}`);
+        logger.error('Checkpoint not found', { checkpointId, error });
         return { success: false, error };
       }
       
@@ -83,14 +83,14 @@ export class BARNotificationService {
       // Check if reminder already sent for this day count
       const reminderSentDays = checkpoint.reminderSentDays || [];
       if (reminderSentDays.includes(daysUntil)) {
-        console.log(`⏭️  BAR: Reminder already sent for ${daysUntil} days - skipping`);
+        logger.info('Reminder already sent - skipping', { checkpointId, daysUntil });
         return { success: true, checkpointId };
       }
       
       // Validate caseworker email
       if (!caseworkerEmail) {
         const error = `Caseworker email not found for checkpoint ${checkpointId}`;
-        console.warn(`⚠️  BAR: ${error} - cannot send email`);
+        logger.warn('Cannot send email - caseworker email not found', { checkpointId });
         return { success: false, error };
       }
       
@@ -122,7 +122,7 @@ export class BARNotificationService {
       });
       
       if (!emailSent) {
-        console.warn(`⚠️  BAR: Email failed to send to ${caseworkerEmail}, but continuing...`);
+        logger.warn('Email failed to send, but continuing', { caseworkerEmail, checkpointId });
       }
       
       // Update checkpoint: add to reminderSentDays array and set notificationSentAt
@@ -136,12 +136,16 @@ export class BARNotificationService {
         })
         .where(eq(caseLifecycleEvents.id, checkpointId));
       
-      console.log(`✅ BAR: Caseworker reminder sent to ${caseworkerEmail} (${daysUntil} days)`);
+      logger.info('Caseworker reminder sent', {
+        checkpointId,
+        caseworkerEmail,
+        daysUntil
+      });
       return { success: true, checkpointId };
       
     } catch (error) {
       const errorMsg = `Failed to send caseworker reminder: ${error}`;
-      console.error(`❌ BAR: ${errorMsg}`);
+      logger.error('Error in BAR operation', { error: errorMsg });
       return { success: false, checkpointId, error: errorMsg };
     }
   }
@@ -151,7 +155,7 @@ export class BARNotificationService {
    * Note: This requires adding supervisorNotifiedAt column to benefitsAccessReviews
    */
   async sendSupervisorReviewPrompt(reviewId: string): Promise<NotificationResult> {
-    console.log(`📧 BAR: Sending supervisor review prompt for review ${reviewId}`);
+    logger.info('Sending supervisor review prompt', { reviewId });
     
     try {
       // Get review data
@@ -162,7 +166,7 @@ export class BARNotificationService {
       
       if (review.length === 0) {
         const error = `Review ${reviewId} not found`;
-        console.error(`❌ BAR: ${error}`);
+        logger.error('BAR operation error', { error });
         return { success: false, error };
       }
       
@@ -172,7 +176,7 @@ export class BARNotificationService {
       const supervisorId = reviewData.supervisorId;
       if (!supervisorId) {
         const error = `No supervisor assigned to review ${reviewId}`;
-        console.warn(`⚠️  BAR: ${error}`);
+        logger.warn('BAR operation warning', { error });
         return { success: false, error };
       }
       
@@ -183,7 +187,7 @@ export class BARNotificationService {
       
       if (supervisor.length === 0 || !supervisor[0].email) {
         const error = `Supervisor email not found for review ${reviewId}`;
-        console.warn(`⚠️  BAR: ${error}`);
+        logger.warn('BAR operation warning', { error });
         return { success: false, error };
       }
       
@@ -226,7 +230,7 @@ export class BARNotificationService {
       });
       
       if (!emailSent) {
-        console.warn(`⚠️  BAR: Email failed to send to ${supervisorEmail}, but continuing...`);
+        logger.warn('Email failed to send to supervisor, but continuing', { supervisorEmail, reviewId });
       }
       
       // Update review: set supervisorNotifiedAt
@@ -243,12 +247,12 @@ export class BARNotificationService {
         })
         .where(eq(benefitsAccessReviews.id, reviewId));
       
-      console.log(`✅ BAR: Supervisor review prompt sent to ${supervisorEmail}`);
+      logger.info('Supervisor review prompt sent', { supervisorEmail, reviewId });
       return { success: true };
       
     } catch (error) {
       const errorMsg = `Failed to send supervisor review prompt: ${error}`;
-      console.error(`❌ BAR: ${errorMsg}`);
+      logger.error('Error in BAR operation', { error: errorMsg });
       return { success: false, error: errorMsg };
     }
   }
@@ -257,14 +261,14 @@ export class BARNotificationService {
    * Send overdue alert to both caseworker and supervisor
    */
   async sendOverdueAlert(checkpointId: string): Promise<NotificationResult> {
-    console.log(`🚨 BAR: Sending overdue alert for checkpoint ${checkpointId}`);
+    logger.info('Sending overdue alert', { checkpointId });
     
     try {
       // Get checkpoint and extended data
       const overdueData = await this.getOverdueCheckpointData(checkpointId);
       if (!overdueData) {
         const error = `Checkpoint ${checkpointId} not found or incomplete data`;
-        console.error(`❌ BAR: ${error}`);
+        logger.error('BAR operation error', { error });
         return { success: false, error };
       }
       
@@ -277,7 +281,10 @@ export class BARNotificationService {
         const hoursSinceLastAlert = (now - lastAlertTime) / (1000 * 60 * 60);
         
         if (hoursSinceLastAlert < 24) {
-          console.log(`⏭️  BAR: Overdue alert sent ${hoursSinceLastAlert.toFixed(1)} hours ago - skipping`);
+          logger.info('Overdue alert recently sent - skipping', { 
+            checkpointId, 
+            hoursSinceLastAlert: hoursSinceLastAlert.toFixed(1) 
+          });
           return { success: true, checkpointId };
         }
       }
@@ -304,9 +311,9 @@ export class BARNotificationService {
         });
         
         if (caseworkerEmailSent) {
-          console.log(`✅ BAR: Overdue alert sent to caseworker ${caseworkerEmail}`);
+          logger.info('Overdue alert sent to caseworker', { checkpointId, caseworkerEmail });
         } else {
-          console.warn(`⚠️  BAR: Failed to send overdue alert to caseworker ${caseworkerEmail}`);
+          logger.warn('Failed to send overdue alert to caseworker', { checkpointId, caseworkerEmail });
         }
       }
       
@@ -328,9 +335,9 @@ export class BARNotificationService {
         });
         
         if (supervisorEmailSent) {
-          console.log(`✅ BAR: Overdue alert sent to supervisor ${supervisorEmail}`);
+          logger.info('Overdue alert sent to supervisor', { checkpointId, supervisorEmail });
         } else {
-          console.warn(`⚠️  BAR: Failed to send overdue alert to supervisor ${supervisorEmail}`);
+          logger.warn('Failed to send overdue alert to supervisor', { checkpointId, supervisorEmail });
         }
       }
       
@@ -342,12 +349,12 @@ export class BARNotificationService {
         })
         .where(eq(caseLifecycleEvents.id, checkpointId));
       
-      console.log(`✅ BAR: Overdue alert processing complete for checkpoint ${checkpointId}`);
+      logger.info('Overdue alert processing complete', { checkpointId });
       return { success: true, checkpointId };
       
     } catch (error) {
       const errorMsg = `Failed to send overdue alert: ${error}`;
-      console.error(`❌ BAR: ${errorMsg}`);
+      logger.error('Error in BAR operation', { error: errorMsg });
       return { success: false, checkpointId, error: errorMsg };
     }
   }
@@ -357,7 +364,7 @@ export class BARNotificationService {
    * Runs daily at 9 AM via smart scheduler
    */
   async checkUpcomingCheckpoints(): Promise<number> {
-    console.log(`📋 BAR: Checking for upcoming checkpoints...`);
+    logger.info('Checking for upcoming checkpoints', { service: 'BARNotificationService' });
     
     try {
       const now = new Date();
@@ -376,7 +383,7 @@ export class BARNotificationService {
           )
         );
       
-      console.log(`📊 BAR: Found ${upcomingCheckpoints.length} upcoming checkpoints`);
+      logger.info('Found upcoming checkpoints', { count: upcomingCheckpoints.length });
       
       let notificationsSent = 0;
       
@@ -395,7 +402,10 @@ export class BARNotificationService {
         // Check if reminder already sent for this day count
         const reminderSentDays = checkpoint.reminderSentDays || [];
         if (reminderSentDays.includes(daysUntil)) {
-          console.log(`⏭️  BAR: Checkpoint ${checkpoint.id} - ${daysUntil}-day reminder already sent`);
+          logger.info('Reminder already sent for checkpoint', { 
+            checkpointId: checkpoint.id, 
+            daysUntil 
+          });
           continue;
         }
         
@@ -406,11 +416,13 @@ export class BARNotificationService {
         }
       }
       
-      console.log(`✅ BAR: Sent ${notificationsSent} upcoming checkpoint reminders`);
+      logger.info('Upcoming checkpoint reminders sent', { notificationsSent });
       return notificationsSent;
       
     } catch (error) {
-      console.error(`❌ BAR: Error checking upcoming checkpoints: ${error}`);
+      logger.error('Error checking upcoming checkpoints', { 
+        error: error instanceof Error ? error.message : 'Unknown error' 
+      });
       return 0;
     }
   }
@@ -420,7 +432,7 @@ export class BARNotificationService {
    * Runs daily at 9 AM via smart scheduler
    */
   async checkOverdueCheckpoints(): Promise<number> {
-    console.log(`⚠️  BAR: Checking for overdue checkpoints...`);
+    logger.info('Checking for overdue checkpoints', { service: 'BARNotificationService' });
     
     try {
       const now = new Date();
@@ -439,7 +451,7 @@ export class BARNotificationService {
           )
         );
       
-      console.log(`📊 BAR: Found ${overdueCheckpoints.length} overdue checkpoints`);
+      logger.info('Found overdue checkpoints', { count: overdueCheckpoints.length });
       
       let alertsSent = 0;
       
@@ -471,11 +483,13 @@ export class BARNotificationService {
         }
       }
       
-      console.log(`✅ BAR: Sent ${alertsSent} overdue checkpoint alerts`);
+      logger.info('Overdue checkpoint alerts sent', { alertsSent });
       return alertsSent;
       
     } catch (error) {
-      console.error(`❌ BAR: Error checking overdue checkpoints: ${error}`);
+      logger.error('Error checking overdue checkpoints', {
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
       return 0;
     }
   }
@@ -514,7 +528,10 @@ export class BARNotificationService {
         caseId: row.caseId,
       };
     } catch (error) {
-      console.error(`❌ BAR: Error fetching checkpoint data: ${error}`);
+      logger.error('Error fetching checkpoint data', {
+        checkpointId,
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
       return null;
     }
   }
@@ -567,7 +584,10 @@ export class BARNotificationService {
         daysOverdue,
       };
     } catch (error) {
-      console.error(`❌ BAR: Error fetching overdue checkpoint data: ${error}`);
+      logger.error('Error fetching overdue checkpoint data', {
+        checkpointId,
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
       return null;
     }
   }

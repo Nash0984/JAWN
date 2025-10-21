@@ -5,6 +5,7 @@ import { marylandBills, documents, policySources } from '@shared/schema';
 import { eq, and } from 'drizzle-orm';
 import { ObjectStorageService } from '../objectStorage';
 import { unifiedDocumentService as documentProcessor } from './unified/UnifiedDocumentService';
+import { logger } from './logger.service';
 
 /**
  * Maryland Legislature Scraper
@@ -78,7 +79,7 @@ export class MarylandLegislatureScraper {
    * Main scraper method - scrapes bills from Maryland Legislature
    */
   async scrapeBills(session: string = '2025RS'): Promise<ScrapeResult> {
-    console.log(`\n🏛️  Maryland Legislature Scraper - Session ${session}\n`);
+    logger.info('Maryland Legislature Scraper started', { session });
     
     const result: ScrapeResult = {
       success: true,
@@ -94,11 +95,11 @@ export class MarylandLegislatureScraper {
       const senateBills = await this.scrapeChamber('senate', session);
       
       const allBills = [...houseBills, ...senateBills];
-      console.log(`📊 Total bills found: ${allBills.length}\n`);
+      logger.info('Total bills found', { count: allBills.length });
 
       // Process each bill and filter AFTER fetching details
       // This ensures we check BOTH title AND synopsis for keywords
-      console.log(`🔍 Fetching details and filtering by keywords...\n`);
+      logger.info('Fetching details and filtering by keywords');
       
       for (const billItem of allBills) {
         try {
@@ -115,21 +116,25 @@ export class MarylandLegislatureScraper {
           await this.delay(this.DELAY_MS);
         } catch (error) {
           const errorMsg = `Error processing ${billItem.billNumber}: ${error instanceof Error ? error.message : 'Unknown error'}`;
-          console.error(`❌ ${errorMsg}`);
+          logger.error('Error fetching bill details', { error: errorMsg });
           result.errors.push(errorMsg);
         }
       }
       
-      console.log(`\n🎯 Found ${result.billsFound} policy-relevant bills (checked title AND synopsis)\n`);
+      logger.info('Policy-relevant bills found', { 
+        count: result.billsFound,
+        note: 'Checked both title and synopsis'
+      });
 
       // Update policy source sync status
       await this.updatePolicySourceStatus(session, result);
 
-      console.log(`\n✅ Maryland Legislature Scrape Complete:`);
-      console.log(`   Bills Found: ${result.billsFound}`);
-      console.log(`   Bills Stored: ${result.billsStored}`);
-      console.log(`   Bills Updated: ${result.billsUpdated}`);
-      console.log(`   Errors: ${result.errors.length}`);
+      logger.info('Maryland Legislature scrape complete', {
+        billsFound: result.billsFound,
+        billsStored: result.billsStored,
+        billsUpdated: result.billsUpdated,
+        errors: result.errors.length
+      });
 
     } catch (error) {
       result.success = false;
@@ -146,7 +151,7 @@ export class MarylandLegislatureScraper {
    * Dynamically detects pagination parameter from Next link on page 1
    */
   private async scrapeChamber(chamber: 'house' | 'senate', session: string): Promise<BillListItem[]> {
-    console.log(`📥 Fetching ${chamber} bills with pagination...`);
+    logger.info('Fetching bills with pagination', { chamber });
     
     const allBills: BillListItem[] = [];
     let page = 1;
@@ -161,7 +166,7 @@ export class MarylandLegislatureScraper {
         // For page 1, fetch and detect pagination parameter from Next link
         if (page === 1) {
           const baseUrl = `${this.BASE_URL}/mgawebsite/Legislation/Index/${chamber}`;
-          console.log(`  📄 Fetching page ${page}...`);
+          logger.debug('Fetching page', { page, chamber });
           
           const response = await axios.get(baseUrl, {
             headers: {
@@ -181,22 +186,22 @@ export class MarylandLegislatureScraper {
               url.searchParams.forEach((value, key) => {
                 if (!isNaN(Number(value)) && Number(value) > 1 && paginationParam === 'page') {
                   paginationParam = key;
-                  console.log(`🔍 Detected pagination parameter from Next link: "${paginationParam}"`);
+                  logger.debug('Detected pagination parameter from Next link', { paginationParam });
                 }
               });
             } catch (error) {
-              console.log(`  ⚠️ Could not parse Next link, using default parameter: ${paginationParam}`);
+              logger.warn('Could not parse Next link, using default parameter', { paginationParam });
             }
           } else {
-            console.log(`  ℹ️ No Next link found, using default parameter: ${paginationParam}`);
+            logger.debug('No Next link found, using default parameter', { paginationParam });
           }
           
-          console.log(`  ✅ Found ${pageBills.length} bills on page ${page}`);
+          logger.debug('Found bills on page', { page, count: pageBills.length });
         } else {
           // For subsequent pages, use detected pagination parameter
           const url = `${this.BASE_URL}/mgawebsite/Legislation/Index/${chamber}?${paginationParam}=${page}`;
           
-          console.log(`  📄 Fetching page ${page} (using ?${paginationParam}=)...`);
+          logger.debug('Fetching page', { page, chamber, paginationParam });
           
           const response = await axios.get(url, {
             headers: {
@@ -217,12 +222,19 @@ export class MarylandLegislatureScraper {
         const actualNewBills = allBills.length - beforeCount;
         
         if (page > 1) {
-          console.log(`  ✅ Found ${newBillsCount} bills on page ${page} (${actualNewBills} new, ${newBillsCount - actualNewBills} duplicates)`);
+          logger.debug('Found bills on page', { 
+            page, 
+            total: newBillsCount, 
+            new: actualNewBills, 
+            duplicates: newBillsCount - actualNewBills 
+          });
         }
         
         // END DETECTION: Stop if no bills found OR all were duplicates
         if (pageBills.length === 0 || actualNewBills === 0) {
-          console.log(`  🛑 End of pagination detected: ${pageBills.length === 0 ? 'no bills found' : 'all duplicates'}`);
+          logger.debug('End of pagination detected', { 
+            reason: pageBills.length === 0 ? 'no bills found' : 'all duplicates' 
+          });
           hasMore = false;
           break;
         }
@@ -239,7 +251,10 @@ export class MarylandLegislatureScraper {
           const isLikelyLastPage = pageBills.length < 25;
           
           if (!hasNextButton && !hasPageLinks && isLikelyLastPage) {
-            console.log(`  🛑 End of pagination detected: small page (${pageBills.length} bills) with no next indicators`);
+            logger.debug('End of pagination detected', { 
+              reason: 'small page with no next indicators', 
+              billsOnPage: pageBills.length 
+            });
             hasMore = false;
             break;
           }
@@ -249,15 +264,23 @@ export class MarylandLegislatureScraper {
         await this.delay(this.DELAY_MS);
         
       } catch (error) {
-        console.error(`  ❌ Error fetching page ${page}: ${error}`);
+        logger.error('Error fetching page', { page, error });
         hasMore = false;
       }
     }
     
-    console.log(`✅ Total ${chamber} bills found: ${allBills.length} across ${page - 1} page(s) (using pagination parameter: "${paginationParam}")`);
+    logger.info('Chamber scrape complete', { 
+      chamber, 
+      totalBills: allBills.length, 
+      pages: page - 1, 
+      paginationParam 
+    });
     
     if (allBills.length >= this.MAX_BILLS_PER_CHAMBER) {
-      console.log(`⚠️ WARNING: Hit MAX_BILLS_PER_CHAMBER limit (${this.MAX_BILLS_PER_CHAMBER}). There may be more bills.`);
+      logger.warn('Max bills per chamber limit reached', { 
+        limit: this.MAX_BILLS_PER_CHAMBER, 
+        message: 'There may be more bills' 
+      });
     }
     
     return allBills;
@@ -309,7 +332,7 @@ export class MarylandLegislatureScraper {
           }
         }
       } catch (error) {
-        console.error(`Error parsing bill row: ${error}`);
+        logger.error('Error parsing bill row', { error });
       }
     });
     
@@ -346,7 +369,7 @@ export class MarylandLegislatureScraper {
     session: string,
     result: ScrapeResult
   ): Promise<void> {
-    console.log(`📄 Processing ${billItem.billNumber}...`);
+    logger.debug('Processing bill', { billNumber: billItem.billNumber });
 
     // Fetch bill details
     const billDetails = await this.fetchBillDetails(billItem, session);
@@ -365,7 +388,7 @@ export class MarylandLegislatureScraper {
     session: string,
     result: ScrapeResult
   ): Promise<void> {
-    console.log(`📄 Storing ${billDetails.billNumber}...`);
+    logger.debug('Storing bill', { billNumber: billDetails.billNumber });
 
     // Check if bill exists in database
     const existingBills = await db.select()
@@ -390,7 +413,7 @@ export class MarylandLegislatureScraper {
           session
         );
       } catch (error) {
-        console.error(`Failed to download PDF for ${billDetails.billNumber}: ${error}`);
+        logger.error('Failed to download PDF', { billNumber: billDetails.billNumber, error });
       }
     }
 
@@ -423,7 +446,7 @@ export class MarylandLegislatureScraper {
         .where(eq(marylandBills.id, existingBill.id));
       
       result.billsUpdated++;
-      console.log(`🔄 Updated ${billDetails.billNumber}`);
+      logger.info('Bill updated', { billNumber: billDetails.billNumber });
     } else {
       const [insertedBill] = await db.insert(marylandBills)
         .values({
@@ -433,7 +456,7 @@ export class MarylandLegislatureScraper {
         .returning();
       
       result.billsStored++;
-      console.log(`✨ Created ${billDetails.billNumber}`);
+      logger.info('Bill created', { billNumber: billDetails.billNumber });
 
       // Create document record for RAG pipeline
       if (pdfObjectPath) {
@@ -609,7 +632,7 @@ export class MarylandLegislatureScraper {
     billNumber: string,
     session: string
   ): Promise<string> {
-    console.log(`  📥 Downloading PDF for ${billNumber}...`);
+    logger.debug('Downloading PDF', { billNumber });
 
     // Download PDF
     const response = await axios.get(pdfUrl, {
@@ -639,7 +662,7 @@ export class MarylandLegislatureScraper {
     }
 
     const objectPath = objectStorageService.normalizeObjectEntityPath(uploadUrl);
-    console.log(`  ✅ Uploaded PDF to ${objectPath}`);
+    logger.debug('Uploaded PDF', { objectPath });
     
     return objectPath;
   }
@@ -676,9 +699,9 @@ export class MarylandLegislatureScraper {
       // Process document through RAG pipeline
       await documentProcessor.processDocument(document.id);
       
-      console.log(`  📚 Created document record for RAG pipeline`);
+      logger.debug('Created document record for RAG pipeline');
     } catch (error) {
-      console.error(`Error creating document record: ${error}`);
+      logger.error('Error creating document record', { error });
     }
   }
 
@@ -721,7 +744,7 @@ export class MarylandLegislatureScraper {
         await db.insert(policySources).values(sourceData);
       }
     } catch (error) {
-      console.error(`Error updating policy source status: ${error}`);
+      logger.error('Error updating policy source status', { error });
     }
   }
 

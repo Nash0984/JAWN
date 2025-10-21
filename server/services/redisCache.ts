@@ -10,6 +10,7 @@ import Redis from 'ioredis';
 import { Redis as UpstashRedis } from '@upstash/redis';
 import NodeCache from 'node-cache';
 import { cacheService } from './cacheService';
+import { logger } from './logger.service';
 
 // Cache invalidation event interface
 export interface CacheInvalidationEvent {
@@ -83,7 +84,7 @@ class RedisCacheService implements IRedisCache {
         
         this.status = 'connected';
         this.metrics.connectionStatus = 'connected (Upstash)';
-        console.log('🎯 Redis L2 Cache: Connected to Upstash');
+        logger.info('Redis L2 Cache: Connected to Upstash');
       } catch (error) {
         this.handleConnectionError(error);
       }
@@ -96,7 +97,7 @@ class RedisCacheService implements IRedisCache {
         this.redis = new Redis(redisUrl, {
           retryStrategy: (times) => {
             if (times > 3) {
-              console.error('❌ Redis L2 Cache: Max retries reached, falling back to L1 only');
+              logger.error('Redis L2 Cache: Max retries reached, falling back to L1 only');
               this.status = 'fallback';
               return null;
             }
@@ -121,7 +122,7 @@ class RedisCacheService implements IRedisCache {
       // No Redis configuration - use fallback mode
       this.status = 'fallback';
       this.metrics.connectionStatus = 'fallback (L1 only)';
-      console.log('📦 Redis L2 Cache: No Redis configured, using L1 cache only');
+      logger.info('Redis L2 Cache: No Redis configured, using L1 cache only');
     }
   }
 
@@ -131,31 +132,31 @@ class RedisCacheService implements IRedisCache {
     const redisClient = this.redis as Redis;
     
     redisClient.on('connect', () => {
-      console.log('🎯 Redis L2 Cache: Connecting...');
+      logger.info('Redis L2 Cache: Connecting...');
       this.status = 'connecting';
       this.metrics.connectionStatus = 'connecting';
     });
 
     redisClient.on('ready', () => {
-      console.log('✅ Redis L2 Cache: Connected and ready');
+      logger.info('Redis L2 Cache: Connected and ready');
       this.status = 'connected';
       this.metrics.connectionStatus = 'connected';
     });
 
     redisClient.on('error', (error) => {
-      console.error('❌ Redis L2 Cache error:', error.message);
+      logger.error('Redis L2 Cache error', { error: error.message });
       this.metrics.errors++;
       this.metrics.lastError = error.message;
     });
 
     redisClient.on('close', () => {
-      console.log('🔌 Redis L2 Cache: Connection closed');
+      logger.info('Redis L2 Cache: Connection closed');
       this.status = 'disconnected';
       this.metrics.connectionStatus = 'disconnected';
     });
 
     redisClient.on('reconnecting', () => {
-      console.log('🔄 Redis L2 Cache: Reconnecting...');
+      logger.info('Redis L2 Cache: Reconnecting...');
       this.status = 'connecting';
       this.metrics.connectionStatus = 'reconnecting';
     });
@@ -167,10 +168,10 @@ class RedisCacheService implements IRedisCache {
     // Subscribe to cache invalidation channel
     this.subClient.subscribe('cache:invalidation', (err) => {
       if (err) {
-        console.error('❌ Redis Pub/Sub subscription error:', err);
+        logger.error('Redis Pub/Sub subscription error', { error: err });
         this.metrics.errors++;
       } else {
-        console.log('📡 Redis Pub/Sub: Subscribed to cache invalidation channel');
+        logger.info('Redis Pub/Sub: Subscribed to cache invalidation channel');
       }
     });
 
@@ -181,7 +182,7 @@ class RedisCacheService implements IRedisCache {
           const event: CacheInvalidationEvent = JSON.parse(message);
           this.handleInvalidationEvent(event);
         } catch (error) {
-          console.error('❌ Failed to parse invalidation event:', error);
+          logger.error('Failed to parse invalidation event', { error });
           this.metrics.errors++;
         }
       }
@@ -194,7 +195,7 @@ class RedisCacheService implements IRedisCache {
       try {
         handler(event);
       } catch (error) {
-        console.error('❌ Invalidation handler error:', error);
+        logger.error('Invalidation handler error', { error });
         this.metrics.errors++;
       }
     });
@@ -208,7 +209,7 @@ class RedisCacheService implements IRedisCache {
   }
 
   private handleConnectionError(error: any): void {
-    console.error('❌ Redis L2 Cache connection failed:', error?.message || error);
+    logger.error('Redis L2 Cache connection failed', { error: error?.message || error });
     this.status = 'fallback';
     this.metrics.connectionStatus = 'fallback (connection failed)';
     this.metrics.errors++;
@@ -240,7 +241,7 @@ class RedisCacheService implements IRedisCache {
         return null;
       }
     } catch (error) {
-      console.error(`❌ Redis get error for key ${key}:`, error);
+      logger.error('Redis get error', { key, error });
       this.metrics.errors++;
       this.metrics.lastError = `Get failed: ${error}`;
       return null; // Fallback to L1
@@ -266,7 +267,7 @@ class RedisCacheService implements IRedisCache {
       
       this.metrics.sets++;
     } catch (error) {
-      console.error(`❌ Redis set error for key ${key}:`, error);
+      logger.error('Redis set error', { key, error });
       this.metrics.errors++;
       this.metrics.lastError = `Set failed: ${error}`;
       // Continue without throwing - L1 cache will still work
@@ -294,7 +295,7 @@ class RedisCacheService implements IRedisCache {
       this.metrics.deletes += deleted;
       return deleted;
     } catch (error) {
-      console.error('❌ Redis del error:', error);
+      logger.error('Redis del error', { error, keys });
       this.metrics.errors++;
       this.metrics.lastError = `Delete failed: ${error}`;
       return 0;
@@ -338,7 +339,7 @@ class RedisCacheService implements IRedisCache {
       }
       return 0;
     } catch (error) {
-      console.error('❌ Redis pattern invalidation error:', error);
+      logger.error('Redis pattern invalidation error', { error, pattern });
       this.metrics.errors++;
       this.metrics.lastError = `Pattern invalidation failed: ${error}`;
       return 0;
@@ -364,9 +365,9 @@ class RedisCacheService implements IRedisCache {
         await this.pubClient.publish('cache:invalidation', message);
       }
       
-      console.log(`📡 Published cache invalidation: ${event.trigger}`);
+      logger.info('Published cache invalidation', { trigger: event.trigger });
     } catch (error) {
-      console.error('❌ Failed to publish invalidation:', error);
+      logger.error('Failed to publish invalidation', { error, event });
       this.metrics.errors++;
       this.metrics.lastError = `Publish failed: ${error}`;
     }
@@ -414,7 +415,7 @@ class RedisCacheService implements IRedisCache {
       await this.subClient.quit();
     }
     this.status = 'disconnected';
-    console.log('🔌 Redis L2 Cache: Disconnected');
+    logger.info('Redis L2 Cache: Disconnected');
   }
 }
 

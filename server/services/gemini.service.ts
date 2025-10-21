@@ -1,5 +1,6 @@
 import { GoogleGenAI } from "@google/genai";
 import { embeddingCache } from "./embeddingCache";
+import { logger } from './logger.service';
 
 /**
  * Get a configured Gemini client instance
@@ -81,7 +82,7 @@ export async function generateEmbedding(text: string): Promise<number[]> {
     
     return embedding;
   } catch (error) {
-    console.error('Error generating embedding:', error);
+    logger.error('Error generating embedding', { error, textLength: text.length });
     return new Array(768).fill(0);
   }
 }

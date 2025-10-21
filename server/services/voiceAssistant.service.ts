@@ -7,6 +7,7 @@
 import { db } from "../db";
 import { intakeSessions, users } from "@shared/schema";
 import { eq } from "drizzle-orm";
+import { logger } from "./logger.service";
 
 interface VoiceSettings {
   enabled: boolean;
@@ -148,7 +149,12 @@ class VoiceAssistantService {
         };
       }
     } catch (error) {
-      console.error('Error fetching voice settings:', error);
+      logger.error('Error fetching voice settings', {
+        service: 'VoiceAssistantService',
+        method: 'getUserVoiceSettings',
+        userId,
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
     }
 
     return this.defaultVoiceSettings;
@@ -184,7 +190,12 @@ class VoiceAssistantService {
           .where(eq(users.id, userId));
       }
     } catch (error) {
-      console.error('Error saving voice settings:', error);
+      logger.error('Error saving voice settings', {
+        service: 'VoiceAssistantService',
+        method: 'saveUserVoiceSettings',
+        userId,
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
     }
   }
 
@@ -438,7 +449,12 @@ class VoiceAssistantService {
         };
       }
     } catch (error) {
-      console.error('Error fetching accessibility settings:', error);
+      logger.error('Error fetching accessibility settings', {
+        service: 'VoiceAssistantService',
+        method: 'getAccessibilitySettings',
+        userId,
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
     }
 
     return defaultSettings;

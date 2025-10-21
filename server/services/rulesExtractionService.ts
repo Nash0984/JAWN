@@ -1,5 +1,6 @@
 import { GoogleGenAI } from "@google/genai";
 import { db } from "../db";
+import { logger } from "./logger.service";
 import { 
   manualSections, 
   documentChunks, 
@@ -20,13 +21,18 @@ function getGemini(): GoogleGenAI | null {
   if (!genAI) {
     const apiKey = process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY;
     if (!apiKey) {
-      console.warn("Warning: No Gemini API key found for rules extraction");
+      logger.warn("No Gemini API key found for rules extraction", {
+        service: 'RulesExtractionService'
+      });
       return null;
     }
     try {
       genAI = new GoogleGenAI({ apiKey });
     } catch (error) {
-      console.error('Failed to initialize Gemini API:', error);
+      logger.error('Failed to initialize Gemini API', {
+        service: 'RulesExtractionService',
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
       return null;
     }
   }
@@ -51,7 +57,11 @@ function parseGeminiResponse<T>(responseText: string, arrayKey: string, function
     
     // Validate response structure
     if (!parsed || typeof parsed !== 'object') {
-      console.error(`[${functionName}] Invalid Gemini response structure (not object):`, responseText);
+      logger.error('Invalid Gemini response structure (not object)', {
+        service: 'RulesExtractionService',
+        method: functionName,
+        responseText
+      });
       return [];
     }
     
@@ -59,14 +69,23 @@ function parseGeminiResponse<T>(responseText: string, arrayKey: string, function
     
     // Ensure we got an array
     if (!Array.isArray(data)) {
-      console.error(`[${functionName}] Invalid Gemini response - expected array for key '${arrayKey}', got:`, typeof data);
+      logger.error('Invalid Gemini response - expected array', {
+        service: 'RulesExtractionService',
+        method: functionName,
+        arrayKey,
+        dataType: typeof data
+      });
       return [];
     }
     
     return data as T[];
   } catch (error) {
-    console.error(`[${functionName}] Error parsing Gemini response:`, error);
-    if (responseText) console.error(`[${functionName}] Response text:`, responseText);
+    logger.error('Error parsing Gemini response', {
+      service: 'RulesExtractionService',
+      method: functionName,
+      error: error instanceof Error ? error.message : 'Unknown error',
+      responseText
+    });
     return [];
   }
 }
@@ -179,7 +198,10 @@ async function extractIncomeLimits(sectionText: string, sectionNumber: string): 
   try {
     const ai = getGemini();
     if (!ai) {
-      console.error("Gemini API not available for income limits extraction");
+      logger.error("Gemini API not available for income limits extraction", {
+        service: 'RulesExtractionService',
+        method: 'extractIncomeLimits'
+      });
       return [];
     }
 
@@ -222,7 +244,11 @@ If no income limits are found, return: {"incomeLimits": []}`;
     
     return parseGeminiResponse<ExtractedIncomeLimit>(responseText, 'incomeLimits', 'extractIncomeLimits');
   } catch (error) {
-    console.error("Error extracting income limits:", error);
+    logger.error("Error extracting income limits", {
+      service: 'RulesExtractionService',
+      method: 'extractIncomeLimits',
+      error: error instanceof Error ? error.message : 'Unknown error'
+    });
     return [];
   }
 }
@@ -234,7 +260,10 @@ async function extractDeductions(sectionText: string, sectionNumber: string): Pr
   try {
     const ai = getGemini();
     if (!ai) {
-      console.error("Gemini API not available for deductions extraction");
+      logger.error("Gemini API not available for deductions extraction", {
+        service: 'RulesExtractionService',
+        method: 'extractDeductions'
+      });
       return [];
     }
 
@@ -268,7 +297,11 @@ If none found: {"deductions": []}`;
     
     return parseGeminiResponse<ExtractedDeduction>(responseText, 'deductions', 'extractDeductions');
   } catch (error) {
-    console.error("Error extracting deductions:", error);
+    logger.error("Error extracting deductions", {
+      service: 'RulesExtractionService',
+      method: 'extractDeductions',
+      error: error instanceof Error ? error.message : 'Unknown error'
+    });
     return [];
   }
 }
@@ -280,7 +313,10 @@ async function extractAllotments(sectionText: string, sectionNumber: string): Pr
   try {
     const ai = getGemini();
     if (!ai) {
-      console.error("Gemini API not available for allotments extraction");
+      logger.error("Gemini API not available for allotments extraction", {
+        service: 'RulesExtractionService',
+        method: 'extractAllotments'
+      });
       return [];
     }
 
@@ -309,7 +345,11 @@ If none found: {"allotments": []}`;
     
     return parseGeminiResponse<ExtractedAllotment>(responseText, 'allotments', 'extractAllotments');
   } catch (error) {
-    console.error("Error extracting allotments:", error);
+    logger.error("Error extracting allotments", {
+      service: 'RulesExtractionService',
+      method: 'extractAllotments',
+      error: error instanceof Error ? error.message : 'Unknown error'
+    });
     return [];
   }
 }
@@ -321,7 +361,10 @@ async function extractCategoricalRules(sectionText: string, sectionNumber: strin
   try {
     const ai = getGemini();
     if (!ai) {
-      console.error("Gemini API not available for categorical rules extraction");
+      logger.error("Gemini API not available for categorical rules extraction", {
+        service: 'RulesExtractionService',
+        method: 'extractCategoricalRules'
+      });
       return [];
     }
 
@@ -354,7 +397,11 @@ If none found: {"categoricalRules": []}`;
     
     return parseGeminiResponse<ExtractedCategoricalRule>(responseText, 'categoricalRules', 'extractCategoricalRules');
   } catch (error) {
-    console.error("Error extracting categorical rules:", error);
+    logger.error("Error extracting categorical rules", {
+      service: 'RulesExtractionService',
+      method: 'extractCategoricalRules',
+      error: error instanceof Error ? error.message : 'Unknown error'
+    });
     return [];
   }
 }
@@ -366,7 +413,10 @@ async function extractDocumentRequirements(sectionText: string, sectionNumber: s
   try {
     const ai = getGemini();
     if (!ai) {
-      console.error("Gemini API not available for document requirements extraction");
+      logger.error("Gemini API not available for document requirements extraction", {
+        service: 'RulesExtractionService',
+        method: 'extractDocumentRequirements'
+      });
       return [];
     }
 
@@ -400,7 +450,11 @@ If none found: {"documentRequirements": []}`;
     
     return parseGeminiResponse<ExtractedDocumentRequirement>(responseText, 'documentRequirements', 'extractDocumentRequirements');
   } catch (error) {
-    console.error("Error extracting document requirements:", error);
+    logger.error("Error extracting document requirements", {
+      service: 'RulesExtractionService',
+      method: 'extractDocumentRequirements',
+      error: error instanceof Error ? error.message : 'Unknown error'
+    });
     return [];
   }
 }

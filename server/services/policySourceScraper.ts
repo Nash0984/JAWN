@@ -1936,13 +1936,15 @@ export class PolicySourceScraper {
             documentCount: result.documentIds.length,
             syncError: null
           });
-          console.log(`✅ eCFR Bulk Download complete: ${result.documentIds.length} documents`);
+          logger.info('eCFR Bulk Download complete', {
+            documentsCount: result.documentIds.length
+          });
           return result.documentIds.length;
         } else {
           throw new Error(result.error || 'eCFR bulk download failed');
         }
       } else if (config?.scrapeType === 'irs_direct_download') {
-        console.log('📥 Using IRS Direct Download Service...');
+        logger.info('Using IRS Direct Download Service');
         
         // Construct publication object from config
         const publicationNumber = config.publicationNumber || config.formNumber;
@@ -1971,7 +1973,9 @@ export class PolicySourceScraper {
           documentCount: documentIds.length,
           syncError: null
         });
-        console.log(`✅ IRS Direct Download complete: ${documentIds.length} documents`);
+        logger.info('IRS Direct Download complete', {
+          documentsCount: documentIds.length
+        });
         return documentIds.length;
       }
       
@@ -2011,10 +2015,15 @@ export class PolicySourceScraper {
       } else if (config?.scrapeType === 'irs_vita_pdf') {
         documents = await this.scrapeIRSVITAPDF(policySourceId, config);
       } else {
-        console.log(`⚠ Scraper not yet implemented for: ${config?.scrapeType}`);
+        logger.warn('Scraper not yet implemented', {
+          scrapeType: config?.scrapeType
+        });
       }
       
-      console.log(`✓ Scraped ${documents.length} documents from ${source.name}`);
+      logger.info('Documents scraped from source', {
+        documentsCount: documents.length,
+        sourceName: source.name
+      });
       
       // Download and process each document
       const ADMIN_USER_ID = 'b259547b-0479-4549-9576-a55e013345a5'; // demo.admin from seedData.ts
@@ -2034,16 +2043,24 @@ export class PolicySourceScraper {
           }
         } catch (error: any) {
           failedCount++;
-          console.error(`❌ Failed to process document ${doc.title}:`, error.message);
+          logger.error('Failed to process document', {
+            documentTitle: doc.title,
+            error: error.message
+          });
           // Continue with other documents
         }
       }
       
       if (failedCount > 0) {
-        console.log(`⚠️  ${failedCount} documents failed to process`);
+        logger.warn('Some documents failed to process', {
+          failedCount
+        });
       }
       
-      console.log(`✓ Downloaded and stored ${processedCount}/${documents.length} documents`);
+      logger.info('Documents downloaded and stored', {
+        processedCount,
+        totalDocuments: documents.length
+      });
       
       // Update sync status
       await storage.updatePolicySource(policySourceId, {
@@ -2055,7 +2072,10 @@ export class PolicySourceScraper {
       
       return processedCount;
     } catch (error: any) {
-      console.error(`Error scraping source ${policySourceId}:`, error);
+      logger.error('Error scraping source', {
+        policySourceId,
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
       
       await storage.updatePolicySource(policySourceId, {
         syncStatus: 'error',
@@ -2076,20 +2096,27 @@ export class PolicySourceScraper {
         .filter((s: any) => s.isActive)
         .sort((a: any, b: any) => (b.priority || 0) - (a.priority || 0));
       
-      console.log(`Scraping ${activeSources.length} active policy sources...`);
+      logger.info('Scraping active policy sources', {
+        count: activeSources.length
+      });
       
       for (const source of activeSources) {
         try {
           await this.scrapeSource(source.id);
         } catch (error) {
-          console.error(`Failed to scrape ${source.name}:`, error);
+          logger.error('Failed to scrape source', {
+            sourceName: source.name,
+            error: error instanceof Error ? error.message : 'Unknown error'
+          });
           // Continue with other sources
         }
       }
       
-      console.log('✓ Completed scraping all sources');
+      logger.info('Completed scraping all sources');
     } catch (error) {
-      console.error('Error scraping all sources:', error);
+      logger.error('Error scraping all sources', {
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
       throw error;
     }
   }

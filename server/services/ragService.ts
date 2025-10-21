@@ -3,6 +3,7 @@ import { ReadingLevelService } from "./readingLevelService";
 import { auditService } from "./auditService";
 import { ragCache } from "./ragCache";
 import { getGeminiClient, generateEmbedding as geminiGenerateEmbedding } from "./gemini.service";
+import { logger } from './logger.service';
 
 // Track Gemini availability
 let geminiAvailable = true;
@@ -13,7 +14,7 @@ function getGemini() {
   try {
     return getGeminiClient();
   } catch (error) {
-    console.error('Failed to get Gemini client:', error);
+    logger.error('Failed to get Gemini client', { error });
     geminiAvailable = false;
     lastGeminiError = new Date();
     return null;
@@ -127,7 +128,7 @@ class RAGService {
       geminiAvailable = !!response.text;
       return geminiAvailable;
     } catch (error) {
-      console.error("Gemini API availability check failed:", error);
+      logger.error("Gemini API availability check failed", { error });
       geminiAvailable = false;
       lastGeminiError = new Date();
       
@@ -137,7 +138,7 @@ class RAGService {
         action: "availability_check",
         success: false,
         error: (error as any).message
-      }).catch(console.error);
+      }).catch(err => logger.error("Failed to log external service", { err }));
       
       return false;
     }
@@ -149,13 +150,13 @@ class RAGService {
       
       // Check if Gemini API is available
       if (!ai || !geminiAvailable) {
-        console.warn("Gemini API not available, returning fallback response");
+        logger.warn("Gemini API not available, returning fallback response");
         await auditService.logExternalService({
           service: "Gemini",
           action: "document_verification",
           success: false,
           error: "API not available"
-        }).catch(console.error);
+        }).catch(err => logger.error("Failed to log external service", { err }));
         
         return generateFallbackResponse('verification');
       }
@@ -218,7 +219,7 @@ class RAGService {
         const jsonMatch = responseText.match(/```(?:json)?\n?([\s\S]*?)```/) || [null, responseText];
         result = JSON.parse(jsonMatch[1].trim());
       } catch (parseError) {
-        console.error("JSON parsing error:", parseError, "Raw response:", responseText);
+        logger.error("JSON parsing error", { parseError, responseText });
         result = {};
       }
       
@@ -232,7 +233,7 @@ class RAGService {
         confidence: result.confidence || 0
       };
     } catch (error) {
-      console.error("Document verification error:", error);
+      logger.error("Document verification error", { error, filename });
       return {
         documentType: "unknown",
         meetsCriteria: false,
@@ -286,7 +287,7 @@ class RAGService {
       
       return response;
     } catch (error) {
-      console.error("RAG search error:", error);
+      logger.error("RAG search error", { error, query, benefitProgramId });
       throw new Error("Failed to process search query");
     }
   }
@@ -332,7 +333,7 @@ class RAGService {
 
       return JSON.parse(responseText);
     } catch (error) {
-      console.error("Query analysis error:", error);
+      logger.error("Query analysis error", { error, query });
       return {
         intent: "general_inquiry",
         entities: [],
@@ -407,7 +408,7 @@ class RAGService {
               });
             }
           } catch (error) {
-            console.error(`Error processing chunk ${chunk.id}:`, error);
+            logger.error(`Error processing chunk`, { chunkId: chunk.id, error });
             continue;
           }
         }
@@ -418,11 +419,11 @@ class RAGService {
         .sort((a, b) => b.relevanceScore - a.relevanceScore)
         .slice(0, 5); // Return top 5 most relevant chunks
 
-      console.log(`Found ${topResults.length} relevant chunks for query`);
+      logger.info(`Found relevant chunks for query`, { count: topResults.length });
       return topResults;
       
     } catch (error) {
-      console.error("Error retrieving relevant chunks:", error);
+      logger.error("Error retrieving relevant chunks", { error, benefitProgramId });
       // Fallback to simple document-based search
       const documents = await storage.getDocuments({ 
         benefitProgramId,
@@ -545,7 +546,7 @@ class RAGService {
         queryAnalysis,
       };
     } catch (error) {
-      console.error("Response generation error:", error);
+      logger.error("Response generation error", { error, query });
       throw new Error("Failed to generate response");
     }
   }
@@ -577,9 +578,9 @@ class RAGService {
         }
       }
       
-      console.log(`Document ${documentId} indexed successfully`);
+      logger.info(`Document indexed successfully`, { documentId });
     } catch (error) {
-      console.error(`Error indexing document ${documentId}:`, error);
+      logger.error(`Error indexing document`, { documentId, error });
       throw error;
     }
   }
@@ -592,13 +593,13 @@ class RAGService {
       for (const chunk of chunks) {
         if (chunk.vectorId) {
           // Remove from vector database
-          console.log(`Removing vector ${chunk.vectorId} from index`);
+          logger.info(`Removing vector from index`, { vectorId: chunk.vectorId });
         }
       }
       
-      console.log(`Document ${documentId} removed from index successfully`);
+      logger.info(`Document removed from index successfully`, { documentId });
     } catch (error) {
-      console.error(`Error removing document ${documentId} from index:`, error);
+      logger.error(`Error removing document from index`, { documentId, error });
       throw error;
     }
   }

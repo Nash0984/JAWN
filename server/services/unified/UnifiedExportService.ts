@@ -14,6 +14,7 @@ import autoTable from 'jspdf-autotable';
 import { Parser } from 'json2csv';
 import * as XLSX from 'xlsx';
 import { storage } from '../../storage';
+import { logger } from '../logger.service';
 import type { 
   ClientInteractionSession, 
   ClientCase, 

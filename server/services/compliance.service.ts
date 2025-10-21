@@ -1,6 +1,7 @@
 import { generateTextWithGemini } from "./gemini.service";
 import { storage } from "../storage";
 import type { ComplianceRule, InsertComplianceViolation } from "@shared/schema";
+import { logger } from './logger.service';
 
 export interface ValidationContext {
   entityType: string;
@@ -61,7 +62,7 @@ Analyze the content for compliance with this rule. Return JSON:
       // Try to extract JSON from response text
       const jsonMatch = result.match(/\{[\s\S]*\}/);
       if (!jsonMatch) {
-        console.error(`No JSON found in Gemini response for rule ${rule.ruleCode}`);
+        logger.error('No JSON found in Gemini response', { ruleCode: rule.ruleCode });
         return null;
       }
       
@@ -82,9 +83,7 @@ Analyze the content for compliance with this rule. Return JSON:
 
       return null;
     } catch (error) {
-      console.error(`Failed to validate against rule ${rule.ruleCode}:`, error);
-      // Log the raw response for debugging
-      console.error('Raw Gemini response:', error);
+      logger.error('Failed to validate against rule', { ruleCode: rule.ruleCode, error });
       return null;
     }
   }

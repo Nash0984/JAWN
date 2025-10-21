@@ -9,6 +9,7 @@
  */
 
 import type { Express, Request, Response, NextFunction } from "express";
+import { logger } from "./logger.service";
 
 let Sentry: any = null;
 let sentryEnabled = false;
@@ -36,7 +37,10 @@ async function initializeSentry() {
         const packageJson = await import("../../package.json");
         release = (packageJson as any).version || "unknown";
       } catch (e) {
-        console.warn("⚠️  Could not read package.json for Sentry release version");
+        logger.warn("Could not read package.json for Sentry release version", {
+          service: 'SentryService',
+          error: e instanceof Error ? e.message : 'Unknown error'
+        });
       }
       
       Sentry.init({
@@ -120,16 +124,24 @@ async function initializeSentry() {
       
       sentryEnabled = true;
       sentryConfigured = true;
-      console.log(`✅ Sentry initialized (${environment}) - Release: ${release}`);
-      console.log(`   Traces sample rate: ${tracesSampleRate * 100}%`);
-      console.log(`   Profiles sample rate: ${profilesSampleRate * 100}%`);
+      logger.info('Sentry initialized', {
+        service: 'SentryService',
+        environment,
+        release,
+        tracesSampleRate: `${tracesSampleRate * 100}%`,
+        profilesSampleRate: `${profilesSampleRate * 100}%`
+      });
     } else {
-      console.warn("⚠️  Sentry DSN not configured (SENTRY_DSN). Error tracking disabled.");
-      console.warn("   Add SENTRY_DSN to environment variables to enable Sentry monitoring.");
+      logger.warn("Sentry DSN not configured - error tracking disabled", {
+        service: 'SentryService',
+        suggestion: 'Add SENTRY_DSN to environment variables to enable Sentry monitoring'
+      });
     }
   } catch (error) {
-    console.warn("⚠️  Sentry packages not installed. Error tracking disabled.");
-    console.warn("   Run: npm install @sentry/node @sentry/react @sentry/profiling-node");
+    logger.warn("Sentry packages not installed - error tracking disabled", {
+      service: 'SentryService',
+      suggestion: 'Run: npm install @sentry/node @sentry/react @sentry/profiling-node'
+    });
     sentryEnabled = false;
   }
 }

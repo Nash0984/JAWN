@@ -5,6 +5,7 @@ import { publicLaws, federalBills, documents, policySources } from '@shared/sche
 import { eq, and, sql } from 'drizzle-orm';
 import { ObjectStorageService } from '../objectStorage';
 import { unifiedDocumentService as documentProcessor } from './unified/UnifiedDocumentService';
+import { logger } from './logger.service';
 
 /**
  * GovInfo Public Laws Downloader
@@ -64,7 +65,7 @@ export class GovInfoPublicLawsDownloader {
    * Download public laws for a specific Congress
    */
   async downloadPublicLaws(congress: number = 119): Promise<PublicLawsDownloadResult> {
-    console.log(`\n🏛️  GovInfo Public Laws Downloader - Congress ${congress}\n`);
+    logger.info('GovInfo Public Laws Downloader started', { congress });
     
     const result: PublicLawsDownloadResult = {
       success: true,
@@ -77,21 +78,21 @@ export class GovInfoPublicLawsDownloader {
 
     try {
       // Fetch all packages from PLAW collection for the entire Congress
-      console.log(`📥 Fetching public laws from GovInfo API...`);
+      logger.info('Fetching public laws from GovInfo API');
       const packages = await govInfoClient.getAllPackages(
         'PLAW',
         undefined,
         undefined,
         { congress: congress.toString() }
       );
-      console.log(`✅ Found ${packages.length} public laws in Congress ${congress}\n`);
+      logger.info('Public laws found in Congress', { count: packages.length, congress });
 
       // Filter laws by policy keywords
       const relevantLaws = packages.filter(pkg => 
         this.isPolicyRelevant(pkg.title)
       );
       
-      console.log(`🎯 Filtered to ${relevantLaws.length} policy-relevant laws\n`);
+      logger.info('Policy-relevant laws filtered', { count: relevantLaws.length });
 
       // Process each relevant law
       for (const pkg of relevantLaws) {
@@ -99,7 +100,7 @@ export class GovInfoPublicLawsDownloader {
           await this.processPublicLaw(pkg.packageId, congress, result);
         } catch (error) {
           const errorMsg = `Error processing ${pkg.packageId}: ${error instanceof Error ? error.message : 'Unknown error'}`;
-          console.error(`❌ ${errorMsg}`);
+          logger.error('Error processing public law', { error: errorMsg });
           result.errors.push(errorMsg);
           result.success = false;
         }
@@ -108,12 +109,13 @@ export class GovInfoPublicLawsDownloader {
       // Update policy source sync status
       await this.updatePolicySourceStatus(congress, result);
 
-      console.log(`\n✅ Public Laws Download Complete:`);
-      console.log(`   Processed: ${result.lawsProcessed}`);
-      console.log(`   Updated: ${result.lawsUpdated}`);
-      console.log(`   Skipped: ${result.lawsSkipped}`);
-      console.log(`   Documents: ${result.documentsCreated}`);
-      console.log(`   Errors: ${result.errors.length}`);
+      logger.info('Public Laws Download Complete', {
+        processed: result.lawsProcessed,
+        updated: result.lawsUpdated,
+        skipped: result.lawsSkipped,
+        documents: result.documentsCreated,
+        errors: result.errors.length
+      });
 
     } catch (error) {
       result.success = false;
@@ -149,7 +151,7 @@ export class GovInfoPublicLawsDownloader {
     const metadata = await govInfoClient.getPackageMetadata(packageId);
     
     if (!metadata.download.xmlLink) {
-      console.log(`⏭️  Skipping ${packageId} - no XML available`);
+      logger.debug('Skipping public law - no XML available', { packageId });
       result.lawsSkipped++;
       return;
     }
@@ -174,12 +176,12 @@ export class GovInfoPublicLawsDownloader {
 
     // Skip if law exists and hasn't been modified
     if (existingLaw?.downloadedAt && existingLaw.downloadedAt >= lastModified) {
-      console.log(`⏭️  Skipping Public Law ${publicLawNumber} - already up-to-date`);
+      logger.debug('Skipping public law - already up-to-date', { publicLawNumber });
       result.lawsSkipped++;
       return;
     }
 
-    console.log(`📥 Downloading Public Law ${publicLawNumber}...`);
+    logger.info('Downloading public law', { publicLawNumber });
 
     // Download USLM XML
     const xmlContent = await govInfoClient.downloadXML(metadata.download.xmlLink);
@@ -224,7 +226,7 @@ export class GovInfoPublicLawsDownloader {
         })
         .where(eq(publicLaws.id, existingLaw.id));
       
-      console.log(`🔄 Updated Public Law ${publicLawNumber}`);
+      logger.info('Public law updated', { publicLawNumber });
     } else {
       await db.insert(publicLaws).values({
         ...lawData,
@@ -234,7 +236,7 @@ export class GovInfoPublicLawsDownloader {
         downloadedAt: new Date(),
       });
       
-      console.log(`✨ Created Public Law ${publicLawNumber}`);
+      logger.info('Public law created', { publicLawNumber });
     }
 
     result.lawsUpdated++;
@@ -497,10 +499,10 @@ export class GovInfoPublicLawsDownloader {
           })
           .where(eq(federalBills.id, bills[0].id));
         
-        console.log(`🔗 Linked to originating bill ${billNumber}`);
+        logger.info('Linked to originating bill', { billNumber });
       }
     } catch (error) {
-      console.error(`Error linking to bill ${billNumber}:`, error);
+      logger.error('Error linking to bill', { billNumber, error });
     }
   }
 
@@ -539,7 +541,7 @@ export class GovInfoPublicLawsDownloader {
 
       return document.id;
     } catch (error) {
-      console.error(`Error creating document record: ${error}`);
+      logger.error('Error creating document record', { error });
       return null;
     }
   }
@@ -583,7 +585,7 @@ export class GovInfoPublicLawsDownloader {
         await db.insert(policySources).values(sourceData);
       }
     } catch (error) {
-      console.error(`Error updating policy source status: ${error}`);
+      logger.error('Error updating policy source status', { error });
     }
   }
 }

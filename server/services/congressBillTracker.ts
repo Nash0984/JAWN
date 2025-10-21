@@ -2,6 +2,7 @@ import { congressGovClient, CongressBill, BillDetailsResponse } from './congress
 import { db } from '../db';
 import { federalBills, documents, benefitPrograms } from '@shared/schema';
 import { eq, and, sql } from 'drizzle-orm';
+import { logger } from './logger.service';
 
 /**
  * Congress Bill Tracker
@@ -60,9 +61,10 @@ export class CongressBillTracker {
     billType?: string,
     limit: number = 100
   ): Promise<BillTrackingResult> {
-    console.log(`\n🔍 Searching Congress.gov for bills - Congress ${congress}`);
-    console.log(`   Keywords: ${keywords.join(', ')}`);
-    console.log();
+    logger.info('Searching Congress.gov for bills', { 
+      congress, 
+      keywords 
+    });
     
     const result: BillTrackingResult = {
       success: true,
@@ -82,12 +84,12 @@ export class CongressBillTracker {
         sort: 'updateDate+desc',
       });
 
-      console.log(`📥 Found ${searchResponse.bills.length} bills from API`);
+      logger.info('Bills found from API', { count: searchResponse.bills.length });
       result.billsFound = searchResponse.bills.length;
 
       const billsToTrack = searchResponse.bills;
 
-      console.log(`🎯 Tracking ${billsToTrack.length} bills\n`);
+      logger.info('Tracking bills', { count: billsToTrack.length });
 
       // Track each bill
       for (const bill of billsToTrack) {
@@ -107,21 +109,22 @@ export class CongressBillTracker {
           }
         } catch (error) {
           const errorMsg = `Error tracking ${bill.type} ${bill.number}: ${error instanceof Error ? error.message : 'Unknown error'}`;
-          console.error(`❌ ${errorMsg}`);
+          logger.error('Error tracking bill', { error: errorMsg });
           result.errors.push(errorMsg);
         }
       }
 
-      console.log(`\n✅ Search Complete:`);
-      console.log(`   Found: ${result.billsFound}`);
-      console.log(`   Tracked: ${result.billsTracked}`);
-      console.log(`   Updated: ${result.billsUpdated}`);
-      console.log(`   Errors: ${result.errors.length}`);
+      logger.info('Search complete', {
+        found: result.billsFound,
+        tracked: result.billsTracked,
+        updated: result.billsUpdated,
+        errors: result.errors.length
+      });
 
     } catch (error) {
       result.success = false;
       const errorMsg = `Search failed: ${error instanceof Error ? error.message : 'Unknown error'}`;
-      console.error(`❌ ${errorMsg}`);
+      logger.error('Sync error', { error: errorMsg });
       result.errors.push(errorMsg);
     }
 
@@ -143,7 +146,7 @@ export class CongressBillTracker {
     const formattedBillNumber = `${billType.toUpperCase()} ${billNumber}`;
     
     try {
-      console.log(`📥 Tracking ${formattedBillNumber}...`);
+      logger.debug('Tracking bill', { billNumber: formattedBillNumber });
 
       // Fetch bill details from Congress.gov
       const billDetails = await congressGovClient.getBillDetails(
@@ -211,7 +214,7 @@ export class CongressBillTracker {
 
         billId = existingBill.id;
         updated = true;
-        console.log(`🔄 Updated ${formattedBillNumber}`);
+        logger.info('Bill updated', { billNumber: formattedBillNumber });
       } else {
         // Insert new bill
         const insertResult = await db.insert(federalBills).values({
@@ -221,7 +224,7 @@ export class CongressBillTracker {
         }).returning({ id: federalBills.id });
 
         billId = insertResult[0].id;
-        console.log(`✨ Created ${formattedBillNumber}`);
+        logger.info('Bill created', { billNumber: formattedBillNumber });
       }
 
       return {
@@ -233,7 +236,7 @@ export class CongressBillTracker {
 
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : 'Unknown error';
-      console.error(`❌ Failed to track ${formattedBillNumber}: ${errorMsg}`);
+      logger.error('Failed to track bill', { billNumber: formattedBillNumber, error: errorMsg });
       
       return {
         success: false,
@@ -249,7 +252,7 @@ export class CongressBillTracker {
    * Sync all bills currently in the database
    */
   async syncTrackedBills(): Promise<BillTrackingResult> {
-    console.log(`\n🔄 Syncing all tracked bills...\n`);
+    logger.info('Syncing all tracked bills');
 
     const result: BillTrackingResult = {
       success: true,
@@ -269,7 +272,7 @@ export class CongressBillTracker {
       }).from(federalBills);
 
       result.billsFound = allBills.length;
-      console.log(`📥 Found ${allBills.length} bills to sync\n`);
+      logger.info('Bills to sync', { count: allBills.length });
 
       // Sync each bill
       for (const bill of allBills) {
@@ -291,20 +294,21 @@ export class CongressBillTracker {
           }
         } catch (error) {
           const errorMsg = `Error syncing ${bill.billNumber}: ${error instanceof Error ? error.message : 'Unknown error'}`;
-          console.error(`❌ ${errorMsg}`);
+          logger.error('Error tracking bill', { error: errorMsg });
           result.errors.push(errorMsg);
         }
       }
 
-      console.log(`\n✅ Sync Complete:`);
-      console.log(`   Total Bills: ${result.billsFound}`);
-      console.log(`   Updated: ${result.billsUpdated}`);
-      console.log(`   Errors: ${result.errors.length}`);
+      logger.info('Sync complete', {
+        totalBills: result.billsFound,
+        updated: result.billsUpdated,
+        errors: result.errors.length
+      });
 
     } catch (error) {
       result.success = false;
       const errorMsg = `Sync failed: ${error instanceof Error ? error.message : 'Unknown error'}`;
-      console.error(`❌ ${errorMsg}`);
+      logger.error('Sync error', { error: errorMsg });
       result.errors.push(errorMsg);
     }
 

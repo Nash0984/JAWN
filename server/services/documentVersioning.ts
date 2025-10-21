@@ -1,6 +1,7 @@
 import { DocumentVersion } from "../../shared/schema.js";
 import { storage } from "../storage.js";
 import crypto from "crypto";
+import { logger } from "./logger.service";
 
 export interface VersionComparisonResult {
   hasChanged: boolean;
@@ -32,7 +33,12 @@ export class DocumentVersioningService {
     
     // Check if document has changed
     if (latestVersion && latestVersion.documentHash === documentHash) {
-      console.log(`📋 Document ${documentId} unchanged (hash: ${documentHash.substring(0, 8)}...)`);
+      logger.info('Document unchanged', {
+        service: 'DocumentVersioningService',
+        method: 'createVersionIfChanged',
+        documentId,
+        hashPrefix: documentHash.substring(0, 8)
+      });
       return {
         hasChanged: false,
         versionNumber: latestVersion.versionNumber
@@ -80,7 +86,13 @@ export class DocumentVersioningService {
     
     const newVersion = await storage.createDocumentVersion(versionData);
     
-    console.log(`📋 Created document version ${nextVersionNumber} for ${documentId} (hash: ${documentHash.substring(0, 8)}...)`);
+    logger.info('Created document version', {
+      service: 'DocumentVersioningService',
+      method: 'createVersionIfChanged',
+      documentId,
+      versionNumber: nextVersionNumber,
+      hashPrefix: documentHash.substring(0, 8)
+    });
     
     return {
       versionId: newVersion.id,
