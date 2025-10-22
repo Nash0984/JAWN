@@ -36,6 +36,8 @@ export class SmartScheduler {
   private initialCheckTimers: Map<string, NodeJS.Timeout> = new Map();
   private readonly DEFAULT_CONGRESS = 119;
   private configsCache: ScheduleConfig[] | null = null;
+  private isInitialized: boolean = false;
+  private initializationTime: number | null = null;
   
   /**
    * Get source-specific schedules with realistic check intervals
@@ -341,6 +343,10 @@ export class SmartScheduler {
     log(`   Session-aware: Federal bills ${inSession ? 'daily' : 'weekly'}, MD Legislature ${mdInSession ? 'active' : 'paused'}`);
     log(`   Estimated check reduction: 70-80% vs 6-hour global interval`);
     log('════════════════════════════════════════════════════════════\n');
+    
+    // Mark as initialized
+    this.isInitialized = true;
+    this.initializationTime = Date.now();
   }
 
   /**
@@ -405,6 +411,23 @@ export class SmartScheduler {
       })),
       activeCount: this.intervals.size,
       pausedCount: configs.filter(c => !c.enabled).length,
+    };
+  }
+
+  /**
+   * Get health check status
+   */
+  getHealthStatus(): {
+    isInitialized: boolean;
+    initializationTime: number | null;
+    activeSchedules: number;
+    pendingInitialChecks: number;
+  } {
+    return {
+      isInitialized: this.isInitialized,
+      initializationTime: this.initializationTime,
+      activeSchedules: this.intervals.size,
+      pendingInitialChecks: this.initialCheckTimers.size,
     };
   }
 

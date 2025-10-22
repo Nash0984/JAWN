@@ -62,6 +62,7 @@ class HealthCheckService {
       objectStorageStatus,
       backupStatus,
       websocketStatus,
+      schedulerStatus,
     ] = await Promise.all([
       this.checkDatabase(),
       this.checkRedis(),
@@ -69,6 +70,7 @@ class HealthCheckService {
       this.checkObjectStorage(),
       this.checkBackup(),
       this.checkWebSocket(),
+      this.checkScheduler(),
     ]);
     
     const services = [
@@ -78,6 +80,7 @@ class HealthCheckService {
       objectStorageStatus,
       backupStatus,
       websocketStatus,
+      schedulerStatus,
     ];
     
     // Determine overall status
@@ -342,6 +345,56 @@ class HealthCheckService {
         status: 'unhealthy',
         latency: Date.now() - startTime,
         message: 'WebSocket health check failed',
+        details: {
+          error: error instanceof Error ? error.message : 'Unknown error',
+        },
+      };
+    }
+  }
+  
+  /**
+   * Check Smart Scheduler health
+   */
+  private async checkScheduler(): Promise<ServiceStatus> {
+    const startTime = Date.now();
+    
+    try {
+      const { smartScheduler } = await import('./smartScheduler');
+      const healthStatus = smartScheduler.getHealthStatus();
+      const latency = Date.now() - startTime;
+      
+      // Determine status based on initialization state
+      let status: 'healthy' | 'degraded' | 'unhealthy' = 'healthy';
+      let message = 'Smart Scheduler operating normally';
+      
+      if (!healthStatus.isInitialized) {
+        status = 'degraded';
+        message = 'Smart Scheduler still initializing (non-blocking)';
+      } else if (healthStatus.activeSchedules === 0) {
+        status = 'degraded';
+        message = 'Smart Scheduler initialized but no active schedules';
+      }
+      
+      return {
+        name: 'scheduler',
+        status,
+        latency,
+        message,
+        details: {
+          initialized: healthStatus.isInitialized,
+          activeSchedules: healthStatus.activeSchedules,
+          pendingInitialChecks: healthStatus.pendingInitialChecks,
+          initializationTime: healthStatus.initializationTime 
+            ? new Date(healthStatus.initializationTime).toISOString() 
+            : null,
+        },
+      };
+    } catch (error) {
+      return {
+        name: 'scheduler',
+        status: 'unhealthy',
+        latency: Date.now() - startTime,
+        message: 'Scheduler health check failed',
         details: {
           error: error instanceof Error ? error.message : 'Unknown error',
         },

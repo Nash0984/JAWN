@@ -341,15 +341,6 @@ app.use("/api/", apiVersionMiddleware);
     next();
   });
   
-  // Start Smart Scheduler with source-specific intervals
-  // Checks each data source based on realistic update frequencies (70-80% reduction in API calls)
-  try {
-    const { smartScheduler } = await import("./services/smartScheduler");
-    await smartScheduler.startAll();
-  } catch (error) {
-    logger.error("❌ Failed to start Smart Scheduler:", error);
-  }
-  
   const server = await registerRoutes(app, sessionMiddleware);
 
   // Add explicit middleware to intercept /api routes before Vite
@@ -398,6 +389,29 @@ app.use("/api/", apiVersionMiddleware);
     log(`serving on port ${port}`);
     logCorsConfig();
     logSecurityHeadersConfig();
+    
+    // ============================================================================
+    // BACKGROUND INITIALIZATION - Start Smart Scheduler after server is ready
+    // ============================================================================
+    // Start Smart Scheduler in background (non-blocking, fire-and-forget)
+    // This ensures HTTP requests are served immediately without waiting for scheduler
+    setImmediate(() => {
+      // Import and start scheduler without await - true fire-and-forget
+      import("./services/smartScheduler")
+        .then(({ smartScheduler }) => {
+          // Don't await startAll() - let it run in background
+          smartScheduler.startAll()
+            .then(() => {
+              logger.info("✅ Smart Scheduler initialized");
+            })
+            .catch((error) => {
+              logger.error("❌ Smart Scheduler initialization failed", { error });
+            });
+        })
+        .catch((error) => {
+          logger.error("❌ Failed to import Smart Scheduler", { error });
+        });
+    });
   });
 
   // ============================================================================
