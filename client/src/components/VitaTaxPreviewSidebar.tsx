@@ -21,6 +21,7 @@ import {
   Calculator
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useTenant } from "@/contexts/TenantContext";
 
 interface VitaTaxPreviewProps {
   formData: any;
@@ -56,7 +57,7 @@ interface TaxCalculationResult {
     totalCredits: number;
     totalFederalTax: number;
   };
-  marylandTax: {
+  marylandTax: { // Backend field name preserved for API compatibility
     marylandTaxableIncome: number;
     stateTax: number;
     countyTax: number;
@@ -73,6 +74,8 @@ interface TaxCalculationResult {
 }
 
 export function VitaTaxPreviewSidebar({ formData, sessionId, className }: VitaTaxPreviewProps) {
+  const { stateConfig } = useTenant();
+  const stateCode = stateConfig?.stateCode || 'MD';
   const [isLoading, setIsLoading] = useState(false);
   const [calculation, setCalculation] = useState<TaxCalculationResult | null>(null);
   const [lastCalculation, setLastCalculation] = useState<TaxCalculationResult | null>(null);
@@ -334,9 +337,9 @@ export function VitaTaxPreviewSidebar({ formData, sessionId, className }: VitaTa
 
             <Separator />
 
-            {/* Maryland State Breakdown */}
+            {/* State Tax Breakdown */}
             <div className="space-y-2">
-              <div className="text-sm font-semibold">Maryland State Tax</div>
+              <div className="text-sm font-semibold">{stateCode} State Tax</div>
               
               <div className="flex justify-between text-sm">
                 <span className="text-muted-foreground">State Tax</span>
@@ -356,7 +359,7 @@ export function VitaTaxPreviewSidebar({ formData, sessionId, className }: VitaTa
 
               {calculation.marylandTax.marylandEITC > 0 && (
                 <div className="flex justify-between text-sm" data-testid="maryland-eitc">
-                  <span className="text-muted-foreground">MD EITC</span>
+                  <span className="text-muted-foreground">{stateCode} EITC</span>
                   <span className="font-medium text-green-600 dark:text-green-400">
                     -{formatCurrency(calculation.marylandTax.marylandEITC)}
                   </span>
@@ -364,7 +367,7 @@ export function VitaTaxPreviewSidebar({ formData, sessionId, className }: VitaTa
               )}
 
               <div className="flex justify-between text-sm pt-2 border-t" data-testid="maryland-total">
-                <span className="font-medium">Maryland Tax</span>
+                <span className="font-medium">{stateCode} Tax</span>
                 <span className={cn(
                   "font-semibold",
                   getRefundColor(-calculation.marylandTax.totalMarylandTax)

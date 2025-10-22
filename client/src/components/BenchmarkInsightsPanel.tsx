@@ -3,8 +3,11 @@ import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Separator } from '@/components/ui/separator';
 import { BarChart3, AlertTriangle, CheckCircle2, TrendingUp, FileText } from 'lucide-react';
+import { useTenant } from '@/contexts/TenantContext';
 
 export function BenchmarkInsightsPanel() {
+  const { stateConfig } = useTenant();
+  const stateName = stateConfig?.stateName || 'State';
   return (
     <div className="space-y-6" data-testid="benchmark-insights-panel">
       {/* Overview */}
@@ -108,13 +111,13 @@ export function BenchmarkInsightsPanel() {
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="space-y-2">
-            <p className="text-sm font-medium">25-Case Test Structure (Adapted for Maryland):</p>
+            <p className="text-sm font-medium">25-Case Test Structure (State-Specific Adaptations):</p>
             <div className="grid md:grid-cols-3 gap-3">
               <div className="border rounded-lg p-3">
                 <p className="text-xs font-semibold text-blue-600 mb-1">Eligibility Rules (8 cases)</p>
                 <ul className="text-xs text-muted-foreground space-y-0.5">
-                  <li>• MD asset limits</li>
-                  <li>• MD drug felony policy</li>
+                  <li>• State asset limits</li>
+                  <li>• State drug felony policy</li>
                   <li>• Categorical eligibility</li>
                   <li>• Student eligibility</li>
                 </ul>
@@ -123,8 +126,8 @@ export function BenchmarkInsightsPanel() {
               <div className="border rounded-lg p-3">
                 <p className="text-xs font-semibold text-green-600 mb-1">Benefit Calculations (12 cases)</p>
                 <ul className="text-xs text-muted-foreground space-y-0.5">
-                  <li>• MD gross income test</li>
-                  <li>• MD net income test</li>
+                  <li>• State gross income test</li>
+                  <li>• State net income test</li>
                   <li>• Deductions (shelter, utilities)</li>
                   <li>• Household size scaling</li>
                 </ul>
@@ -135,7 +138,7 @@ export function BenchmarkInsightsPanel() {
                 <ul className="text-xs text-muted-foreground space-y-0.5">
                   <li>• Mixed immigration status</li>
                   <li>• Elderly/disabled households</li>
-                  <li>• MD recertification periods</li>
+                  <li>• State recertification periods</li>
                   <li>• Income volatility</li>
                 </ul>
               </div>
@@ -155,22 +158,22 @@ export function BenchmarkInsightsPanel() {
                 <Badge variant="outline">Primary metric</Badge>
               </div>
               <p className="text-xs text-muted-foreground">
-                Industry standard for benefits accuracy. Our goal: {">"} 90% pass@1 for Maryland programs
+                Industry standard for benefits accuracy. Our goal: {">"} 90% pass@1 for {stateName} programs
               </p>
             </div>
           </div>
 
           <Alert>
             <FileText className="h-4 w-4" />
-            <AlertTitle>Maryland-Specific Adaptations</AlertTitle>
+            <AlertTitle>State-Specific Adaptations</AlertTitle>
             <AlertDescription className="space-y-2 mt-2">
-              <p className="text-sm">Our evaluation framework adds Maryland-specific test cases:</p>
+              <p className="text-sm">Our evaluation framework includes state-specific test cases such as:</p>
               <ul className="list-disc ml-4 space-y-1 text-sm">
-                <li>MD SNAP asset limit: $2,250 (or $3,500 for elderly/disabled households)</li>
-                <li>MD drug felony policy: No disqualification (unlike federal default)</li>
-                <li>MD recertification: 12 months for most, 24 for elderly/disabled</li>
-                <li>MD heating/cooling standard utility allowance (HCSUA) amounts</li>
-                <li>MD broad-based categorical eligibility (BBCE) up to 200% FPL</li>
+                <li>SNAP asset limits (varies by state and elderly/disabled household status)</li>
+                <li>State drug felony policies and disqualifications</li>
+                <li>State-specific recertification periods</li>
+                <li>Heating/cooling standard utility allowances (HCSUA)</li>
+                <li>Broad-based categorical eligibility (BBCE) income thresholds</li>
               </ul>
             </AlertDescription>
           </Alert>
@@ -200,16 +203,16 @@ export function BenchmarkInsightsPanel() {
             <p className="text-xs text-muted-foreground">
               <strong>Finding:</strong> Column Tax's 61% accuracy with ±10% tolerance shows rounding matters
               <br />
-              <strong>Response:</strong> Strict 2% variance for MD calculations (SNAP, Medicaid, TANF)
+              <strong>Response:</strong> Strict 2% variance for state calculations (SNAP, Medicaid, TANF)
             </p>
           </div>
 
           <div className="border-l-4 border-purple-600 pl-4 space-y-1">
-            <p className="text-sm font-medium">3. Maryland-First Test Cases</p>
+            <p className="text-sm font-medium">3. State-Specific Test Cases</p>
             <p className="text-xs text-muted-foreground">
               <strong>Finding:</strong> Propel's 25-case SNAP eval shows edge cases are critical
               <br />
-              <strong>Response:</strong> Build MD-specific evaluation with drug felony, BBCE, recertification cases
+              <strong>Response:</strong> Build state-specific evaluation with drug felony, BBCE, recertification cases
             </p>
           </div>
 
@@ -239,7 +242,7 @@ export function BenchmarkInsightsPanel() {
               <div>
                 <p className="text-sm font-medium">Automated Test Suite</p>
                 <p className="text-xs text-muted-foreground">
-                  25-case Maryland SNAP evaluation (following Propel's structure)
+                  25-case SNAP evaluation (following Propel's structure)
                 </p>
               </div>
             </div>
@@ -249,7 +252,7 @@ export function BenchmarkInsightsPanel() {
               <div>
                 <p className="text-sm font-medium">Multi-Program Accuracy Tracking</p>
                 <p className="text-xs text-muted-foreground">
-                  Expand to MD Medicaid, TANF, OHEP, WIC with program-specific benchmarks
+                  Expand to Medicaid, TANF, OHEP, WIC with program-specific benchmarks
                 </p>
               </div>
             </div>
@@ -259,7 +262,7 @@ export function BenchmarkInsightsPanel() {
               <div>
                 <p className="text-sm font-medium">Real-World Validation</p>
                 <p className="text-xs text-muted-foreground">
-                  Partner with MD DHS to validate against actual case outcomes
+                  Partner with state DHS to validate against actual case outcomes
                 </p>
               </div>
             </div>

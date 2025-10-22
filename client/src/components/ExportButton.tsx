@@ -10,6 +10,7 @@ import { Download, FileSpreadsheet, FileText } from "lucide-react";
 import Papa from "papaparse";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
+import { useTenant } from "@/contexts/TenantContext";
 
 interface ExportButtonProps {
   data: any[];
@@ -28,6 +29,11 @@ export function ExportButton({
   size = "default",
   variant = "outline"
 }: ExportButtonProps) {
+  const { stateConfig, branding } = useTenant();
+  const stateName = stateConfig?.stateName || 'State';
+  const stateCode = stateConfig?.stateCode || 'STATE';
+  // Use tenant primary color or default to neutral
+  const primaryColor = branding?.primaryColor || 'rgb(59, 130, 246)'; // Default blue
   const [isExporting, setIsExporting] = useState(false);
 
   const exportToCSV = () => {
@@ -66,10 +72,14 @@ export function ExportButton({
     try {
       const doc = new jsPDF();
       
-      // Add Maryland branding
+      // Add state branding
       doc.setFontSize(20);
-      doc.setTextColor(200, 18, 44); // Maryland red
-      doc.text("Maryland SNAP", 14, 22);
+      // Use tenant primary color or default
+      const rgb = primaryColor.match(/\d+/g);
+      if (rgb && rgb.length >= 3) {
+        doc.setTextColor(parseInt(rgb[0]), parseInt(rgb[1]), parseInt(rgb[2]));
+      }
+      doc.text(`${stateName} SNAP`, 14, 22);
       
       doc.setFontSize(14);
       doc.setTextColor(0, 0, 0);
@@ -97,7 +107,7 @@ export function ExportButton({
           cellPadding: 3,
         },
         headStyles: {
-          fillColor: [200, 18, 44], // Maryland red
+          fillColor: rgb && rgb.length >= 3 ? [parseInt(rgb[0]), parseInt(rgb[1]), parseInt(rgb[2])] : [59, 130, 246],
           textColor: [255, 255, 255],
           fontStyle: "bold",
         },

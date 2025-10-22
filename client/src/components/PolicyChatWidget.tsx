@@ -8,6 +8,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { useMutation } from '@tanstack/react-query';
 import { apiRequest } from '@/lib/queryClient';
+import { useTenant } from '@/contexts/TenantContext';
 
 interface ChatMessage {
   id: string;
@@ -38,6 +39,8 @@ interface PolicyChatWidgetProps {
 }
 
 export function PolicyChatWidget({ context, initialQuestion, compact = false }: PolicyChatWidgetProps) {
+  const { stateConfig } = useTenant();
+  const stateName = stateConfig?.stateName || 'State';
   const [isOpen, setIsOpen] = useState(false);
   const [isExpanded, setIsExpanded] = useState(true);
   const [showExplainer, setShowExplainer] = useState(false);
@@ -122,7 +125,7 @@ export function PolicyChatWidget({ context, initialQuestion, compact = false }: 
       ];
     } else {
       return [
-        'How do I apply for SNAP benefits in Maryland?',
+        `How do I apply for SNAP benefits in ${stateName}?`,
         'What are the income limits for my household size?',
         'What documents do I need to apply?'
       ];
@@ -205,7 +208,7 @@ export function PolicyChatWidget({ context, initialQuestion, compact = false }: 
                   How This Works
                 </h3>
                 <p className="text-muted-foreground">
-                  This assistant uses a hybrid approach combining AI-powered search with verified policy rules to give you accurate answers about Maryland SNAP benefits.
+                  This assistant uses a hybrid approach combining AI-powered search with verified policy rules to give you accurate answers about {stateName} SNAP benefits.
                 </p>
               </div>
 
@@ -215,7 +218,7 @@ export function PolicyChatWidget({ context, initialQuestion, compact = false }: 
                   <div>
                     <p className="font-medium">Data Sources</p>
                     <ul className="text-xs text-muted-foreground space-y-1 mt-1">
-                      <li>• Maryland SNAP Policy Manual (official DHS documents)</li>
+                      <li>• {stateName} SNAP Policy Manual (official DHS documents)</li>
                       <li>• PolicyEngine (third-party benefit calculator)</li>
                       <li>• Federal regulations and state guidelines</li>
                     </ul>
@@ -268,7 +271,7 @@ export function PolicyChatWidget({ context, initialQuestion, compact = false }: 
                 <div className="text-center py-8">
                   <MessageCircle className="h-12 w-12 mx-auto text-muted-foreground mb-3" />
                   <p className="text-sm text-muted-foreground mb-4">
-                    Ask me anything about Maryland SNAP policies and requirements
+                    Ask me anything about {stateName} SNAP policies and requirements
                   </p>
                   
                   {/* Quick questions */}
