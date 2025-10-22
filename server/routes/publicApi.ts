@@ -6,7 +6,7 @@ import { db } from "../db";
 import { benefitPrograms, webhooks, insertWebhookSchema } from "@shared/schema";
 import { eq } from "drizzle-orm";
 import { rulesEngine } from "../services/rulesEngine";
-// import { documentVerificationService } from "../services/documentVerificationService"; // Not implemented yet
+import { unifiedDocumentService } from "../services/unified/UnifiedDocumentService";
 import crypto from "crypto";
 
 const router = Router();
@@ -101,20 +101,49 @@ router.post(
     // Decode base64 document
     const documentBuffer = Buffer.from(validatedData.documentData, 'base64');
     
-    // Use existing document verification service
-    // TODO: Implement document verification service
-    const verificationResult = {
-      verified: false,
-      confidence: 0,
-      extractedData: {},
-      issues: ["Document verification service not implemented yet"]
-    };
+    // Determine MIME type from buffer or metadata
+    const mimeType = validatedData.metadata?.mimeType || 'image/jpeg';
+    
+    // Analyze document using Gemini Vision
+    const analysis = await unifiedDocumentService.analyzeDocument(
+      documentBuffer,
+      mimeType
+    );
+    
+    // Apply basic verification logic based on document type
+    const issues: string[] = [];
+    let verified = true;
+    
+    // Quality checks
+    if (analysis.quality.readability === 'low') {
+      issues.push('Document is not clearly readable');
+      verified = false;
+    }
+    if (analysis.quality.completeness === 'incomplete') {
+      issues.push('Document appears to be incomplete');
+    }
+    if (analysis.quality.authenticity === 'concerns') {
+      issues.push('Document authenticity could not be verified');
+    }
+    
+    // Type-specific checks
+    const { documentType } = validatedData;
+    if (documentType === 'income_proof') {
+      if (!['pay_stub', 'W2', 'W-2', '1099'].some(type => 
+        analysis.documentType.toLowerCase().includes(type.toLowerCase())
+      )) {
+        issues.push('Document does not appear to be valid income verification');
+        verified = false;
+      }
+    }
     
     res.json({
-      verified: verificationResult.verified || false,
-      confidence: verificationResult.confidence || 0,
-      extractedData: verificationResult.extractedData || {},
-      issues: verificationResult.issues || [],
+      verified: verified && issues.length === 0,
+      confidence: analysis.confidence || 0,
+      extractedData: analysis.extractedData || {},
+      issues,
+      documentType: analysis.documentType,
+      quality: analysis.quality,
     });
   })
 );
