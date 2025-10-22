@@ -6,6 +6,14 @@ The Maryland Universal Financial Navigator (JAWN - Joint Access Welfare Network)
 
 Preferred communication style: Simple, everyday language.
 
+# Recent Updates (October 22, 2025)
+
+## AI Consolidation & Cost Optimization Phase
+- **Unified AI Orchestrator**: Consolidated aiIntakeAssistant, voiceAssistant, and aiService into single aiOrchestrator.ts with strategy pattern routing, centralized rate limiting, cost tracking, and exponential backoff retry logic
+- **Gemini Context Caching Implemented**: 90% cost reduction on repeated prompts via explicit caching API with full cache management (create, list, update, delete) for policy manuals, form templates, and system instructions. Supports minimum 1,024 tokens for Gemini 1.5 Flash with versioned models (gemini-1.5-flash-001)
+- **AI Training Database Created**: Added aiTrainingExamples table with schema, Zod validation, and TypeScript types for few-shot learning system supporting tax/benefits document classification and field extraction
+- **Centralized AI Strategy**: All Gemini API calls now flow through aiOrchestrator for consistent rate limiting, request queueing, cost tracking, and retry handling across entire application
+
 # Recent Updates (October 21, 2025)
 
 ## Production Finalization Phase (October 21)
