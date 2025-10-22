@@ -100,7 +100,7 @@ export default function PolicyManual() {
         description: "Could not generate text from Rules as Code. This section may not have associated rules.",
         variant: "destructive",
       });
-      console.error("Text generation error:", error);
+      // console.error("Text generation error:", error);
     },
   });
 
@@ -124,7 +124,7 @@ export default function PolicyManual() {
         description: "Could not load manual sections. Please try again.",
         variant: "destructive",
       });
-      console.error("Ingestion error:", error);
+      // console.error("Ingestion error:", error);
     },
   });
 
@@ -149,7 +149,7 @@ export default function PolicyManual() {
         description: "Could not complete manual ingestion. Check console for errors.",
         variant: "destructive",
       });
-      console.error("Full ingestion error:", error);
+      // console.error("Full ingestion error:", error);
     },
   });
 

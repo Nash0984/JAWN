@@ -261,7 +261,7 @@ export default function EFileDashboard() {
     if (!user) return;
 
     const unsubscribe = subscribe('efile_status_update', (data: any) => {
-      console.log('E-file status update received:', data);
+      // console.log('E-file status update received:', data);
       
       // Show toast notification
       toast({

@@ -5,6 +5,8 @@
  * Ensures all security, performance, and operational requirements are met
  */
 
+import { logger } from '../services/logger.service';
+
 interface ProductionCheck {
   name: string;
   check: () => { passed: boolean; message?: string };
@@ -218,34 +220,81 @@ export class ProductionValidator {
   static validateAndDisplay(): boolean {
     const result = this.validate();
     
-    console.log('\n' + '='.repeat(80));
-    console.log('🔒 PRODUCTION READINESS VALIDATION');
-    console.log('='.repeat(80));
+    logger.info('\n' + '='.repeat(80), {
+      service: "productionValidation",
+      action: "header"
+    });
+    logger.info('🔒 PRODUCTION READINESS VALIDATION', {
+      service: "productionValidation",
+      action: "title"
+    });
+    logger.info('='.repeat(80), {
+      service: "productionValidation",
+      action: "headerLine"
+    });
     
-    console.log(`\n📊 Summary: ${result.summary.passed}/${result.summary.total} checks passed`);
+    logger.info(`\n📊 Summary: ${result.summary.passed}/${result.summary.total} checks passed`, {
+      service: "productionValidation",
+      action: "summary",
+      passed: result.summary.passed,
+      total: result.summary.total
+    });
     
     if (result.critical.length > 0) {
-      console.error('\n❌ CRITICAL ISSUES (Must fix before production):');
-      result.critical.forEach(msg => console.error(`  ${msg}`));
+      logger.error('\n❌ CRITICAL ISSUES (Must fix before production):', {
+        service: "productionValidation",
+        action: "criticalHeader",
+        count: result.critical.length
+      });
+      result.critical.forEach(msg => logger.error(`  ${msg}`, {
+        service: "productionValidation",
+        action: "criticalIssue",
+        issue: msg
+      }));
     }
     
     if (result.warnings.length > 0) {
-      console.warn('\n⚠️  WARNINGS (Recommended to fix):');
-      result.warnings.forEach(msg => console.warn(`  ${msg}`));
+      logger.warn('\n⚠️  WARNINGS (Recommended to fix):', {
+        service: "productionValidation",
+        action: "warningsHeader",
+        count: result.warnings.length
+      });
+      result.warnings.forEach(msg => logger.warn(`  ${msg}`, {
+        service: "productionValidation",
+        action: "warningIssue",
+        issue: msg
+      }));
     }
     
     if (result.info.length > 0) {
-      console.log('\n💡 INFO (Optional improvements):');
-      result.info.forEach(msg => console.log(`  ${msg}`));
+      logger.info('\n💡 INFO (Optional improvements):', {
+        service: "productionValidation",
+        action: "infoHeader",
+        count: result.info.length
+      });
+      result.info.forEach(msg => logger.info(`  ${msg}`, {
+        service: "productionValidation",
+        action: "infoIssue",
+        issue: msg
+      }));
     }
     
     if (result.ready) {
-      console.log('\n✅ System is READY for production deployment');
+      logger.info('\n✅ System is READY for production deployment', {
+        service: "productionValidation",
+        action: "ready"
+      });
     } else {
-      console.error('\n❌ System is NOT READY for production (fix critical issues above)');
+      logger.error('\n❌ System is NOT READY for production (fix critical issues above)', {
+        service: "productionValidation",
+        action: "notReady"
+      });
     }
     
-    console.log('='.repeat(80) + '\n');
+    logger.info('='.repeat(80) + '\n', {
+      service: "productionValidation",
+      action: "footer"
+    });
     
     return result.ready;
   }
@@ -272,7 +321,10 @@ export class ProductionValidator {
     if (result.warnings.length > 0 || result.info.length > 0) {
       this.validateAndDisplay();
     } else {
-      console.log('✅ Production readiness validation passed');
+      logger.info('✅ Production readiness validation passed', {
+        service: "productionValidation",
+        action: "validationPassed"
+      });
     }
   }
 

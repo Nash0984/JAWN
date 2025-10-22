@@ -724,28 +724,18 @@ export default function VitaIntake() {
   // Create mutation
   const createMutation = useMutation({
     mutationFn: async (data: Partial<InsertVitaIntakeSession>) => {
-      console.log('[VITA Auto-Save Debug] createMutation.mutationFn called');
-      console.log('[VITA Auto-Save Debug] Data being sent:', {
-        primaryFirstName: data.primaryFirstName,
-        primaryLastName: data.primaryLastName,
-        currentStep: data.currentStep,
-        status: data.status,
-        userId: user?.id
-      });
+      // Debug logs removed - createMutation.mutationFn called
       const res = await apiRequest("/api/vita-intake", "POST", {
         ...data,
         userId: user?.id,
       });
-      console.log('[VITA Auto-Save Debug] API request completed, parsing JSON');
+      // Debug log removed - API request completed
       const jsonData = await res.json() as VitaIntakeSession;
-      console.log('[VITA Auto-Save Debug] JSON parsed:', jsonData);
+      // Debug log removed - JSON parsed
       return jsonData;
     },
     onSuccess: (data) => {
-      console.log('[VITA Auto-Save Debug] createMutation.onSuccess called');
-      console.log('[VITA Auto-Save Debug] Response data:', data);
-      console.log('[VITA Auto-Save Debug] data.id exists?', !!data?.id);
-      console.log('[VITA Auto-Save Debug] Full data object:', JSON.stringify(data, null, 2));
+      // Debug logs removed - createMutation.onSuccess called
       
       queryClient.invalidateQueries({ queryKey: ["/api/vita-intake"] });
       setSelectedSessionId(data.id);
@@ -890,7 +880,7 @@ export default function VitaIntake() {
       try {
         return JSON.parse(savedDraft);
       } catch (error) {
-        console.error('Failed to parse draft:', error);
+        // console.error('Failed to parse draft:', error);
         return null;
       }
     }
@@ -904,9 +894,7 @@ export default function VitaIntake() {
 
   // Auto-save function with debounce
   const performAutoSave = useCallback((data: VitaIntakeFormData) => {
-    console.log('[VITA Auto-Save Debug] performAutoSave called');
-    console.log('[VITA Auto-Save Debug] selectedSessionId:', selectedSessionId);
-    console.log('[VITA Auto-Save Debug] currentStep:', currentStep);
+    // Debug logs removed - performAutoSave called
     
     // Save to localStorage immediately as fallback
     saveDraftToLocalStorage(data);
@@ -915,7 +903,7 @@ export default function VitaIntake() {
     
     // Skip if data hasn't changed
     if (dataString === lastSavedDataRef.current) {
-      console.log('[VITA Auto-Save Debug] Data unchanged, skipping save');
+      // Debug log removed - Data unchanged, skipping save
       return;
     }
     
@@ -924,13 +912,13 @@ export default function VitaIntake() {
     
     // If no session exists, create one first
     if (!selectedSessionId) {
-      console.log('[VITA Auto-Save Debug] No session ID, creating new session');
+      // Debug log removed - No session ID, creating new session
       createMutation.mutate({
         ...data,
         currentStep,
       });
     } else {
-      console.log('[VITA Auto-Save Debug] Session exists, updating session:', selectedSessionId);
+      // Debug log removed - Session exists, updating session
       // Update existing session
       updateMutation.mutate({
         id: selectedSessionId,

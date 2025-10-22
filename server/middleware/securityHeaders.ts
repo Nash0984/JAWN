@@ -13,6 +13,7 @@
  */
 
 import helmet from "helmet";
+import { logger } from "../services/logger.service";
 
 const isDevelopment = process.env.NODE_ENV === 'development';
 
@@ -135,12 +136,38 @@ export function additionalSecurityHeaders(req: any, res: any, next: any) {
  * Log security headers configuration on startup
  */
 export function logSecurityHeadersConfig() {
-  console.log('🛡️  Security Headers Configuration:');
-  console.log(`   Environment: ${process.env.NODE_ENV || 'development'}`);
-  console.log(`   CSP: ${isDevelopment ? 'Relaxed (Dev - Vite HMR)' : 'Strict (Prod)'}`);
-  console.log(`   HSTS: Enabled (1 year, includeSubDomains, preload)`);
-  console.log(`   X-Frame-Options: DENY`);
-  console.log(`   X-Content-Type-Options: nosniff`);
-  console.log(`   Referrer-Policy: strict-origin-when-cross-origin`);
-  console.log(`   Permissions-Policy: Restrictive`);
+  logger.info('🛡️  Security Headers Configuration:', {
+    service: "securityHeaders",
+    action: "initialize"
+  });
+  logger.info(`   Environment: ${process.env.NODE_ENV || 'development'}`, {
+    service: "securityHeaders",
+    action: "environment",
+    env: process.env.NODE_ENV || 'development'
+  });
+  logger.info(`   CSP: ${isDevelopment ? 'Relaxed (Dev - Vite HMR)' : 'Strict (Prod)'}`, {
+    service: "securityHeaders",
+    action: "csp",
+    mode: isDevelopment ? 'relaxed' : 'strict'
+  });
+  logger.info(`   HSTS: Enabled (1 year, includeSubDomains, preload)`, {
+    service: "securityHeaders",
+    action: "hsts"
+  });
+  logger.info(`   X-Frame-Options: DENY`, {
+    service: "securityHeaders",
+    action: "frameOptions"
+  });
+  logger.info(`   X-Content-Type-Options: nosniff`, {
+    service: "securityHeaders",
+    action: "contentTypeOptions"
+  });
+  logger.info(`   Referrer-Policy: strict-origin-when-cross-origin`, {
+    service: "securityHeaders",
+    action: "referrerPolicy"
+  });
+  logger.info(`   Permissions-Policy: Restrictive`, {
+    service: "securityHeaders",
+    action: "permissionsPolicy"
+  });
 }

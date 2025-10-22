@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from "express";
 import { storage } from "../storage";
+import { logger } from "../services/logger.service";
 
 /**
  * County Context Middleware
@@ -75,7 +76,12 @@ export async function detectCountyContext(
 
     next();
   } catch (error) {
-    console.error('Error detecting county context:', error);
+    logger.error('Error detecting county context', {
+      service: "countyContext",
+      action: "detectError",
+      error: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : undefined
+    });
     next(); // Continue even if county detection fails
   }
 }

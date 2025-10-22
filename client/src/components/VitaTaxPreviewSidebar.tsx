@@ -106,7 +106,7 @@ export function VitaTaxPreviewSidebar({ formData, sessionId, className }: VitaTa
       setLastCalculation(result); // Save as last valid calculation
       setLastUpdated(new Date());
     } catch (err) {
-      console.error('Tax calculation error:', err);
+      // console.error('Tax calculation error:', err);
       setError(err instanceof Error ? err.message : 'Failed to calculate tax');
       // Keep last valid calculation visible
       if (lastCalculation) {

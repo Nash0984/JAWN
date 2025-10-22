@@ -10,6 +10,7 @@
 
 import { Server } from 'http';
 import { WebSocket } from 'ws';
+import { logger } from '../services/logger.service';
 
 interface ShutdownConfig {
   timeout?: number; // Max time to wait for connections to close (ms)
@@ -26,7 +27,10 @@ export class GracefulShutdown {
     this.server = server;
     this.config = {
       timeout: config.timeout || 30000, // 30 seconds default
-      logger: config.logger || console.log
+      logger: config.logger || ((msg: string) => logger.info(msg, {
+        service: "gracefulShutdown",
+        action: "log"
+      }))
     };
   }
 
@@ -54,7 +58,12 @@ export class GracefulShutdown {
     // Handle uncaught errors
     process.on('uncaughtException', (error) => {
       this.config.logger(`❌ Uncaught Exception: ${error.message}`);
-      console.error(error);
+      logger.error("Error during cleanup", {
+        service: "gracefulShutdown",
+        action: "cleanup",
+        error: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined
+      });
       this.shutdown('uncaughtException', 1);
     });
 

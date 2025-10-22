@@ -26,14 +26,14 @@ export function useWebSocket() {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const wsUrl = `${protocol}//${window.location.host}/ws/notifications`;
 
-    console.log("Connecting to WebSocket:", wsUrl);
+    // Debug log removed - Connecting to WebSocket
 
     try {
       const ws = new WebSocket(wsUrl);
       wsRef.current = ws;
 
       ws.onopen = () => {
-        console.log("WebSocket connected");
+        // Debug log removed - WebSocket connected
         setIsConnected(true);
         setReconnectAttempts(0);
       };
@@ -48,16 +48,16 @@ export function useWebSocket() {
             handlers.forEach(handler => handler(message.data));
           }
         } catch (error) {
-          console.error("Error parsing WebSocket message:", error);
+          // console.error("Error parsing WebSocket message:", error);
         }
       };
 
       ws.onerror = (error) => {
-        console.error("WebSocket error:", error);
+        // console.error("WebSocket error:", error);
       };
 
       ws.onclose = () => {
-        console.log("WebSocket disconnected");
+        // Debug log removed - WebSocket disconnected
         setIsConnected(false);
         wsRef.current = null;
 
@@ -69,7 +69,7 @@ export function useWebSocket() {
         }, delay);
       };
     } catch (error) {
-      console.error("Error creating WebSocket:", error);
+      // console.error("Error creating WebSocket:", error);
     }
   }, [user?.id, reconnectAttempts]);
 

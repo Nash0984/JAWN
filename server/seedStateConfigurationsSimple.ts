@@ -1,5 +1,6 @@
 import { db } from "./db";
 import { sql } from "drizzle-orm";
+import { logger } from "./services/logger.service";
 
 const stateData = [
   { name: 'Maryland', code: 'MD', region: 'Mid-Atlantic', agency: 'Maryland Department of Human Services', color: '#0D4F8B' },
@@ -25,7 +26,11 @@ const stateData = [
 ];
 
 async function seedSimple() {
-  console.log("🌱 Seeding state configurations (simplified)...");
+  logger.info("🌱 Seeding state configurations (simplified)...", {
+    service: "seedStateConfigurationsSimple",
+    action: "start",
+    statesCount: stateData.length
+  });
   
   for (const state of stateData) {
     try {
@@ -38,7 +43,12 @@ async function seedSimple() {
       
       if (existingTenantResult.rows && existingTenantResult.rows.length > 0) {
         tenantId = existingTenantResult.rows[0].id as string;
-        console.log(`  ⚠️  Tenant exists for ${state.name}`);
+        logger.warn(`  ⚠️  Tenant exists for ${state.name}`, {
+          service: "seedStateConfigurationsSimple",
+          action: "tenantExists",
+          stateName: state.name,
+          stateCode: state.code
+        });
       } else {
         // Create tenant
         const tenantResult = await db.execute(sql`
@@ -47,7 +57,13 @@ async function seedSimple() {
           RETURNING id
         `);
         tenantId = tenantResult.rows[0].id as string;
-        console.log(`  ✅ Created tenant for ${state.name}`);
+        logger.info(`  ✅ Created tenant for ${state.name}`, {
+          service: "seedStateConfigurationsSimple",
+          action: "createTenant",
+          stateName: state.name,
+          stateCode: state.code,
+          tenantId: tenantId
+        });
       }
       
       // Check if state configuration exists
@@ -56,7 +72,12 @@ async function seedSimple() {
       `);
       
       if (existingConfigResult.rows && existingConfigResult.rows.length > 0) {
-        console.log(`  ⚠️  Configuration exists for ${state.name}`);
+        logger.warn(`  ⚠️  Configuration exists for ${state.name}`, {
+          service: "seedStateConfigurationsSimple",
+          action: "configExists",
+          stateName: state.name,
+          stateCode: state.code
+        });
       } else {
         // Create state configuration
         await db.execute(sql`
@@ -80,7 +101,12 @@ async function seedSimple() {
             true
           )
         `);
-        console.log(`  ✅ Created configuration for ${state.name}`);
+        logger.info(`  ✅ Created configuration for ${state.name}`, {
+          service: "seedStateConfigurationsSimple",
+          action: "createConfig",
+          stateName: state.name,
+          stateCode: state.code
+        });
         
         // Create tenant branding
         const existingBrandingResult = await db.execute(sql`
@@ -92,21 +118,43 @@ async function seedSimple() {
             INSERT INTO tenant_branding (tenant_id, primary_color)
             VALUES (${tenantId}, ${state.color})
           `);
-          console.log(`  ✅ Created branding for ${state.name}`);
+          logger.info(`  ✅ Created branding for ${state.name}`, {
+            service: "seedStateConfigurationsSimple",
+            action: "createBranding",
+            stateName: state.name,
+            stateCode: state.code,
+            color: state.color
+          });
         }
       }
       
     } catch (error) {
-      console.error(`  ❌ Error processing ${state.name}:`, error);
+      logger.error(`  ❌ Error processing ${state.name}`, {
+        service: "seedStateConfigurationsSimple",
+        action: "processError",
+        stateName: state.name,
+        stateCode: state.code,
+        error: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined
+      });
     }
   }
   
-  console.log("✅ Seeding complete!");
+  logger.info("✅ Seeding complete!", {
+    service: "seedStateConfigurationsSimple",
+    action: "complete",
+    statesProcessed: stateData.length
+  });
 }
 
 seedSimple()
   .then(() => process.exit(0))
   .catch((error) => {
-    console.error("💥 Seeding failed:", error);
+    logger.error("💥 Seeding failed", {
+      service: "seedStateConfigurationsSimple",
+      action: "fatal",
+      error: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : undefined
+    });
     process.exit(1);
   });

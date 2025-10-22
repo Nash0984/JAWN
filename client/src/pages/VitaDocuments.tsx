@@ -148,7 +148,7 @@ export default function VitaDocuments() {
         try {
           await apiRequest("POST", `/api/vita-documents/${requestId}/extract`, {});
         } catch (error) {
-          console.warn("Extraction failed (staff-only feature):", error);
+          // console.warn("Extraction failed (staff-only feature):", error);
         }
       }
       

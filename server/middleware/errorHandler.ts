@@ -2,6 +2,7 @@ import type { Request, Response, NextFunction } from "express";
 import { AuditService } from "../services/auditService";
 import { captureException, setUserContext as setSentryUser, addBreadcrumb } from "../services/sentryService";
 import { metricsService } from "../services/metricsService";
+import { logger } from "../services/logger.service";
 
 export interface AppError extends Error {
   statusCode?: number;
@@ -139,12 +140,21 @@ class ErrorHandler {
           details: err.details,
         });
       } catch (auditError) {
-        console.error("Failed to log error to audit service:", auditError);
+        logger.error("Failed to log error to audit service", {
+          service: "errorHandler",
+          action: "auditLog",
+          error: auditError instanceof Error ? auditError.message : String(auditError)
+        });
       }
 
       // Log to console in development
       if (isDevelopment) {
-        console.error("Error:", err);
+        logger.error("Error occurred", {
+          service: "errorHandler",
+          action: "handleError",
+          error: err instanceof Error ? err.message : String(err),
+          stack: err instanceof Error ? err.stack : undefined
+        });
       }
 
       // Send error response
@@ -153,7 +163,12 @@ class ErrorHandler {
 
       // If it's not a trusted error, we should potentially restart the process
       if (!this.isTrustedError(err) && statusCode >= 500) {
-        console.error("FATAL ERROR: Untrusted error occurred", err);
+        logger.error("FATAL ERROR: Untrusted error occurred", {
+          service: "errorHandler",
+          action: "untrustedError",
+          error: err instanceof Error ? err.message : String(err),
+          stack: err instanceof Error ? err.stack : undefined
+        });
         // In production, you might want to gracefully shut down
         // process.exit(1);
       }
@@ -226,7 +241,11 @@ class ErrorHandler {
             statusCode: error.statusCode || 500,
           },
           tenantId
-        ).catch(console.error);
+        ).catch(auditErr => logger.error("Failed to create security incident", {
+          service: "errorHandler",
+          action: "createIncident",
+          error: auditErr instanceof Error ? auditErr.message : String(auditErr)
+        }));
         
         next(error);
       });

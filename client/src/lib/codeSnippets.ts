@@ -100,7 +100,7 @@ function generateJavaScriptSnippet(endpoint: APIEndpoint, url: string): string {
   lines.push(`});`);
   lines.push(``);
   lines.push(`const data = await response.json();`);
-  lines.push(`console.log(data);`);
+  lines.push(`// console.log(data);`);
   
   return lines.join('\n');
 }

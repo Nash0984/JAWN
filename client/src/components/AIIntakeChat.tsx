@@ -263,7 +263,7 @@ export function AIIntakeChat() {
       };
       
       recognitionRef.current.onerror = (event: any) => {
-        console.error('Speech recognition error:', event.error);
+        // console.error('Speech recognition error:', event.error);
         setIsListening(false);
         toast({
           variant: 'destructive',

@@ -5,6 +5,8 @@
  * Fails fast with clear error messages if configuration is invalid
  */
 
+import { logger } from '../services/logger.service';
+
 interface EnvConfig {
   name: string;
   required: boolean;
@@ -260,20 +262,45 @@ export class EnvValidator {
     
     // Print warnings
     if (result.warnings.length > 0) {
-      console.warn('\n⚠️  Environment Warnings:');
-      result.warnings.forEach(warning => console.warn(`  - ${warning}`));
-      console.warn('');
+      logger.warn('\n⚠️  Environment Warnings:', {
+        service: "envValidation",
+        action: "warnings",
+        warningsCount: result.warnings.length
+      });
+      result.warnings.forEach(warning => logger.warn(`  - ${warning}`, {
+        service: "envValidation",
+        action: "warning",
+        warning: warning
+      }));
+      logger.warn('', {
+        service: "envValidation",
+        action: "warningsSeparator"
+      });
     }
     
     // Throw on errors
     if (!result.valid) {
-      console.error('\n❌ Environment Validation Failed:');
-      result.errors.forEach(error => console.error(`  - ${error}`));
-      console.error('\nPlease check your .env file and set all required environment variables.\n');
+      logger.error('\n❌ Environment Validation Failed:', {
+        service: "envValidation",
+        action: "failed",
+        errorsCount: result.errors.length
+      });
+      result.errors.forEach(error => logger.error(`  - ${error}`, {
+        service: "envValidation",
+        action: "error",
+        error: error
+      }));
+      logger.error('\nPlease check your .env file and set all required environment variables.\n', {
+        service: "envValidation",
+        action: "instructions"
+      });
       throw new Error('Environment validation failed');
     }
     
-    console.log('✅ Environment validation passed\n');
+    logger.info('✅ Environment validation passed\n', {
+      service: "envValidation",
+      action: "passed"
+    });
   }
   
   /**

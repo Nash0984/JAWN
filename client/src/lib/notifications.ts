@@ -32,7 +32,7 @@ export async function sendSessionConfirmation(
     
     return { success: true };
   } catch (error) {
-    console.error('Error sending session confirmation:', error);
+    // console.error('Error sending session confirmation:', error);
     return { success: false, errors: [(error as Error).message] };
   }
 }

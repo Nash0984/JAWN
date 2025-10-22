@@ -8,6 +8,7 @@
  */
 
 import { Request, Response, NextFunction } from 'express';
+import { logger } from '../services/logger.service';
 
 /**
  * Patterns that indicate potential XSS attacks
@@ -88,7 +89,10 @@ function decodeHtmlEntities(text: string): string {
   
   // If we hit max iterations without stabilizing, it's suspicious - escape it
   if (iterations >= MAX_DECODE_ITERATIONS && decoded !== previousDecoded) {
-    console.warn('[XSS] Suspicious deeply nested entity encoding detected, escaping input');
+    logger.warn('[XSS] Suspicious deeply nested entity encoding detected, escaping input', {
+      service: "xssSanitization",
+      action: "detectNestedEncoding"
+    });
     return escapeHtml(text);
   }
   
@@ -250,7 +254,12 @@ export function xssSanitization(options: { strict?: boolean } = {}) {
 
       next();
     } catch (error) {
-      console.error('[XSS Sanitization] Error sanitizing request:', error);
+      logger.error('[XSS Sanitization] Error sanitizing request', {
+        service: "xssSanitization",
+        action: "sanitizeError",
+        error: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined
+      });
       // Don't block the request on sanitization errors, just log and continue
       next();
     }

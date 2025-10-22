@@ -9,6 +9,7 @@
  */
 
 import { Request, Response, NextFunction } from 'express';
+import { logger } from '../services/logger.service';
 
 /**
  * Request size limit configuration
@@ -113,7 +114,13 @@ export function slowRequestMonitoring(thresholdMs: number = 3000) {
       const duration = Date.now() - start;
       
       if (duration > thresholdMs) {
-        console.warn(`⚠️ Slow request detected: ${req.method} ${req.path} took ${duration}ms`);
+        logger.warn(`⚠️ Slow request detected: ${req.method} ${req.path} took ${duration}ms`, {
+          service: "requestLimits",
+          action: "slowRequest",
+          method: req.method,
+          path: req.path,
+          duration: duration
+        });
         
         // Optionally log to audit system
         // auditLog.create({

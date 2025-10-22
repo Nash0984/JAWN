@@ -18,6 +18,7 @@ import multer, { FileFilterCallback } from 'multer';
 import { Request } from 'express';
 import path from 'path';
 import crypto from 'crypto';
+import { logger } from '../services/logger.service';
 
 /**
  * Allowed file types configuration
@@ -165,7 +166,12 @@ export async function scanFileForViruses(buffer: Buffer, filename: string): Prom
     const { isInfected, viruses } = await clamscan.scanBuffer(buffer);
     
     if (isInfected) {
-      console.error(`🦠 Virus detected in ${filename}: ${viruses.join(', ')}`);
+      logger.error(`🦠 Virus detected in ${filename}: ${viruses.join(', ')}`, {
+        service: "fileUploadSecurity",
+        action: "virusDetected",
+        filename: filename,
+        viruses: viruses
+      });
       return { clean: false, threat: viruses.join(', ') };
     }
     */
@@ -173,7 +179,12 @@ export async function scanFileForViruses(buffer: Buffer, filename: string): Prom
     // For now, return clean (no scanning)
     return { clean: true };
   } catch (error) {
-    console.error('Virus scanning error:', error);
+    logger.error('Virus scanning error', {
+      service: "fileUploadSecurity",
+      action: "scanError",
+      error: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : undefined
+    });
     // Fail secure - reject file if scanning fails in production
     if (process.env.NODE_ENV === 'production') {
       return { clean: false, threat: 'Virus scan failed' };
@@ -259,7 +270,12 @@ export async function verifyUploadedFile(
     const signatureValid = verifyFileSignature(file.buffer, file.mimetype);
     
     if (!signatureValid) {
-      console.warn(`⚠️ File signature mismatch: ${file.originalname} (claimed: ${file.mimetype})`);
+      logger.warn(`⚠️ File signature mismatch: ${file.originalname} (claimed: ${file.mimetype})`, {
+        service: "fileUploadSecurity",
+        action: "signatureMismatch",
+        filename: file.originalname,
+        claimedMimetype: file.mimetype
+      });
       return {
         valid: false,
         error: 'File signature does not match claimed type. Possible file spoofing attempt.',
@@ -272,7 +288,11 @@ export async function verifyUploadedFile(
     const scanResult = await scanFileForViruses(file.buffer, file.originalname);
     
     if (!scanResult.clean) {
-      console.error(`🦠 Virus detected in uploaded file: ${file.originalname}`);
+      logger.error(`🦠 Virus detected in uploaded file: ${file.originalname}`, {
+        service: "fileUploadSecurity",
+        action: "uploadVirusDetected",
+        filename: file.originalname
+      });
       return {
         valid: false,
         error: `File rejected: ${scanResult.threat || 'Virus detected'}`,

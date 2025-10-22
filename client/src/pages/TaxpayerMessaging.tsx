@@ -39,7 +39,7 @@ export default function TaxpayerMessaging() {
             isRead: true,
           });
         } catch (error) {
-          console.error("Failed to mark message as read:", error);
+          // console.error("Failed to mark message as read:", error);
         }
       });
     }
@@ -139,7 +139,7 @@ export default function TaxpayerMessaging() {
         attachmentIds,
       });
     } catch (error) {
-      console.error("Failed to send message:", error);
+      // console.error("Failed to send message:", error);
       toast({
         title: "Send Failed",
         description: "Failed to upload attachments or send message.",

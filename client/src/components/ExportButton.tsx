@@ -55,7 +55,7 @@ export function ExportButton({
       link.click();
       document.body.removeChild(link);
     } catch (error) {
-      console.error("CSV export error:", error);
+      // console.error("CSV export error:", error);
     } finally {
       setIsExporting(false);
     }
@@ -108,7 +108,7 @@ export function ExportButton({
 
       doc.save(`${filename}.pdf`);
     } catch (error) {
-      console.error("PDF export error:", error);
+      // console.error("PDF export error:", error);
     } finally {
       setIsExporting(false);
     }

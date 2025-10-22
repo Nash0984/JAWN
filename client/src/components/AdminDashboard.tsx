@@ -74,7 +74,7 @@ export default function AdminDashboard() {
         description: "Failed to create policy source.",
         variant: "destructive",
       });
-      console.error("Error creating policy source:", error);
+      // console.error("Error creating policy source:", error);
     },
   });
 

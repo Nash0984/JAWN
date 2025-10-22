@@ -278,6 +278,7 @@ async function syncFailedRequests() {
     const { getQueuedRequests, dequeueRequest } = await import('./offlineStorage.js');
     const queued = await getQueuedRequests();
     
+    // Keep: PWA sync status - important for offline functionality
     console.log(`🔄 Syncing ${queued.length} queued requests...`);
     
     for (const req of queued) {
@@ -290,17 +291,21 @@ async function syncFailedRequests() {
         
         if (response.ok) {
           await dequeueRequest(req.id);
+          // Keep: PWA sync success - important for offline functionality
           console.log('✅ Synced queued request:', req.method, req.url);
         } else {
+          // Keep: PWA sync failure - important for debugging offline issues
           console.error('❌ Failed to sync request (bad response):', req.method, req.url, response.status);
           // Keep in queue for retry
         }
       } catch (error) {
+        // Keep: PWA sync error - important for debugging offline issues
         console.error('❌ Failed to sync request:', req.method, req.url, error);
         // Keep in queue for retry
       }
     }
   } catch (error) {
+    // Keep: PWA sync error - important for debugging offline issues
     console.error('❌ Error in syncFailedRequests:', error);
   }
 }

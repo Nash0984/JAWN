@@ -60,7 +60,7 @@ export default function DocumentUpload() {
         setSelectedFiles([]);
       }
     } catch (error) {
-      console.error("Upload completion error:", error);
+      // console.error("Upload completion error:", error);
       toast({
         title: "Upload Error",
         description: "Failed to process uploaded file.",

@@ -1,5 +1,6 @@
 import type { Request, Response, NextFunction } from "express";
 import { AuditService } from "../services/auditService";
+import { logger } from "../services/logger.service";
 
 interface RequestLog {
   timestamp: Date;
@@ -189,7 +190,12 @@ class RequestLogger {
 
         // Log to console in a readable format
         if (process.env.NODE_ENV === "development" || log.statusCode >= 400) {
-          console.log(requestLogger.formatLogMessage(log));
+          logger.info(requestLogger.formatLogMessage(log), {
+            service: "requestLogger",
+            action: "logRequest",
+            method: log.method,
+            path: log.path
+          });
         }
 
         // Async log to audit service (don't block response)
@@ -233,7 +239,11 @@ class RequestLogger {
       });
     } catch (error) {
       // Don't crash the app if logging fails
-      console.error("Failed to log request to audit service:", error);
+      logger.error("Failed to log request to audit service", {
+        service: "requestLogger",
+        action: "auditLog",
+        error: error instanceof Error ? error.message : String(error)
+      });
     }
   }
 
@@ -300,7 +310,13 @@ class RequestLogger {
         
         // Log slow requests
         if (duration > slowRequestThreshold) {
-          console.warn(`⚠️ Slow request detected: ${req.method} ${req.path} took ${duration}ms`);
+          logger.warn(`⚠️ Slow request detected: ${req.method} ${req.path} took ${duration}ms`, {
+            service: "requestLogger",
+            action: "slowRequest",
+            method: req.method,
+            path: req.path,
+            duration: duration
+          });
           
           // Log to audit service
           this.auditService.logPerformance({
@@ -310,7 +326,11 @@ class RequestLogger {
             duration,
             threshold: slowRequestThreshold,
             userId: (req as any).userId,
-          }).catch(err => console.error("Failed to log performance issue:", err));
+          }).catch(err => logger.error("Failed to log performance issue", {
+            service: "requestLogger",
+            action: "performanceLog",
+            error: err instanceof Error ? err.message : String(err)
+          }));
         }
       });
       

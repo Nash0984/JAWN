@@ -1,6 +1,7 @@
 import { db } from "./db";
 import { storage } from "./storage";
 import { stateConfigurationService } from "./services/stateConfigurationService";
+import { logger } from "./services/logger.service";
 import type { 
   InsertStateConfiguration, 
   InsertStateBenefitProgram,
@@ -766,7 +767,11 @@ const stateConfigData = [
 
 // Function to seed state configurations
 export async function seedStateConfigurations() {
-  console.log("🌱 Seeding state configurations...");
+  logger.info("🌱 Seeding state configurations...", {
+    service: "seedStateConfigurations",
+    action: "start",
+    totalStates: stateConfigData.length
+  });
 
   try {
     // Get all benefit programs to configure for each state
@@ -778,12 +783,22 @@ export async function seedStateConfigurations() {
     const vitaProgram = benefitPrograms.find(p => p.code === 'VITA');
 
     for (const state of stateConfigData) {
-      console.log(`  📍 Creating configuration for ${state.stateConfig.stateName}...`);
+      logger.info(`  📍 Creating configuration for ${state.stateConfig.stateName}...`, {
+        service: "seedStateConfigurations",
+        action: "createState",
+        stateName: state.stateConfig.stateName,
+        stateCode: state.stateConfig.stateCode
+      });
 
       // Check if state already exists
       const existingConfig = await storage.getStateConfigurationByCode(state.stateConfig.stateCode);
       if (existingConfig) {
-        console.log(`    ⚠️  State configuration already exists for ${state.stateConfig.stateName}`);
+        logger.warn(`    ⚠️  State configuration already exists for ${state.stateConfig.stateName}`, {
+          service: "seedStateConfigurations",
+          action: "stateExists",
+          stateName: state.stateConfig.stateName,
+          stateCode: state.stateConfig.stateCode
+        });
         continue;
       }
 
@@ -869,12 +884,27 @@ export async function seedStateConfigurations() {
         );
       }
 
-      console.log(`    ✅ Created configuration for ${state.stateConfig.stateName} with ${programsToAdd.length} programs`);
+      logger.info(`    ✅ Created configuration for ${state.stateConfig.stateName} with ${programsToAdd.length} programs`, {
+        service: "seedStateConfigurations",
+        action: "stateCreated",
+        stateName: state.stateConfig.stateName,
+        stateCode: state.stateConfig.stateCode,
+        programsCount: programsToAdd.length
+      });
     }
 
-    console.log("✅ State configurations seeded successfully!");
+    logger.info("✅ State configurations seeded successfully!", {
+      service: "seedStateConfigurations",
+      action: "complete",
+      totalStates: stateConfigData.length
+    });
   } catch (error) {
-    console.error("❌ Error seeding state configurations:", error);
+    logger.error("❌ Error seeding state configurations", {
+      service: "seedStateConfigurations",
+      action: "error",
+      error: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : undefined
+    });
     throw error;
   }
 }
@@ -886,11 +916,19 @@ const isMainModule = import.meta.url === `file://${process.argv[1]}`;
 if (isMainModule) {
   seedStateConfigurations()
     .then(() => {
-      console.log("✨ Seeding complete!");
+      logger.info("✨ Seeding complete!", {
+        service: "seedStateConfigurations",
+        action: "finalize"
+      });
       process.exit(0);
     })
     .catch((error) => {
-      console.error("💥 Seeding failed:", error);
+      logger.error("💥 Seeding failed", {
+        service: "seedStateConfigurations",
+        action: "fatal",
+        error: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined
+      });
       process.exit(1);
     });
 }

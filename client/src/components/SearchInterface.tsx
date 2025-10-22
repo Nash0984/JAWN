@@ -73,7 +73,7 @@ export default function SearchInterface() {
       try {
         setRecentSearches(JSON.parse(stored));
       } catch (e) {
-        console.error("Failed to load recent searches:", e);
+        // console.error("Failed to load recent searches:", e);
       }
     }
   }, []);
@@ -118,7 +118,7 @@ export default function SearchInterface() {
         description: "We couldn't search right now. Please try again in a moment.",
         variant: "destructive",
       });
-      console.error("Search error:", error);
+      // console.error("Search error:", error);
     },
   });
 

@@ -64,7 +64,7 @@ export default function ModelTraining() {
         description: "Failed to start model training.",
         variant: "destructive",
       });
-      console.error("Training start error:", error);
+      // console.error("Training start error:", error);
     },
   });
 

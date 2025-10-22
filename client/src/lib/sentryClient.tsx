@@ -64,11 +64,14 @@ async function initializeSentry() {
       });
       
       sentryEnabled = true;
+      // Keep: Sentry initialization confirmation - important for production monitoring
       console.log(`✅ Sentry initialized (${environment}) on frontend`);
     } else {
+      // Keep: Sentry configuration warning - important for setup diagnostics
       console.warn("⚠️  Sentry DSN not configured (VITE_SENTRY_DSN). Frontend error tracking disabled.");
     }
   } catch (error) {
+    // Keep: Sentry package warning - important for setup diagnostics
     console.warn("⚠️  Sentry packages not installed. Frontend error tracking disabled.");
     sentryEnabled = false;
   }
@@ -138,7 +141,7 @@ export function setUserContext(user: { id: string; username?: string; email?: st
       Sentry.setUser(null);
     }
   } catch (error) {
-    console.error("Failed to set Sentry user context:", error);
+    // console.error("Failed to set Sentry user context:", error);
   }
 }
 
@@ -147,6 +150,7 @@ export function setUserContext(user: { id: string; username?: string; email?: st
  */
 export function captureException(error: Error, context?: Record<string, any>) {
   if (!sentryEnabled) {
+    // Keep: Fallback error logging when Sentry is disabled - important for debugging
     console.error("[Frontend Error]", error, context);
     return null;
   }
@@ -156,7 +160,7 @@ export function captureException(error: Error, context?: Record<string, any>) {
       extra: context,
     });
   } catch (err) {
-    console.error("Failed to capture exception in Sentry:", err);
+    // console.error("Failed to capture exception in Sentry:", err);
     return null;
   }
 }
@@ -174,7 +178,7 @@ export function captureMessage(message: string, level: 'fatal' | 'error' | 'warn
   try {
     return Sentry.captureMessage(message, level);
   } catch (error) {
-    console.error("Failed to capture message in Sentry:", error);
+    // console.error("Failed to capture message in Sentry:", error);
     return null;
   }
 }
@@ -193,7 +197,7 @@ export function addBreadcrumb(message: string, category: string, data?: Record<s
       level: 'info',
     });
   } catch (error) {
-    console.error("Failed to add Sentry breadcrumb:", error);
+    // console.error("Failed to add Sentry breadcrumb:", error);
   }
 }
 

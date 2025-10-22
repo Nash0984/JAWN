@@ -44,7 +44,11 @@ export async function seedRulesEngineData() {
       isActive: true,
     }).returning();
     ohepProgram = created;
-    console.log("✓ Created OHEP program");
+    logger.info("✓ Created OHEP program", {
+      service: "seedRulesEngineData",
+      action: "createProgram",
+      programCode: "OHEP"
+    });
   }
 
   if (!tanfProgram) {
@@ -59,7 +63,11 @@ export async function seedRulesEngineData() {
       isActive: true,
     }).returning();
     tanfProgram = created;
-    console.log("✓ Created TANF program");
+    logger.info("✓ Created TANF program", {
+      service: "seedRulesEngineData",
+      action: "createProgram",
+      programCode: "TANF"
+    });
   }
 
   // Step 2: Seed Federal Poverty Levels (2025 data)
@@ -86,7 +94,11 @@ export async function seedRulesEngineData() {
         isActive: true,
       });
     }
-    console.log("✓ Seeded 2025 Federal Poverty Levels");
+    logger.info("✓ Seeded 2025 Federal Poverty Levels", {
+      service: "seedRulesEngineData",
+      action: "seedFPL",
+      levelsCount: fplData.length
+    });
   }
 
   // Step 3: Seed OHEP Income Limits (60% FPL for regular assistance)
@@ -115,7 +127,11 @@ export async function seedRulesEngineData() {
         notes: "OHEP income limits at 60% FPL for FY2025",
       });
     }
-    console.log("✓ Seeded OHEP income limits");
+    logger.info("✓ Seeded OHEP income limits", {
+      service: "seedRulesEngineData",
+      action: "seedOHEPIncome",
+      limitsCount: ohepIncomeData.length
+    });
   }
 
   // Step 4: Seed OHEP Benefit Tiers
@@ -156,7 +172,11 @@ export async function seedRulesEngineData() {
         notes: "Assistance with past due utility bills - $300 maximum per Maryland DHS policy",
       },
     ]);
-    console.log("✓ Seeded OHEP benefit tiers");
+    logger.info("✓ Seeded OHEP benefit tiers", {
+      service: "seedRulesEngineData",
+      action: "seedOHEPTiers",
+      tiersCount: ohepTiers.length
+    });
   }
 
   // Step 5: Seed OHEP Seasonal Factors
@@ -184,7 +204,11 @@ export async function seedRulesEngineData() {
         notes: "Cooling season May through September",
       },
     ]);
-    console.log("✓ Seeded OHEP seasonal factors");
+    logger.info("✓ Seeded OHEP seasonal factors", {
+      service: "seedRulesEngineData",
+      action: "seedOHEPSeasons",
+      factorsCount: seasonalData.length
+    });
   }
 
   // Step 6: Seed TANF Income Limits (Needs Standard + Payment Standard)
@@ -213,7 +237,11 @@ export async function seedRulesEngineData() {
         notes: "Maryland TCA needs and payment standards FY2025",
       });
     }
-    console.log("✓ Seeded TANF income limits");
+    logger.info("✓ Seeded TANF income limits", {
+      service: "seedRulesEngineData",
+      action: "seedTANFIncome",
+      limitsCount: tanfIncomeData.length
+    });
   }
 
   // Step 7: Seed TANF Asset Limits
@@ -239,7 +267,11 @@ export async function seedRulesEngineData() {
         notes: "Vehicle equity = market value - loans",
       },
     ]);
-    console.log("✓ Seeded TANF asset limits");
+    logger.info("✓ Seeded TANF asset limits", {
+      service: "seedRulesEngineData",
+      action: "seedTANFAssets",
+      limitsCount: tanfAssetData.length
+    });
   }
 
   // Step 8: Seed TANF Work Requirements
@@ -267,7 +299,11 @@ export async function seedRulesEngineData() {
         notes: "Two parent work requirements - combined 35 hours/week minimum",
       },
     ]);
-    console.log("✓ Seeded TANF work requirements");
+    logger.info("✓ Seeded TANF work requirements", {
+      service: "seedRulesEngineData",
+      action: "seedTANFWork",
+      requirementsCount: tanfWorkData.length
+    });
   }
 
   // Step 9: Seed TANF Time Limits
@@ -293,7 +329,11 @@ export async function seedRulesEngineData() {
         notes: "24-month continuous assistance before review",
       },
     ]);
-    console.log("✓ Seeded TANF time limits");
+    logger.info("✓ Seeded TANF time limits", {
+      service: "seedRulesEngineData",
+      action: "seedTANFTime",
+      limitsCount: tanfTimeData.length
+    });
   }
 
   // ============================================================================
@@ -318,7 +358,11 @@ export async function seedRulesEngineData() {
       sourceType: "web_scraping",
       isActive: true,
     }).returning();
-    console.log("✓ Created Medicaid program");
+    logger.info("✓ Created Medicaid program", {
+      service: "seedRulesEngineData",
+      action: "createProgram",
+      programCode: "MEDICAID"
+    });
   }
 
   // Step 10: Seed Medicaid Income Limits (MAGI pathways)
@@ -409,19 +453,34 @@ export async function seedRulesEngineData() {
       });
     }
 
-    console.log("✓ Seeded Medicaid income limits");
+    logger.info("✓ Seeded Medicaid income limits", {
+      service: "seedRulesEngineData",
+      action: "seedMedicaidIncome",
+      limitsCount: medicaidIncomeData.length
+    });
   }
 
-  console.log("✅ Rules Engine seed data complete!");
+  logger.info("✅ Rules Engine seed data complete!", {
+    service: "seedRulesEngineData",
+    action: "complete"
+  });
 }
 
 // Run if called directly
 seedRulesEngineData()
   .then(() => {
-    console.log("Done!");
+    logger.info("Done!", {
+      service: "seedRulesEngineData",
+      action: "finalize"
+    });
     process.exit(0);
   })
   .catch((error) => {
-    console.error("Error seeding data:", error);
+    logger.error("Error seeding data", {
+      service: "seedRulesEngineData",
+      action: "fatal",
+      error: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : undefined
+    });
     process.exit(1);
   });

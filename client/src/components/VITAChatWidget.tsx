@@ -70,7 +70,7 @@ export function VITAChatWidget({ compact = false, onClose }: VITAChatWidgetProps
       setMessages(prev => [...prev, assistantMessage]);
     },
     onError: (error) => {
-      console.error('VITA search error:', error);
+      // console.error('VITA search error:', error);
       const errorMessage: ChatMessage = {
         id: `msg-${Date.now()}`,
         role: 'assistant',

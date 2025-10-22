@@ -5,6 +5,8 @@
  * Prevents accidental exposure of SSNs, account numbers, passwords, API keys
  */
 
+import { logger } from '../services/logger.service';
+
 const SSN_PATTERN = /\b\d{3}-?\d{2}-?\d{4}\b/g;
 const ACCOUNT_NUMBER_PATTERN = /\b\d{4,17}\b/g;
 const EMAIL_PATTERN = /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/g;
@@ -269,34 +271,18 @@ export class PiiMaskingUtils {
   }
 }
 
-// Override console.log, console.error, etc. to auto-redact PII
-const originalConsoleLog = console.log;
-const originalConsoleError = console.error;
-const originalConsoleWarn = console.warn;
-
-console.log = (...args: any[]) => {
-  const redacted = args.map(arg =>
-    typeof arg === 'string' ? PiiMaskingUtils.redactPII(arg) :
-    typeof arg === 'object' ? PiiMaskingUtils.redactObject(arg) :
-    arg
-  );
-  originalConsoleLog(...redacted);
-};
-
-console.error = (...args: any[]) => {
-  const redacted = args.map(arg =>
-    typeof arg === 'string' ? PiiMaskingUtils.redactPII(arg) :
-    typeof arg === 'object' ? PiiMaskingUtils.redactObject(arg) :
-    arg
-  );
-  originalConsoleError(...redacted);
-};
-
-console.warn = (...args: any[]) => {
-  const redacted = args.map(arg =>
-    typeof arg === 'string' ? PiiMaskingUtils.redactPII(arg) :
-    typeof arg === 'object' ? PiiMaskingUtils.redactObject(arg) :
-    arg
-  );
-  originalConsoleWarn(...redacted);
-};
+// Note: Console override functionality has been deprecated in favor of
+// using the centralized logger service which already implements PII masking.
+// The logger service (server/services/logger.service.ts) automatically
+// redacts sensitive data before logging.
+//
+// If you need to mask PII in logs, use the logger service directly:
+//   import { logger } from '../services/logger.service';
+//   logger.info('message', { data: someData }); // PII is automatically masked
+//
+// For manual PII masking in other contexts, use the utility methods in this class:
+//   PiiMaskingUtils.redactPII(text) - for strings
+//   PiiMaskingUtils.redactObject(obj) - for objects
+//
+// IMPORTANT: Do not override console methods as it conflicts with the 
+// centralized logger service and can cause issues in production.

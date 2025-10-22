@@ -55,7 +55,7 @@ export default function ConsentModal({ isOpen, userId }: ConsentModalProps) {
         description: "Failed to record consent. Please try again.",
         variant: "destructive",
       });
-      console.error("Consent error:", error);
+      // console.error("Consent error:", error);
     },
   });
 

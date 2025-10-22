@@ -171,7 +171,7 @@ export function useEligibilityRadar(debounceMs: number = 500): UseEligibilityRad
       } catch (err: any) {
         // Ignore abort errors
         if (err.name !== 'AbortError') {
-          console.error('Eligibility calculation error:', err);
+          // console.error('Eligibility calculation error:', err);
           setError(err.message || 'Failed to calculate eligibility');
         }
       } finally {

@@ -70,7 +70,7 @@ export function PolicyChatWidget({ context, initialQuestion, compact = false }: 
       setMessages(prev => [...prev, assistantMessage]);
     },
     onError: (error) => {
-      console.error('Chat error:', error);
+      // console.error('Chat error:', error);
       const errorMessage: ChatMessage = {
         id: `msg-${Date.now()}`,
         role: 'assistant',

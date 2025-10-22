@@ -11,6 +11,7 @@
  */
 
 import { CorsOptions } from 'cors';
+import { logger } from '../services/logger.service';
 
 const isDevelopment = process.env.NODE_ENV === 'development';
 
@@ -57,9 +58,19 @@ const baseAllowedOrigins = (isDevelopment || isTest)
 
 // Security check: Production/Staging MUST have at least one origin configured
 if (!isDevelopment && !isTest && baseAllowedOrigins.length === 0) {
-  console.error('❌ FATAL: No CORS origins configured. Set ALLOWED_ORIGINS environment variable.');
-  console.error('   Example: ALLOWED_ORIGINS=https://myapp.com,https://www.myapp.com');
-  console.error(`   Current NODE_ENV: ${process.env.NODE_ENV || 'undefined'}`);
+  logger.error('❌ FATAL: No CORS origins configured. Set ALLOWED_ORIGINS environment variable.', {
+    service: "corsConfig",
+    action: "missingOrigins"
+  });
+  logger.error('   Example: ALLOWED_ORIGINS=https://myapp.com,https://www.myapp.com', {
+    service: "corsConfig",
+    action: "configExample"
+  });
+  logger.error(`   Current NODE_ENV: ${process.env.NODE_ENV || 'undefined'}`, {
+    service: "corsConfig",
+    action: "currentEnv",
+    nodeEnv: process.env.NODE_ENV || 'undefined'
+  });
   process.exit(1);
 }
 
@@ -85,7 +96,11 @@ export const corsOptions: CorsOptions = {
     if (allowedOrigins.indexOf(origin) !== -1 || allowedOrigins.includes('*')) {
       callback(null, true);
     } else {
-      console.warn(`[CORS] Blocked request from unauthorized origin: ${origin}`);
+      logger.warn(`[CORS] Blocked request from unauthorized origin: ${origin}`, {
+        service: "corsConfig",
+        action: "blockedOrigin",
+        origin: origin
+      });
       callback(new Error('Not allowed by CORS'));
     }
   },
@@ -106,9 +121,26 @@ export const corsOptions: CorsOptions = {
  * Log current CORS configuration on startup
  */
 export function logCorsConfig() {
-  console.log('🔒 CORS Configuration:');
-  console.log(`   Environment: ${process.env.NODE_ENV || 'development'}`);
-  console.log(`   Allowed Origins: ${allowedOrigins.length > 0 ? allowedOrigins.join(', ') : 'NONE (⚠️ WARNING)'}`);
-  console.log(`   Credentials: enabled`);
-  console.log(`   Methods: GET, POST, PUT, PATCH, DELETE, OPTIONS`);
+  logger.info('🔒 CORS Configuration:', {
+    service: "corsConfig",
+    action: "initialize"
+  });
+  logger.info(`   Environment: ${process.env.NODE_ENV || 'development'}`, {
+    service: "corsConfig",
+    action: "environment",
+    env: process.env.NODE_ENV || 'development'
+  });
+  logger.info(`   Allowed Origins: ${allowedOrigins.length > 0 ? allowedOrigins.join(', ') : 'NONE (⚠️ WARNING)'}`, {
+    service: "corsConfig",
+    action: "allowedOrigins",
+    origins: allowedOrigins
+  });
+  logger.info(`   Credentials: enabled`, {
+    service: "corsConfig",
+    action: "credentials"
+  });
+  logger.info(`   Methods: GET, POST, PUT, PATCH, DELETE, OPTIONS`, {
+    service: "corsConfig",
+    action: "methods"
+  });
 }

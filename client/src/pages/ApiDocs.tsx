@@ -298,8 +298,8 @@ eligibility = response.json()`
   })
 });
 const result = await response.json();
-console.log(result.answer);
-console.log(result.citations);`
+// console.log(result.answer);
+// console.log(result.citations);`
         }
       },
       {
@@ -745,8 +745,8 @@ with open('export.csv', 'wb') as f:
           javascript: `// No authentication required
 const response = await fetch('/api/health');
 const health = await response.json();
-console.log('Status:', health.status);
-console.log('Database:', health.services.database.status);`,
+// console.log('Status:', health.status);
+// console.log('Database:', health.services.database.status);`,
           curl: `curl https://your-domain.replit.app/api/health`
         }
       },

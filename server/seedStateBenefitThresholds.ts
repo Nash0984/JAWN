@@ -2,6 +2,7 @@ import { db } from "./db";
 import { storage } from "./storage";
 import { stateConfigurations, stateBenefitPrograms, benefitPrograms } from "@shared/schema";
 import { eq } from "drizzle-orm";
+import { logger } from "./services/logger.service";
 
 // Key benefit thresholds for all 19 states based on research
 const stateBenefitData = [
@@ -434,7 +435,10 @@ const stateBenefitData = [
 ];
 
 async function seedStateBenefitThresholds() {
-  console.log("🌱 Seeding state benefit thresholds...");
+  logger.info("🌱 Seeding state benefit thresholds...", {
+    service: "seedStateBenefitThresholds",
+    action: "start"
+  });
 
   try {
     // Get all benefit programs
@@ -451,13 +455,25 @@ async function seedStateBenefitThresholds() {
     });
 
     if (!snapProgram || !tanfProgram || !medicaidProgram) {
-      console.error("❌ Required benefit programs not found. Run seedBenefitPrograms first.");
+      logger.error("❌ Required benefit programs not found. Run seedBenefitPrograms first.", {
+        service: "seedStateBenefitThresholds",
+        action: "validatePrograms",
+        programs: {
+          snap: !!snapProgram,
+          tanf: !!tanfProgram,
+          medicaid: !!medicaidProgram
+        }
+      });
       return;
     }
 
     // Process each state
     for (const stateData of stateBenefitData) {
-      console.log(`  📍 Processing ${stateData.stateCode}...`);
+      logger.info(`  📍 Processing ${stateData.stateCode}...`, {
+        service: "seedStateBenefitThresholds",
+        action: "processState",
+        stateCode: stateData.stateCode
+      });
 
       // Find the state configuration
       const stateConfig = await db.query.stateConfigurations.findFirst({
@@ -465,7 +481,11 @@ async function seedStateBenefitThresholds() {
       });
 
       if (!stateConfig) {
-        console.log(`    ⚠️  State configuration not found for ${stateData.stateCode}`);
+        logger.warn(`    ⚠️  State configuration not found for ${stateData.stateCode}`, {
+          service: "seedStateBenefitThresholds",
+          action: "checkStateConfig",
+          stateCode: stateData.stateCode
+        });
         continue;
       }
 
@@ -509,10 +529,20 @@ async function seedStateBenefitThresholds() {
 
         if (existingSnap) {
           await storage.updateStateBenefitProgram(existingSnap.id, snapConfig);
-          console.log(`    ✅ Updated SNAP configuration`);
+          logger.info(`    ✅ Updated SNAP configuration`, {
+            service: "seedStateBenefitThresholds",
+            action: "updateSNAP",
+            stateCode: stateData.stateCode,
+            programCode: `${stateData.stateCode}_SNAP`
+          });
         } else {
           await storage.createStateBenefitProgram(snapConfig);
-          console.log(`    ✅ Created SNAP configuration`);
+          logger.info(`    ✅ Created SNAP configuration`, {
+            service: "seedStateBenefitThresholds",
+            action: "createSNAP",
+            stateCode: stateData.stateCode,
+            programCode: `${stateData.stateCode}_SNAP`
+          });
         }
       }
 
@@ -557,10 +587,20 @@ async function seedStateBenefitThresholds() {
 
         if (existingTanf) {
           await storage.updateStateBenefitProgram(existingTanf.id, tanfConfig);
-          console.log(`    ✅ Updated TANF configuration`);
+          logger.info(`    ✅ Updated TANF configuration`, {
+            service: "seedStateBenefitThresholds",
+            action: "updateTANF",
+            stateCode: stateData.stateCode,
+            programCode: `${stateData.stateCode}_TANF`
+          });
         } else {
           await storage.createStateBenefitProgram(tanfConfig);
-          console.log(`    ✅ Created TANF configuration`);
+          logger.info(`    ✅ Created TANF configuration`, {
+            service: "seedStateBenefitThresholds",
+            action: "createTANF",
+            stateCode: stateData.stateCode,
+            programCode: `${stateData.stateCode}_TANF`
+          });
         }
       }
 
@@ -606,17 +646,36 @@ async function seedStateBenefitThresholds() {
 
         if (existingMedicaid) {
           await storage.updateStateBenefitProgram(existingMedicaid.id, medicaidConfig);
-          console.log(`    ✅ Updated Medicaid configuration`);
+          logger.info(`    ✅ Updated Medicaid configuration`, {
+            service: "seedStateBenefitThresholds",
+            action: "updateMedicaid",
+            stateCode: stateData.stateCode,
+            programCode: `${stateData.stateCode}_MEDICAID`
+          });
         } else {
           await storage.createStateBenefitProgram(medicaidConfig);
-          console.log(`    ✅ Created Medicaid configuration`);
+          logger.info(`    ✅ Created Medicaid configuration`, {
+            service: "seedStateBenefitThresholds",
+            action: "createMedicaid",
+            stateCode: stateData.stateCode,
+            programCode: `${stateData.stateCode}_MEDICAID`
+          });
         }
       }
     }
 
-    console.log("✅ State benefit thresholds seeding completed!");
+    logger.info("✅ State benefit thresholds seeding completed!", {
+      service: "seedStateBenefitThresholds",
+      action: "complete",
+      statesProcessed: stateBenefitData.length
+    });
   } catch (error) {
-    console.error("❌ Error seeding state benefit thresholds:", error);
+    logger.error("❌ Error seeding state benefit thresholds", {
+      service: "seedStateBenefitThresholds",
+      action: "error",
+      error: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : undefined
+    });
     throw error;
   }
 }
@@ -624,11 +683,19 @@ async function seedStateBenefitThresholds() {
 // Run if executed directly
 seedStateBenefitThresholds()
   .then(() => {
-    console.log("✨ Done!");
+    logger.info("✨ Done!", {
+      service: "seedStateBenefitThresholds",
+      action: "finalize"
+    });
     process.exit(0);
   })
   .catch((error) => {
-    console.error("Failed to seed state benefit thresholds:", error);
+    logger.error("Failed to seed state benefit thresholds", {
+      service: "seedStateBenefitThresholds",
+      action: "fatal",
+      error: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : undefined
+    });
     process.exit(1);
   });
 

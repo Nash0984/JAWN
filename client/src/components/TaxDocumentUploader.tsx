@@ -160,7 +160,7 @@ export function TaxDocumentUploader({ vitaSessionId, onUploadComplete, onError }
         });
       }
     } catch (error) {
-      console.error("Upload completion error:", error);
+      // console.error("Upload completion error:", error);
     }
   };
 

@@ -381,7 +381,7 @@ export default function TaxPreparation() {
       }
     },
     onError: (error: Error) => {
-      console.error("Cross-enrollment analysis failed:", error);
+      // console.error("Cross-enrollment analysis failed:", error);
       toast({
         title: "Cross-Enrollment Analysis Failed",
         description: error.message || "Unable to analyze benefit opportunities. Please try again.",

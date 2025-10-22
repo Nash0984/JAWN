@@ -74,7 +74,7 @@ export default function DocumentVerification() {
         description: "We couldn't analyze your document. Please try again or contact support.",
         variant: "destructive",
       });
-      console.error("Verification error:", error);
+      // console.error("Verification error:", error);
     },
   });
 

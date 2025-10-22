@@ -29,14 +29,14 @@ export function useOfflineStatus() {
           setQueuedRequestsCount(0);
           
           if (result.success > 0) {
-            console.log(`Successfully processed ${result.success} queued requests`);
+            // console.log(`Successfully processed ${result.success} queued requests`);
           }
           
           if (result.failed > 0) {
-            console.warn(`Failed to process ${result.failed} queued requests`);
+            // console.warn(`Failed to process ${result.failed} queued requests`);
           }
         } catch (error) {
-          console.error('Error processing queue:', error);
+          // console.error('Error processing queue:', error);
         }
       }
       
@@ -127,7 +127,7 @@ export function useAutoSaveDraft(
         
         setLastSaved(new Date());
       } catch (error) {
-        console.error('Error saving draft:', error);
+        // console.error('Error saving draft:', error);
       } finally {
         setIsSaving(false);
       }
@@ -162,7 +162,7 @@ export function useLoadDraft(
           setDraft(savedDraft.data);
         }
       } catch (error) {
-        console.error('Error loading draft:', error);
+        // console.error('Error loading draft:', error);
       } finally {
         setIsLoading(false);
       }

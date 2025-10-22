@@ -133,7 +133,7 @@ export default function DeveloperPortal() {
 });
 
 const result = await response.json();
-console.log(result);`,
+// console.log(result);`,
     python: `import requests
 
 response = requests.post(

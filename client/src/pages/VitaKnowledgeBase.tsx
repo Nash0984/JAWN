@@ -84,7 +84,7 @@ export default function VitaKnowledgeBase() {
       setMessages(prev => [...prev, assistantMessage]);
     },
     onError: (error) => {
-      console.error('VITA search error:', error);
+      // console.error('VITA search error:', error);
       const errorMessage: ChatMessage = {
         id: `msg-${Date.now()}`,
         role: 'assistant',

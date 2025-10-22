@@ -145,7 +145,7 @@ export function TaxSlayerDataEntry({ vitaSessionId, taxYear = new Date().getFull
           description: "Your previously saved draft has been restored.",
         });
       } catch (e) {
-        console.error("Failed to load saved draft:", e);
+        // console.error("Failed to load saved draft:", e);
       }
     }
   }, [vitaSessionId]);

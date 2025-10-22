@@ -101,7 +101,7 @@ export function IncomeLimitsManager() {
         description: "Please check the form and try again.",
         variant: "destructive",
       });
-      console.error("Save error:", error);
+      // console.error("Save error:", error);
     },
   });
 
