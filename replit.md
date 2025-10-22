@@ -67,3 +67,30 @@ The backend uses Express.js with TypeScript and PostgreSQL via Drizzle ORM on Ne
 -   **Monitoring & Alerts**: Sentry error tracking.
 -   **Communication**: Twilio SMS API.
 -   **Caching**: Redis/Upstash (distributed).
+
+# Production Environment Configuration
+
+## Required Variables (6 Critical)
+1. **ENCRYPTION_KEY**: AES-256-GCM key for PII encryption (generate: `openssl rand -hex 32`)
+2. **SESSION_SECRET**: Cookie signing secret (generate: `openssl rand -base64 64`)
+3. **ALLOWED_ORIGINS**: CORS whitelist (production domains only, comma-separated)
+4. **GEMINI_API_KEY**: Google Gemini API key (https://aistudio.google.com/app/apikey)
+5. **GCS_BUCKET_NAME**: Google Cloud Storage bucket name
+6. **GOOGLE_APPLICATION_CREDENTIALS**: Path to GCS service account JSON
+
+## Optional Variables (Recommended)
+-   **Redis/Upstash**: Distributed caching (REDIS_URL or UPSTASH_REDIS_REST_URL + UPSTASH_REDIS_REST_TOKEN)
+-   **SMTP**: Email notifications (SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, SMTP_FROM_EMAIL)
+-   **Sentry**: Error tracking (SENTRY_DSN)
+
+## Setup Documentation
+-   **Comprehensive Guide**: `PRODUCTION_ENV_SETUP.md` - Detailed setup instructions with examples
+-   **Environment Template**: `.env.production.example` - Copy and fill in for production deployment
+-   **Validation**: `server/utils/envValidation.ts` - Automatic validation on startup
+-   **Production Checks**: `server/utils/productionValidation.ts` - Production readiness validation
+
+## Environment Validation
+The application performs automatic environment validation on startup:
+-   **Development**: Shows warnings for missing optional services (non-blocking)
+-   **Production**: Fails fast on missing critical variables (ENCRYPTION_KEY, SESSION_SECRET, GEMINI_API_KEY, etc.)
+-   **Health Checks**: `/api/health` endpoint reports status of all services (database, Redis, Gemini, object storage)
