@@ -27,6 +27,7 @@ import { useToast } from "@/hooks/use-toast";
 import { PolicyChatWidget } from "@/components/PolicyChatWidget";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
+import { useTenant } from "@/contexts/TenantContext";
 
 interface ManualSection {
   id: string;
@@ -71,6 +72,9 @@ export default function PolicyManual() {
   const [selectedSectionId, setSelectedSectionId] = useState<string | null>(null);
   const [useLivingManual, setUseLivingManual] = useState(false);
   const { toast } = useToast();
+  const { stateConfig } = useTenant();
+  const stateName = stateConfig?.stateName || 'State';
+  const agencyAcronym = stateConfig?.agencyAcronym || 'DHS';
 
   // Fetch manual sections
   const { data: sectionsData, isLoading: sectionsLoading } = useQuery({
@@ -115,7 +119,7 @@ export default function PolicyManual() {
       queryClient.invalidateQueries({ queryKey: ["/api/manual/status"] });
       toast({
         title: "Metadata ingested successfully",
-        description: `${data.ingested} sections loaded from Maryland DHS website.`,
+        description: `${data.ingested} sections loaded from ${agencyAcronym} website.`,
       });
     },
     onError: (error) => {
@@ -178,10 +182,10 @@ export default function PolicyManual() {
         {/* Header */}
         <div>
           <h1 className="text-3xl font-bold text-foreground mb-2">
-            Maryland SNAP Policy Manual
+            SNAP Policy Manual
           </h1>
           <p className="text-muted-foreground">
-            Official policy documentation for Maryland's Supplemental Nutrition Assistance Program
+            Official policy documentation for the Supplemental Nutrition Assistance Program
           </p>
         </div>
 

@@ -3,6 +3,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Activity, TrendingUp, FileCheck, AlertTriangle, BarChart3, Clock } from "lucide-react";
+import { useTenant } from "@/contexts/TenantContext";
 
 interface QueryAnalytics {
   trends: Array<{
@@ -56,6 +57,9 @@ interface ResponseQuality {
 }
 
 export default function AIMonitoring() {
+  const { stateConfig } = useTenant();
+  const stateName = stateConfig?.stateName || 'State';
+  
   const { data: queryAnalytics, isLoading: loadingAnalytics } = useQuery<QueryAnalytics>({
     queryKey: ["/api/ai-monitoring/query-analytics"],
   });
@@ -98,7 +102,7 @@ export default function AIMonitoring() {
           AI Health & Bias Monitoring
         </h1>
         <p className="text-muted-foreground">
-          Transparency dashboard for Maryland SNAP AI system - monitoring accuracy, citations, and bias indicators
+          Transparency dashboard for SNAP AI system - monitoring accuracy, citations, and bias indicators
         </p>
       </div>
 
@@ -239,10 +243,10 @@ export default function AIMonitoring() {
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <AlertTriangle className="h-5 w-5 text-blue-600" />
-                Maryland SNAP Bias Monitoring
+                SNAP Bias Monitoring
               </CardTitle>
               <CardDescription className="text-blue-900">
-                Ensuring equitable access for all Maryland residents
+                Ensuring equitable access for all {stateName} residents
               </CardDescription>
             </CardHeader>
             <CardContent className="text-sm text-blue-900 space-y-2">

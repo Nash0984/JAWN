@@ -22,9 +22,12 @@ import {
   Languages,
   Accessibility
 } from 'lucide-react';
+import { useTenant } from '@/contexts/TenantContext';
 
 export function IntakeAssistant() {
   const [showChat, setShowChat] = useState(false);
+  const { stateConfig } = useTenant();
+  const stateName = stateConfig?.stateName || 'State';
 
   const features = [
     {
@@ -76,7 +79,7 @@ export function IntakeAssistant() {
               AI Benefits Assistant
             </h1>
             <p className="text-muted-foreground mt-2">
-              Your personal guide to Maryland benefits
+              Your personal guide to {stateName} benefits
             </p>
           </div>
           <Button 
@@ -106,7 +109,7 @@ export function IntakeAssistant() {
           AI-Powered Benefits Assistant
         </h1>
         <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
-          Apply for Maryland benefits with the help of an intelligent assistant that speaks your language 
+          Apply for benefits with the help of an intelligent assistant that speaks your language 
           and guides you every step of the way
         </p>
       </div>
@@ -289,7 +292,7 @@ export function IntakeAssistant() {
               <div className="bg-muted/50 rounded-lg p-4">
                 <p className="text-sm">
                   <strong>Available Benefits:</strong> SNAP (Food Assistance), Medicaid, 
-                  TANF (Cash Assistance), Energy Assistance (OHEP), and more Maryland programs.
+                  TANF (Cash Assistance), Energy Assistance (OHEP), and more {stateName} programs.
                 </p>
               </div>
             </CardContent>

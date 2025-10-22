@@ -49,7 +49,7 @@ export default function Developers() {
   return (
     <>
       <Helmet>
-        <title>Developer Guide - Maryland Universal Benefits-Tax Navigator</title>
+        <title>Developer Guide - Universal Benefits-Tax Navigator</title>
         <meta name="description" content="Complete developer guide for integrating with the JAWN API platform" />
       </Helmet>
 
@@ -65,7 +65,7 @@ export default function Developers() {
                 Developer Guide
               </h1>
               <p className="text-lg text-muted-foreground">
-                Build powerful integrations with the Maryland Benefits-Tax Navigator API
+                Build powerful integrations with the Benefits-Tax Navigator API
               </p>
             </div>
           </div>

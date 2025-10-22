@@ -23,6 +23,7 @@ import {
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { motion } from "framer-motion";
 import { fadeVariants } from "@/lib/animations";
+import { useTenant } from "@/contexts/TenantContext";
 
 interface TaxDocument {
   id: string;
@@ -131,6 +132,8 @@ interface HouseholdProfile {
 export default function TaxPreparation() {
   const { user } = useAuth();
   const { toast } = useToast();
+  const { stateConfig } = useTenant();
+  const stateName = stateConfig?.stateName || 'State';
   const [activeTab, setActiveTab] = useState("documents");
   const [selectedDocType, setSelectedDocType] = useState<string>("w2");
   const [taxYear, setTaxYear] = useState<number>(new Date().getFullYear() - 1);
@@ -485,7 +488,7 @@ export default function TaxPreparation() {
       });
 
       if (!response.ok) {
-        throw new Error('Failed to generate Maryland Form 502');
+        throw new Error(`Failed to generate ${stateName} Form 502`);
       }
 
       const blob = await response.blob();
@@ -504,7 +507,7 @@ export default function TaxPreparation() {
       window.open(url, '_blank');
 
       toast({
-        title: "Maryland Form 502 Generated",
+        title: `${stateName} Form 502 Generated`,
         description: "PDF downloaded and opened in new tab",
       });
     },
@@ -1171,7 +1174,7 @@ export default function TaxPreparation() {
                     <CardHeader>
                       <CardTitle className="flex items-center gap-2">
                         <DollarSign className="h-5 w-5 text-primary" />
-                        Maryland State Tax Summary
+                        {stateName} State Tax Summary
                       </CardTitle>
                       <CardDescription>
                         {personalInfo.county} County • Tax Year {calculationResult.taxYear}
@@ -1180,7 +1183,7 @@ export default function TaxPreparation() {
                     <CardContent className="space-y-6">
                       <div className="grid grid-cols-2 gap-4">
                         <div className="space-y-2">
-                          <Label className="text-muted-foreground">Maryland AGI</Label>
+                          <Label className="text-muted-foreground">{stateName} AGI</Label>
                           <p className="text-2xl font-bold" data-testid="text-md-agi">
                             ${calculationResult.marylandTax.marylandAGI.toLocaleString()}
                           </p>

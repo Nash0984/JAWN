@@ -166,7 +166,7 @@ export default function VitaKnowledgeBase() {
           </h1>
         </div>
         <p className="text-muted-foreground">
-          Search IRS Publication 4012 and federal tax rules to assist Maryland residents with tax preparation
+          Search IRS Publication 4012 and federal tax rules to assist with tax preparation
         </p>
       </div>
 

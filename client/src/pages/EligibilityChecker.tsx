@@ -11,6 +11,7 @@ import { CheckCircle2, XCircle, Loader2, Users, DollarSign, FileText, Info } fro
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { PolicyChatWidget } from "@/components/PolicyChatWidget";
+import { useTenant } from "@/contexts/TenantContext";
 
 interface EligibilityResult {
   eligible: boolean;
@@ -29,6 +30,8 @@ export default function EligibilityChecker() {
   const [hasSSI, setHasSSI] = useState<string>("no");
   const [hasTANF, setHasTANF] = useState<string>("no");
   const [result, setResult] = useState<EligibilityResult | null>(null);
+  const { stateConfig } = useTenant();
+  const stateName = stateConfig?.stateName || 'State';
 
   // Check eligibility mutation
   const checkEligibilityMutation = useMutation({
@@ -69,7 +72,7 @@ export default function EligibilityChecker() {
           SNAP Eligibility Pre-Screener
         </h1>
         <p className="text-gray-600 dark:text-gray-300">
-          Answer a few quick questions to see if you may qualify for SNAP benefits in Maryland
+          Answer a few quick questions to see if you may qualify for SNAP benefits
         </p>
       </div>
 
@@ -372,7 +375,7 @@ export default function EligibilityChecker() {
             <Info className="h-4 w-4" />
             <AlertDescription>
               <strong>Important:</strong> This is a pre-screening tool and does not guarantee eligibility. 
-              You must submit a complete application to receive benefits. Results are based on current Maryland SNAP policy rules.
+              You must submit a complete application to receive benefits. Results are based on current {stateName} SNAP policy rules.
             </AlertDescription>
           </Alert>
         </div>
