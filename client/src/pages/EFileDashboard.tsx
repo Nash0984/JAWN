@@ -28,6 +28,7 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { format } from "date-fns";
 import { Link } from "wouter";
 import { Helmet } from "react-helmet-async";
+import { useTenant } from "@/contexts/TenantContext";
 
 interface TaxReturn {
   id: string;
@@ -43,7 +44,7 @@ interface TaxReturn {
   updatedAt: string;
 }
 
-interface MarylandReturn {
+interface StateReturn {
   id: string;
   federalReturnId: string;
   efileStatus: string;
@@ -112,9 +113,15 @@ const getStatusBadge = (status: string) => {
 export default function EFileDashboard() {
   const { user } = useAuth();
   const { subscribe, isConnected } = useWebSocket();
+  const { stateConfig } = useTenant();
+  const stateName = stateConfig?.stateName || 'State';
+  const stateCode = stateConfig?.stateCode || 'MD';
+  // TODO: Get state tax form from tenant config (e.g., PA-40, VA Form 760)
+  const stateFormNumber = stateCode === 'MD' ? 'Form 502' : `${stateCode} State Tax Return`;
+  
   const [selectedReturnId, setSelectedReturnId] = useState<string | null>(null);
-  const [showSubmitDialog, setShowSubmitDialog] = useState<{ id: string; type: 'federal' | 'maryland' } | null>(null);
-  const [showXmlDialog, setShowXmlDialog] = useState<{ id: string; type: 'federal' | 'maryland' } | null>(null);
+  const [showSubmitDialog, setShowSubmitDialog] = useState<{ id: string; type: 'federal' | 'state' } | null>(null);
+  const [showXmlDialog, setShowXmlDialog] = useState<{ id: string; type: 'federal' | 'state' } | null>(null);
   const { toast } = useToast();
 
   // Fetch federal tax returns for current user
@@ -123,9 +130,9 @@ export default function EFileDashboard() {
     enabled: !!user,
   });
 
-  // Fetch Maryland returns
-  const { data: marylandReturns, isLoading: marylandLoading, refetch: refetchMaryland } = useQuery<MarylandReturn[]>({
-    queryKey: ['/api/maryland/tax-returns/my-returns'],
+  // Fetch state returns
+  const { data: stateReturns, isLoading: stateLoading, refetch: refetchState } = useQuery<StateReturn[]>({
+    queryKey: ['/api/maryland/tax-returns/my-returns'], // TODO: Make API endpoint tenant-aware
     enabled: !!user,
   });
 
@@ -158,23 +165,23 @@ export default function EFileDashboard() {
     },
   });
 
-  // Submit for Maryland e-filing
-  const submitMarylandMutation = useMutation({
-    mutationFn: (id: string) => apiRequest(`/api/maryland/efile/submit/${id}`, {
+  // Submit for state e-filing
+  const submitStateMutation = useMutation({
+    mutationFn: (id: string) => apiRequest(`/api/maryland/efile/submit/${id}`, { // TODO: Make API endpoint tenant-aware
       method: 'POST',
     }),
     onSuccess: () => {
       toast({
         title: "Success",
-        description: "Maryland return submitted for e-filing",
+        description: `${stateName} return submitted for e-filing`,
       });
-      refetchMaryland();
+      refetchState();
       setShowSubmitDialog(null);
     },
     onError: (error: any) => {
       toast({
         title: "Submission Failed",
-        description: error.message || "Failed to submit Maryland return",
+        description: error.message || `Failed to submit ${stateName} return`,
         variant: "destructive",
       });
     },
@@ -198,7 +205,7 @@ export default function EFileDashboard() {
 
   // Get XML
   const getXmlMutation = useMutation({
-    mutationFn: async ({ id, type }: { id: string; type: 'federal' | 'maryland' }) => {
+    mutationFn: async ({ id, type }: { id: string; type: 'federal' | 'state' }) => {
       const endpoint = type === 'federal' 
         ? `/api/efile/xml/${id}` 
         : `/api/maryland/efile/xml/${id}`;
@@ -237,7 +244,7 @@ export default function EFileDashboard() {
     if (showSubmitDialog.type === 'federal') {
       submitFederalMutation.mutate(showSubmitDialog.id);
     } else {
-      submitMarylandMutation.mutate(showSubmitDialog.id);
+      submitStateMutation.mutate(showSubmitDialog.id);
     }
   };
 
@@ -248,7 +255,7 @@ export default function EFileDashboard() {
 
   const handleRefresh = () => {
     refetchFederal();
-    refetchMaryland();
+    refetchState();
     refetchQueue();
     toast({
       title: "Refreshed",
@@ -266,14 +273,14 @@ export default function EFileDashboard() {
       // Show toast notification
       toast({
         title: `E-File ${data.status}`,
-        description: `${data.type === 'federal' ? 'Federal' : 'Maryland'} return ${data.returnId.substring(0, 8)}... ${data.status}`,
+        description: `${data.type === 'federal' ? 'Federal' : stateName} return ${data.returnId.substring(0, 8)}... ${data.status}`,
       });
 
       // Refresh data to show updated status
       if (data.type === 'federal') {
         refetchFederal();
       } else {
-        refetchMaryland();
+        refetchState();
       }
       refetchQueue();
     });
@@ -281,15 +288,15 @@ export default function EFileDashboard() {
     return () => {
       unsubscribe();
     };
-  }, [user, subscribe, refetchFederal, refetchMaryland, refetchQueue, toast]);
+  }, [user, subscribe, refetchFederal, refetchState, refetchQueue, toast]);
 
-  const isLoading = federalLoading || marylandLoading || queueLoading;
+  const isLoading = federalLoading || stateLoading || queueLoading;
 
   return (
     <>
       <Helmet>
-        <title>E-Filing Dashboard - Maryland Benefits Navigator</title>
-        <meta name="description" content="Submit and track federal and Maryland tax return e-filing status" />
+        <title>E-Filing Dashboard - {stateName} Benefits Navigator</title>
+        <meta name="description" content={`Submit and track federal and ${stateName} tax return e-filing status`} />
       </Helmet>
 
       <div className="container mx-auto px-4 py-6 max-w-7xl">
@@ -300,7 +307,7 @@ export default function EFileDashboard() {
               E-Filing Dashboard
             </h1>
             <p className="text-sm text-gray-600 dark:text-gray-400 mt-1 flex items-center gap-2">
-              Submit and track your federal and Maryland tax return e-filing status
+              Submit and track your federal and {stateName} tax return e-filing status
               {isConnected && (
                 <Badge variant="default" className="bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300">
                   <span className="w-2 h-2 bg-green-500 rounded-full mr-2 animate-pulse"></span>
@@ -342,8 +349,8 @@ export default function EFileDashboard() {
             <TabsTrigger value="federal" data-testid="tab-federal">
               Federal Returns ({federalReturns?.length || 0})
             </TabsTrigger>
-            <TabsTrigger value="maryland" data-testid="tab-maryland">
-              Maryland Returns ({marylandReturns?.length || 0})
+            <TabsTrigger value="state" data-testid="tab-state">
+              {stateName} Returns ({stateReturns?.length || 0})
             </TabsTrigger>
             <TabsTrigger value="queue" data-testid="tab-queue">
               E-File Queue ({queue?.length || 0})
@@ -448,13 +455,13 @@ export default function EFileDashboard() {
             </Card>
           </TabsContent>
 
-          {/* Maryland Returns Tab */}
-          <TabsContent value="maryland">
+          {/* State Returns Tab */}
+          <TabsContent value="state">
             <Card>
               <CardHeader>
-                <CardTitle>Maryland Tax Returns (Form 502)</CardTitle>
+                <CardTitle>{stateName} Tax Returns ({stateFormNumber})</CardTitle>
                 <CardDescription>
-                  Manage your Maryland Form 502 electronic filing submissions
+                  Manage your {stateName} {stateFormNumber} electronic filing submissions
                 </CardDescription>
               </CardHeader>
               <CardContent>
@@ -464,12 +471,12 @@ export default function EFileDashboard() {
                       <Skeleton key={i} className="h-16 w-full" />
                     ))}
                   </div>
-                ) : !marylandReturns || marylandReturns.length === 0 ? (
+                ) : !stateReturns || stateReturns.length === 0 ? (
                   <div className="text-center py-12">
                     <FileText className="h-16 w-16 mx-auto text-gray-300 mb-4" />
-                    <p className="text-gray-500 mb-4">No Maryland tax returns found</p>
+                    <p className="text-gray-500 mb-4">No {stateName} tax returns found</p>
                     <p className="text-sm text-gray-400">
-                      Maryland returns are automatically created when you complete a federal return
+                      {stateName} returns are automatically created when you complete a federal return
                     </p>
                   </div>
                 ) : (
@@ -485,7 +492,7 @@ export default function EFileDashboard() {
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {marylandReturns.map((ret) => (
+                        {stateReturns.map((ret) => (
                           <TableRow key={ret.id} data-testid={`row-maryland-${ret.id}`}>
                             <TableCell className="font-mono text-xs">
                               {ret.federalReturnId.substring(0, 8)}...
@@ -504,8 +511,8 @@ export default function EFileDashboard() {
                                 {ret.efileStatus === 'ready' && (
                                   <Button
                                     size="sm"
-                                    onClick={() => setShowSubmitDialog({ id: ret.id, type: 'maryland' })}
-                                    data-testid={`button-submit-md-${ret.id}`}
+                                    onClick={() => setShowSubmitDialog({ id: ret.id, type: 'state' })}
+                                    data-testid={`button-submit-state-${ret.id}`}
                                   >
                                     <Send className="h-3 w-3 mr-1" />
                                     Submit
@@ -514,8 +521,8 @@ export default function EFileDashboard() {
                                 <Button
                                   size="sm"
                                   variant="outline"
-                                  onClick={() => setShowXmlDialog({ id: ret.id, type: 'maryland' })}
-                                  data-testid={`button-download-xml-md-${ret.id}`}
+                                  onClick={() => setShowXmlDialog({ id: ret.id, type: 'state' })}
+                                  data-testid={`button-download-xml-state-${ret.id}`}
                                 >
                                   <Download className="h-3 w-3 mr-1" />
                                   XML
@@ -614,14 +621,14 @@ export default function EFileDashboard() {
             <DialogHeader>
               <DialogTitle>Submit for E-Filing</DialogTitle>
               <DialogDescription>
-                Are you sure you want to submit this {showSubmitDialog?.type === 'federal' ? 'federal' : 'Maryland'} tax return for electronic filing?
+                Are you sure you want to submit this {showSubmitDialog?.type === 'federal' ? 'federal' : stateName} tax return for electronic filing?
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-4">
               <Alert>
                 <AlertCircle className="h-4 w-4" />
                 <AlertDescription>
-                  Once submitted, the return will be transmitted to the {showSubmitDialog?.type === 'federal' ? 'IRS' : 'Maryland Comptroller'}. 
+                  Once submitted, the return will be transmitted to the {showSubmitDialog?.type === 'federal' ? 'IRS' : `${stateName} Tax Authority`}. 
                   Make sure all information is accurate before proceeding.
                 </AlertDescription>
               </Alert>
@@ -636,10 +643,10 @@ export default function EFileDashboard() {
               </Button>
               <Button 
                 onClick={handleSubmit}
-                disabled={submitFederalMutation.isPending || submitMarylandMutation.isPending}
+                disabled={submitFederalMutation.isPending || submitStateMutation.isPending}
                 data-testid="button-confirm-submit"
               >
-                {submitFederalMutation.isPending || submitMarylandMutation.isPending ? (
+                {submitFederalMutation.isPending || submitStateMutation.isPending ? (
                   <>
                     <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
                     Submitting...
@@ -661,7 +668,7 @@ export default function EFileDashboard() {
             <DialogHeader>
               <DialogTitle>Download E-File XML</DialogTitle>
               <DialogDescription>
-                Download the {showXmlDialog?.type === 'federal' ? 'IRS MeF' : 'Maryland iFile'} XML file for this tax return.
+                Download the {showXmlDialog?.type === 'federal' ? 'IRS MeF' : `${stateName} iFile`} XML file for this tax return.
               </DialogDescription>
             </DialogHeader>
             <DialogFooter>
