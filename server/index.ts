@@ -20,6 +20,7 @@ import { doubleCsrf } from "csrf-csrf";
 import helmet from "helmet";
 import cors from "cors";
 import cookieParser from "cookie-parser";
+import crypto from "crypto";
 import passport from "./auth";
 import { registerRoutes } from "./routes";
 import { corsOptions, logCorsConfig } from "./middleware/corsConfig";
@@ -163,19 +164,25 @@ const sessionMiddleware = session({
       connectionString: process.env.DATABASE_URL,
     },
     createTableIfMissing: true,
+    pruneSessionInterval: 60 * 15, // Prune stale sessions every 15 minutes
+    ttl: 30 * 24 * 60 * 60 // 30 days TTL
   }),
   secret: process.env.SESSION_SECRET,
   resave: false,
-  saveUninitialized: true, // Changed to true to ensure session cookie is always set
+  saveUninitialized: false, // Security: Only create sessions after authentication (prevents session fixation)
   cookie: {
     maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
     httpOnly: true, // Prevent XSS attacks by making cookie inaccessible to JavaScript
     secure: process.env.NODE_ENV === "production", // Only send cookie over HTTPS in production
-    sameSite: process.env.NODE_ENV === "production" ? "strict" : "lax", // CSRF protection: strict in prod, lax in dev
+    sameSite: "strict", // Always strict for maximum CSRF protection
     path: "/", // Cookie available for entire domain
   },
   rolling: true, // Extend session on activity (rolling session timeout)
   name: "sessionId", // Custom cookie name (security through obscurity - don't reveal tech stack)
+  genid: () => {
+    // Use crypto-secure session IDs
+    return crypto.randomBytes(32).toString('hex');
+  }
 });
 
 app.use(sessionMiddleware);
@@ -286,6 +293,22 @@ app.use("/api/", (req, res, next) => {
   // Skip CSRF if marked by public endpoint bypass
   if ((req as any).skipCsrf) {
     return next();
+  }
+  
+  // Strict CSRF validation - ensure token is present
+  const csrfToken = req.headers['x-csrf-token'];
+  if (!csrfToken && !['GET', 'HEAD', 'OPTIONS'].includes(req.method)) {
+    logger.warn('[CSRF] State-changing request without CSRF token blocked', {
+      service: 'csrfProtection',
+      action: 'tokenMissing',
+      method: req.method,
+      path: req.path,
+      ip: req.ip
+    });
+    return res.status(403).json({
+      error: 'CSRF token required',
+      message: 'State-changing requests must include X-CSRF-Token header'
+    });
   }
   
   // Apply CSRF protection

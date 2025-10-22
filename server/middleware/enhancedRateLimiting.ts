@@ -287,6 +287,44 @@ export const aggressiveRateLimiter: RateLimitRequestHandler = rateLimit({
 });
 
 /**
+ * Bulk operation rate limiter - Prevents resource exhaustion from batch processing
+ * Applied to endpoints that process multiple records at once
+ */
+export const bulkOperationRateLimiter: RateLimitRequestHandler = rateLimit({
+  windowMs: 60 * 60 * 1000, // 1 hour
+  max: 10, // Max 10 bulk operations per hour
+  validate: false,
+  message: {
+    error: 'Bulk Operation Limit Exceeded',
+    message: 'Too many bulk operations. Please wait before retrying batch requests.',
+    retryAfter: 3600
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req: Request) => {
+    const user = (req as any).user;
+    return user ? `bulk:user:${user.id}` : `bulk:ip:${createSafeIpKey(req.ip)}`;
+  },
+  handler: (req, res) => {
+    logger.warn(`⚠️  Bulk operation rate limit exceeded: ${req.method} ${req.path}`, {
+      service: "rateLimiting",
+      action: "bulkOperationLimitExceeded",
+      method: req.method,
+      path: req.path,
+      userId: (req as any).user?.id,
+      ip: req.ip
+    });
+    
+    res.status(429).json({
+      error: 'Bulk Operation Limit Exceeded',
+      message: 'Too many bulk operations. Maximum 10 batch requests per hour. Please wait before retrying.',
+      retryAfter: 3600,
+      limit: 10
+    });
+  }
+});
+
+/**
  * Export endpoint-specific limiters
  */
 export const rateLimiters = {
@@ -296,5 +334,6 @@ export const rateLimiters = {
   upload: uploadRateLimiter,
   public: publicRateLimiter,
   aggressive: aggressiveRateLimiter,
+  bulkOperation: bulkOperationRateLimiter,
   custom: createCustomRateLimiter
 };

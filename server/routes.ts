@@ -11189,11 +11189,16 @@ If the question cannot be answered with the available information, say so clearl
   }));
   
   // Batch analyze multiple households
-  app.post("/api/cross-enrollment/batch-analyze", requireAuth, requireStaff, asyncHandler(async (req: Request, res: Response) => {
+  app.post("/api/cross-enrollment/batch-analyze", rateLimiters.bulkOperation, requireAuth, requireStaff, asyncHandler(async (req: Request, res: Response) => {
     const { householdIds } = req.body;
     
     if (!householdIds || !Array.isArray(householdIds)) {
       throw validationError("householdIds array is required");
+    }
+    
+    // Validate array size to prevent resource exhaustion
+    if (householdIds.length > 100) {
+      throw validationError('Maximum 100 households per batch request');
     }
     
     const results = await crossEnrollmentEngineService.batchAnalyze(householdIds);

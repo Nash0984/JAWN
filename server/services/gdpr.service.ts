@@ -302,7 +302,7 @@ export class GdprService {
     }
 
     const userDocuments = await db.select().from(documents).where(eq(documents.uploadedBy, userId));
-    const userCases = await db.select().from(clientCases).where(eq(clientCases.userId, userId));
+    const userCases = await db.select().from(clientCases).where(eq(clientCases.createdBy, userId));
     const userHouseholds = await db.select().from(householdProfiles).where(eq(householdProfiles.userId, userId));
     const userVitaSessions = await db.select().from(vitaIntakeSessions).where(eq(vitaIntakeSessions.userId, userId));
     const userFederalReturns = await db.select().from(federalTaxReturns).where(eq(federalTaxReturns.preparerId, userId));
@@ -466,7 +466,7 @@ export class GdprService {
       .from(clientCases)
       .where(
         and(
-          eq(clientCases.userId, userId),
+          eq(clientCases.createdBy, userId),
           or(eq(clientCases.status, "active"), eq(clientCases.status, "pending"))
         )
       );

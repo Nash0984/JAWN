@@ -85,9 +85,9 @@ export const helmetConfig = helmet({
   // Disable X-Powered-By header (don't leak server info)
   hidePoweredBy: true,
   
-  // Referrer Policy - Share origin on same-origin, only origin on cross-origin
+  // Referrer Policy - Strict in production to prevent information leakage
   referrerPolicy: {
-    policy: 'strict-origin-when-cross-origin',
+    policy: isDevelopment ? 'strict-origin-when-cross-origin' : 'same-origin',
   },
   
   // Permissions Policy - Restrict browser features

@@ -182,9 +182,9 @@ class StratifiedSamplingService {
     const eligibleCases = await db
       .select({
         id: clientCases.id,
-        userId: clientCases.userId,
-        programType: clientCases.programType,
-        county: clientCases.county,
+        assignedNavigator: clientCases.assignedNavigator,
+        benefitProgramId: clientCases.benefitProgramId,
+        countyCode: clientCases.countyCode,
         createdAt: clientCases.createdAt,
       })
       .from(clientCases)
@@ -201,7 +201,7 @@ class StratifiedSamplingService {
 
     // Group cases by caseworker
     const casesByWorker = eligibleCases.reduce((acc, case_) => {
-      const workerId = case_.userId || "unassigned";
+      const workerId = case_.assignedNavigator || "unassigned";
       if (!acc[workerId]) acc[workerId] = [];
       acc[workerId].push(case_);
       return acc;
@@ -230,13 +230,13 @@ class StratifiedSamplingService {
         selectedCases.push({
           caseId: case_.id,
           caseworkerId: workerId,
-          programType: case_.programType || "unknown",
-          county: case_.county || "unknown",
+          programType: case_.benefitProgramId || "unknown",
+          county: case_.countyCode || "unknown",
           weight: case_.weight
         });
 
         // Track stratification
-        const key = `${case_.programType}:${case_.county}`;
+        const key = `${case_.benefitProgramId}:${case_.countyCode}`;
         stratificationDistribution[key] = (stratificationDistribution[key] || 0) + 1;
       }
     }
@@ -307,20 +307,20 @@ class StratifiedSamplingService {
 
     // Boost weight for underrepresented programs
     const programCounts = allWorkerCases.reduce((acc, c) => {
-      acc[c.programType] = (acc[c.programType] || 0) + 1;
+      acc[c.benefitProgramId] = (acc[c.benefitProgramId] || 0) + 1;
       return acc;
     }, {} as Record<string, number>);
     
-    const programFreq = programCounts[case_.programType] / allWorkerCases.length;
+    const programFreq = programCounts[case_.benefitProgramId] / allWorkerCases.length;
     weight *= (1 - programFreq); // Lower frequency = higher weight
 
     // Boost weight for diverse counties
     const countyCounts = allWorkerCases.reduce((acc, c) => {
-      acc[c.county] = (acc[c.county] || 0) + 1;
+      acc[c.countyCode] = (acc[c.countyCode] || 0) + 1;
       return acc;
     }, {} as Record<string, number>);
     
-    const countyFreq = countyCounts[case_.county] / allWorkerCases.length;
+    const countyFreq = countyCounts[case_.countyCode] / allWorkerCases.length;
     weight *= (1 - countyFreq);
 
     // Ensure weight never reaches zero (maintains randomness even for uniform cohorts)
@@ -353,7 +353,7 @@ class StratifiedSamplingService {
     if (sample.length === 0 || population.length === 0) return 0;
 
     // Get all unique programs from population
-    const allPrograms = new Set(population.map(c => c.programType || "unknown"));
+    const allPrograms = new Set(population.map(c => c.benefitProgramId || "unknown"));
     
     // Calculate distributions with smoothing (add-one smoothing to handle zeros)
     const smoothing = 0.01;
@@ -372,7 +372,7 @@ class StratifiedSamplingService {
       sampleDist[prog] += 1;
     }
     for (const c of population) {
-      const prog = c.programType || "unknown";
+      const prog = c.benefitProgramId || "unknown";
       popDist[prog] += 1;
     }
 
@@ -607,10 +607,10 @@ class AIAssessmentService {
 Analyze the following case and provide a quality assessment.
 
 Case Information:
-- Program: ${caseData.programType || "Unknown"}
+- Program: ${caseData.benefitProgramId || "Unknown"}
 - Status: ${caseData.status || "Unknown"}
 - Created: ${caseData.createdAt}
-- County: ${caseData.county || "Unknown"}
+- County: ${caseData.countyCode || "Unknown"}
 
 Checkpoint Progress:
 ${checkpoints.map(cp => `- ${cp.checkpointName}: ${cp.status} ${cp.delayDays ? `(${cp.delayDays} days delay)` : ""}`).join("\n")}
