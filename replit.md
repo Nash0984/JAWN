@@ -1,52 +1,10 @@
 # Overview
 
-The Maryland Universal Financial Navigator (JAWN - Joint Access Welfare Network) is an AI-powered platform designed to optimize financial well-being by integrating public benefits eligibility with federal and state tax preparation. It acts as a universal financial command center, utilizing Retrieval-Augmented Generation (RAG), Rules as Code, and the Google Gemini API. The platform offers comprehensive financial optimization through a single conversational interface, supporting six Maryland benefit programs and VITA tax assistance. A key innovation is the use of a single household profile for both benefit calculations and tax preparation, combined with AI-driven cross-enrollment intelligence to identify unclaimed benefits. The platform is fully operational, including GDPR/HIPAA compliance, production-grade infrastructure, a complete E-Filing Dashboard, and an autonomous Benefits Access Review system. The system is deployed as a single unified application at marylandbenefits.gov serving all 24 Maryland LDSS offices with multi-tenant architecture.
+The Maryland Universal Financial Navigator (JAWN - Joint Access Welfare Network) is an AI-powered platform designed to optimize financial well-being by integrating public benefits eligibility with federal and state tax preparation. It serves as a universal financial command center, utilizing Retrieval-Augmented Generation (RAG), Rules as Code, and the Google Gemini API. The platform offers comprehensive financial optimization through a single conversational interface, supporting six Maryland benefit programs and VITA tax assistance. A key innovation is the use of a single household profile for both benefit calculations and tax preparation, combined with AI-driven cross-enrollment intelligence to identify unclaimed benefits. The system is fully operational, including GDPR/HIPAA compliance, production-grade infrastructure, a complete E-Filing Dashboard, and an autonomous Benefits Access Review system, deployed as a single unified application at marylandbenefits.gov for all 24 Maryland LDSS offices with multi-tenant architecture.
 
 # User Preferences
 
 Preferred communication style: Simple, everyday language.
-
-# Recent Updates (October 22, 2025)
-
-## Performance & Infrastructure Optimization Phase
-- **Smart Scheduler Non-Blocking Initialization**: Refactored to fire-and-forget pattern with promise chaining, eliminating 10-second server startup delays. Achieved 97% performance improvement (subsequent requests: 10s → 208ms)
-- **Comprehensive Health Check System**: Enhanced `/api/health` endpoint with multi-service monitoring (database, Redis, Gemini API, object storage, backup, WebSocket, Smart Scheduler). Returns detailed telemetry including latencies, connection status, and graceful degradation states
-- **Production-Ready Service Monitoring**: All critical services report health status with proper HTTP status codes (200 = healthy, 503 = unhealthy, 207 = degraded). Scheduler reports initialization state, active schedules, and pending checks
-
-## AI Consolidation & Cost Optimization Phase
-- **Unified AI Orchestrator**: Consolidated aiIntakeAssistant, voiceAssistant, and aiService into single aiOrchestrator.ts with strategy pattern routing, centralized rate limiting, cost tracking, and exponential backoff retry logic
-- **Gemini Context Caching Implemented**: 90% cost reduction on repeated prompts via explicit caching API with full cache management (create, list, update, delete) for policy manuals, form templates, and system instructions. Supports minimum 1,024 tokens for Gemini 1.5 Flash with versioned models (gemini-1.5-flash-001)
-- **AI Training Database Created**: Added aiTrainingExamples table with schema, Zod validation, and TypeScript types for few-shot learning system supporting tax/benefits document classification and field extraction
-- **Centralized AI Strategy**: All Gemini API calls now flow through aiOrchestrator for consistent rate limiting, request queueing, cost tracking, and retry handling across entire application
-
-# Recent Updates (October 21, 2025)
-
-## Production Finalization Phase (October 21)
-- **Eliminated AI-Coding Antipatterns**: Fixed 17 circular references in schema.ts, created structured logging service to replace console statements
-- **Production Hardening**: Added compression middleware, updated browserslist, created .env.example with full production configuration
-- **Database Completeness**: Added missing tables (crossEnrollmentPredictions, fraudDetectionAlerts, aiUsageLogs) for AI/ML features
-- **Logging Infrastructure**: Created production-ready logger service, started replacement of 721 console statements (partial - critical services done)
-- **Security**: Fixed error handling to prevent stack trace leaks, documented all required environment variables
-- **Contact Information**: Updated placeholder phone numbers to Maryland DHS: 1-800-332-6347
-
-# Recent Updates (October 20, 2025)
-
-## AI Enhancement Phase Completed
-- **Fixed Rate Limiting**: Resolved IPv6 validation errors by adding `validate: false` to all rate limiters
-- **AI Document Intelligence Pipeline**: Implemented Gemini Vision API integration for OCR and smart field extraction from documents (W-2s, pay stubs, utility bills, etc.)
-- **Conversational AI Intake Assistant**: Built natural language processing chat interface with multi-language support (English, Spanish, Chinese, Korean) and voice capabilities
-- **Cross-Enrollment Intelligence Engine**: Created ML-based benefit prediction system with confidence scoring and analytics dashboard
-- **Smart RAG System**: Deployed semantic search across policy documents using Gemini embeddings with natural language Q&A
-- **Predictive Analytics**: Added case outcome predictions, processing time estimations, and resource allocation forecasting
-- **Emergency Fast-Track**: Implemented AI identification of urgent cases with automatic expedited processing
-- **Fraud Detection Pipeline**: Built pattern analysis for unusual applications and behavioral anomalies
-- **Smart Workflow Automation**: Deployed AI-driven task prioritization and automatic case routing
-
-## Critical Fixes Applied
-- API routing now properly handles JSON responses before Vite middleware
-- Tenant context error logging properly serializes error details
-- BAR supervisor dashboard implements actual county-based filtering with database joins
-- Gemini API integration uses correct GoogleGenAI API format throughout
 
 # System Architecture
 
@@ -54,7 +12,7 @@ Preferred communication style: Simple, everyday language.
 The frontend is built with React 18, TypeScript, Vite, shadcn/ui (Radix UI), and Tailwind CSS, emphasizing modularity, accessibility, and mobile-first responsiveness. It includes features like a Command Palette, animations, resizable split views, skeleton loading, auto-save, and progress indicators. A public applicant portal offers document checklist generation, notice letter explanation, and simplified policy search.
 
 ## Technical Implementations
-The backend uses Express.js with TypeScript and PostgreSQL via Drizzle ORM on Neon Database. It incorporates a multi-stage document processing pipeline for OCR, classification, semantic chunking, and embedding generation. The Google Gemini API is central for analysis, query processing, and RAG. A "Living Policy Manual" and "Rules Extraction Pipeline" convert policy text into structured "Rules as Code." Google Cloud Storage handles document file storage.
+The backend uses Express.js with TypeScript and PostgreSQL via Drizzle ORM on Neon Database. It incorporates a multi-stage document processing pipeline for OCR, classification, semantic chunking, and embedding generation. The Google Gemini API is central for analysis, query processing, and RAG. A "Living Policy Manual" and "Rules Extraction Pipeline" convert policy text into structured "Rules as Code." Google Cloud Storage handles document file storage. The AI orchestration is unified in `aiOrchestrator.ts` with strategy pattern routing, centralized rate limiting, cost tracking, and exponential backoff retry logic. Gemini context caching is implemented for cost reduction.
 
 ## Feature Specifications
 ### Core Platform Features
@@ -70,32 +28,30 @@ The backend uses Express.js with TypeScript and PostgreSQL via Drizzle ORM on Ne
 -   **IRS Use & Disclosure Consent Form**: IRS Publication 4299 compliant consent form with electronic signature.
 -   **Unified Monitoring & Analytics Platform**: 7 observability domains, real-time WebSocket updates, and admin dashboard.
 -   **TaxSlayer Document Management**: Enhanced VITA document workflow with quality validation, audit logging, and secure downloads.
--   **Interactive Demo Showcase**: Comprehensive static demo with cached data showcasing platform features.
--   **API Documentation Explorer**: Searchable, filterable catalog of API endpoints.
--   **API Platform & Developer Experience**: Enhanced API Explorer with code snippet generation, comprehensive API versioning, and a developer onboarding portal.
--   **Benefits Access Review (BAR)**: Fully autonomous case quality monitoring system with stratified sampling, 30-60 day lifecycle tracking across 5 checkpoints, AI quality assessment via Gemini, blind supervisor review with SHA-256 anonymization, automated notification infrastructure, production-ready Supervisor Review Dashboard with mandatory structured feedback forms, real-time WebSocket updates, and pattern detection analytics.
-
-### E-Filing Infrastructure
-Production-ready components include Form 1040 and Maryland Form 502 PDF generators, and XML generators for both federal and state forms. An E-File Queue Service for submission tracking exists.
+-   **Benefits Access Review (BAR)**: Fully autonomous case quality monitoring system with stratified sampling, AI quality assessment via Gemini, blind supervisor review, automated notification infrastructure, and a production-ready Supervisor Review Dashboard.
+-   **AI Document Intelligence Pipeline**: Gemini Vision API integration for OCR and smart field extraction.
+-   **Conversational AI Intake Assistant**: Natural language processing chat interface with multi-language support and voice capabilities.
+-   **Smart RAG System**: Semantic search across policy documents using Gemini embeddings.
+-   **Fraud Detection Pipeline**: Pattern analysis for unusual applications and behavioral anomalies.
+-   **Smart Workflow Automation**: AI-driven task prioritization and automatic case routing.
 
 ## System Design Choices
 -   **Data Management**: PostgreSQL for core data, Google Cloud Storage for files.
 -   **Authentication & Authorization**: Basic user authentication with roles, object-level security, and CSRF protection.
 -   **Production Security Hardening**: Field-level encryption (AES-256-GCM), secure file uploads, strong password enforcement, enhanced session security, CORS hardening, security headers, XSS sanitization, SQL injection protection, and a Security Monitoring Dashboard.
--   **Enterprise Compliance Framework**: GDPR and HIPAA compliance implemented with dedicated database tables, service code, and API routes.
+-   **Enterprise Compliance Framework**: GDPR and HIPAA compliance implemented.
 -   **Production Readiness & Hardening**: Health check endpoints, role-based rate limiting, DoS protection, database connection pooling, and graceful shutdown.
 -   **Unified Household Profiler**: Single profile for benefits and tax workflows.
--   **Performance Optimization**: Server-side caching, extensive database indexing.
--   **Maryland Rules-as-Code Architecture**: Maryland rules engines are the primary determination system, with PolicyEngine serving as a third-party verifier for benefits and tax rules.
+-   **Performance Optimization**: Server-side caching, extensive database indexing, and non-blocking initialization for the Smart Scheduler.
+-   **Maryland Rules-as-Code Architecture**: Maryland rules engines are the primary determination system, with PolicyEngine serving as a third-party verifier.
 -   **Testing**: Vitest, @testing-library/react, and supertest.
--   **Distributed Caching System**: Production-ready distributed cache with Redis/Upstash integration and automatic fallback, featuring tiered L1/L2 cache architecture and multi-layer caching for various components.
--   **Scalable Connection Pooling**: Neon Pooled Connections for 100+ concurrent connections, surge protection, and circuit breaker pattern.
--   **WebSocket Real-Time Service**: WebSocket service with session-based authentication, heartbeat monitoring, and metrics broadcast for admin monitoring dashboard.
--   **Unified Metrics Service (7 Observability Domains)**: Comprehensive monitoring across Errors, Security, Performance, E-Filing, AI usage/costs, Cache performance, and Health checks.
--   **Prometheus Metrics Export**: Configured in PM2.
+-   **Distributed Caching System**: Production-ready distributed cache with Redis/Upstash integration.
+-   **Scalable Connection Pooling**: Neon Pooled Connections for high concurrency.
+-   **WebSocket Real-Time Service**: WebSocket service with session-based authentication.
+-   **Unified Metrics Service**: Comprehensive monitoring across Errors, Security, Performance, E-Filing, AI usage/costs, Cache performance, and Health checks, with Prometheus Metrics Export.
 -   **Universal Feature Registry**: Ensures all 6 programs have access to all features, with a modular architecture and cross-enrollment intelligence.
--   **PM2 Production Deployment**: Cluster mode deployment for process management, zero-downtime deployments, auto-restart capabilities, and production settings.
--   **Maryland LDSS Single-Instance Deployment**: A single unified application serves all 24 Maryland LDSS offices, with office-specific data and user assignments managed within the system.
+-   **PM2 Production Deployment**: Cluster mode deployment for process management.
+-   **Maryland LDSS Single-Instance Deployment**: A single unified application serves all 24 Maryland LDSS offices with multi-tenant architecture.
 
 # External Dependencies
 
