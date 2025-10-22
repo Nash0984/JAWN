@@ -59,18 +59,24 @@ export function LDSSOfficeInfo() {
             No Office Assignment
           </CardTitle>
           <CardDescription className="text-amber-700 dark:text-amber-300">
-            You are not currently assigned to a Local Department of Social Services office. Contact your administrator for assignment.
+            You are not currently assigned to a county office. Contact your administrator for assignment.
           </CardDescription>
         </CardHeader>
       </Card>
     );
   }
 
+  // Generic program names (tenant-aware versions should come from stateConfig in future)
   const programNames: Record<string, string> = {
+    "SNAP": "SNAP (Food Assistance)",
     "MD_SNAP": "SNAP (Food Assistance)",
+    "MEDICAID": "Medicaid",
     "MD_MEDICAID": "Medicaid",
-    "MD_TANF": "TCA/TANF (Cash Assistance)",
-    "MD_OHEP": "OHEP (Energy Assistance)",
+    "TANF": "Cash Assistance (TANF)",
+    "MD_TANF": "Cash Assistance (TANF)",
+    "OHEP": "Energy Assistance",
+    "MD_OHEP": "Energy Assistance",
+    "TAX_CREDITS": "Tax Credits",
     "MD_TAX_CREDITS": "Tax Credits",
     "VITA": "VITA Tax Assistance",
   };

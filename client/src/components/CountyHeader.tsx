@@ -30,8 +30,9 @@ export function CountyHeader() {
           className="h-10 w-10 object-contain"
           data-testid="img-county-logo"
         />
-      ) : (branding.countyName?.toLowerCase().includes(stateConfig?.stateName?.toLowerCase() || 'maryland') || 
-             branding.countyName?.toLowerCase().includes('state')) ? (
+      ) : ((stateConfig?.stateName && branding.countyName?.toLowerCase().includes(stateConfig.stateName.toLowerCase())) || 
+             branding.countyName?.toLowerCase().includes('state') || 
+             branding.countyName?.toLowerCase().includes('commonwealth')) ? (
         <TenantSeal
           size="md"
           className="h-10 w-10" 

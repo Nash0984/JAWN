@@ -71,8 +71,8 @@ export default function Login() {
   const { toast } = useToast();
   const { stateConfig } = useTenant();
   
-  const stateName = stateConfig?.stateName || 'Maryland';
-  const agencyAcronym = stateConfig?.agencyAcronym || 'DHS';
+  const stateName = stateConfig?.stateName || 'State';
+  const agencyAcronym = stateConfig?.agencyAcronym || '';
   
   // Get returnUrl from query string
   const params = new URLSearchParams(window.location.search);

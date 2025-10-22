@@ -19,7 +19,7 @@ export const TenantLogo = ({
   const { tenant, branding, stateConfig } = useTenant();
   
   const stateCode = stateConfig?.stateCode || 'MD';
-  const stateName = stateConfig?.stateName || 'Maryland';
+  const stateName = stateConfig?.stateName || 'State';
   const abbreviation = stateConfig?.abbreviation || stateCode;
   
   // If custom logo URL is provided, use it
@@ -47,7 +47,7 @@ export const TenantLogo = ({
         onError={(e) => {
           // Fallback to generic seal if state seal not found
           if (fallback) {
-            (e.target as HTMLImageElement).src = '/maryland-seal.svg';
+            (e.target as HTMLImageElement).src = '/assets/generic-seal.svg';
           }
         }}
         {...(rest as any)}

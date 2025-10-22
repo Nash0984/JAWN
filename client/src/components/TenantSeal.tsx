@@ -27,7 +27,7 @@ export const TenantSeal = ({
   const { stateConfig, tenant } = useTenant();
   
   const stateCode = stateConfig?.stateCode || 'MD';
-  const stateName = stateConfig?.stateName || tenant?.name || 'Maryland';
+  const stateName = stateConfig?.stateName || tenant?.name || 'State';
   const sealPath = `/assets/${stateCode.toLowerCase()}/seal.svg`;
   
   const sizeClass = sizeMap[size];
@@ -41,8 +41,8 @@ export const TenantSeal = ({
       aria-label={`${stateName} State Seal`}
       onError={(e) => {
         if (showFallback) {
-          // Fallback to Maryland seal if state seal not found
-          (e.target as HTMLImageElement).src = '/maryland-seal.svg';
+          // Fallback to generic seal if state seal not found
+          (e.target as HTMLImageElement).src = '/assets/generic-seal.svg';
         } else {
           // Hide image if no fallback desired
           (e.target as HTMLImageElement).style.display = 'none';

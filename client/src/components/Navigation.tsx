@@ -17,8 +17,8 @@ import { useTenant } from "@/contexts/TenantContext";
 const StateHeader = ({ t }: { t: any }) => {
   const { stateConfig } = useTenant();
   
-  const stateName = stateConfig?.stateName || 'Maryland';
-  const agencyAcronym = stateConfig?.agencyAcronym || 'DHS';
+  const stateName = stateConfig?.stateName || 'State';
+  const agencyAcronym = stateConfig?.agencyAcronym || '';
   
   return (
     <div className="flex items-center gap-3">
@@ -41,7 +41,7 @@ export default function Navigation() {
   const { toast } = useToast();
   const { stateConfig } = useTenant();
   
-  const stateName = stateConfig?.stateName || 'Maryland';
+  const stateName = stateConfig?.stateName || 'State';
 
   // Define all navigation items with role requirements
   const allNavigationItems = [
