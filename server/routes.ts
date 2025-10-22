@@ -701,15 +701,39 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
 
     // Verify the document using Gemini Vision API
     // Pass buffer for immediate verification (avoids redundant storage fetch)
-    const result = await documentVerificationService.verifyDocument(
-      document.id,
-      documentType,
-      {
-        fileBuffer: req.file.buffer,
-        mimeType: req.file.mimetype,
-        clientCaseId
-      }
-    );
+    let result;
+    try {
+      result = await documentVerificationService.verifyDocument(
+        document.id,
+        documentType,
+        {
+          fileBuffer: req.file.buffer,
+          mimeType: req.file.mimetype,
+          clientCaseId
+        }
+      );
+    } catch (error) {
+      // Handle Gemini API errors gracefully - return user-friendly validation response
+      logger.warn('Document verification failed', {
+        service: 'verify-document',
+        error: error instanceof Error ? error.message : 'Unknown error',
+        documentId: document.id
+      });
+      
+      return res.status(400).json({
+        documentType: documentType,
+        meetsCriteria: false,
+        summary: "We couldn't analyze this document. Please ensure the image is clear, well-lit, and shows the complete document. If the problem persists, try uploading a different format (JPEG, PNG, or PDF).",
+        requirements: [{
+          requirement: "Image Quality",
+          met: false,
+          explanation: "The uploaded image could not be processed. This may be due to image quality, size, or format issues."
+        }],
+        officialCitations: [],
+        confidence: 0,
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
+    }
 
     // Get plain-language explanation
     const explanation = documentVerificationService.getVerificationExplanation(result);

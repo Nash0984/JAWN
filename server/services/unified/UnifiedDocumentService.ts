@@ -213,7 +213,7 @@ Include a "confidence" field (0-1) for extraction accuracy.`;
 
     const ai = getGemini();
     const result = await ai.models.generateContent({
-      model: "gemini-2.5-flash",
+      model: "gemini-2.0-flash",
       contents: [{
         role: 'user',
         parts: [
@@ -267,7 +267,7 @@ Return as JSON with a confidence score.`;
 
     const ai = getGemini();
     const result = await ai.models.generateContent({
-      model: "gemini-2.5-flash",
+      model: "gemini-2.0-flash",
       contents: [{
         role: 'user',
         parts: [
