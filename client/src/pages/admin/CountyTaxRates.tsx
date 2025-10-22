@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useTenant } from "@/contexts/TenantContext";
 
 interface CountyTaxRate {
   id: string;
@@ -33,10 +34,23 @@ interface CountyTaxRatesResponse {
   rates: CountyTaxRate[];
 }
 
+const STATE_TAX_FORMS: Record<string, string> = {
+  'MD': 'Form 502',
+  'PA': 'PA-40',
+  'VA': 'Form 760',
+  'UT': 'TC-40',
+  'IN': 'IT-40',
+  'MI': 'MI-1040',
+};
+
 export default function CountyTaxRates() {
   const [taxYear, setTaxYear] = useState<string>("2025");
   const [editedRates, setEditedRates] = useState<Record<string, { minRate: number; maxRate: number }>>({});
   const { toast } = useToast();
+  const { stateConfig } = useTenant();
+  const stateName = stateConfig?.stateName || 'State';
+  const stateCode = stateConfig?.stateCode || 'MD';
+  const stateFormNumber = STATE_TAX_FORMS[stateCode] || `${stateCode} State Tax Form`;
 
   // Fetch county tax rates
   const { data, isLoading } = useQuery<CountyTaxRatesResponse>({
@@ -101,9 +115,9 @@ export default function CountyTaxRates() {
   return (
     <div className="container mx-auto max-w-7xl py-8 space-y-6" data-testid="page-county-tax-rates">
       <div>
-        <h1 className="text-3xl font-bold" data-testid="text-page-title">Maryland County Tax Rates</h1>
+        <h1 className="text-3xl font-bold" data-testid="text-page-title">{stateName} County Tax Rates</h1>
         <p className="text-muted-foreground" data-testid="text-page-description">
-          Manage county tax rates for Maryland Form 502 calculations
+          Manage county tax rates for {stateName} {stateFormNumber} calculations
         </p>
       </div>
 
@@ -187,7 +201,7 @@ export default function CountyTaxRates() {
       ) : (
         <Card>
           <CardHeader>
-            <CardTitle>All Maryland Counties ({data.rates.length})</CardTitle>
+            <CardTitle>All {stateName} Counties ({data.rates.length})</CardTitle>
             <CardDescription>
               Enter rates as percentages (e.g., 2.25 for 2.25%)
             </CardDescription>

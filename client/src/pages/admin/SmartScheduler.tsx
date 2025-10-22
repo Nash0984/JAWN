@@ -11,6 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useTenant } from "@/contexts/TenantContext";
 import { 
   RefreshCw, 
   Clock, 
@@ -40,6 +41,8 @@ type SchedulerStatus = {
 
 export default function SmartScheduler() {
   const { toast } = useToast();
+  const { stateConfig } = useTenant();
+  const stateName = stateConfig?.stateName || 'State';
   const [frequencyDialogOpen, setFrequencyDialogOpen] = useState(false);
   const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
   const [selectedSource, setSelectedSource] = useState<string>('');
@@ -158,7 +161,7 @@ export default function SmartScheduler() {
       'irs_publications': 'IRS VITA Publications',
       'federal_bills': 'Federal Bill Status',
       'public_laws': 'Federal Public Laws',
-      'maryland_legislature': 'Maryland Legislature Bills',
+      'maryland_legislature': `${stateName} Legislature Bills`,
       'fns_state_options': 'FNS SNAP State Options'
     };
     return labels[source] || source;
@@ -369,7 +372,7 @@ export default function SmartScheduler() {
                 <li>IRS Publications: Weekly (updated annually Oct-Dec for tax season)</li>
                 <li>Federal Bills: Daily during session, weekly during recess</li>
                 <li>Public Laws: Weekly (few enacted per month)</li>
-                <li>Maryland Legislature: Daily during session (Jan-Apr only), paused rest of year</li>
+                <li>{stateName} Legislature: Daily during session, paused rest of year</li>
                 <li>FNS State Options: Monthly check (published annually in August)</li>
               </ul>
             </CardContent>

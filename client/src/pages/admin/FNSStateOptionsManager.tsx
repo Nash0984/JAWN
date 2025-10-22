@@ -15,7 +15,9 @@ import {
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useTenant } from "@/contexts/TenantContext";
 
+// Backend field name 'MarylandStatus' preserved for API compatibility
 interface MarylandStatus {
   id: string | null;
   isParticipating: boolean | null;
@@ -42,13 +44,15 @@ interface StateOption {
   benefitImpact: string | null;
   sourceUrl: string | null;
   isActive: boolean;
-  marylandStatus: MarylandStatus;
+  marylandStatus: MarylandStatus; // Backend field name preserved
 }
 
 export default function FNSStateOptionsManager() {
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
   const [participationFilter, setParticipationFilter] = useState<string>("all");
   const { toast } = useToast();
+  const { stateConfig } = useTenant();
+  const stateName = stateConfig?.stateName || 'State';
 
   // Build query params
   const queryParams = new URLSearchParams();
@@ -96,7 +100,7 @@ export default function FNSStateOptionsManager() {
       <div>
         <h1 className="text-3xl font-bold" data-testid="text-page-title">FNS State Options Manager</h1>
         <p className="text-muted-foreground" data-testid="text-page-description">
-          Manage SNAP state options and waivers for Maryland
+          Manage SNAP state options and waivers for {stateName}
         </p>
       </div>
 
