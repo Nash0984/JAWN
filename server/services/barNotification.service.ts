@@ -512,7 +512,7 @@ export class BARNotificationService {
       })
         .from(caseLifecycleEvents)
         .innerJoin(clientCases, eq(caseLifecycleEvents.caseId, clientCases.id))
-        .innerJoin(users, eq(clientCases.userId, users.id))
+        .innerJoin(users, eq(clientCases.assignedNavigator, users.id))
         .where(eq(caseLifecycleEvents.id, checkpointId))
         .limit(1);
       
