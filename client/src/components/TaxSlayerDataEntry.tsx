@@ -18,6 +18,7 @@ import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { AlertCircle, Plus, Save, Trash2, FileText, DollarSign, Building, Calculator, AlertTriangle, CheckCircle2, Loader2 } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { useTenant } from "@/contexts/TenantContext";
 
 // TaxSlayer data entry schema
 const taxslayerEntrySchema = z.object({
@@ -96,6 +97,8 @@ interface TaxSlayerDataEntryProps {
 }
 
 export function TaxSlayerDataEntry({ vitaSessionId, taxYear = new Date().getFullYear() - 1, onSuccess, onCancel }: TaxSlayerDataEntryProps) {
+  const { stateConfig } = useTenant();
+  const stateCode = stateConfig?.stateCode || 'STATE';
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [autoSaveEnabled, setAutoSaveEnabled] = useState(true);
@@ -437,7 +440,7 @@ export function TaxSlayerDataEntry({ vitaSessionId, taxYear = new Date().getFull
               <AccordionTrigger className="text-lg font-semibold">
                 <div className="flex items-center gap-2">
                   <FileText className="h-5 w-5" />
-                  Maryland State Return
+                  {stateCode} State Return
                 </div>
               </AccordionTrigger>
               <AccordionContent>
@@ -449,7 +452,7 @@ export function TaxSlayerDataEntry({ vitaSessionId, taxYear = new Date().getFull
                         name="stateAGI"
                         render={({ field }) => (
                           <FormItem>
-                            <FormLabel>Maryland AGI</FormLabel>
+                            <FormLabel>{stateCode} AGI</FormLabel>
                             <FormControl>
                               <Input
                                 type="number"

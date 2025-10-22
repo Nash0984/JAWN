@@ -12,8 +12,8 @@ interface PolicyEngineVerificationBadgeProps {
   confidenceScore?: number;
   variancePercentage?: number | null;
   // New props for hybrid endpoint compatibility
-  difference?: number; // Dollar difference between Maryland and PolicyEngine
-  primaryAmount?: number; // Maryland calculation amount
+  difference?: number; // Dollar difference between primary and PolicyEngine calculation
+  primaryAmount?: number; // Primary calculation amount
   compact?: boolean;
   className?: string;
 }

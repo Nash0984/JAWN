@@ -44,6 +44,7 @@ import {
   HelpCircle
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useTenant } from '@/contexts/TenantContext';
 
 interface Message {
   id: string;
@@ -87,6 +88,8 @@ interface ChatSession {
 }
 
 export function AIIntakeChat() {
+  const { stateConfig } = useTenant();
+  const stateName = stateConfig?.stateName || 'State';
   const { toast } = useToast();
   const chatEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -438,8 +441,8 @@ export function AIIntakeChat() {
 
   const getWelcomeMessage = (lang: string): string => {
     const messages: Record<string, string> = {
-      'en': "Hello! I'm here to help you apply for Maryland benefits. I can assist you with SNAP, Medicaid, TANF, and energy assistance programs. How can I help you today?",
-      'es': "¡Hola! Estoy aquí para ayudarle a solicitar beneficios de Maryland. Puedo ayudarle con los programas SNAP, Medicaid, TANF y asistencia energética. ¿Cómo puedo ayudarle hoy?",
+      'en': `Hello! I'm here to help you apply for ${stateName} benefits. I can assist you with SNAP, Medicaid, TANF, and energy assistance programs. How can I help you today?`,
+      'es': `¡Hola! Estoy aquí para ayudarle a solicitar beneficios de ${stateName}. Puedo ayudarle con los programas SNAP, Medicaid, TANF y asistencia energética. ¿Cómo puedo ayudarle hoy?`,
       'zh': "您好！我在这里帮助您申请马里兰州福利。我可以协助您申请SNAP、Medicaid、TANF和能源援助计划。今天我能为您做些什么？",
       'ko': "안녕하세요! 메릴랜드 복지 혜택 신청을 도와드리겠습니다. SNAP, Medicaid, TANF 및 에너지 지원 프로그램을 도와드릴 수 있습니다. 오늘 무엇을 도와드릴까요?"
     };

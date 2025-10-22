@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
+import { useTenant } from "@/contexts/TenantContext";
 import { 
   Download, 
   FileText, 
@@ -41,6 +42,8 @@ interface IngestionResponse {
 }
 
 export function DocumentIngestionPanel() {
+  const { stateConfig } = useTenant();
+  const stateName = stateConfig?.stateName || 'State';
   const [isIngesting, setIsIngesting] = useState(false);
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -103,7 +106,7 @@ export function DocumentIngestionPanel() {
             Golden Source Documents
           </h2>
           <p className="text-gray-600 dark:text-gray-400 mt-1">
-            Official Maryland SNAP policy manual documents with complete audit trails
+            Official {stateName} SNAP policy manual documents with complete audit trails
           </p>
         </div>
         <div className="flex items-center gap-3">
@@ -123,7 +126,7 @@ export function DocumentIngestionPanel() {
             Document Ingestion
           </CardTitle>
           <CardDescription>
-            Download and process all official Maryland SNAP manual documents from the Maryland Department of Human Services website.
+            Download and process all official {stateName} SNAP manual documents from the {stateName} Department of Human Services website.
             This creates a complete audit trail for compliance and verification.
           </CardDescription>
         </CardHeader>
@@ -133,8 +136,8 @@ export function DocumentIngestionPanel() {
               <Alert>
                 <FileText className="w-4 h-4" />
                 <AlertDescription>
-                  No golden source documents found. Click the button below to download all 47+ sections
-                  of the Maryland SNAP manual with complete audit trails.
+                  No golden source documents found. Click the button below to download all sections
+                  of the {stateName} SNAP manual with complete audit trails.
                 </AlertDescription>
               </Alert>
             ) : (

@@ -9,6 +9,7 @@ import { Loader2, Search, Bot, Calculator, BookOpen, CheckCircle2, Info, Clock, 
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { useTenant } from "@/contexts/TenantContext";
 import { ExportButton } from "@/components/ExportButton";
 import FeedbackButton from "@/components/FeedbackButton";
 import QuickRating from "@/components/QuickRating";
@@ -60,6 +61,8 @@ const RECENT_SEARCHES_KEY = "md-benefits-recent-searches";
 const MAX_RECENT_SEARCHES = 5;
 
 export default function SearchInterface() {
+  const { stateConfig } = useTenant();
+  const stateName = stateConfig?.stateName || 'State';
   const [query, setQuery] = useState("");
   const [executedQuery, setExecutedQuery] = useState("");
   const [searchResult, setSearchResult] = useState<HybridSearchResult | null>(null);
@@ -160,7 +163,7 @@ export default function SearchInterface() {
       <a href="#search-results" className="skip-link">Skip to search results</a>
       
       <section aria-labelledby="search-heading">
-        <h2 id="search-heading" className="sr-only">Search Maryland SNAP Information</h2>
+        <h2 id="search-heading" className="sr-only">Search {stateName} SNAP Information</h2>
         <Card className="shadow-lg border border-border">
           <CardContent className="p-6">
             <div className="relative">
@@ -170,7 +173,7 @@ export default function SearchInterface() {
               <Input 
                 id="search-input"
                 type="text" 
-                placeholder="Ask about Maryland SNAP eligibility, income limits, work rules..."
+                placeholder={`Ask about ${stateName} SNAP eligibility, income limits, work rules...`}
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 onKeyDown={handleKeyPress}
