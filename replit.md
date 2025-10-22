@@ -38,8 +38,8 @@ The backend uses Express.js with TypeScript and PostgreSQL via Drizzle ORM on Ne
 ## System Design Choices
 -   **Data Management**: PostgreSQL for core data, Google Cloud Storage for files.
 -   **Authentication & Authorization**: Basic user authentication with roles, object-level security, and CSRF protection.
--   **Production Security Hardening**: Field-level encryption (AES-256-GCM), secure file uploads, strong password enforcement, enhanced session security, CORS hardening, security headers, XSS sanitization, SQL injection protection, and a Security Monitoring Dashboard.
--   **Enterprise Compliance Framework**: GDPR and HIPAA compliance implemented.
+-   **Production Security Hardening**: Field-level encryption (AES-256-GCM), secure file uploads, strong password enforcement, enhanced session security, CORS hardening, security headers, XSS sanitization, SQL injection protection, and a Security Monitoring Dashboard. **Vulnerable dependencies eliminated** (xlsx replaced with ExcelJS to mitigate HIGH severity prototype pollution and ReDoS vulnerabilities).
+-   **Enterprise Compliance Framework**: GDPR and HIPAA compliance implemented. **Zero known vulnerabilities** in production dependencies.
 -   **Production Readiness & Hardening**: Health check endpoints, role-based rate limiting, DoS protection, database connection pooling, and graceful shutdown.
 -   **Unified Household Profiler**: Single profile for benefits and tax workflows.
 -   **Performance Optimization**: Server-side caching, extensive database indexing, and non-blocking initialization for the Smart Scheduler.
@@ -59,7 +59,7 @@ The backend uses Express.js with TypeScript and PostgreSQL via Drizzle ORM on Ne
 -   **Benefit Calculations**: PolicyEngine Household API.
 -   **Database**: PostgreSQL via Drizzle ORM with Neon Database.
 -   **Object Storage**: Google Cloud Storage.
--   **Document Processing**: Tesseract OCR engine, pdf-parse.
+-   **Document Processing**: Tesseract OCR engine, pdf-parse, **ExcelJS** (secure Excel parsing/generation - replaces vulnerable xlsx library).
 -   **UI Components**: Radix UI primitives via shadcn/ui.
 -   **Data Visualization**: Recharts.
 -   **PDF Generation**: jsPDF and jspdf-autotable.
