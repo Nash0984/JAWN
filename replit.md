@@ -1,6 +1,6 @@
 # Overview
 
-The Maryland Universal Financial Navigator (JAWN - Joint Access Welfare Network) is an AI-powered platform designed to optimize financial well-being by integrating public benefits eligibility with federal and state tax preparation. It serves as a universal financial command center, utilizing Retrieval-Augmented Generation (RAG), Rules as Code, and the Google Gemini API. The platform offers comprehensive financial optimization through a single conversational interface, supporting six Maryland benefit programs and VITA tax assistance. A key innovation is the use of a single household profile for both benefit calculations and tax preparation, combined with AI-driven cross-enrollment intelligence to identify unclaimed benefits. The system is fully operational, including GDPR/HIPAA compliance, production-grade infrastructure, a complete E-Filing Dashboard, and an autonomous Benefits Access Review system, deployed as a single unified application at marylandbenefits.gov for all 24 Maryland LDSS offices with multi-tenant architecture.
+The Maryland Universal Financial Navigator (JAWN) is an AI-powered platform that optimizes financial well-being by integrating public benefits eligibility with federal and state tax preparation. It acts as a universal financial command center, utilizing Retrieval-Augmented Generation (RAG), Rules as Code, and the Google Gemini API. The platform provides comprehensive financial optimization through a single conversational interface, supporting six Maryland benefit programs and VITA tax assistance. A key innovation is the use of a single household profile for both benefit calculations and tax preparation, combined with AI-driven cross-enrollment intelligence to identify unclaimed benefits. The system is fully operational, including GDPR/HIPAA compliance, production-grade infrastructure, a complete E-Filing Dashboard, and an autonomous Benefits Access Review system, deployed as a single unified application at marylandbenefits.gov for all 24 Maryland LDSS offices with multi-tenant architecture.
 
 # User Preferences
 
@@ -9,10 +9,10 @@ Preferred communication style: Simple, everyday language.
 # System Architecture
 
 ## UI/UX
-The frontend is built with React 18, TypeScript, Vite, shadcn/ui (Radix UI), and Tailwind CSS, emphasizing modularity, accessibility, and mobile-first responsiveness. It includes features like a Command Palette, animations, resizable split views, skeleton loading, auto-save, and progress indicators. A public applicant portal offers document checklist generation, notice letter explanation, and simplified policy search.
+The frontend is built with React 18, TypeScript, Vite, shadcn/ui (Radix UI), and Tailwind CSS, focusing on modularity, accessibility, and mobile-first responsiveness. Features include a Command Palette, animations, resizable split views, skeleton loading, auto-save, and progress indicators. A public applicant portal offers document checklist generation, notice letter explanation, and simplified policy search.
 
 ## Technical Implementations
-The backend uses Express.js with TypeScript and PostgreSQL via Drizzle ORM on Neon Database. It incorporates a multi-stage document processing pipeline for OCR, classification, semantic chunking, and embedding generation. The Google Gemini API is central for analysis, query processing, and RAG. A "Living Policy Manual" and "Rules Extraction Pipeline" convert policy text into structured "Rules as Code." Google Cloud Storage handles document file storage. The AI orchestration is unified in `aiOrchestrator.ts` with strategy pattern routing, centralized rate limiting, cost tracking, and exponential backoff retry logic. Gemini context caching is implemented for cost reduction.
+The backend uses Express.js with TypeScript and PostgreSQL via Drizzle ORM on Neon Database. It incorporates a multi-stage document processing pipeline for OCR, classification, semantic chunking, and embedding generation. The Google Gemini API is central for analysis, query processing, and RAG. A "Living Policy Manual" and "Rules Extraction Pipeline" convert policy text into structured "Rules as Code." Google Cloud Storage handles document file storage. The AI orchestration is unified in `aiOrchestrator.ts` with a strategy pattern for routing, centralized rate limiting, cost tracking, and exponential backoff retry logic. Gemini context caching is implemented for cost reduction.
 
 ## Feature Specifications
 ### Core Platform Features
@@ -28,7 +28,7 @@ The backend uses Express.js with TypeScript and PostgreSQL via Drizzle ORM on Ne
 -   **IRS Use & Disclosure Consent Form**: IRS Publication 4299 compliant consent form with electronic signature.
 -   **Unified Monitoring & Analytics Platform**: 7 observability domains, real-time WebSocket updates, and admin dashboard.
 -   **TaxSlayer Document Management**: Enhanced VITA document workflow with quality validation, audit logging, and secure downloads.
--   **Benefits Access Review (BAR)**: Fully autonomous case quality monitoring system with stratified sampling, AI quality assessment via Gemini, blind supervisor review, automated notification infrastructure, and a production-ready Supervisor Review Dashboard. **Includes orphaned checkpoint handling** with automatic cleanup and cancellation of checkpoints referencing deleted cases/users.
+-   **Benefits Access Review (BAR)**: Fully autonomous case quality monitoring system with stratified sampling, AI quality assessment via Gemini, blind supervisor review, automated notification infrastructure, and a production-ready Supervisor Review Dashboard, including orphaned checkpoint handling.
 -   **AI Document Intelligence Pipeline**: Gemini Vision API integration for OCR and smart field extraction.
 -   **Conversational AI Intake Assistant**: Natural language processing chat interface with multi-language support and voice capabilities.
 -   **Smart RAG System**: Semantic search across policy documents using Gemini embeddings.
@@ -38,8 +38,8 @@ The backend uses Express.js with TypeScript and PostgreSQL via Drizzle ORM on Ne
 ## System Design Choices
 -   **Data Management**: PostgreSQL for core data, Google Cloud Storage for files.
 -   **Authentication & Authorization**: Basic user authentication with roles, object-level security, and CSRF protection.
--   **Production Security Hardening**: Field-level encryption (AES-256-GCM), secure file uploads, strong password enforcement, enhanced session security, CORS hardening, security headers, XSS sanitization, SQL injection protection, and a Security Monitoring Dashboard. **Vulnerable dependencies eliminated** (xlsx replaced with ExcelJS to mitigate HIGH severity prototype pollution and ReDoS vulnerabilities).
--   **Enterprise Compliance Framework**: GDPR and HIPAA compliance implemented. **Zero known vulnerabilities** in production dependencies.
+-   **Production Security Hardening**: Field-level encryption (AES-256-GCM), secure file uploads, strong password enforcement, enhanced session security, CORS hardening, security headers, XSS sanitization, SQL injection protection, and a Security Monitoring Dashboard. Vulnerable dependencies eliminated (xlsx replaced with ExcelJS).
+-   **Enterprise Compliance Framework**: GDPR and HIPAA compliance implemented.
 -   **Production Readiness & Hardening**: Health check endpoints, role-based rate limiting, DoS protection, database connection pooling, and graceful shutdown.
 -   **Unified Household Profiler**: Single profile for benefits and tax workflows.
 -   **Performance Optimization**: Server-side caching, extensive database indexing, and non-blocking initialization for the Smart Scheduler.
@@ -59,7 +59,7 @@ The backend uses Express.js with TypeScript and PostgreSQL via Drizzle ORM on Ne
 -   **Benefit Calculations**: PolicyEngine Household API.
 -   **Database**: PostgreSQL via Drizzle ORM with Neon Database.
 -   **Object Storage**: Google Cloud Storage.
--   **Document Processing**: Tesseract OCR engine, pdf-parse, **ExcelJS** (secure Excel parsing/generation - replaces vulnerable xlsx library).
+-   **Document Processing**: Tesseract OCR engine, pdf-parse, ExcelJS.
 -   **UI Components**: Radix UI primitives via shadcn/ui.
 -   **Data Visualization**: Recharts.
 -   **PDF Generation**: jsPDF and jspdf-autotable.
@@ -67,64 +67,3 @@ The backend uses Express.js with TypeScript and PostgreSQL via Drizzle ORM on Ne
 -   **Monitoring & Alerts**: Sentry error tracking.
 -   **Communication**: Twilio SMS API.
 -   **Caching**: Redis/Upstash (distributed).
-
-# Production Environment Configuration
-
-## Required Variables (5 Critical)
-1. **ENCRYPTION_KEY**: AES-256-GCM key for PII encryption (generate: `openssl rand -hex 32`)
-2. **SESSION_SECRET**: Cookie signing secret (generate: `openssl rand -base64 64`)
-3. **ALLOWED_ORIGINS**: CORS whitelist (production domains only, comma-separated)
-4. **GEMINI_API_KEY**: Google Gemini API key (https://aistudio.google.com/app/apikey)
-5. **Object Storage** (choose one):
-   - **Recommended**: Replit's built-in Object Storage (auto-configured, zero setup)
-   - **Advanced**: Google Cloud Storage (GCS_BUCKET_NAME + GCS_SERVICE_ACCOUNT_BASE64 - base64-encoded credentials)
-
-## Optional Variables (Recommended)
--   **Redis/Upstash**: Distributed caching (REDIS_URL or UPSTASH_REDIS_REST_URL + UPSTASH_REDIS_REST_TOKEN)
--   **SMTP**: Email notifications (SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, SMTP_FROM_EMAIL)
--   **Sentry**: Error tracking (SENTRY_DSN)
-
-## Setup Documentation
--   **Comprehensive Guide**: `PRODUCTION_ENV_SETUP.md` - Detailed setup instructions with examples
--   **Environment Template**: `.env.production.example` - Copy and fill in for production deployment
--   **Validation**: `server/utils/envValidation.ts` - Automatic validation on startup
--   **Production Checks**: `server/utils/productionValidation.ts` - Production readiness validation
-
-## Environment Validation
-The application performs automatic environment validation on startup:
--   **Development**: Shows warnings for missing optional services (non-blocking)
--   **Production**: Fails fast on missing critical variables (ENCRYPTION_KEY, SESSION_SECRET, GEMINI_API_KEY, etc.)
--   **Health Checks**: `/api/health` endpoint reports status of all services (database, Redis, Gemini, object storage)
-
-# Recent Updates (October 22, 2025)
-
-## Multi-State White-Labeling Foundation (62% Complete - Pages, Components Pending)
--   **Tenant-Aware CSS Architecture**: Refactored from hardcoded Maryland variables to semantic system (`--brand-primary`, `--brand-secondary`, `--brand-accent`) with HSL-based dynamic color injection and accessibility-verified 6.7:1 contrast ratios
--   **Backward-Compatible Tailwind**: Semantic brand tokens added with aliases (`md-red` → `brand-accent`) to prevent regressions during incremental migration
--   **Tenant Infrastructure Components**: TenantThemeProvider (dynamic HSL injection), TenantLogo (state-specific logo/seal), TenantSeal (dynamic seal rendering) with generic fallbacks ("State" instead of "Maryland", `/assets/generic-seal.svg`)
--   **42 Files White-Labeled (62% of 68 pages)**: **Phase 1 (17 files)** - Navigation, Footer, CountyHeader, LDSSOfficeInfo, Login, Signup, Demo, ClientDashboard, AdminDashboard, CaseworkerDashboard, PolicyManual, IntakeAssistant, EligibilityChecker, AIMonitoring, VitaKnowledgeBase, TaxPreparation, Developers. **Phase 2 (11 files)** - QuickScreener, BenefitScreener, FsaLanding, Disclaimer, TermsOfService, PrivacyPolicy, BreachNotificationPolicy, TaxpayerSignature, TaxpayerDashboard, TaxpayerMessaging, TaxpayerDocumentRequests. **Phase 3 (3 files)** - CountyTaxRates, FNSStateOptionsManager, SmartScheduler. **Phase 4 (4 files)** - License, AccessibilityStatement, DataSecurityPolicy, EFileDashboard. **Phase 5 (7 files)** - StateLawTracker (tenant-aware wrapper), EFileMonitoring, legal/index, EvaluationFramework, DocumentReviewQueue, DeveloperPortal, ApiDocs. **Phase 6 (5 files)** - MAIVEDashboard (with async tenant sync), CrossEnrollmentAdmin, APIExplorer, CountyAnalytics, Leaderboard
--   **Components**: Footer.tsx white-labeled (fallback 'State'), **22 components remaining** (MarylandLogo/Flag legacy, VitaTaxPreviewSidebar, BenchmarkInsightsPanel, PolicyChatWidget, ExportButton, etc.)
--   **Zero Maryland Leakage**: All fallbacks changed from "Maryland" to generic "State", seal paths changed to `/assets/generic-seal.svg`
--   **Pattern Consistency**: All white-labeled pages import `useTenant`, derive `stateName`/`stateCode` from `stateConfig`, and dynamically interpolate state-specific values in Helmet metadata and body copy
--   **Critical Fixes**: QuickScreener programCode (`${stateCode}_SNAP`), BenefitScreener stateCode default, FsaLanding TaxSlayer URL generation, income thresholds documented as TODOs, EFileDashboard stateFormNumber variable, **MAIVEDashboard async tenant sync** (useEffect pattern), **CountyTaxRates STATE_TAX_FORMS lookup** (data-driven all 6 states)
--   **E2E Testing Passed**: Login → Dashboard flow validated, TenantSeal renders correctly, brand colors applied, modern elevated card styling verified
--   **Remaining Work**: **26 pages** (admin/feature-specific pages), **22 components** (~56 Maryland refs including legacy MarylandLogo/Flag, active VitaTaxPreviewSidebar, BenchmarkInsightsPanel, PolicyChatWidget, ExportButton)
--   **Key Patterns Established**: (1) Async tenant sync via useEffect for dynamic state selection, (2) Backend field preservation (marylandTax, MarylandStatus) with UI-only white-labeling, (3) Data-driven lookups (STATE_TAX_FORMS Record) vs hardcoded ternaries, (4) Generic fallbacks ('State', '{CODE} State Tax Form')
-
-## Document Verification Fix (Production-Ready)
--   **CSRF Bug Fixed**: Login flow now works end-to-end with constant session identifier ("csrf-session") and strict sameSite policy
--   **Document Verification**: Gemini Vision integration complete with graceful error handling (400 vs 500)
--   **Model Consistency**: All Gemini API calls use "gemini-2.0-flash" (14 instances verified)
--   **Error Handling**: Gemini API failures return user-friendly 400 responses with guidance instead of 500 crashes
--   **Buffer Optimization**: Document verification uses provided fileBuffer to avoid redundant GCS fetches
-
-## BAR Notification Service Fix
--   **Orphaned Checkpoint Handling**: Fixed error when checkpoints reference deleted cases/users
--   **LEFT JOIN Implementation**: Changed from INNER JOIN to LEFT JOIN to prevent query failures
--   **Automatic Cleanup**: Orphaned checkpoints automatically marked as 'cancelled' with metadata reason
--   **Enhanced Logging**: Actionable context logging (checkpoint ID, missing entity, suggested actions)
-
-## Pre-Production Deployment
--   **Comprehensive Checklist**: Created `PRE_PRODUCTION_CHECKLIST.md` with 100+ verification steps
--   **13 Deployment Phases**: Security, infrastructure, integrations, testing, compliance, monitoring
--   **Production Readiness**: All critical systems verified and documented for government deployment
