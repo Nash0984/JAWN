@@ -1098,6 +1098,46 @@ export const mlModels = pgTable("ml_models", {
   statusIdx: index("ml_models_status_idx").on(table.status),
 }));
 
+// AI Training Examples for Few-Shot Learning
+export const aiTrainingExamples = pgTable("ai_training_examples", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  
+  // Use case categorization
+  useCase: text("use_case").notNull(), // tax_document_classification, benefits_form_extraction, field_extraction, cross_enrollment_intelligence, policy_qa
+  documentType: text("document_type"), // w2, 1099, pay_stub, utility_bill, dhs_form, birth_certificate, etc.
+  
+  // Example data
+  exampleDocument: text("example_document"), // Object storage path to example document/file
+  exampleText: text("example_text"), // Text content for text-based examples
+  correctLabel: text("correct_label").notNull(), // The correct classification/label
+  extractedData: jsonb("extracted_data"), // For field extraction examples: structured JSON of correct extractions
+  
+  // Quality metrics
+  confidence: real("confidence").default(1.0), // 0-1 confidence in this example (1.0 = verified correct)
+  version: integer("version").default(1).notNull(), // Version number for A/B testing
+  isActive: boolean("is_active").default(true).notNull(), // Whether this example is currently being used
+  
+  // Prompt template association
+  promptTemplate: text("prompt_template"), // Associated prompt template version
+  
+  // Multi-tenant and audit
+  tenantId: varchar("tenant_id"),
+  createdBy: varchar("created_by").references(() => users.id),
+  verifiedBy: varchar("verified_by").references(() => users.id), // Admin who verified this example
+  
+  // Metadata
+  metadata: jsonb("metadata"), // Additional context, notes, edge case flags
+  notes: text("notes"), // Human-readable notes about this example
+  
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  useCaseIdx: index("ai_training_examples_use_case_idx").on(table.useCase),
+  documentTypeIdx: index("ai_training_examples_document_type_idx").on(table.documentType),
+  activeIdx: index("ai_training_examples_active_idx").on(table.isActive),
+  versionIdx: index("ai_training_examples_version_idx").on(table.version),
+}));
+
 // Analytics Aggregations
 export const analyticsAggregations = pgTable("analytics_aggregations", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -7665,6 +7705,12 @@ export const insertMlModelSchema = createInsertSchema(mlModels).omit({
   updatedAt: true,
 });
 
+export const insertAiTrainingExampleSchema = createInsertSchema(aiTrainingExamples).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
 export const insertAnalyticsAggregationSchema = createInsertSchema(analyticsAggregations).omit({
   id: true,
   calculatedAt: true,
@@ -7678,6 +7724,8 @@ export type PredictionHistory = typeof predictionHistory.$inferSelect;
 export type InsertPredictionHistory = z.infer<typeof insertPredictionHistorySchema>;
 export type MlModel = typeof mlModels.$inferSelect;
 export type InsertMlModel = z.infer<typeof insertMlModelSchema>;
+export type AiTrainingExample = typeof aiTrainingExamples.$inferSelect;
+export type InsertAiTrainingExample = z.infer<typeof insertAiTrainingExampleSchema>;
 export type AnalyticsAggregation = typeof analyticsAggregations.$inferSelect;
 export type InsertAnalyticsAggregation = z.infer<typeof insertAnalyticsAggregationSchema>;
 
