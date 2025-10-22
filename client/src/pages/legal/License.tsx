@@ -1,15 +1,19 @@
 import { Helmet } from "react-helmet-async";
 import LegalLayout from "@/components/LegalLayout";
 import { Scale, CheckCircle, Users, Code } from "lucide-react";
+import { useTenant } from "@/contexts/TenantContext";
 
 export default function License() {
+  const { stateConfig } = useTenant();
+  const stateName = stateConfig?.stateName || 'State';
+  
   return (
     <>
       <Helmet>
-        <title>License & Copyright - Maryland Benefits Platform</title>
+        <title>License & Copyright - {stateName} Benefits Platform</title>
         <meta 
           name="description" 
-          content="Maryland Benefits Platform is open source software licensed under the MIT License. Learn about your rights to use, modify, and distribute this software." 
+          content={`${stateName} Benefits Platform is open source software licensed under the MIT License. Learn about your rights to use, modify, and distribute this software.`}
         />
       </Helmet>
       
@@ -17,7 +21,7 @@ export default function License() {
         <section data-testid="section-license-overview">
           <h2>Open Source License</h2>
           <p>
-            Maryland Benefits Platform is open source software released under the <strong>MIT License</strong>. 
+            {stateName} Benefits Platform is open source software released under the <strong>MIT License</strong>. 
             This means the code is freely available for anyone to use, modify, and distribute, subject to the 
             terms and conditions outlined below.
           </p>
@@ -80,7 +84,7 @@ export default function License() {
         <section data-testid="section-copyright">
           <h2>Copyright & Intellectual Property</h2>
           <p>
-            <strong>Copyright © 2025 Maryland Benefits Navigator Contributors</strong>
+            <strong>Copyright © 2025 {stateName} Benefits Navigator Contributors</strong>
           </p>
           <p>
             While the code is open source, the copyright remains with the original authors and contributors. 
@@ -94,7 +98,7 @@ export default function License() {
           <div className="bg-muted p-6 rounded-lg font-mono text-sm whitespace-pre-wrap" data-testid="text-license-full">
 {`MIT License
 
-Copyright (c) 2025 Maryland Benefits Navigator Contributors
+Copyright (c) 2025 ${stateName} Benefits Navigator Contributors
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -119,7 +123,7 @@ SOFTWARE.`}
         <section data-testid="section-contributors">
           <h2>Credits & Attribution</h2>
           <p>
-            This platform was built by and for the civic tech community to help Maryland residents access 
+            This platform was built by and for the civic tech community to help {stateName} residents access 
             government benefits and tax assistance. We extend our gratitude to all contributors who have 
             helped make this project possible.
           </p>

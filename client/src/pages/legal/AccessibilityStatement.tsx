@@ -1,14 +1,18 @@
 import { Helmet } from "react-helmet-async";
 import LegalLayout from "@/components/LegalLayout";
+import { useTenant } from "@/contexts/TenantContext";
 
 export default function AccessibilityStatement() {
+  const { stateConfig } = useTenant();
+  const stateName = stateConfig?.stateName || 'State';
+  
   return (
     <>
       <Helmet>
-        <title>Accessibility Statement - Maryland Benefits Platform</title>
+        <title>Accessibility Statement - {stateName} Benefits Platform</title>
         <meta 
           name="description" 
-          content="Maryland Benefits Platform's commitment to WCAG 2.1 AA accessibility, inclusive design, and ensuring equal access for all users." 
+          content={`${stateName} Benefits Platform's commitment to WCAG 2.1 AA accessibility, inclusive design, and ensuring equal access for all users.`} 
         />
       </Helmet>
       
@@ -16,7 +20,7 @@ export default function AccessibilityStatement() {
         <section data-testid="section-accessibility-commitment">
           <h2>Our Commitment to Accessibility</h2>
           <p>
-            Maryland Benefits Platform is committed to ensuring digital accessibility for people with disabilities. 
+            {stateName} Benefits Platform is committed to ensuring digital accessibility for people with disabilities. 
             We continuously work to improve the user experience for all users and apply relevant accessibility standards.
           </p>
         </section>
@@ -191,7 +195,7 @@ export default function AccessibilityStatement() {
         <section data-testid="section-feedback">
           <h2>Your Feedback Matters</h2>
           <p>
-            We welcome your feedback on the accessibility of the Maryland Benefits Platform. Please let us know 
+            We welcome your feedback on the accessibility of the {stateName} Benefits Platform. Please let us know 
             if you encounter barriers or have suggestions for improvement.
           </p>
         </section>
@@ -201,7 +205,7 @@ export default function AccessibilityStatement() {
           <p>For accessibility questions, accommodation requests, or to report accessibility issues:</p>
           <div className="bg-muted p-4 rounded-lg" data-testid="contact-accessibility">
             <p className="font-semibold">Accessibility Coordinator</p>
-            <p>Maryland Benefits Platform</p>
+            <p>{stateName} Benefits Platform</p>
             <p>Email: accessibility@marylandbenefits.org</p>
             <p>Phone: (410) 555-ACCESS (222-377)</p>
             <p>TTY: (410) 555-8833</p>
@@ -219,7 +223,7 @@ export default function AccessibilityStatement() {
           <ul>
             <li><strong>Section 508 of the Rehabilitation Act</strong> (U.S. federal accessibility requirements)</li>
             <li><strong>Americans with Disabilities Act (ADA) Title II and III</strong></li>
-            <li><strong>Maryland Accessibility Code</strong></li>
+            <li><strong>{stateName} Accessibility Code</strong></li>
             <li><strong>EN 301 549</strong> (European accessibility standard for reference)</li>
           </ul>
         </section>

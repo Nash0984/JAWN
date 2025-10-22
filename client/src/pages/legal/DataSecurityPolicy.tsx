@@ -1,14 +1,18 @@
 import { Helmet } from "react-helmet-async";
 import LegalLayout from "@/components/LegalLayout";
+import { useTenant } from "@/contexts/TenantContext";
 
 export default function DataSecurityPolicy() {
+  const { stateConfig } = useTenant();
+  const stateName = stateConfig?.stateName || 'State';
+  
   return (
     <>
       <Helmet>
-        <title>Data Security Policy - Maryland Benefits Platform</title>
+        <title>Data Security Policy - {stateName} Benefits Platform</title>
         <meta 
           name="description" 
-          content="Learn about Maryland Benefits Platform's comprehensive data security measures including AES-256-GCM encryption, audit logging, and HIPAA-compliant security controls." 
+          content={`Learn about ${stateName} Benefits Platform's comprehensive data security measures including AES-256-GCM encryption, audit logging, and HIPAA-compliant security controls.`} 
         />
       </Helmet>
       
@@ -16,7 +20,7 @@ export default function DataSecurityPolicy() {
         <section data-testid="section-security-overview">
           <h2>Security Overview</h2>
           <p>
-            Maryland Benefits Platform implements defense-in-depth security controls to protect your personal 
+            {stateName} Benefits Platform implements defense-in-depth security controls to protect your personal 
             and protected health information (PHI). This policy describes our technical, administrative, and 
             physical safeguards in accordance with HIPAA Security Rule requirements.
           </p>
@@ -315,7 +319,7 @@ export default function DataSecurityPolicy() {
           <p>To report security vulnerabilities or incidents:</p>
           <div className="bg-muted p-4 rounded-lg" data-testid="contact-security">
             <p className="font-semibold">Chief Information Security Officer (CISO)</p>
-            <p>Maryland Benefits Platform</p>
+            <p>{stateName} Benefits Platform</p>
             <p>Email: security@marylandbenefits.org</p>
             <p>Incident Hotline: (410) 555-SECURE (732-873) [24/7]</p>
             <p>Bug Bounty: https://bugcrowd.com/marylandbenefits</p>
