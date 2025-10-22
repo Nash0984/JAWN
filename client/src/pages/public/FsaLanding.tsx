@@ -6,6 +6,7 @@ import { Separator } from "@/components/ui/separator";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { useTenant } from "@/contexts/TenantContext";
 import { 
   FileText, 
   Download, 
@@ -29,17 +30,24 @@ import {
 } from "lucide-react";
 
 export default function FsaLanding() {
-  const taxSlayerUrl = "https://www.taxslayerpro.com/fsa?sidn=MARYLAND-VITA-2025";
+  const { stateConfig } = useTenant();
+  const stateName = stateConfig?.stateName || 'State';
+  const stateCode = stateConfig?.stateCode || 'MD';
+  const taxSlayerUrl = `https://www.taxslayerpro.com/fsa?sidn=${stateCode.toUpperCase()}-VITA-2025`;
+  
+  // TODO: Pull income thresholds from tenant config when fully implemented
+  // Currently using IRS VITA standard threshold of $67,000
+  const incomeThreshold = '$67,000';
 
   return (
     <>
       <Helmet>
-        <title>TaxSlayer FSA - Free Self-Assisted Tax Prep | Maryland VITA</title>
+        <title>TaxSlayer FSA - Free Self-Assisted Tax Prep | {stateName} VITA</title>
         <meta 
           name="description" 
-          content="Prepare your own taxes for free with TaxSlayer FSA. Maryland VITA program offers free self-assisted tax preparation with expert navigator support when you need it." 
+          content={`Prepare your own taxes for free with TaxSlayer FSA. ${stateName} VITA program offers free self-assisted tax preparation with expert navigator support when you need it.`}
         />
-        <meta property="og:title" content="TaxSlayer FSA - Free Self-Assisted Tax Prep | Maryland VITA" />
+        <meta property="og:title" content={`TaxSlayer FSA - Free Self-Assisted Tax Prep | ${stateName} VITA`} />
         <meta property="og:description" content="Prepare your own taxes for free with TaxSlayer FSA. Expert support available when you need it." />
         <meta property="og:type" content="website" />
       </Helmet>
@@ -57,7 +65,7 @@ export default function FsaLanding() {
               Prepare Your Own Taxes with TaxSlayer
             </h1>
             <p className="text-xl text-gray-600 dark:text-gray-300 mb-6 max-w-3xl mx-auto">
-              Free self-assisted tax preparation for Maryland taxpayers earning $67,000 or less. Expert navigator support available when you need it.
+              Free self-assisted tax preparation for {stateName} taxpayers earning {incomeThreshold} or less. Expert navigator support available when you need it.
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
               <Button 
@@ -185,7 +193,7 @@ export default function FsaLanding() {
               <Alert data-testid="alert-eligibility">
                 <AlertCircle className="h-4 w-4" />
                 <AlertDescription>
-                  <strong>Eligibility:</strong> FSA is available to Maryland taxpayers with income of $67,000 or less. If you have complex tax situations (rental property, business income, investments), we recommend in-person VITA assistance.
+                  <strong>Eligibility:</strong> FSA is available to {stateName} taxpayers with income of {incomeThreshold} or less. If you have complex tax situations (rental property, business income, investments), we recommend in-person VITA assistance.
                 </AlertDescription>
               </Alert>
             </CardContent>
@@ -433,7 +441,7 @@ export default function FsaLanding() {
                   <AccordionTrigger>Is my information secure?</AccordionTrigger>
                   <AccordionContent>
                     <p className="text-sm text-gray-600 dark:text-gray-400">
-                      Yes! TaxSlayer uses bank-level encryption to protect your data. All information is transmitted securely and stored with the same security standards used by major financial institutions. The Maryland VITA program follows strict IRS security protocols. Your personal information is never shared without your consent, and all navigators are IRS-certified and background-checked volunteers.
+                      Yes! TaxSlayer uses bank-level encryption to protect your data. All information is transmitted securely and stored with the same security standards used by major financial institutions. The {stateName} VITA program follows strict IRS security protocols. Your personal information is never shared without your consent, and all navigators are IRS-certified and background-checked volunteers.
                     </p>
                   </AccordionContent>
                 </AccordionItem>
@@ -540,7 +548,7 @@ export default function FsaLanding() {
           <div className="text-center bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-lg p-8">
             <h2 className="text-2xl font-bold mb-4">Ready to Start Your Taxes?</h2>
             <p className="text-blue-100 mb-6 max-w-2xl mx-auto">
-              Join thousands of Maryland taxpayers who have successfully filed their taxes for free with FSA. Get started now or reach out to a navigator for guidance.
+              Join thousands of {stateName} taxpayers who have successfully filed their taxes for free with FSA. Get started now or reach out to a navigator for guidance.
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
               <Button 

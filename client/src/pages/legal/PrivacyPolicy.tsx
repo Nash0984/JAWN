@@ -1,14 +1,19 @@
 import { Helmet } from "react-helmet-async";
 import LegalLayout from "@/components/LegalLayout";
+import { useTenant } from "@/contexts/TenantContext";
 
 export default function PrivacyPolicy() {
+  const { stateConfig } = useTenant();
+  const stateName = stateConfig?.stateName || 'State';
+  const agencyAcronym = stateConfig?.agencyAcronym || 'DHS';
+  
   return (
     <>
       <Helmet>
-        <title>Privacy Policy - Maryland Benefits Platform</title>
+        <title>Privacy Policy - {stateName} Benefits Platform</title>
         <meta 
           name="description" 
-          content="Learn how Maryland Benefits Platform protects your personal and health information with HIPAA-compliant privacy practices and AES-256-GCM encryption." 
+          content={`Learn how ${stateName} Benefits Platform protects your personal and health information with HIPAA-compliant privacy practices and AES-256-GCM encryption.`}
         />
       </Helmet>
       
@@ -16,7 +21,7 @@ export default function PrivacyPolicy() {
         <section data-testid="section-privacy-overview">
           <h2>Overview</h2>
           <p>
-            Maryland Benefits Platform ("Platform," "we," "us," or "our") is committed to protecting your privacy 
+            {stateName} Benefits Platform ("Platform," "we," "us," or "our") is committed to protecting your privacy 
             and maintaining the security of your personal and protected health information (PHI). This Privacy Policy 
             describes how we collect, use, disclose, and safeguard your information when you use our platform.
           </p>
@@ -100,7 +105,7 @@ export default function PrivacyPolicy() {
             <li><strong>Eligibility Determination:</strong> Assess qualification for SNAP, Medicaid, TANF, and other benefit programs</li>
             <li><strong>Application Processing:</strong> Complete and submit benefit applications on your behalf</li>
             <li><strong>Document Verification:</strong> Validate identity and eligibility documentation</li>
-            <li><strong>Tax Preparation:</strong> Prepare and file federal and Maryland state tax returns (VITA program)</li>
+            <li><strong>Tax Preparation:</strong> Prepare and file federal and {stateName} state tax returns (VITA program)</li>
             <li><strong>Program Administration:</strong> Manage user accounts and provide technical support</li>
             <li><strong>Legal Compliance:</strong> Meet regulatory requirements and respond to lawful requests</li>
             <li><strong>System Security:</strong> Monitor for fraud, abuse, and security threats</li>
@@ -116,7 +121,7 @@ export default function PrivacyPolicy() {
             Information disclosure is limited to:
           </p>
           <ul>
-            <li><strong>Government Agencies:</strong> Maryland Department of Human Services, IRS, Social Security Administration (only as required for benefit application processing)</li>
+            <li><strong>Government Agencies:</strong> {stateName} Department of Human Services ({agencyAcronym}), IRS, Social Security Administration (only as required for benefit application processing)</li>
             <li><strong>Authorized Representatives:</strong> Individuals you designate in writing to act on your behalf</li>
             <li><strong>Law Enforcement:</strong> When required by valid legal process (subpoena, court order)</li>
             <li><strong>Emergency Situations:</strong> To prevent harm to you or others as permitted by law</li>
@@ -155,14 +160,14 @@ export default function PrivacyPolicy() {
         <section data-testid="section-state-privacy-laws">
           <h2>State Privacy Laws</h2>
           
-          <h3>Maryland Personal Information Protection Act</h3>
+          <h3>State Data Protection Laws</h3>
           <p>
-            We comply with Maryland's data breach notification requirements and consumer protection statutes.
+            We comply with {stateName}'s data breach notification requirements and consumer protection statutes.
           </p>
 
           <h3>CCPA Alignment (California Residents)</h3>
           <p>
-            While primarily serving Maryland residents, we extend certain California Consumer Privacy Act (CCPA) 
+            While primarily serving {stateName} residents, we extend certain California Consumer Privacy Act (CCPA) 
             rights to all users, including the right to know what information is collected and the right to deletion.
           </p>
         </section>
@@ -172,7 +177,7 @@ export default function PrivacyPolicy() {
           <ul>
             <li><strong>Active Accounts:</strong> Information retained while account is active</li>
             <li><strong>Tax Records:</strong> 7 years (IRS requirement)</li>
-            <li><strong>Benefit Applications:</strong> 6 years (Maryland DHS requirement)</li>
+            <li><strong>Benefit Applications:</strong> 6 years ({stateName} {agencyAcronym} requirement)</li>
             <li><strong>Audit Logs:</strong> 3 years minimum for security monitoring</li>
             <li><strong>Deleted Accounts:</strong> Personal data anonymized after retention period expires</li>
           </ul>
@@ -191,7 +196,7 @@ export default function PrivacyPolicy() {
           <p>For privacy-related questions, concerns, or to exercise your rights, contact:</p>
           <div className="bg-muted p-4 rounded-lg" data-testid="contact-privacy-officer">
             <p className="font-semibold">Privacy Officer</p>
-            <p>Maryland Benefits Platform</p>
+            <p>{stateName} Benefits Platform</p>
             <p>Email: privacy@marylandbenefits.org</p>
             <p>Phone: (410) 555-PRIVACY (774-8229)</p>
             <p>Mail: Privacy Office, 123 Benefits Way, Baltimore, MD 21201</p>

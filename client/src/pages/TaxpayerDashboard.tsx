@@ -8,9 +8,12 @@ import { Badge } from "@/components/ui/badge";
 import { FileText, MessageSquare, PenTool, Calendar, ArrowRight } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { DeadlineIndicator } from "@/components/taxpayer/DeadlineIndicator";
+import { useTenant } from "@/contexts/TenantContext";
 
 export default function TaxpayerDashboard() {
   const { user } = useAuth();
+  const { stateConfig } = useTenant();
+  const stateName = stateConfig?.stateName || 'State';
 
   // Fetch all taxpayer-related data
   const { data: documentRequests, isLoading: loadingRequests } = useQuery<any[]>({
@@ -69,7 +72,7 @@ export default function TaxpayerDashboard() {
   return (
     <>
       <Helmet>
-        <title>My Tax Portal - Dashboard | Maryland Benefits</title>
+        <title>My Tax Portal - Dashboard | {stateName} Benefits</title>
         <meta name="description" content="Access your tax preparation documents, messages, and forms in one secure portal." />
       </Helmet>
 

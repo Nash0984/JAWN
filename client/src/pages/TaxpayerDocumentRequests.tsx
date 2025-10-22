@@ -13,9 +13,12 @@ import { TaxpayerStatusBadge } from "@/components/taxpayer/TaxpayerStatusBadge";
 import { DeadlineIndicator } from "@/components/taxpayer/DeadlineIndicator";
 import { FileText, Upload, CheckCircle2 } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useTenant } from "@/contexts/TenantContext";
 
 export default function TaxpayerDocumentRequests() {
   const { toast } = useToast();
+  const { stateConfig } = useTenant();
+  const stateName = stateConfig?.stateName || 'State';
   const [uploadingRequestId, setUploadingRequestId] = useState<string | null>(null);
   const [taxpayerNotes, setTaxpayerNotes] = useState("");
 
@@ -100,7 +103,7 @@ export default function TaxpayerDocumentRequests() {
   return (
     <>
       <Helmet>
-        <title>Document Requests | Maryland Benefits</title>
+        <title>Document Requests | {stateName} Benefits</title>
         <meta name="description" content="Upload requested tax documents for your VITA tax preparation." />
       </Helmet>
 

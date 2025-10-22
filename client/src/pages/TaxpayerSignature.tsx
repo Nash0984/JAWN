@@ -10,10 +10,13 @@ import { useToast } from "@/hooks/use-toast";
 import { PenTool, Eraser, CheckCircle2, AlertTriangle } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useAuth } from "@/hooks/useAuth";
+import { useTenant } from "@/contexts/TenantContext";
 
 export default function TaxpayerSignature() {
   const { toast } = useToast();
   const { user } = useAuth();
+  const { stateConfig } = useTenant();
+  const stateName = stateConfig?.stateName || 'State';
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [isDrawing, setIsDrawing] = useState(false);
   const [hasSignature, setHasSignature] = useState(false);
@@ -170,7 +173,7 @@ export default function TaxpayerSignature() {
     return (
       <>
         <Helmet>
-          <title>E-Signature - Success | Maryland Benefits</title>
+          <title>E-Signature - Success | {stateName} Benefits</title>
         </Helmet>
 
         <div className="container mx-auto px-4 py-8 max-w-4xl">
@@ -198,7 +201,7 @@ export default function TaxpayerSignature() {
   return (
     <>
       <Helmet>
-        <title>E-Signature | Maryland Benefits</title>
+        <title>E-Signature | {stateName} Benefits</title>
         <meta name="description" content="Electronically sign your tax forms with legal compliance." />
       </Helmet>
 

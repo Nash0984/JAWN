@@ -18,6 +18,7 @@ import { useToast } from "@/hooks/use-toast";
 import { CheckCircle2, DollarSign, Heart, Baby, Home, Users, Calculator, Info, ArrowRight, Save, Zap } from "lucide-react";
 import { PolicyEngineVerificationBadge } from "@/components/PolicyEngineVerificationBadge";
 import { Helmet } from "react-helmet-async";
+import { useTenant } from "@/contexts/TenantContext";
 
 const screenerSchema = z.object({
   adults: z.coerce.number().min(1, "At least 1 adult required").max(20),
@@ -78,6 +79,8 @@ export default function BenefitScreener() {
   const [sessionId] = useState(getSessionId());
   const [savedSessionId, setSavedSessionId] = useState<string | null>(null);
   const { toast } = useToast();
+  const { stateConfig } = useTenant();
+  const stateName = stateConfig?.stateName || 'State';
 
   const form = useForm<ScreenerFormData>({
     resolver: zodResolver(screenerSchema),
@@ -86,7 +89,7 @@ export default function BenefitScreener() {
       children: 0,
       employmentIncome: 0,
       unearnedIncome: 0,
-      stateCode: "MD",
+      stateCode: stateConfig?.stateCode || "MD",
       householdAssets: 0,
       rentOrMortgage: 0,
       utilityCosts: 0,
@@ -320,7 +323,7 @@ export default function BenefitScreener() {
                             </SelectTrigger>
                           </FormControl>
                           <SelectContent>
-                            <SelectItem value="MD">Maryland</SelectItem>
+                            <SelectItem value="MD">{stateName}</SelectItem>
                             <SelectItem value="DC">Washington DC</SelectItem>
                             <SelectItem value="VA">Virginia</SelectItem>
                             <SelectItem value="PA">Pennsylvania</SelectItem>
@@ -669,7 +672,7 @@ export default function BenefitScreener() {
         <Alert className="mt-8" data-testid="alert-disclaimer">
           <Info className="h-4 w-4" />
           <AlertDescription className="text-xs">
-            <strong>Disclaimer:</strong> This is an estimate only. Actual eligibility and benefit amounts may vary. This tool is provided by the Maryland Benefits Navigator System to help you understand potential benefits. For official determinations, please apply through the appropriate benefit programs or consult with a certified benefits navigator.
+            <strong>Disclaimer:</strong> This is an estimate only. Actual eligibility and benefit amounts may vary. This tool is provided by the {stateName} Benefits Navigator System to help you understand potential benefits. For official determinations, please apply through the appropriate benefit programs or consult with a certified benefits navigator.
           </AlertDescription>
         </Alert>
       </div>

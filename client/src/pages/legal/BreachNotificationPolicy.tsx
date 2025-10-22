@@ -1,14 +1,18 @@
 import { Helmet } from "react-helmet-async";
 import LegalLayout from "@/components/LegalLayout";
+import { useTenant } from "@/contexts/TenantContext";
 
 export default function BreachNotificationPolicy() {
+  const { stateConfig } = useTenant();
+  const stateName = stateConfig?.stateName || 'State';
+  
   return (
     <>
       <Helmet>
-        <title>Breach Notification Policy - Maryland Benefits Platform</title>
+        <title>Breach Notification Policy - {stateName} Benefits Platform</title>
         <meta 
           name="description" 
-          content="Maryland Benefits Platform's breach notification procedures, HIPAA compliance, incident response timeline, and user notification process." 
+          content={`${stateName} Benefits Platform's breach notification procedures, HIPAA compliance, incident response timeline, and user notification process.`}
         />
       </Helmet>
       
@@ -16,10 +20,10 @@ export default function BreachNotificationPolicy() {
         <section data-testid="section-breach-overview">
           <h2>Overview</h2>
           <p>
-            Maryland Benefits Platform is committed to protecting your personal and protected health information (PHI). 
+            {stateName} Benefits Platform is committed to protecting your personal and protected health information (PHI). 
             This Breach Notification Policy outlines our procedures for detecting, responding to, and notifying affected 
             parties in the event of a data security breach, in full compliance with the HIPAA Breach Notification Rule 
-            (45 CFR §§ 164.400-414) and Maryland's Personal Information Protection Act.
+            (45 CFR §§ 164.400-414) and {stateName}'s Personal Information Protection Act.
           </p>
         </section>
 
@@ -127,14 +131,14 @@ export default function BreachNotificationPolicy() {
             <li><strong>Method:</strong> Electronic submission via HHS Breach Portal (https://ocrportal.hhs.gov/ocr/breach)</li>
           </ul>
 
-          <h3>State Agency Notification (Maryland)</h3>
+          <h3>State Agency Notification</h3>
           <p>
-            In accordance with Maryland Personal Information Protection Act:
+            In accordance with {stateName} Personal Information Protection Act:
           </p>
           <ul>
             <li><strong>Timeframe:</strong> Without unreasonable delay</li>
-            <li><strong>Recipient:</strong> Maryland Attorney General's Office</li>
-            <li><strong>Threshold:</strong> Notification required if &gt;1,000 Maryland residents affected</li>
+            <li><strong>Recipient:</strong> {stateName} Attorney General's Office</li>
+            <li><strong>Threshold:</strong> Notification required if &gt;1,000 {stateName} residents affected</li>
           </ul>
         </section>
 
@@ -221,9 +225,9 @@ export default function BreachNotificationPolicy() {
             <li><strong>Annual Report:</strong> Log of breaches &lt;500 individuals submitted by March 1</li>
           </ul>
 
-          <h3>Maryland Attorney General</h3>
+          <h3>State Attorney General</h3>
           <ul>
-            <li><strong>Threshold:</strong> &gt;1,000 Maryland residents affected</li>
+            <li><strong>Threshold:</strong> &gt;1,000 {stateName} residents affected</li>
             <li><strong>Method:</strong> Written notification to Consumer Protection Division</li>
             <li><strong>Content:</strong> Timing of breach, number affected, actions taken</li>
           </ul>
@@ -330,7 +334,7 @@ export default function BreachNotificationPolicy() {
           <p>To report a potential breach or for breach-related assistance:</p>
           <div className="bg-muted p-4 rounded-lg" data-testid="contact-breach">
             <p className="font-semibold">Breach Response Team</p>
-            <p>Maryland Benefits Platform</p>
+            <p>{stateName} Benefits Platform</p>
             <p>Hotline: (410) 555-BREACH (273-2242) [24/7]</p>
             <p>Email: breach-response@marylandbenefits.org</p>
             <p>Secure Reporting: https://marylandbenefits.org/report-incident</p>

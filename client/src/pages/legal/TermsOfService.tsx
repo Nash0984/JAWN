@@ -1,14 +1,19 @@
 import { Helmet } from "react-helmet-async";
 import LegalLayout from "@/components/LegalLayout";
+import { useTenant } from "@/contexts/TenantContext";
 
 export default function TermsOfService() {
+  const { stateConfig } = useTenant();
+  const stateName = stateConfig?.stateName || 'State';
+  const agencyAcronym = stateConfig?.agencyAcronym || 'DHS';
+  
   return (
     <>
       <Helmet>
-        <title>Terms of Service - Maryland Benefits Platform</title>
+        <title>Terms of Service - {stateName} Benefits Platform</title>
         <meta 
           name="description" 
-          content="Read the Terms of Service for Maryland Benefits Platform. Understand your rights, responsibilities, and our commitment to helping you access benefits." 
+          content={`Read the Terms of Service for ${stateName} Benefits Platform. Understand your rights, responsibilities, and our commitment to helping you access benefits.`}
         />
       </Helmet>
       
@@ -16,7 +21,7 @@ export default function TermsOfService() {
         <section data-testid="section-terms-acceptance">
           <h2>Acceptance of Terms</h2>
           <p>
-            By accessing or using the Maryland Benefits Platform ("Platform"), you agree to be bound by these 
+            By accessing or using the {stateName} Benefits Platform ("Platform"), you agree to be bound by these 
             Terms of Service ("Terms"). If you do not agree to these Terms, you may not use the Platform.
           </p>
         </section>
@@ -24,18 +29,18 @@ export default function TermsOfService() {
         <section data-testid="section-platform-purpose">
           <h2>Platform Purpose and Scope</h2>
           <p>
-            The Maryland Benefits Platform is designed to assist Maryland residents in:
+            The {stateName} Benefits Platform is designed to assist {stateName} residents in:
           </p>
           <ul>
             <li>Determining eligibility for government benefit programs (SNAP, Medicaid, TANF, etc.)</li>
             <li>Completing and submitting benefit applications</li>
-            <li>Preparing federal and Maryland state tax returns through the IRS VITA program</li>
+            <li>Preparing federal and {stateName} state tax returns through the IRS VITA program</li>
             <li>Accessing policy information and navigational assistance</li>
             <li>Tracking benefit application status and documentation</li>
           </ul>
           <p className="font-semibold mt-4">
-            This Platform is NOT a government website and is NOT officially affiliated with the State of Maryland, 
-            Maryland Department of Human Services, or any federal agency.
+            This Platform is NOT a government website and is NOT officially affiliated with the State of {stateName}, 
+            {stateName} Department of Human Services, or any federal agency.
           </p>
         </section>
 
@@ -44,7 +49,7 @@ export default function TermsOfService() {
           <p>To use this Platform, you must:</p>
           <ul>
             <li>Be at least 18 years old or have guardian consent</li>
-            <li>Be a Maryland resident seeking benefits assistance</li>
+            <li>Be a {stateName} resident seeking benefits assistance</li>
             <li>Provide accurate and truthful information</li>
             <li>Have legal authority to apply for benefits on your own behalf or as an authorized representative</li>
           </ul>
@@ -170,7 +175,7 @@ export default function TermsOfService() {
         <section data-testid="section-indemnification">
           <h2>Indemnification</h2>
           <p>
-            You agree to indemnify, defend, and hold harmless the Maryland Benefits Platform, its operators, 
+            You agree to indemnify, defend, and hold harmless the {stateName} Benefits Platform, its operators, 
             volunteers, and affiliates from any claims, damages, losses, or expenses (including attorney fees) 
             arising from:
           </p>
@@ -187,11 +192,11 @@ export default function TermsOfService() {
           <h2>Governing Law</h2>
           <p>
             These Terms shall be governed by and construed in accordance with the laws of the 
-            <strong> State of Maryland</strong>, without regard to its conflict of law provisions.
+            <strong> State of {stateName}</strong>, without regard to its conflict of law provisions.
           </p>
           <p>
             Any legal action or proceeding arising under these Terms shall be brought exclusively in the 
-            state or federal courts located in Baltimore City, Maryland.
+            state or federal courts located in {stateName}.
           </p>
         </section>
 
@@ -207,7 +212,7 @@ export default function TermsOfService() {
           <h3>Arbitration (Optional)</h3>
           <p>
             For disputes not resolved informally, you may opt for binding arbitration under the American 
-            Arbitration Association rules. Arbitration shall take place in Baltimore, Maryland.
+            Arbitration Association rules. Arbitration shall take place in {stateName}.
           </p>
 
           <h3>Class Action Waiver</h3>
@@ -221,7 +226,7 @@ export default function TermsOfService() {
           <h2>Intellectual Property</h2>
           <p>
             All content on the Platform, including text, graphics, logos, software, and documentation, is 
-            the property of Maryland Benefits Platform or its licensors and is protected by copyright and 
+            the property of {stateName} Benefits Platform or its licensors and is protected by copyright and 
             trademark laws.
           </p>
           <p>
@@ -250,7 +255,7 @@ export default function TermsOfService() {
           <p>For questions about these Terms of Service, contact:</p>
           <div className="bg-muted p-4 rounded-lg" data-testid="contact-legal">
             <p className="font-semibold">Legal Department</p>
-            <p>Maryland Benefits Platform</p>
+            <p>{stateName} Benefits Platform</p>
             <p>Email: legal@marylandbenefits.org</p>
             <p>Phone: (410) 555-LEGAL (534-2583)</p>
             <p>Mail: Legal Office, 123 Benefits Way, Baltimore, MD 21201</p>
@@ -263,7 +268,7 @@ export default function TermsOfService() {
             Current Version: 1.0 | Effective Date: October 16, 2025
           </p>
           <p>
-            By using the Maryland Benefits Platform, you acknowledge that you have read, understood, and agree 
+            By using the {stateName} Benefits Platform, you acknowledge that you have read, understood, and agree 
             to be bound by these Terms of Service.
           </p>
         </section>

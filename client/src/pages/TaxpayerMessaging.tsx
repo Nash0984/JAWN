@@ -13,10 +13,13 @@ import { AttachmentPreview } from "@/components/taxpayer/AttachmentPreview";
 import { Send, Paperclip, MessageSquare } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useAuth } from "@/hooks/useAuth";
+import { useTenant } from "@/contexts/TenantContext";
 
 export default function TaxpayerMessaging() {
   const { toast } = useToast();
   const { user } = useAuth();
+  const { stateConfig } = useTenant();
+  const stateName = stateConfig?.stateName || 'State';
   const [messageText, setMessageText] = useState("");
   const [attachments, setAttachments] = useState<File[]>([]);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -155,7 +158,7 @@ export default function TaxpayerMessaging() {
   return (
     <>
       <Helmet>
-        <title>Messages | Maryland Benefits</title>
+        <title>Messages | {stateName} Benefits</title>
         <meta name="description" content="Secure messaging with your tax navigator." />
       </Helmet>
 

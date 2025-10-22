@@ -15,6 +15,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { CheckCircle2, ArrowRight, Info, Users, DollarSign, PiggyBank, Heart, Loader2 } from "lucide-react";
 import { PolicyEngineVerificationBadge } from "@/components/PolicyEngineVerificationBadge";
 import { Helmet } from "react-helmet-async";
+import { useTenant } from "@/contexts/TenantContext";
 
 // Ultra-minimal screener schema - only 5-7 questions
 const quickScreenerSchema = z.object({
@@ -62,6 +63,8 @@ interface HybridCalculationResult {
 export default function QuickScreener() {
   const [, setLocation] = useLocation();
   const [result, setResult] = useState<HybridCalculationResult | null>(null);
+  const { stateConfig } = useTenant();
+  const stateName = stateConfig?.stateName || 'State';
 
   const form = useForm<QuickScreenerFormData>({
     resolver: zodResolver(quickScreenerSchema),
@@ -91,7 +94,7 @@ export default function QuickScreener() {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          programCode: 'MD_SNAP', // Quick screener focuses on SNAP
+          programCode: `${stateConfig?.stateCode || 'MD'}_SNAP`, // Quick screener focuses on SNAP
           householdSize: data.householdSize,
           income: data.monthlyIncome,
           assets: estimatedAssets, // Estimated assets based on $2,750 threshold
@@ -125,7 +128,7 @@ export default function QuickScreener() {
   return (
     <>
       <Helmet>
-        <title>Quick Screener - MD Benefits Navigator</title>
+        <title>Quick Screener - {stateName} Benefits Navigator</title>
       </Helmet>
       <div className="min-h-screen bg-gradient-to-b from-blue-50 to-white dark:from-gray-900 dark:to-gray-800">
       <div className="container mx-auto px-4 py-8 max-w-2xl">
@@ -358,7 +361,7 @@ export default function QuickScreener() {
                 <Info className="h-5 w-5" />
                 <AlertDescription className="text-base">
                   {result.primary.type === 'deterministic' 
-                    ? "Calculated using Maryland's official SNAP eligibility rules." 
+                    ? `Calculated using ${stateName}'s official SNAP eligibility rules.` 
                     : "This is a quick estimate. For detailed benefit calculations and to apply, please use our detailed screener or contact a navigator."
                   }
                 </AlertDescription>

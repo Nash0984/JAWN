@@ -1,14 +1,19 @@
 import { Helmet } from "react-helmet-async";
 import LegalLayout from "@/components/LegalLayout";
+import { useTenant } from "@/contexts/TenantContext";
 
 export default function Disclaimer() {
+  const { stateConfig } = useTenant();
+  const stateName = stateConfig?.stateName || 'State';
+  const agencyAcronym = stateConfig?.agencyAcronym || 'DHS';
+  
   return (
     <>
       <Helmet>
-        <title>Disclaimer - Maryland Benefits Platform</title>
+        <title>Disclaimer - {stateName} Benefits Platform</title>
         <meta 
           name="description" 
-          content="Important disclaimers for Maryland Benefits Platform users. Not affiliated with State of Maryland. For informational purposes only." 
+          content={`Important disclaimers for ${stateName} Benefits Platform users. Not affiliated with State of ${stateName}. For informational purposes only.`}
         />
       </Helmet>
       
@@ -16,32 +21,32 @@ export default function Disclaimer() {
         <section data-testid="section-disclaimer-overview">
           <h2>Important Notice</h2>
           <p className="text-lg font-semibold text-destructive">
-            PLEASE READ THIS DISCLAIMER CAREFULLY BEFORE USING THE MARYLAND BENEFITS PLATFORM.
+            PLEASE READ THIS DISCLAIMER CAREFULLY BEFORE USING THE {stateName.toUpperCase()} BENEFITS PLATFORM.
           </p>
           <p className="mt-4">
-            The Maryland Benefits Platform ("Platform") provides benefit screening, application assistance, and tax 
+            The {stateName} Benefits Platform ("Platform") provides benefit screening, application assistance, and tax 
             preparation services. This disclaimer outlines important limitations and clarifications about our services.
           </p>
         </section>
 
         <section data-testid="section-no-government-affiliation">
-          <h2>NOT Officially Affiliated with State of Maryland</h2>
+          <h2>NOT Officially Affiliated with State of {stateName}</h2>
           <div className="bg-yellow-50 dark:bg-yellow-900/20 border-l-4 border-yellow-400 p-4 my-4">
             <p className="font-semibold text-yellow-800 dark:text-yellow-200">
               ⚠️ CRITICAL NOTICE: This Platform is NOT a government website.
             </p>
           </div>
           <ul>
-            <li>We are <strong>NOT</strong> operated by the State of Maryland government</li>
-            <li>We are <strong>NOT</strong> affiliated with the Maryland Department of Human Services (DHS)</li>
+            <li>We are <strong>NOT</strong> operated by the State of {stateName} government</li>
+            <li>We are <strong>NOT</strong> affiliated with the {stateName} Department of Human Services ({agencyAcronym})</li>
             <li>We are <strong>NOT</strong> part of any federal agency (Social Security Administration, IRS, USDA)</li>
             <li>We are <strong>NOT</strong> authorized to make official eligibility determinations</li>
             <li>We are <strong>NOT</strong> a government contractor or official partner</li>
           </ul>
           <p className="mt-4">
-            <strong>What We Are:</strong> An independent platform designed to assist Maryland residents with navigating 
+            <strong>What We Are:</strong> An independent platform designed to assist {stateName} residents with navigating 
             benefit programs and preparing tax returns. We work with the same public information and application systems 
-            available to all Maryland residents.
+            available to all {stateName} residents.
           </p>
         </section>
 
@@ -149,7 +154,7 @@ export default function Disclaimer() {
           <h3>Service Limitations</h3>
           <ul>
             <li><strong>Complex Cases:</strong> Some complex eligibility scenarios may require professional assistance</li>
-            <li><strong>State Variations:</strong> Information is specific to Maryland; may not apply elsewhere</li>
+            <li><strong>State Variations:</strong> Information is specific to {stateName}; may not apply elsewhere</li>
             <li><strong>Policy Changes:</strong> Recent policy updates may not yet be reflected in our system</li>
             <li><strong>Language Support:</strong> Full translation services may not be available for all materials</li>
             <li><strong>Document Processing:</strong> OCR and document extraction may have accuracy limitations</li>
@@ -189,11 +194,11 @@ export default function Disclaimer() {
             </p>
           </div>
           <ul>
-            <li><strong>Food Emergency:</strong> Contact Maryland Food Bank at 1-866-921-6151</li>
-            <li><strong>Housing Emergency:</strong> Call Maryland Housing Search at 1-877-428-8844</li>
+            <li><strong>Food Emergency:</strong> Contact your local food bank or call 211 for assistance</li>
+            <li><strong>Housing Emergency:</strong> Call 211 for local housing resources</li>
             <li><strong>Medical Emergency:</strong> Call 911 or go to nearest emergency room</li>
             <li><strong>Mental Health Crisis:</strong> Call 988 (Suicide & Crisis Lifeline)</li>
-            <li><strong>Domestic Violence:</strong> Call Maryland Domestic Violence Hotline at 1-800-MD-HELPS</li>
+            <li><strong>Domestic Violence:</strong> Call National Domestic Violence Hotline at 1-800-799-7233</li>
           </ul>
         </section>
 
@@ -230,7 +235,7 @@ export default function Disclaimer() {
         <section data-testid="section-liability-limitation">
           <h2>Limitation of Liability</h2>
           <p>
-            TO THE MAXIMUM EXTENT PERMITTED BY LAW, MARYLAND BENEFITS PLATFORM AND ITS OPERATORS SHALL NOT BE LIABLE FOR:
+            TO THE MAXIMUM EXTENT PERMITTED BY LAW, {stateName.toUpperCase()} BENEFITS PLATFORM AND ITS OPERATORS SHALL NOT BE LIABLE FOR:
           </p>
           <ul>
             <li>Denial or reduction of government benefits</li>
@@ -253,19 +258,19 @@ export default function Disclaimer() {
             For official information and authoritative guidance, please consult:
           </p>
           <ul>
-            <li><strong>Maryland Department of Human Services:</strong> https://dhs.maryland.gov</li>
-            <li><strong>Maryland SNAP Hotline:</strong> 1-800-332-6347</li>
-            <li><strong>Maryland Medicaid:</strong> https://health.maryland.gov/mmcp</li>
+            <li><strong>{stateName} Department of Human Services:</strong> Contact your local {agencyAcronym} office</li>
+            <li><strong>{stateName} SNAP Hotline:</strong> Call 211 for local SNAP information</li>
+            <li><strong>{stateName} Medicaid:</strong> Contact your local Medicaid office</li>
             <li><strong>Social Security Administration:</strong> https://www.ssa.gov | 1-800-772-1213</li>
             <li><strong>IRS (Tax Questions):</strong> https://www.irs.gov | 1-800-829-1040</li>
-            <li><strong>Maryland 211:</strong> Call 211 for comprehensive social services information</li>
+            <li><strong>211:</strong> Call 211 for comprehensive social services information</li>
           </ul>
         </section>
 
         <section data-testid="section-acknowledgment">
           <h2>Acknowledgment of Understanding</h2>
           <p>
-            By using the Maryland Benefits Platform, you acknowledge that you have read, understood, and agree to 
+            By using the {stateName} Benefits Platform, you acknowledge that you have read, understood, and agree to 
             this disclaimer. If you do not agree with any part of this disclaimer, you should not use the Platform.
           </p>
         </section>
@@ -275,8 +280,8 @@ export default function Disclaimer() {
           <p>If you have questions about this disclaimer or need clarification:</p>
           <div className="bg-muted p-4 rounded-lg" data-testid="contact-general">
             <p className="font-semibold">Support Team</p>
-            <p>Maryland Benefits Platform</p>
-            <p>Email: support@marylandbenefits.org</p>
+            <p>{stateName} Benefits Platform</p>
+            <p>Email: support@benefitsplatform.org</p>
             <p>Phone: (410) 555-HELP (4357)</p>
             <p>Hours: Monday-Friday, 8:00 AM - 6:00 PM EST</p>
           </div>
