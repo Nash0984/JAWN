@@ -25,9 +25,10 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { format } from "date-fns";
+import { useTenant } from "@/contexts/TenantContext";
 
 interface EFileMetrics {
-  statusCounts: { status: string; count: number; federal: number; maryland: number }[];
+  statusCounts: { status: string; count: number; federal: number; maryland: number }[]; // Backend uses 'maryland', UI displays stateName
   errorRate: number;
   recentActivity: { date: string; transmitted: number; accepted: number; rejected: number }[];
   totalSubmissions: number;
@@ -39,9 +40,9 @@ interface EFileSubmission {
   clientName: string;
   taxYear: number;
   federalStatus: string;
-  marylandStatus?: string;
+  marylandStatus?: string; // Backend field name, UI displays stateName
   federalTransmissionId?: string;
-  marylandTransmissionId?: string;
+  marylandTransmissionId?: string; // Backend field name, UI displays stateName
   preparerName: string;
   submittedAt?: Date;
   updatedAt: Date;
@@ -62,13 +63,13 @@ interface EFileSubmissionDetails {
     qualityReview?: any;
     form1040Data: any;
   };
-  maryland?: {
+  maryland?: { // Backend field name, UI displays stateName
     id: string;
     efileStatus: string;
     efileTransmissionId?: string;
     efileSubmittedAt?: Date;
     efileAcceptedAt?: Date;
-    form502Data: any;
+    form502Data: any; // State-specific form data (Form 502 for MD, PA-40 for PA, etc.)
   };
   preparer: {
     id: string;
@@ -115,6 +116,10 @@ const getStatusBadge = (status: string) => {
 };
 
 export default function EFileMonitoring() {
+  const { stateConfig } = useTenant();
+  const stateName = stateConfig?.stateName || 'State';
+  const stateCode = stateConfig?.stateCode || 'MD';
+  
   const [selectedSubmission, setSelectedSubmission] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const { toast } = useToast();
@@ -255,7 +260,7 @@ export default function EFileMonitoring() {
             <div className="text-2xl font-bold text-blue-600" data-testid="text-transmitted">
               {statusCounts['transmitted'] || 0}
             </div>
-            <p className="text-xs text-muted-foreground">Sent to IRS/MD</p>
+            <p className="text-xs text-muted-foreground">Sent to IRS/{stateCode}</p>
           </CardContent>
         </Card>
 
@@ -340,7 +345,7 @@ export default function EFileMonitoring() {
                     <TableHead>Client</TableHead>
                     <TableHead>Tax Year</TableHead>
                     <TableHead>Federal Status</TableHead>
-                    <TableHead>Maryland Status</TableHead>
+                    <TableHead>{stateName} Status</TableHead>
                     <TableHead>Transmission ID</TableHead>
                     <TableHead>Preparer</TableHead>
                     <TableHead>Updated</TableHead>
@@ -447,7 +452,7 @@ export default function EFileMonitoring() {
                   <Tooltip />
                   <Legend />
                   <Bar dataKey="federal" fill="#3b82f6" name="Federal" />
-                  <Bar dataKey="maryland" fill="#f59e0b" name="Maryland" />
+                  <Bar dataKey="maryland" fill="#f59e0b" name={stateName} />
                 </BarChart>
               </ResponsiveContainer>
             </CardContent>
@@ -602,12 +607,12 @@ export default function EFileMonitoring() {
                 )}
               </div>
 
-              {/* Maryland Return */}
+              {/* State Return - Backend field is 'maryland', UI displays stateName */}
               {submissionDetails.maryland && (
                 <div>
                   <h3 className="font-semibold mb-3 flex items-center gap-2">
                     <FileText className="h-5 w-5" />
-                    Maryland Return (Form 502)
+                    {stateName} Return ({stateCode === 'MD' ? 'Form 502' : `${stateCode} State Tax Return`})
                   </h3>
                   <div className="grid grid-cols-2 gap-4 text-sm">
                     <div>
