@@ -1,4 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
+import { logger } from '../services/logger.service';
 
 export const CURRENT_API_VERSION = 'v1';
 export const SUPPORTED_API_VERSIONS = ['v1'];
@@ -91,7 +92,14 @@ export function versionRoute(version: string, path: string): string {
  */
 export function deprecationNotice(version: string, message: string) {
   return (req: Request, res: Response, next: NextFunction) => {
-    console.warn(`[DEPRECATION] ${req.method} ${req.path} - ${message}`);
+    logger.warn(`[DEPRECATION] ${req.method} ${req.path} - ${message}`, {
+      service: "apiVersioning",
+      action: "deprecation",
+      method: req.method,
+      path: req.path,
+      version: version,
+      message: message
+    });
     res.setHeader('X-Deprecation-Notice', message);
     next();
   };

@@ -139,7 +139,10 @@ export class MarylandLegislatureScraper {
     } catch (error) {
       result.success = false;
       const errorMsg = `Fatal error: ${error instanceof Error ? error.message : 'Unknown error'}`;
-      console.error(`❌ ${errorMsg}`);
+      logger.error('Fatal error scraping Maryland legislature', {
+        context: 'MarylandLegislatureScraper.scrapeAndStoreBills',
+        error: error instanceof Error ? error.message : String(error)
+      });
       result.errors.push(errorMsg);
     }
 

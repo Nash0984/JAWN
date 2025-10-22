@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from "express";
 import { apiKeyService } from "../services/apiKeyService";
 import { ApiKey } from "@shared/schema";
 import { asyncHandler } from "./errorHandler";
+import { logger } from "../services/logger.service";
 
 // Extend Express Request to include apiKey and tenant info
 declare global {
@@ -116,7 +117,12 @@ export const trackApiUsage = () => {
             responseSize: JSON.stringify(body).length,
           }
         ).catch(err => {
-          console.error('Failed to track API usage:', err);
+          logger.error('Failed to track API usage', {
+            service: "apiKeyAuth",
+            action: "trackUsage",
+            error: err instanceof Error ? err.message : String(err),
+            stack: err instanceof Error ? err.stack : undefined
+          });
         });
       }
       

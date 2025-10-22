@@ -1,12 +1,16 @@
 import { db } from "./db";
 import { evaluationTestCases } from "@shared/schema";
+import { logger } from "./services/logger.service";
 
 /**
  * Seed Maryland-specific evaluation test cases
  * Based on Work Requirements exemptions table
  */
 export async function seedMarylandTestCases() {
-  console.log("Seeding Maryland evaluation test cases...");
+  logger.info("Seeding Maryland evaluation test cases...", {
+    service: "seedMarylandTestCases",
+    action: "start"
+  });
 
   const testCases = [
     // Test Case 1: Dependent Care Exemption (MD_SNAP work requirement)
@@ -66,15 +70,35 @@ export async function seedMarylandTestCases() {
   for (const testCase of testCases) {
     try {
       await db.insert(evaluationTestCases).values(testCase);
-      console.log(`  ✓ Created test case: ${testCase.description}`);
+      logger.info(`  ✓ Created test case: ${testCase.description}`, {
+        service: "seedMarylandTestCases",
+        action: "createTestCase",
+        testCase: testCase.name,
+        description: testCase.description
+      });
     } catch (error: any) {
       if (error.code === '23505') { // Duplicate key error
-        console.log(`  - Test case already exists: ${testCase.description}`);
+        logger.info(`  - Test case already exists: ${testCase.description}`, {
+          service: "seedMarylandTestCases",
+          action: "skip",
+          testCase: testCase.name,
+          description: testCase.description
+        });
       } else {
-        console.error(`  ✗ Error creating test case: ${testCase.description}`, error);
+        logger.error(`  ✗ Error creating test case: ${testCase.description}`, {
+          service: "seedMarylandTestCases",
+          action: "error",
+          testCase: testCase.name,
+          error: error.message,
+          stack: error.stack
+        });
       }
     }
   }
 
-  console.log("✓ Maryland test cases seeding complete\n");
+  logger.info("✓ Maryland test cases seeding complete", {
+    service: "seedMarylandTestCases",
+    action: "complete",
+    testCasesCount: testCases.length
+  });
 }

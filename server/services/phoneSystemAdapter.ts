@@ -412,11 +412,20 @@ export class PhoneSystemManager {
     try {
       return await adapter.initializeCall(options);
     } catch (error) {
-      console.error("Failed to initialize call:", error);
+      logger.error("Failed to initialize call", {
+        context: 'PhoneSystemService.initializeCall',
+        systemId: options.systemConfigId,
+        from: options.from,
+        to: options.to,
+        error: error instanceof Error ? error.message : String(error)
+      });
       // Try fallback adapter
       const fallback = this.getDefaultAdapter();
       if (fallback && fallback !== adapter) {
-        console.log("Trying fallback adapter...");
+        logger.info("Trying fallback adapter", {
+          context: 'PhoneSystemService.initializeCall',
+          fallbackSystem: fallback.config.systemType
+        });
         return await fallback.initializeCall(options);
       }
       throw error;

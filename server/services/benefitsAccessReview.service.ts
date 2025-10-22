@@ -17,6 +17,7 @@ import { eq, and, gte, lte, desc, sql, inArray } from "drizzle-orm";
 import { createHash, randomBytes } from "crypto";
 import { cacheOrchestrator } from "./cacheOrchestrator";
 import { GoogleGenAI } from "@google/genai";
+import { logger } from "./logger.service";
 
 // ============================================================================
 // TYPES AND CONSTANTS
@@ -115,7 +116,10 @@ class AnonymizationService {
                 "REPLACE_ME_IN_PRODUCTION_WITH_STABLE_SALT";
     
     if (this.salt === "REPLACE_ME_IN_PRODUCTION_WITH_STABLE_SALT") {
-      console.warn("⚠️  Using default anonymization salt - set ANONYMIZATION_SALT env variable for production");
+      logger.warn("Using default anonymization salt", {
+        context: 'AnonymizationService.constructor',
+        message: 'Set ANONYMIZATION_SALT env variable for production'
+      });
     }
   }
 
@@ -664,7 +668,11 @@ Score range: 0.0 (poor) to 1.0 (excellent)`;
       return result_obj;
 
     } catch (error) {
-      console.error("AI assessment error:", error);
+      logger.error("AI assessment error", {
+        context: 'AIAssessmentService.assessCaseQuality',
+        caseId,
+        error: error instanceof Error ? error.message : String(error)
+      });
       // Return default assessment if AI fails
       return {
         score: 0.5,
@@ -755,7 +763,12 @@ export class BenefitsAccessReviewService {
 
       // Run AI assessment (async, don't wait)
       this.runAIAssessment(review.id, selectedCase.caseId).catch(err => 
-        console.error(`AI assessment failed for review ${review.id}:`, err)
+        logger.error("AI assessment failed for review", {
+          context: 'BenefitsAccessReviewService.createIndividualReviews',
+          reviewId: review.id,
+          caseId: selectedCase.caseId,
+          error: err instanceof Error ? err.message : String(err)
+        })
       );
     }
 

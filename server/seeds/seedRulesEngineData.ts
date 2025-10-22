@@ -12,6 +12,7 @@ import {
   tanfTimeLimits,
   medicaidIncomeLimits,
 } from "../../shared/schema";
+import { logger } from "../services/logger.service";
 
 /**
  * Seed test data for OHEP and TANF Rules Engines
@@ -20,7 +21,10 @@ import {
  * for testing the Rules-as-Code engines.
  */
 export async function seedRulesEngineData() {
-  console.log("🌱 Seeding Rules Engine test data...");
+  logger.info("🌱 Seeding Rules Engine test data...", {
+    service: "seedRulesEngineData",
+    action: "start"
+  });
 
   // Step 1: Get or create OHEP and TANF benefit programs
   const programs = await db.select().from(benefitPrograms);

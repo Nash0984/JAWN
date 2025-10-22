@@ -821,7 +821,12 @@ export async function batchExtractRules(
       successCount++;
       totalRules += result.rulesExtracted;
     } catch (error) {
-      console.error(`Failed to extract rules from section ${sectionId}:`, error);
+      logger.error('Failed to extract rules from section', {
+        context: 'RulesExtractionService.extractAllRules',
+        sectionId,
+        documentId,
+        error: error instanceof Error ? error.message : String(error)
+      });
       failCount++;
     }
   }

@@ -8,6 +8,7 @@ import {
   type InsertStateReciprocityAgreement,
 } from "@shared/schema";
 import { nanoid } from "nanoid";
+import { logger } from "../services/logger.service";
 
 /**
  * Cross-State Rules Seeder
@@ -15,7 +16,10 @@ import { nanoid } from "nanoid";
  */
 
 async function seedCrossStateRules() {
-  console.log("🌱 Seeding cross-state rules...");
+  logger.info("🌱 Seeding cross-state rules...", {
+    service: "seedCrossStateRules",
+    action: "start"
+  });
 
   // ============================================================================
   // Jurisdiction Hierarchies - Mid-Atlantic Corridor & Federal Special Cases
@@ -163,7 +167,11 @@ async function seedCrossStateRules() {
   ];
 
   await db.insert(jurisdictionHierarchies).values(jurisdictions);
-  console.log(`✅ Inserted ${jurisdictions.length} jurisdiction hierarchies`);
+  logger.info(`✅ Inserted ${jurisdictions.length} jurisdiction hierarchies`, {
+    service: "seedCrossStateRules",
+    action: "insertJurisdictions",
+    count: jurisdictions.length
+  });
 
   // ============================================================================
   // State Reciprocity Agreements - Mid-Atlantic Focus
@@ -258,7 +266,11 @@ async function seedCrossStateRules() {
   ];
 
   await db.insert(stateReciprocityAgreements).values(reciprocityAgreements);
-  console.log(`✅ Inserted ${reciprocityAgreements.length} reciprocity agreements`);
+  logger.info(`✅ Inserted ${reciprocityAgreements.length} reciprocity agreements`, {
+    service: "seedCrossStateRules",
+    action: "insertReciprocity",
+    count: reciprocityAgreements.length
+  });
 
   // ============================================================================
   // Cross-State Rules - Conflict Resolution Rules
@@ -455,18 +467,33 @@ async function seedCrossStateRules() {
   ];
 
   await db.insert(crossStateRules).values(rules);
-  console.log(`✅ Inserted ${rules.length} cross-state rules`);
+  logger.info(`✅ Inserted ${rules.length} cross-state rules`, {
+    service: "seedCrossStateRules",
+    action: "insertRules",
+    count: rules.length
+  });
 
-  console.log("🎉 Cross-state rules seeding completed successfully!");
+  logger.info("🎉 Cross-state rules seeding completed successfully!", {
+    service: "seedCrossStateRules",
+    action: "complete"
+  });
 }
 
 // Main seeder function
 export async function seedCrossStateRulesData() {
   try {
     await seedCrossStateRules();
-    console.log("✅ All cross-state rules data seeded successfully");
+    logger.info("✅ All cross-state rules data seeded successfully", {
+      service: "seedCrossStateRulesData",
+      action: "complete"
+    });
   } catch (error) {
-    console.error("❌ Error seeding cross-state rules data:", error);
+    logger.error("❌ Error seeding cross-state rules data", {
+      service: "seedCrossStateRulesData",
+      action: "error",
+      error: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : undefined
+    });
     throw error;
   }
 }
@@ -475,11 +502,19 @@ export async function seedCrossStateRulesData() {
 if (require.main === module) {
   seedCrossStateRulesData()
     .then(() => {
-      console.log("Seeding completed");
+      logger.info("Seeding completed", {
+        service: "seedCrossStateRulesData",
+        action: "processComplete"
+      });
       process.exit(0);
     })
     .catch((error) => {
-      console.error("Seeding failed:", error);
+      logger.error("Seeding failed", {
+        service: "seedCrossStateRulesData",
+        action: "processFailed",
+        error: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined
+      });
       process.exit(1);
     });
 }

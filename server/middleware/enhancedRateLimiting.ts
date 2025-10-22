@@ -11,6 +11,7 @@
 import rateLimit, { RateLimitRequestHandler } from 'express-rate-limit';
 import { Request } from 'express';
 import crypto from 'crypto';
+import { logger } from '../services/logger.service';
 
 /**
  * Create a safe key from IP address using hash
@@ -103,7 +104,13 @@ export const standardRateLimiter: RateLimitRequestHandler = rateLimit({
     const limit = getRateLimitForUser(req);
     
     // Log rate limit hit
-    console.warn(`⚠️  Rate limit exceeded: ${req.method} ${req.path} from ${req.ip}`);
+    logger.warn(`⚠️  Rate limit exceeded: ${req.method} ${req.path} from ${req.ip}`, {
+      service: "rateLimiting",
+      action: "standardLimitExceeded",
+      method: req.method,
+      path: req.path,
+      ip: req.ip
+    });
     
     res.status(429).json({
       error: 'Too Many Requests',
@@ -129,7 +136,11 @@ export const authRateLimiter: RateLimitRequestHandler = rateLimit({
   },
   keyGenerator: (req: Request) => `auth:${createSafeIpKey(req.ip)}`,
   handler: (req, res) => {
-    console.warn(`⚠️  Auth rate limit exceeded from IP: ${req.ip}`);
+    logger.warn(`⚠️  Auth rate limit exceeded from IP: ${req.ip}`, {
+      service: "rateLimiting",
+      action: "authLimitExceeded",
+      ip: req.ip
+    });
     
     res.status(429).json({
       error: 'Too Many Login Attempts',
@@ -227,7 +238,13 @@ export const publicRateLimiter: RateLimitRequestHandler = rateLimit({
   legacyHeaders: false,
   keyGenerator: (req: Request) => `public:${createSafeIpKey(req.ip)}`,
   handler: (req, res) => {
-    console.warn(`⚠️  Public endpoint rate limit exceeded: ${req.method} ${req.path} from ${req.ip}`);
+    logger.warn(`⚠️  Public endpoint rate limit exceeded: ${req.method} ${req.path} from ${req.ip}`, {
+      service: "rateLimiting",
+      action: "publicLimitExceeded",
+      method: req.method,
+      path: req.path,
+      ip: req.ip
+    });
     
     res.status(429).json({
       error: 'Rate Limit Exceeded',
@@ -253,7 +270,13 @@ export const aggressiveRateLimiter: RateLimitRequestHandler = rateLimit({
   },
   keyGenerator: (req: Request) => `blocked:${createSafeIpKey(req.ip)}`,
   handler: (req, res) => {
-    console.error(`🚨 IP BLOCKED due to rate limit abuse: ${req.ip} - ${req.method} ${req.path}`);
+    logger.error(`🚨 IP BLOCKED due to rate limit abuse: ${req.ip} - ${req.method} ${req.path}`, {
+      service: "rateLimiting",
+      action: "ipBlocked",
+      ip: req.ip,
+      method: req.method,
+      path: req.path
+    });
     
     res.status(429).json({
       error: 'IP Temporarily Blocked',

@@ -900,7 +900,12 @@ Return as JSON with documentType, extractedData, quality, and confidence fields.
         changeReason: params.changeReason || null,
       });
     } catch (error) {
-      console.error('Failed to log document audit action:', error);
+      logger.error('Failed to log document audit action', {
+        context: 'UnifiedDocumentService.auditLog',
+        documentId,
+        action,
+        error: error instanceof Error ? error.message : String(error)
+      });
       // Don't throw - audit logging should not break the main flow
     }
   }
@@ -913,7 +918,11 @@ Return as JSON with documentType, extractedData, quality, and confidence fields.
         .where(eq(vitaDocumentAudit.documentRequestId, documentRequestId))
         .orderBy(desc(vitaDocumentAudit.createdAt));
     } catch (error) {
-      console.error('Failed to retrieve document audit trail:', error);
+      logger.error('Failed to retrieve document audit trail', {
+        context: 'UnifiedDocumentService.getAuditTrail',
+        documentId,
+        error: error instanceof Error ? error.message : String(error)
+      });
       return [];
     }
   }

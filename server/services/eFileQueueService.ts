@@ -586,7 +586,11 @@ export class EFileQueueService {
         xmlGenerated: true
       };
     } catch (error) {
-      console.error('Error submitting Maryland return for e-file:', error);
+      logger.error('Error submitting Maryland return for e-file', {
+        context: 'EFileQueueService.submitMarylandReturn',
+        returnId,
+        error: error instanceof Error ? error.message : String(error)
+      });
       return {
         success: false,
         marylandReturnId,
@@ -857,10 +861,12 @@ export class EFileQueueService {
     // 3. Receive acknowledgment
     // 4. Return transmission ID and status
     
-    console.log('[PLACEHOLDER] Would transmit to IRS MeF:', {
+    logger.info('PLACEHOLDER: Would transmit to IRS MeF', {
+      context: 'EFileQueueService.transmitToIRS',
       returnId: federalReturn.id,
       xmlLength: xmlData.length,
-      taxYear: federalReturn.taxYear
+      taxYear: federalReturn.taxYear,
+      note: 'Actual IRS transmission requires production credentials'
     });
 
     const mockTransmissionId = `IRS-${nanoid(16)}`;
@@ -899,10 +905,12 @@ export class EFileQueueService {
     // 3. Receive acknowledgment
     // 4. Return transmission ID and status
     
-    console.log('[PLACEHOLDER] Would transmit to Maryland iFile:', {
+    logger.info('PLACEHOLDER: Would transmit to Maryland iFile', {
+      context: 'EFileQueueService.transmitToMaryland',
       returnId: marylandReturn.id,
       xmlLength: xmlData.length,
-      countyCode: marylandReturn.countyCode
+      countyCode: marylandReturn.countyCode,
+      note: 'Actual Maryland transmission requires production credentials'
     });
 
     const mockTransmissionId = `MD-${nanoid(16)}`;

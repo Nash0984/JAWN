@@ -14,6 +14,7 @@ import { generateTextWithGemini } from "./gemini.service";
 import { policyEngineService } from "./policyEngine.service";
 import { cacheService, CACHE_KEYS } from "./cacheService";
 import { notificationService } from "./notification.service";
+import { logger } from "./logger.service";
 
 interface HouseholdData {
   householdId: string;
@@ -114,7 +115,11 @@ class CrossEnrollmentEngineService {
       
       return analysis;
     } catch (error) {
-      console.error("Error analyzing household:", error);
+      logger.error("Error analyzing household", {
+        context: 'CrossEnrollmentEngineService.analyzeHousehold',
+        householdId,
+        error: error instanceof Error ? error.message : String(error)
+      });
       throw error;
     }
   }
@@ -374,7 +379,12 @@ class CrossEnrollmentEngineService {
           deadline: this.calculateDeadline(program.code)
         });
       } catch (error) {
-        console.error(`Error generating recommendation for ${program.code}:`, error);
+        logger.error("Error generating recommendation", {
+          context: 'CrossEnrollmentEngineService.generateRecommendations',
+          programCode: program.code,
+          programName: program.name,
+          error: error instanceof Error ? error.message : String(error)
+        });
       }
     }
     

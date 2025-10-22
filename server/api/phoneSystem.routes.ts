@@ -21,9 +21,11 @@ import { TwilioVoiceAdapter } from "../services/twilioVoiceAdapter";
 import { requireAuth } from "../middleware/auth";
 import { z } from "zod";
 import { getWebSocketService } from "../services/websocket.service";
+import { createLogger } from "../services/logger.service";
 import rateLimit from "express-rate-limit";
 
 const router = Router();
+const logger = createLogger("phoneSystem.routes");
 
 // Rate limiting for API endpoints
 const apiRateLimit = rateLimit({
@@ -88,7 +90,7 @@ router.post("/call/initiate", requireAuth, apiRateLimit, async (req, res) => {
       message: "Call initiated successfully"
     });
   } catch (error: any) {
-    console.error("Error initiating call:", error);
+    logger.error("Error initiating call", error);
     res.status(500).json({ 
       success: false, 
       error: error.message || "Internal server error" 
@@ -147,7 +149,7 @@ router.post("/call/transfer", requireAuth, apiRateLimit, async (req, res) => {
       message: success ? "Call transferred successfully" : "Transfer failed"
     });
   } catch (error: any) {
-    console.error("Error transferring call:", error);
+    logger.error("Error transferring call", error);
     res.status(500).json({ 
       success: false, 
       error: error.message || "Internal server error" 
@@ -172,7 +174,7 @@ router.post("/call/hold", requireAuth, apiRateLimit, async (req, res) => {
       message: success ? "Call placed on hold" : "Failed to hold call"
     });
   } catch (error: any) {
-    console.error("Error holding call:", error);
+    logger.error("Error holding call", error);
     res.status(500).json({ 
       success: false, 
       error: error.message 
@@ -197,7 +199,7 @@ router.post("/call/resume", requireAuth, apiRateLimit, async (req, res) => {
       message: success ? "Call resumed" : "Failed to resume call"
     });
   } catch (error: any) {
-    console.error("Error resuming call:", error);
+    logger.error("Error resuming call", error);
     res.status(500).json({ 
       success: false, 
       error: error.message 
@@ -238,7 +240,7 @@ router.post("/call/end", requireAuth, apiRateLimit, async (req, res) => {
       message: success ? "Call ended" : "Failed to end call"
     });
   } catch (error: any) {
-    console.error("Error ending call:", error);
+    logger.error("Error ending call", error);
     res.status(500).json({ 
       success: false, 
       error: error.message 
@@ -270,7 +272,7 @@ router.get("/call/status/:callId", requireAuth, async (req, res) => {
       data: status 
     });
   } catch (error: any) {
-    console.error("Error getting call status:", error);
+    logger.error("Error getting call status", error);
     res.status(500).json({ 
       success: false, 
       error: error.message 
@@ -306,7 +308,7 @@ router.post("/recording/start", requireAuth, apiRateLimit, async (req, res) => {
       message: success ? "Recording started" : "Failed to start recording"
     });
   } catch (error: any) {
-    console.error("Error starting recording:", error);
+    logger.error("Error starting recording", error);
     res.status(500).json({ 
       success: false, 
       error: error.message 
@@ -357,7 +359,7 @@ router.post("/recording/consent", requireAuth, async (req, res) => {
       message: "Consent logged successfully"
     });
   } catch (error: any) {
-    console.error("Error logging consent:", error);
+    logger.error("Error logging consent", error);
     res.status(500).json({ 
       success: false, 
       error: error.message 
@@ -441,7 +443,7 @@ router.post("/ivr/configure", requireAuth, apiRateLimit, async (req, res) => {
       message: "IVR menu configured successfully"
     });
   } catch (error: any) {
-    console.error("Error configuring IVR:", error);
+    logger.error("Error configuring IVR", error);
     res.status(500).json({ 
       success: false, 
       error: error.message 
@@ -469,7 +471,7 @@ router.get("/ivr/menus", requireAuth, async (req, res) => {
       data: menus
     });
   } catch (error: any) {
-    console.error("Error getting IVR menus:", error);
+    logger.error("Error getting IVR menus", error);
     res.status(500).json({ 
       success: false, 
       error: error.message 
@@ -533,7 +535,7 @@ router.get("/queue/status", requireAuth, async (req, res) => {
       data: queueMetrics
     });
   } catch (error: any) {
-    console.error("Error getting queue status:", error);
+    logger.error("Error getting queue status", error);
     res.status(500).json({ 
       success: false, 
       error: error.message 
@@ -591,7 +593,7 @@ router.post("/queue/add", requireAuth, apiRateLimit, async (req, res) => {
       estimatedWaitTime: entries.length * 180
     });
   } catch (error: any) {
-    console.error("Error adding call to queue:", error);
+    logger.error("Error adding call to queue", error);
     res.status(500).json({ 
       success: false, 
       error: error.message 
@@ -655,7 +657,7 @@ router.post("/agent/status", requireAuth, apiRateLimit, async (req, res) => {
       message: "Agent status updated"
     });
   } catch (error: any) {
-    console.error("Error updating agent status:", error);
+    logger.error("Error updating agent status", error);
     res.status(500).json({ 
       success: false, 
       error: error.message 
@@ -704,7 +706,7 @@ router.get("/agent/stats", requireAuth, async (req, res) => {
       data: stats
     });
   } catch (error: any) {
-    console.error("Error getting agent stats:", error);
+    logger.error("Error getting agent stats", error);
     res.status(500).json({ 
       success: false, 
       error: error.message 
@@ -768,7 +770,7 @@ router.post("/twilio/voice-webhook", async (req, res) => {
     res.type("text/xml");
     res.send(response.toString());
   } catch (error) {
-    console.error("Error handling voice webhook:", error);
+    logger.error("Error handling voice webhook", error);
     res.status(500).send("Error");
   }
 });
@@ -791,7 +793,7 @@ router.post("/twilio/status-webhook", async (req, res) => {
 
     res.sendStatus(200);
   } catch (error) {
-    console.error("Error handling status webhook:", error);
+    logger.error("Error handling status webhook", error);
     res.sendStatus(500);
   }
 });

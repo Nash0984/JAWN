@@ -1,6 +1,7 @@
 import { db } from "../db";
 import { consentForms, users } from "@shared/schema";
 import { eq } from "drizzle-orm";
+import { logger } from "../services/logger.service";
 
 // IRS Publication 4299-compliant consent language
 export const IRS_CONSENT_TEMPLATE = {
@@ -60,7 +61,10 @@ export async function seedIRSConsentForm() {
     });
     
     if (existingForm) {
-      console.log('ℹ️  IRS Use & Disclosure consent form already exists');
+      logger.info('ℹ️  IRS Use & Disclosure consent form already exists', {
+        service: "seedIRSConsentForm",
+        action: "skip"
+      });
       return;
     }
     
@@ -70,7 +74,11 @@ export async function seedIRSConsentForm() {
     });
     
     if (!admin) {
-      console.warn('⚠️  No admin user found - skipping IRS consent form seeding');
+      logger.warn('⚠️  No admin user found - skipping IRS consent form seeding', {
+        service: "seedIRSConsentForm",
+        action: "warning",
+        reason: "No admin user found"
+      });
       return;
     }
     
@@ -83,9 +91,17 @@ export async function seedIRSConsentForm() {
       effectiveDate: new Date(),
     });
     
-    console.log('✅ IRS Use & Disclosure consent form seeded successfully');
+    logger.info('✅ IRS Use & Disclosure consent form seeded successfully', {
+      service: "seedIRSConsentForm",
+      action: "complete"
+    });
   } catch (error) {
-    console.error('❌ Error seeding IRS consent form:', error);
+    logger.error('❌ Error seeding IRS consent form', {
+      service: "seedIRSConsentForm",
+      action: "error",
+      error: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : undefined
+    });
     throw error;
   }
 }

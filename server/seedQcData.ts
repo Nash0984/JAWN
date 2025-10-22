@@ -2,13 +2,17 @@ import { db } from "./db";
 import { users } from "@shared/schema";
 import { nanoid } from "nanoid";
 import bcrypt from "bcryptjs";
+import { logger } from "./services/logger.service";
 
 /**
  * Seed QC Analytics data for Maryland SNAP
  * Run this with: npx tsx server/seedQcData.ts
  */
 async function seedQCData() {
-  console.log("📊 Seeding QC Analytics data for Maryland SNAP...");
+  logger.info("📊 Seeding QC Analytics data for Maryland SNAP...", {
+    service: "seedQCData",
+    action: "start"
+  });
 
   try {
     // Get existing Maryland tenant ID
@@ -17,12 +21,20 @@ async function seedQCData() {
     });
 
     if (!marylandTenant) {
-      console.error("❌ Maryland tenant not found. Please run seedTenants first.");
+      logger.error("❌ Maryland tenant not found. Please run seedTenants first.", {
+        service: "seedQCData",
+        action: "error",
+        error: "Tenant not found"
+      });
       process.exit(1);
     }
 
     const marylandId = marylandTenant.id;
-    console.log(`✅ Found Maryland tenant: ${marylandId}`);
+    logger.info(`✅ Found Maryland tenant: ${marylandId}`, {
+      service: "seedQCData",
+      action: "foundTenant",
+      tenantId: marylandId
+    });
 
     // Get existing demo users or create new ones
     let demoCaseworker1 = await db.query.users.findFirst({
@@ -117,15 +129,32 @@ async function seedQCData() {
       });
     }
 
-    console.log("✅ Demo users verified/created");
+    logger.info("✅ Demo users verified/created", {
+      service: "seedQCData",
+      action: "usersVerified",
+      users: ["demo.caseworker", "demo.caseworker2", "demo.supervisor", "demo.navigator"]
+    });
 
-    console.log("\n📈 QC Analytics Summary:");
-    console.log("   • Demo users created for testing QC Analytics features");
-    console.log("   • Use the QC Analytics service to analyze real client cases");
+    logger.info("📈 QC Analytics Summary", {
+      service: "seedQCData",
+      action: "summary",
+      details: [
+        "Demo users created for testing QC Analytics features",
+        "Use the QC Analytics service to analyze real client cases"
+      ]
+    });
     
-    console.log("\n🎉 QC Analytics seeding completed successfully!");
+    logger.info("🎉 QC Analytics seeding completed successfully!", {
+      service: "seedQCData",
+      action: "complete"
+    });
   } catch (error) {
-    console.error("❌ Error seeding QC data:", error);
+    logger.error("❌ Error seeding QC data", {
+      service: "seedQCData",
+      action: "error",
+      error: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : undefined
+    });
     throw error;
   }
 }
@@ -136,11 +165,19 @@ const isMainModule = import.meta.url === `file://${process.argv[1]}`;
 if (isMainModule) {
   seedQCData()
     .then(() => {
-      console.log("Seed completed");
+      logger.info("Seed completed", {
+        service: "seedQCData",
+        action: "processComplete"
+      });
       process.exit(0);
     })
     .catch((error) => {
-      console.error("Seed failed:", error);
+      logger.error("Seed failed", {
+        service: "seedQCData",
+        action: "processFailed",
+        error: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined
+      });
       process.exit(1);
     });
 }

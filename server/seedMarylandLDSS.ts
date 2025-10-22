@@ -1,6 +1,7 @@
 import { db } from "./db";
 import { counties, countyUsers, users, tenants } from "@shared/schema";
 import { eq } from "drizzle-orm";
+import { logger } from "./services/logger.service";
 
 /**
  * Seed 24 Maryland LDSS (Local Departments of Social Services) Offices
@@ -228,7 +229,11 @@ const MARYLAND_LDSS_OFFICES = [
 ];
 
 export async function seedMarylandLDSS() {
-  console.log("🏛️  Seeding 24 Maryland LDSS Offices...");
+  logger.info("🏛️  Seeding 24 Maryland LDSS Offices...", {
+    service: "seedMarylandLDSS",
+    action: "start",
+    officeCount: 24
+  });
 
   try {
     // Get Maryland tenant (should be created by seed data)
@@ -239,12 +244,19 @@ export async function seedMarylandLDSS() {
       .limit(1);
 
     if (!marylandTenant) {
-      console.log("⚠️  Maryland tenant not found - creating it...");
+      logger.warn("⚠️  Maryland tenant not found - creating it...", {
+        service: "seedMarylandLDSS",
+        action: "tenantNotFound"
+      });
       // Tenant will be created by main seed - just warn
       return;
     }
 
-    console.log(`✅ Found Maryland tenant: ${marylandTenant.id}`);
+    logger.info(`✅ Found Maryland tenant: ${marylandTenant.id}`, {
+      service: "seedMarylandLDSS",
+      action: "foundTenant",
+      tenantId: marylandTenant.id
+    });
 
     // Seed each LDSS office
     for (const office of MARYLAND_LDSS_OFFICES) {
@@ -271,7 +283,12 @@ export async function seedMarylandLDSS() {
           })
           .where(eq(counties.id, existing.id));
 
-        console.log(`  ✓ Updated ${office.name}`);
+        logger.info(`  ✓ Updated ${office.name}`, {
+          service: "seedMarylandLDSS",
+          action: "updateOffice",
+          officeName: office.name,
+          officeCode: office.code
+        });
       } else {
         // Create new
         await db.insert(counties).values({
@@ -292,12 +309,21 @@ export async function seedMarylandLDSS() {
           },
         });
 
-        console.log(`  ✅ Created ${office.name}`);
+        logger.info(`  ✅ Created ${office.name}`, {
+          service: "seedMarylandLDSS",
+          action: "createOffice",
+          officeName: office.name,
+          officeCode: office.code,
+          region: office.region
+        });
       }
     }
 
     // Assign demo users to specific LDSS offices for testing
-    console.log("\n👤 Assigning demo users to LDSS offices...");
+    logger.info("👤 Assigning demo users to LDSS offices...", {
+      service: "seedMarylandLDSS",
+      action: "assignUsers"
+    });
 
     // Get demo users
     const [demoNavigator] = await db.select().from(users).where(eq(users.username, "demo.navigator")).limit(1);
@@ -323,7 +349,13 @@ export async function seedMarylandLDSS() {
           isPrimary: true,
           accessLevel: "full",
         });
-        console.log("  ✓ Assigned demo.navigator to Baltimore City LDSS");
+        logger.info("  ✓ Assigned demo.navigator to Baltimore City LDSS", {
+          service: "seedMarylandLDSS",
+          action: "assignUser",
+          username: "demo.navigator",
+          office: "Baltimore City LDSS",
+          role: "navigator"
+        });
       }
     }
 
@@ -342,7 +374,13 @@ export async function seedMarylandLDSS() {
           isPrimary: true,
           accessLevel: "full",
         });
-        console.log("  ✓ Assigned demo.caseworker to Baltimore City LDSS");
+        logger.info("  ✓ Assigned demo.caseworker to Baltimore City LDSS", {
+          service: "seedMarylandLDSS",
+          action: "assignUser",
+          username: "demo.caseworker",
+          office: "Baltimore City LDSS",
+          role: "caseworker"
+        });
       }
     }
 
@@ -361,15 +399,32 @@ export async function seedMarylandLDSS() {
           isPrimary: true,
           accessLevel: "full",
         });
-        console.log("  ✓ Assigned demo.admin to Baltimore City LDSS (supervisor role)");
+        logger.info("  ✓ Assigned demo.admin to Baltimore City LDSS (supervisor role)", {
+          service: "seedMarylandLDSS",
+          action: "assignUser",
+          username: "demo.admin",
+          office: "Baltimore City LDSS",
+          role: "supervisor"
+        });
       }
     }
 
-    console.log("\n✅ LDSS seeding complete!");
-    console.log(`   📊 24 Maryland LDSS offices configured`);
-    console.log(`   👥 Demo users assigned to Baltimore City LDSS`);
+    logger.info("✅ LDSS seeding complete!", {
+      service: "seedMarylandLDSS",
+      action: "complete",
+      officesConfigured: 24,
+      details: [
+        "📊 24 Maryland LDSS offices configured",
+        "👥 Demo users assigned to Baltimore City LDSS"
+      ]
+    });
   } catch (error) {
-    console.error("❌ Error seeding LDSS offices:", error);
+    logger.error("❌ Error seeding LDSS offices", {
+      service: "seedMarylandLDSS",
+      action: "error",
+      error: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : undefined
+    });
     throw error;
   }
 }

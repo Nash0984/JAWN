@@ -1,6 +1,7 @@
 import { db } from "./db";
 import { countyTaxRates } from "@shared/schema";
 import { eq, and } from "drizzle-orm";
+import { logger } from "./services/logger.service";
 
 /**
  * Seed Maryland County Tax Rates
@@ -37,7 +38,10 @@ const MARYLAND_COUNTY_TAX_RATES = [
 ];
 
 export async function seedCountyTaxRates() {
-  console.log('\n💰 Seeding Maryland County Tax Rates...\n');
+  logger.info('💰 Seeding Maryland County Tax Rates...', {
+    service: "seedCountyTaxRates",
+    action: "start"
+  });
 
   const taxYear = 2025;
   const effectiveDate = new Date();
@@ -56,7 +60,12 @@ export async function seedCountyTaxRates() {
         .limit(1);
 
       if (existing.length > 0) {
-        console.log(`✓ ${county.countyName} (${taxYear}) - Already exists`);
+        logger.info(`✓ ${county.countyName} (${taxYear}) - Already exists`, {
+          service: "seedCountyTaxRates",
+          action: "skip",
+          countyName: county.countyName,
+          taxYear: taxYear
+        });
       } else {
         await db.insert(countyTaxRates).values({
           countyName: county.countyName,
@@ -65,13 +74,30 @@ export async function seedCountyTaxRates() {
           maxRate: county.maxRate,
           effectiveDate: effectiveDate,
         });
-        console.log(`✓ ${county.countyName} (${taxYear}) - Created (${county.minRate * 100}% - ${county.maxRate * 100}%)`);
+        logger.info(`✓ ${county.countyName} (${taxYear}) - Created (${county.minRate * 100}% - ${county.maxRate * 100}%)`, {
+          service: "seedCountyTaxRates",
+          action: "create",
+          countyName: county.countyName,
+          taxYear: taxYear,
+          minRate: county.minRate,
+          maxRate: county.maxRate
+        });
       }
     }
 
-    console.log(`\n✅ Successfully seeded ${MARYLAND_COUNTY_TAX_RATES.length} Maryland county tax rates for ${taxYear}\n`);
+    logger.info(`✅ Successfully seeded ${MARYLAND_COUNTY_TAX_RATES.length} Maryland county tax rates for ${taxYear}`, {
+      service: "seedCountyTaxRates",
+      action: "complete",
+      countiesSeeded: MARYLAND_COUNTY_TAX_RATES.length,
+      taxYear: taxYear
+    });
   } catch (error) {
-    console.error('❌ Error seeding county tax rates:', error);
+    logger.error('❌ Error seeding county tax rates', {
+      service: "seedCountyTaxRates",
+      action: "error",
+      error: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : undefined
+    });
     throw error;
   }
 }
@@ -86,11 +112,19 @@ const __dirname = dirname(__filename);
 if (import.meta.url === `file://${process.argv[1]}`) {
   seedCountyTaxRates()
     .then(() => {
-      console.log('County tax rates seeding complete');
+      logger.info('County tax rates seeding complete', {
+        service: "seedCountyTaxRates",
+        action: "processComplete"
+      });
       process.exit(0);
     })
     .catch((error) => {
-      console.error('County tax rates seeding failed:', error);
+      logger.error('County tax rates seeding failed', {
+        service: "seedCountyTaxRates",
+        action: "processFailed",
+        error: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined
+      });
       process.exit(1);
     });
 }

@@ -741,7 +741,12 @@ export class GdprService {
           });
           notificationsSent++;
         } catch (error) {
-          console.error(`Failed to notify user ${user.id}:`, error);
+          logger.error('Failed to notify user about GDPR breach', {
+            context: 'GdprService.notifyBreachSubjects',
+            userId: user.id,
+            breachId: breach.id,
+            error: error instanceof Error ? error.message : String(error)
+          });
         }
       }
     }

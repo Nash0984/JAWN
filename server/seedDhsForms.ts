@@ -1,5 +1,6 @@
 import { db } from "./db";
 import { dhsForms } from "@shared/schema";
+import { logger } from "./services/logger.service";
 
 /**
  * Seed Maryland DHS Forms from official sources
@@ -8,7 +9,10 @@ import { dhsForms } from "@shared/schema";
  * - https://dhs.maryland.gov/business-center/documents/fia/
  */
 export async function seedDhsForms() {
-  console.log("📋 Seeding Maryland DHS Forms...");
+  logger.info("📋 Seeding Maryland DHS Forms...", {
+    service: "seedDhsForms",
+    action: "start"
+  });
 
   try {
     const forms = [
@@ -247,13 +251,21 @@ export async function seedDhsForms() {
       await db.insert(dhsForms).values(form).onConflictDoNothing();
     }
 
-    console.log(`✅ Seeded ${forms.length} DHS forms across 6 languages`);
-    console.log("   Languages: English, Spanish, Amharic, Arabic, Burmese, Chinese (Traditional & Simplified)");
-    console.log("   Programs: SNAP, OHEP, Medicaid, TCA, Child Support");
-    console.log("   Form Types: application, change_report, appeal, supplemental");
+    logger.info(`✅ Seeded ${forms.length} DHS forms across 6 languages`, {
+      service: "seedDhsForms",
+      action: "complete",
+      formCount: forms.length,
+      languages: ["English", "Spanish", "Amharic", "Arabic", "Burmese", "Chinese (Traditional & Simplified)"],
+      programs: ["SNAP", "OHEP", "Medicaid", "TCA", "Child Support"],
+      formTypes: ["application", "change_report", "appeal", "supplemental"]
+    });
 
   } catch (error) {
-    console.error("❌ Error seeding DHS forms:", error);
+    logger.error("❌ Error seeding DHS forms", {
+      service: "seedDhsForms",
+      error: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : undefined
+    });
     throw error;
   }
 }

@@ -279,6 +279,9 @@ import {
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and, ilike, sql, or, isNull, lte, gte, inArray } from "drizzle-orm";
+import { createLogger } from "./services/logger.service";
+
+const logger = createLogger("storage");
 
 export interface IStorage {
   // Users
@@ -1251,7 +1254,7 @@ export class DatabaseStorage implements IStorage {
         }
       } catch (error) {
         // Program might already exist, continue with others
-        console.log(`Program ${program.code} already exists or error occurred`);
+        logger.info(`Program ${program.code} already exists or error occurred`, { programCode: program.code, error });
       }
     }
   }

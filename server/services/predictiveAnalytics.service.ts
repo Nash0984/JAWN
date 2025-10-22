@@ -16,6 +16,7 @@ import { eq, and, gte, lte, sql, desc, count, avg } from "drizzle-orm";
 import { generateTextWithGemini } from "./gemini.service";
 import { cacheService } from "./cacheService";
 import { notificationService } from "./notification.service";
+import { logger } from "./logger.service";
 
 interface CaseOutcomePrediction {
   caseId: string;
@@ -158,7 +159,11 @@ class PredictiveAnalyticsService {
 
       return result;
     } catch (error) {
-      console.error("Error predicting case outcome:", error);
+      logger.error("Error predicting case outcome", {
+        context: 'PredictiveAnalyticsService.predictCaseOutcome',
+        caseId,
+        error: error instanceof Error ? error.message : String(error)
+      });
       throw error;
     }
   }

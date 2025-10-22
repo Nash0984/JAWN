@@ -8,6 +8,7 @@
 import { db } from "./db";
 import { maiveTestCases } from "@shared/schema";
 import { nanoid } from "nanoid";
+import { logger } from "./services/logger.service";
 
 const marylandTestCases = [
   // ============================================================================
@@ -325,7 +326,10 @@ const marylandTestCases = [
 ];
 
 async function seedMAIVETestCases() {
-  console.log("🧪 Seeding MAIVE test cases for Maryland...");
+  logger.info("🧪 Seeding MAIVE test cases for Maryland...", {
+    service: "seedMAIVETestCases",
+    action: "start"
+  });
 
   try {
     for (const testCase of marylandTestCases) {
@@ -338,20 +342,35 @@ async function seedMAIVETestCases() {
         })
         .onConflictDoNothing();
       
-      console.log(`✅ Created test case: ${testCase.name}`);
+      logger.info(`✅ Created test case: ${testCase.name}`, {
+        service: "seedMAIVETestCases",
+        action: "createTestCase",
+        testCase: testCase.name,
+        category: testCase.category
+      });
     }
 
-    console.log(`\n✅ Successfully seeded ${marylandTestCases.length} MAIVE test cases`);
-    console.log("\n📊 Test Coverage:");
-    console.log("   • Benefit Calculations: 4 tests");
-    console.log("   • Work Requirements: 2 tests");
-    console.log("   • Policy Interpretation: 2 tests");
-    console.log("   • Document Extraction: 1 test");
-    console.log("   • Eligibility Determination: 2 tests");
-    console.log("   • Tax Credits: 1 test");
+    logger.info(`✅ Successfully seeded ${marylandTestCases.length} MAIVE test cases`, {
+      service: "seedMAIVETestCases",
+      action: "complete",
+      totalTestCases: marylandTestCases.length,
+      coverage: {
+        benefitCalculations: 4,
+        workRequirements: 2,
+        policyInterpretation: 2,
+        documentExtraction: 1,
+        eligibilityDetermination: 2,
+        taxCredits: 1
+      }
+    });
     
   } catch (error) {
-    console.error("❌ Error seeding MAIVE test cases:", error);
+    logger.error("❌ Error seeding MAIVE test cases", {
+      service: "seedMAIVETestCases",
+      action: "error",
+      error: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : undefined
+    });
     throw error;
   }
 }
@@ -360,11 +379,19 @@ async function seedMAIVETestCases() {
 if (import.meta.url === `file://${process.argv[1]}`) {
   seedMAIVETestCases()
     .then(() => {
-      console.log("✅ MAIVE test cases seeding complete");
+      logger.info("✅ MAIVE test cases seeding complete", {
+        service: "seedMAIVETestCases",
+        action: "processComplete"
+      });
       process.exit(0);
     })
     .catch((error) => {
-      console.error("Failed to seed:", error);
+      logger.error("Failed to seed", {
+        service: "seedMAIVETestCases",
+        action: "processFailed",
+        error: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined
+      });
       process.exit(1);
     });
 }

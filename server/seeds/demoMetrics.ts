@@ -1,9 +1,13 @@
 import { db } from '../db';
 import { monitoringMetrics, alertHistory, alertRules, users } from '@shared/schema';
 import { eq } from 'drizzle-orm';
+import { logger } from '../services/logger.service';
 
 export async function seedDemoMetrics() {
-  console.log('🌱 Seeding demo metrics data...');
+  logger.info('🌱 Seeding demo metrics data...', {
+    service: "seedDemoMetrics",
+    action: "start"
+  });
   
   // Seed monitoring metrics (last 24 hours)
   const now = Date.now();
@@ -40,7 +44,11 @@ export async function seedDemoMetrics() {
   }
   
   await db.insert(monitoringMetrics).values(metrics).onConflictDoNothing();
-  console.log(`✅ Created ${metrics.length} monitoring metrics`);
+  logger.info(`✅ Created ${metrics.length} monitoring metrics`, {
+    service: "seedDemoMetrics",
+    action: "createMetrics",
+    count: metrics.length
+  });
   
   // Seed alert history
   await db.insert(alertHistory).values([
@@ -60,7 +68,11 @@ export async function seedDemoMetrics() {
       resolved: false,
     },
   ]).onConflictDoNothing();
-  console.log('✅ Created 2 alert history entries');
+  logger.info('✅ Created 2 alert history entries', {
+    service: "seedDemoMetrics",
+    action: "createAlertHistory",
+    count: 2
+  });
   
   // Seed demo alert rules
   const adminUser = await db.query.users.findFirst({
@@ -106,10 +118,23 @@ export async function seedDemoMetrics() {
         createdBy: adminUser.id,
       },
     ]).onConflictDoNothing();
-    console.log('✅ Created 3 demo alert rules (2 enabled, 1 disabled)');
+    logger.info('✅ Created 3 demo alert rules (2 enabled, 1 disabled)', {
+      service: "seedDemoMetrics",
+      action: "createAlertRules",
+      count: 3,
+      enabled: 2,
+      disabled: 1
+    });
   } else {
-    console.warn('⚠️  No admin user found - skipping alert rules seeding');
+    logger.warn('⚠️  No admin user found - skipping alert rules seeding', {
+      service: "seedDemoMetrics",
+      action: "warning",
+      reason: "No admin user found"
+    });
   }
   
-  console.log('✅ Demo metrics seeding complete');
+  logger.info('✅ Demo metrics seeding complete', {
+    service: "seedDemoMetrics",
+    action: "complete"
+  });
 }

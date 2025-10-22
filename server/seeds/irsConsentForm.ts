@@ -1,6 +1,7 @@
 import { db } from '../db';
 import { consentForms, users } from '@shared/schema';
 import { eq } from 'drizzle-orm';
+import { logger } from '../services/logger.service';
 
 export async function seedIRSConsentForm() {
   try {
@@ -10,7 +11,10 @@ export async function seedIRSConsentForm() {
     });
 
     if (existing) {
-      console.log('✅ IRS Use & Disclosure Consent form already exists (skipping)');
+      logger.info('✅ IRS Use & Disclosure Consent form already exists (skipping)', {
+        service: "seedIRSConsentForm",
+        action: "skip"
+      });
       return;
     }
 
@@ -20,7 +24,11 @@ export async function seedIRSConsentForm() {
     });
 
     if (!adminUser) {
-      console.error('❌ No admin user found - cannot seed IRS consent form');
+      logger.error('❌ No admin user found - cannot seed IRS consent form', {
+        service: "seedIRSConsentForm",
+        action: "error",
+        error: "No admin user found"
+      });
       return;
     }
 
@@ -123,9 +131,17 @@ By typing my name below, I certify that:
     };
 
     await db.insert(consentForms).values(irsConsentForm);
-    console.log('✅ IRS Use & Disclosure Consent form seeded successfully');
+    logger.info('✅ IRS Use & Disclosure Consent form seeded successfully', {
+      service: "seedIRSConsentForm",
+      action: "complete"
+    });
   } catch (error) {
-    console.error('❌ Error seeding IRS consent form:', error);
+    logger.error('❌ Error seeding IRS consent form', {
+      service: "seedIRSConsentForm",
+      action: "error",
+      error: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : undefined
+    });
     throw error;
   }
 }

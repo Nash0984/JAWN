@@ -1,12 +1,16 @@
 import { storage } from "./storage";
 import { achievementSystemService } from "./services/achievementSystem.service";
+import { logger } from "./services/logger.service";
 
 /**
  * Seed Multi-County and Gamification Data
  */
 
 export async function seedCountiesAndGamification() {
-  console.log('\n🏛️  Seeding Multi-County and Gamification Data...\n');
+  logger.info('🏛️  Seeding Multi-County and Gamification Data...', {
+    service: "seedCountiesAndGamification",
+    action: "start"
+  });
 
   // Seed 4 pilot LDSS counties
   const counties = [
@@ -136,11 +140,21 @@ export async function seedCountiesAndGamification() {
   for (const countyData of counties) {
     const existing = await storage.getCountyByCode(countyData.code);
     if (existing) {
-      console.log(`  County already exists: ${countyData.name}`);
+      logger.info(`  County already exists: ${countyData.name}`, {
+        service: "seedCountiesAndGamification",
+        action: "skip",
+        countyName: countyData.name,
+        countyCode: countyData.code
+      });
       createdCounties.push(existing);
     } else {
       const county = await storage.createCounty(countyData);
-      console.log(`  ✓ Created county: ${countyData.name}`);
+      logger.info(`  ✓ Created county: ${countyData.name}`, {
+        service: "seedCountiesAndGamification",
+        action: "createCounty",
+        countyName: countyData.name,
+        countyCode: countyData.code
+      });
       createdCounties.push(county);
     }
   }
@@ -157,7 +171,12 @@ export async function seedCountiesAndGamification() {
         isPrimary: true,
         assignedBy: null,
       });
-      console.log(`  ✓ Assigned demo.navigator to ${createdCounties[0].name}`);
+      logger.info(`  ✓ Assigned demo.navigator to ${createdCounties[0].name}`, {
+        service: "seedCountiesAndGamification",
+        action: "assignUser",
+        username: "demo.navigator",
+        county: createdCounties[0].name
+      });
     }
   }
 
@@ -173,12 +192,21 @@ export async function seedCountiesAndGamification() {
         isPrimary: true,
         assignedBy: null,
       });
-      console.log(`  ✓ Assigned demo.caseworker to ${createdCounties[2].name}`);
+      logger.info(`  ✓ Assigned demo.caseworker to ${createdCounties[2].name}`, {
+        service: "seedCountiesAndGamification",
+        action: "assignUser",
+        username: "demo.caseworker",
+        county: createdCounties[2].name
+      });
     }
   }
 
   // Seed default achievements
   await achievementSystemService.seedDefaultAchievements();
 
-  console.log('\n✅ Multi-County and Gamification data seeding complete\n');
+  logger.info('✅ Multi-County and Gamification data seeding complete', {
+    service: "seedCountiesAndGamification",
+    action: "complete",
+    countiesCreated: createdCounties.length
+  });
 }

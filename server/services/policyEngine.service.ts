@@ -1,5 +1,6 @@
 import { policyEngineHttpClient, PolicyEngineHouseholdInput } from './policyEngineHttpClient';
 import { policyEngineCache } from './policyEngineCache';
+import { logger } from './logger.service';
 
 /**
  * PolicyEngine Service
@@ -121,7 +122,13 @@ class PolicyEngineService {
         }
       };
     } catch (error) {
-      console.error('PolicyEngine calculation error:', error);
+      logger.error('PolicyEngine calculation error', {
+        context: 'PolicyEngineService.calculateBenefits',
+        stateCode: household.stateCode,
+        adults: household.adults,
+        children: household.children,
+        error: error instanceof Error ? error.message : String(error)
+      });
       return {
         success: false,
         benefits: this.getZeroBenefits(),
@@ -195,10 +202,17 @@ class PolicyEngineService {
   async testConnection(): Promise<boolean> {
     try {
       const result = await policyEngineHttpClient.testConnection();
-      console.log('PolicyEngine API status:', result.message);
+      logger.info('PolicyEngine API status', {
+        context: 'PolicyEngineService.testConnection',
+        message: result.message,
+        available: result.available
+      });
       return result.available;
     } catch (error) {
-      console.error('PolicyEngine test failed:', error);
+      logger.error('PolicyEngine test failed', {
+        context: 'PolicyEngineService.testConnection',
+        error: error instanceof Error ? error.message : String(error)
+      });
       return false;
     }
   }

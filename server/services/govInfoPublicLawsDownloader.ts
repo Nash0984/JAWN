@@ -120,7 +120,11 @@ export class GovInfoPublicLawsDownloader {
     } catch (error) {
       result.success = false;
       const errorMsg = `Fatal error: ${error instanceof Error ? error.message : 'Unknown error'}`;
-      console.error(`❌ ${errorMsg}`);
+      logger.error('Fatal error downloading public laws', {
+        context: 'GovInfoPublicLawsDownloader.downloadAndStore',
+        congress,
+        error: error instanceof Error ? error.message : String(error)
+      });
       result.errors.push(errorMsg);
     }
 
