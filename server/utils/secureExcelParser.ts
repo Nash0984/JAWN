@@ -1,25 +1,19 @@
 /**
- * Secure Excel Parser Wrapper
+ * Secure Excel Parser using ExcelJS
  * 
- * Mitigates xlsx library vulnerabilities (GHSA-4r6h-8v6p-xvw6, GHSA-5pgg-2g8v-p4x9):
- * - Prototype Pollution: Implements Object.freeze() on critical prototypes
- * - ReDoS: Enforces file size limits and parsing timeouts
+ * Replaces vulnerable xlsx library with ExcelJS - a secure alternative with:
+ * - No known prototype pollution vulnerabilities
+ * - No ReDoS vulnerabilities
+ * - Better TypeScript support
+ * - More comprehensive Excel feature support
  * 
- * SECURITY NOTE: This is a mitigation layer, NOT a complete fix.
- * The xlsx library has HIGH severity vulnerabilities with NO FIX AVAILABLE.
- * This wrapper reduces risk but does not eliminate it.
- * 
- * Recommendation: Replace xlsx with exceljs or xlsx-populate when feasible.
+ * Migration from xlsx to ExcelJS for security compliance.
  */
 
-import * as XLSX from 'xlsx';
+import ExcelJS from 'exceljs';
 import { logger } from '../services/logger.service';
 
-// Freeze critical prototypes to prevent pollution attacks
-Object.freeze(Object.prototype);
-Object.freeze(Array.prototype);
-
-export interface SecureXlsxOptions {
+export interface SecureExcelOptions {
   maxFileSizeBytes?: number; // Default: 5MB
   maxParsingTimeMs?: number; // Default: 5000ms (5 seconds)
   allowedSheets?: number; // Default: 10
@@ -37,21 +31,21 @@ export interface ParseResult {
   };
 }
 
-export class SecureXlsxParser {
+export class SecureExcelParser {
   private readonly MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB default
   private readonly MAX_PARSING_TIME = 5000; // 5 seconds default
   private readonly MAX_SHEETS = 10; // Maximum sheets to process
 
   /**
-   * Safely parse an Excel file with security controls
+   * Safely parse an Excel file to CSV with security controls
    * 
    * @param fileBuffer - Buffer containing Excel file data
    * @param options - Parsing options with security limits
-   * @returns ParseResult with data or error
+   * @returns ParseResult with CSV data or error
    */
   async parseExcelToCSV(
     fileBuffer: Buffer,
-    options: SecureXlsxOptions = {}
+    options: SecureExcelOptions = {}
   ): Promise<ParseResult> {
     const startTime = Date.now();
     const warnings: string[] = [];
@@ -61,7 +55,7 @@ export class SecureXlsxParser {
     const maxSheets = options.allowedSheets || this.MAX_SHEETS;
 
     try {
-      // Security Check 1: File size validation (prevents ReDoS on large files)
+      // Security Check 1: File size validation
       if (fileBuffer.length > maxFileSize) {
         return {
           success: false,
@@ -74,21 +68,18 @@ export class SecureXlsxParser {
       let parsingTimedOut = false;
       const timeoutHandle = setTimeout(() => {
         parsingTimedOut = true;
-        logger.warn('Excel parsing timeout detected - possible ReDoS attack', {
+        logger.warn('Excel parsing timeout detected - possible attack', {
           fileSize: fileBuffer.length,
           elapsedTime: Date.now() - startTime,
         });
       }, maxParsingTime);
 
-      // Security Check 3: Parse with error handling
-      let workbook: XLSX.WorkBook;
+      // Security Check 3: Parse with ExcelJS
+      const workbook = new ExcelJS.Workbook();
+      let parsedWorkbook: ExcelJS.Workbook;
+      
       try {
-        workbook = XLSX.read(fileBuffer, { 
-          type: 'buffer',
-          cellDates: true,
-          cellNF: false, // Don't parse number formats (reduces attack surface)
-          cellHTML: false, // Don't parse HTML (XSS prevention)
-        });
+        parsedWorkbook = await workbook.xlsx.load(fileBuffer);
       } catch (parseError) {
         clearTimeout(timeoutHandle);
         return {
@@ -103,33 +94,43 @@ export class SecureXlsxParser {
       if (parsingTimedOut) {
         return {
           success: false,
-          error: 'Excel parsing timeout - file may contain malicious patterns. ' +
-                 'This protection prevents Regular Expression Denial of Service (ReDoS) attacks.',
+          error: 'Excel parsing timeout - file may contain malicious patterns.',
         };
       }
 
       // Security Check 5: Validate sheet count
-      if (workbook.SheetNames.length > maxSheets) {
+      const sheetCount = parsedWorkbook.worksheets.length;
+      if (sheetCount > maxSheets) {
         warnings.push(
-          `File contains ${workbook.SheetNames.length} sheets. ` +
+          `File contains ${sheetCount} sheets. ` +
           `Only processing first ${maxSheets} sheets to prevent resource exhaustion.`
         );
       }
 
-      // Get first sheet (most common use case)
-      const firstSheetName = workbook.SheetNames[0];
-      if (!firstSheetName) {
+      // Get first sheet
+      const firstSheet = parsedWorkbook.worksheets[0];
+      if (!firstSheet) {
         return {
           success: false,
           error: 'Excel file contains no sheets',
         };
       }
 
-      const worksheet = workbook.Sheets[firstSheetName];
+      // Convert to CSV
+      const csvRows: string[] = [];
+      firstSheet.eachRow((row, rowNumber) => {
+        const values = row.values as any[];
+        // Skip the first undefined element from ExcelJS
+        const cleanValues = values.slice(1).map(val => {
+          if (val === null || val === undefined) return '';
+          if (typeof val === 'object' && 'text' in val) return val.text;
+          if (typeof val === 'object' && 'result' in val) return val.result;
+          return String(val);
+        });
+        csvRows.push(cleanValues.map(v => `"${String(v).replace(/"/g, '""')}"`).join(','));
+      });
 
-      // Convert to CSV safely
-      const csvContent = XLSX.utils.sheet_to_csv(worksheet);
-
+      const csvContent = csvRows.join('\n');
       const processingTime = Date.now() - startTime;
 
       // Security Check 6: Log suspicious long processing times
@@ -137,7 +138,7 @@ export class SecureXlsxParser {
         logger.warn('Excel file took unusually long to process', {
           processingTimeMs: processingTime,
           fileSizeBytes: fileBuffer.length,
-          sheetCount: workbook.SheetNames.length,
+          sheetCount: sheetCount,
           suspiciousActivity: true,
         });
         warnings.push(
@@ -152,7 +153,7 @@ export class SecureXlsxParser {
         metadata: {
           processingTimeMs: processingTime,
           fileSizeBytes: fileBuffer.length,
-          sheetCount: workbook.SheetNames.length,
+          sheetCount: sheetCount,
         },
       };
 
@@ -178,7 +179,7 @@ export class SecureXlsxParser {
    */
   async parseExcelToJSON(
     fileBuffer: Buffer,
-    options: SecureXlsxOptions = {}
+    options: SecureExcelOptions = {}
   ): Promise<ParseResult> {
     const startTime = Date.now();
     const warnings: string[] = [];
@@ -201,32 +202,53 @@ export class SecureXlsxParser {
         parsingTimedOut = true;
       }, maxParsingTime);
 
-      // Parse workbook
-      const workbook = XLSX.read(fileBuffer, {
-        type: 'buffer',
-        cellDates: true,
-        cellHTML: false,
-      });
+      // Parse workbook with ExcelJS
+      const workbook = new ExcelJS.Workbook();
+      const parsedWorkbook = await workbook.xlsx.load(fileBuffer);
 
       clearTimeout(timeoutHandle);
 
       if (parsingTimedOut) {
         return {
           success: false,
-          error: 'Excel parsing timeout - possible ReDoS attack',
+          error: 'Excel parsing timeout - possible attack',
         };
       }
 
-      const firstSheetName = workbook.SheetNames[0];
-      if (!firstSheetName) {
+      const firstSheet = parsedWorkbook.worksheets[0];
+      if (!firstSheet) {
         return {
           success: false,
           error: 'Excel file contains no sheets',
         };
       }
 
-      const worksheet = workbook.Sheets[firstSheetName];
-      const jsonData = XLSX.utils.sheet_to_json(worksheet);
+      // Convert to JSON
+      const jsonData: any[] = [];
+      let headers: string[] = [];
+      
+      firstSheet.eachRow((row, rowNumber) => {
+        const values = row.values as any[];
+        const cleanValues = values.slice(1).map(val => {
+          if (val === null || val === undefined) return '';
+          if (typeof val === 'object' && 'text' in val) return val.text;
+          if (typeof val === 'object' && 'result' in val) return val.result;
+          return val;
+        });
+
+        if (rowNumber === 1) {
+          // First row is headers
+          headers = cleanValues.map(String);
+        } else {
+          // Create object from row data
+          const rowObj: any = {};
+          cleanValues.forEach((value, index) => {
+            const header = headers[index] || `Column${index + 1}`;
+            rowObj[header] = value;
+          });
+          jsonData.push(rowObj);
+        }
+      });
 
       const processingTime = Date.now() - startTime;
 
@@ -244,7 +266,7 @@ export class SecureXlsxParser {
         metadata: {
           processingTimeMs: processingTime,
           fileSizeBytes: fileBuffer.length,
-          sheetCount: workbook.SheetNames.length,
+          sheetCount: parsedWorkbook.worksheets.length,
         },
       };
 
@@ -258,4 +280,4 @@ export class SecureXlsxParser {
 }
 
 // Export singleton instance
-export const secureXlsxParser = new SecureXlsxParser();
+export const secureExcelParser = new SecureExcelParser();

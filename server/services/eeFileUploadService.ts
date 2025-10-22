@@ -3,7 +3,7 @@ import { nanoid } from 'nanoid';
 import type { InsertEeDataset, InsertEeDatasetFile, InsertEeClient } from '@shared/schema';
 import { ObjectStorageService } from '../objectStorage';
 import { storage } from '../storage';
-import { secureXlsxParser } from '../utils/secureXlsxParser';
+import { secureExcelParser } from '../utils/secureExcelParser';
 import { logger } from './logger.service';
 
 const objectStorage = new ObjectStorageService();
@@ -175,10 +175,10 @@ export class EeFileUploadService {
                       mimeType.includes('vnd.openxmlformats');
 
       if (isExcel) {
-        // Parse Excel file using SECURE wrapper (mitigates GHSA-4r6h-8v6p-xvw6, GHSA-5pgg-2g8v-p4x9)
-        const parseResult = await secureXlsxParser.parseExcelToCSV(fileBuffer, {
+        // Parse Excel file using ExcelJS (secure, no vulnerabilities)
+        const parseResult = await secureExcelParser.parseExcelToCSV(fileBuffer, {
           maxFileSizeBytes: 5 * 1024 * 1024, // 5MB limit
-          maxParsingTimeMs: 5000, // 5 second timeout (ReDoS protection)
+          maxParsingTimeMs: 5000, // 5 second timeout
           allowedSheets: 10,
         });
 

@@ -12,7 +12,7 @@
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { Parser } from 'json2csv';
-import * as XLSX from 'xlsx';
+import ExcelJS from 'exceljs';
 import { storage } from '../../storage';
 import { logger } from '../logger.service';
 import type { 
@@ -382,29 +382,32 @@ class CSVExportStrategy implements ExportStrategy {
 }
 
 /**
- * Excel Export Strategy
+ * Excel Export Strategy - Using ExcelJS (secure, no vulnerabilities)
  */
 class ExcelExportStrategy implements ExportStrategy {
   async export(data: any, options: ExportOptions): Promise<Buffer> {
-    const workbook = XLSX.utils.book_new();
+    const workbook = new ExcelJS.Workbook();
+    workbook.creator = 'JAWN Maryland Benefits Navigator';
+    workbook.created = new Date();
     
     switch (options.type) {
       case 'ee_report':
-        this.createEEReportWorkbook(workbook, data);
+        await this.createEEReportWorkbook(workbook, data);
         break;
       case 'taxslayer_worksheet':
-        this.createTaxSlayerWorkbook(workbook, data);
+        await this.createTaxSlayerWorkbook(workbook, data);
         break;
       default:
-        this.createGenericWorkbook(workbook, data);
+        await this.createGenericWorkbook(workbook, data);
     }
 
-    const buffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
-    return buffer;
+    const buffer = await workbook.xlsx.writeBuffer();
+    return Buffer.from(buffer);
   }
 
-  private createEEReportWorkbook(workbook: XLSX.WorkBook, data: EEExportData) {
+  private async createEEReportWorkbook(workbook: ExcelJS.Workbook, data: EEExportData) {
     // Summary sheet
+    const summarySheet = workbook.addWorksheet('Summary');
     const summaryData = [
       ['E&E Report Summary'],
       [''],
@@ -419,28 +422,43 @@ class ExcelExportStrategy implements ExportStrategy {
       ['Outcome Statuses', ''],
       ...Object.entries(data.summary.outcomeStatuses).map(([status, count]) => [status, count])
     ];
-    const summarySheet = XLSX.utils.aoa_to_sheet(summaryData);
-    XLSX.utils.book_append_sheet(workbook, summarySheet, 'Summary');
+    summarySheet.addRows(summaryData);
+    
+    // Format header
+    summarySheet.getRow(1).font = { bold: true, size: 14 };
+    summarySheet.getRow(3).font = { bold: true };
 
     // Sessions detail sheet
-    const sessionsData = [
-      ['Date', 'Client ID', 'Session Type', 'Outcome', 'Benefit Amount', 'Navigator', 'Location'],
-      ...data.sessions.map(session => [
-        session.sessionDate ? new Date(session.sessionDate).toLocaleDateString() : '',
-        session.clientCase?.clientIdentifier || '',
-        session.sessionType || '',
-        session.outcome || '',
-        session.eligibilityCalculation?.monthlyBenefit || 0,
-        session.navigatorName || '',
-        session.location || ''
-      ])
+    const sessionsSheet = workbook.addWorksheet('Sessions');
+    sessionsSheet.columns = [
+      { header: 'Date', key: 'date', width: 12 },
+      { header: 'Client ID', key: 'clientId', width: 15 },
+      { header: 'Session Type', key: 'sessionType', width: 20 },
+      { header: 'Outcome', key: 'outcome', width: 15 },
+      { header: 'Benefit Amount', key: 'benefitAmount', width: 15 },
+      { header: 'Navigator', key: 'navigator', width: 20 },
+      { header: 'Location', key: 'location', width: 20 }
     ];
-    const sessionsSheet = XLSX.utils.aoa_to_sheet(sessionsData);
-    XLSX.utils.book_append_sheet(workbook, sessionsSheet, 'Sessions');
+    
+    data.sessions.forEach(session => {
+      sessionsSheet.addRow({
+        date: session.sessionDate ? new Date(session.sessionDate).toLocaleDateString() : '',
+        clientId: session.clientCase?.clientIdentifier || '',
+        sessionType: session.sessionType || '',
+        outcome: session.outcome || '',
+        benefitAmount: session.eligibilityCalculation?.monthlyBenefit || 0,
+        navigator: session.navigatorName || '',
+        location: session.location || ''
+      });
+    });
+
+    // Format header row
+    sessionsSheet.getRow(1).font = { bold: true };
   }
 
-  private createTaxSlayerWorkbook(workbook: XLSX.WorkBook, data: TaxslayerReturn) {
+  private async createTaxSlayerWorkbook(workbook: ExcelJS.Workbook, data: TaxslayerReturn) {
     // Basic info sheet
+    const infoSheet = workbook.addWorksheet('Basic Info');
     const basicInfo = [
       ['TaxSlayer Data Entry Worksheet'],
       [''],
@@ -455,10 +473,12 @@ class ExcelExportStrategy implements ExportStrategy {
       ['Phone', data.phone || ''],
       ['Email', data.email || '']
     ];
-    const infoSheet = XLSX.utils.aoa_to_sheet(basicInfo);
-    XLSX.utils.book_append_sheet(workbook, infoSheet, 'Basic Info');
+    infoSheet.addRows(basicInfo);
+    infoSheet.getRow(1).font = { bold: true, size: 14 };
+    infoSheet.getRow(6).font = { bold: true };
 
     // Income sheet
+    const incomeSheet = workbook.addWorksheet('Income');
     const incomeData = [
       ['Income Summary'],
       [''],
@@ -471,10 +491,12 @@ class ExcelExportStrategy implements ExportStrategy {
       [''],
       ['Adjusted Gross Income', data.agi || 0]
     ];
-    const incomeSheet = XLSX.utils.aoa_to_sheet(incomeData);
-    XLSX.utils.book_append_sheet(workbook, incomeSheet, 'Income');
+    incomeSheet.addRows(incomeData);
+    incomeSheet.getRow(1).font = { bold: true, size: 14 };
+    incomeSheet.getRow(3).font = { bold: true };
 
     // Tax calculation sheet
+    const taxSheet = workbook.addWorksheet('Tax Calculation');
     const taxData = [
       ['Tax Calculation'],
       [''],
@@ -486,13 +508,24 @@ class ExcelExportStrategy implements ExportStrategy {
       ['Federal Tax Withheld', data.federalTaxWithheld || 0],
       ['Refund/Amount Due', data.refund || 0]
     ];
-    const taxSheet = XLSX.utils.aoa_to_sheet(taxData);
-    XLSX.utils.book_append_sheet(workbook, taxSheet, 'Tax Calculation');
+    taxSheet.addRows(taxData);
+    taxSheet.getRow(1).font = { bold: true, size: 14 };
+    taxSheet.getRow(3).font = { bold: true };
   }
 
-  private createGenericWorkbook(workbook: XLSX.WorkBook, data: any) {
-    const worksheet = XLSX.utils.json_to_sheet(Array.isArray(data) ? data : [data]);
-    XLSX.utils.book_append_sheet(workbook, worksheet, 'Data');
+  private async createGenericWorkbook(workbook: ExcelJS.Workbook, data: any) {
+    const worksheet = workbook.addWorksheet('Data');
+    const dataArray = Array.isArray(data) ? data : [data];
+    
+    if (dataArray.length > 0) {
+      const headers = Object.keys(dataArray[0]);
+      worksheet.addRow(headers);
+      worksheet.getRow(1).font = { bold: true };
+      
+      dataArray.forEach(row => {
+        worksheet.addRow(Object.values(row));
+      });
+    }
   }
 }
 
@@ -680,16 +713,27 @@ export class UnifiedExportService {
     options: ExportOptions
   ): Promise<Buffer> {
     if (options.format === 'excel') {
-      const workbook = XLSX.utils.book_new();
+      const workbook = new ExcelJS.Workbook();
+      workbook.creator = 'JAWN Maryland Benefits Navigator';
+      workbook.created = new Date();
       
       for (const dataset of datasets) {
-        const worksheet = XLSX.utils.json_to_sheet(
-          Array.isArray(dataset.data) ? dataset.data : [dataset.data]
-        );
-        XLSX.utils.book_append_sheet(workbook, worksheet, dataset.name);
+        const worksheet = workbook.addWorksheet(dataset.name);
+        const dataArray = Array.isArray(dataset.data) ? dataset.data : [dataset.data];
+        
+        if (dataArray.length > 0) {
+          const headers = Object.keys(dataArray[0]);
+          worksheet.addRow(headers);
+          worksheet.getRow(1).font = { bold: true };
+          
+          dataArray.forEach(row => {
+            worksheet.addRow(Object.values(row));
+          });
+        }
       }
       
-      return XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
+      const buffer = await workbook.xlsx.writeBuffer();
+      return Buffer.from(buffer);
     } else if (options.format === 'pdf') {
       // Create multi-section PDF
       const doc = new jsPDF();
