@@ -672,13 +672,13 @@ export const FEATURE_CATALOG: FeatureMetadata[] = [
   },
   {
     id: 'legislative-02',
-    name: 'Maryland State Law Tracker',
-    description: 'Maryland General Assembly bill tracking with session-aware scheduling.',
+    name: 'State Law Tracker',
+    description: 'Tenant-aware state legislative tracking. Routes to state-specific trackers for Maryland General Assembly and other state legislatures.',
     category: 'Legislative & Regulatory Tracking',
     aiPowered: false,
-    route: '/admin/maryland-law-tracker',
+    route: '/admin/state-law-tracker',
     status: 'production-ready',
-    tags: ['legislative', 'maryland', 'tracking'],
+    tags: ['legislative', 'state', 'tracking', 'tenant-aware'],
     icon: 'Building2'
   },
   {

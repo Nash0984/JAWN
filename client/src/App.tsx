@@ -62,7 +62,7 @@ import CrossEnrollmentAdmin from "@/pages/CrossEnrollmentAdmin";
 // import SmsConfig from "@/pages/admin/SmsConfig";
 import FNSStateOptionsManager from "@/pages/admin/FNSStateOptionsManager";
 import FederalLawTracker from "@/pages/admin/FederalLawTracker";
-import MarylandStateLawTracker from "@/pages/admin/MarylandStateLawTracker";
+import StateLawTracker from "@/pages/admin/StateLawTracker";
 import SmartScheduler from "@/pages/admin/SmartScheduler";
 import CountyTaxRates from "@/pages/admin/CountyTaxRates";
 import WebhookManagement from "@/pages/admin/WebhookManagement";
@@ -569,10 +569,10 @@ function Router() {
               </ProtectedRoute>
             )}
           </Route>
-          <Route path="/admin/maryland-law-tracker">
+          <Route path="/admin/state-law-tracker">
             {() => (
               <ProtectedRoute requireAdmin>
-                <MarylandStateLawTracker />
+                <StateLawTracker />
               </ProtectedRoute>
             )}
           </Route>
