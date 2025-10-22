@@ -16,6 +16,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Shield, FileText, ExternalLink } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
+import { useTenant } from "@/contexts/TenantContext";
 
 interface ConsentModalProps {
   isOpen: boolean;
@@ -25,6 +26,8 @@ interface ConsentModalProps {
 const POLICY_VERSION = "1.0";
 
 export default function ConsentModal({ isOpen, userId }: ConsentModalProps) {
+  const { stateConfig } = useTenant();
+  const stateName = stateConfig?.stateName || 'State';
   const [privacyChecked, setPrivacyChecked] = useState(false);
   const [termsChecked, setTermsChecked] = useState(false);
   const queryClient = useQueryClient();
@@ -77,7 +80,7 @@ export default function ConsentModal({ isOpen, userId }: ConsentModalProps) {
       >
         <DialogHeader>
           <DialogTitle className="text-2xl" data-testid="text-consent-title">
-            Welcome to Maryland Benefits Platform
+            Welcome to {stateName} Benefits Platform
           </DialogTitle>
           <DialogDescription data-testid="text-consent-description">
             Before you continue, please review and accept our Terms of Service and Privacy Policy

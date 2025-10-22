@@ -154,7 +154,7 @@ export function LDSSOfficeInfo() {
           </div>
         </div>
 
-        {/* Office Hours - Standard for all MD LDSS offices */}
+        {/* Office Hours - Standard office hours */}
         <div className="space-y-3">
           <h3 className="font-semibold text-sm flex items-center gap-2">
             <Clock className="h-4 w-4" />

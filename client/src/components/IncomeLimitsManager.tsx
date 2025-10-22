@@ -51,7 +51,7 @@ export function IncomeLimitsManager() {
     },
   });
 
-  // Get Maryland SNAP program ID
+  // Get SNAP program ID (backend uses MD_SNAP code for backward compatibility)
   const { data: programsData } = useQuery({
     queryKey: ["/api/programs"],
   });

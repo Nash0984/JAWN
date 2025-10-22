@@ -107,7 +107,7 @@ export function VITAChatWidget({ compact = false, onClose }: VITAChatWidgetProps
   };
 
   const vitaQuickQuestions = [
-    'Can this Maryland client claim EITC?',
+    'Can this client claim EITC?',
     'What are the EITC income limits for 2024?',
     'What filing status applies to a single parent?',
     'What are the standard deduction amounts?',

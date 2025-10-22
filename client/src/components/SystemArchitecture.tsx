@@ -2,8 +2,11 @@ import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Upload, Database, Brain } from "lucide-react";
+import { useTenant } from "@/contexts/TenantContext";
 
 export default function SystemArchitecture() {
+  const { stateConfig } = useTenant();
+  const stateName = stateConfig?.stateName || 'State';
   const { data: systemStatus } = useQuery({
     queryKey: ["/api/system/status"],
     refetchInterval: 30000, // Refresh every 30 seconds
@@ -13,7 +16,7 @@ export default function SystemArchitecture() {
     <Card className="shadow-lg border border-border">
       <CardHeader>
         <CardTitle className="text-2xl font-bold text-foreground">
-          Maryland Universal Benefits-Tax Navigator
+          {stateName} Universal Benefits-Tax Navigator
         </CardTitle>
       </CardHeader>
       

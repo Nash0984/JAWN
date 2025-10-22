@@ -18,6 +18,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useForm } from "react-hook-form";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { ExportButton } from "@/components/ExportButton";
+import { useTenant } from "@/contexts/TenantContext";
 
 interface SnapCategoricalEligibility {
   id: string;
@@ -38,6 +39,8 @@ interface SnapCategoricalEligibility {
 }
 
 export function CategoricalEligibilityManager() {
+  const { stateConfig } = useTenant();
+  const stateName = stateConfig?.stateName || 'State';
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingEligibility, setEditingEligibility] = useState<SnapCategoricalEligibility | null>(null);
   const { toast } = useToast();
@@ -232,7 +235,7 @@ export function CategoricalEligibilityManager() {
                           <FormControl>
                             <Input 
                               {...field} 
-                              placeholder="e.g., Maryland SSI Recipients" 
+                              placeholder={`e.g., ${stateName} SSI Recipients`}
                               data-testid="input-program-name" 
                             />
                           </FormControl>

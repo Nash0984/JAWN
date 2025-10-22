@@ -3,6 +3,7 @@ import { X, Download, Share } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { useTenant } from "@/contexts/TenantContext";
 
 interface BeforeInstallPromptEvent extends Event {
   prompt: () => Promise<void>;
@@ -10,6 +11,8 @@ interface BeforeInstallPromptEvent extends Event {
 }
 
 export function InstallPrompt() {
+  const { stateConfig } = useTenant();
+  const stateName = stateConfig?.stateName || 'State';
   const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null);
   const [showPrompt, setShowPrompt] = useState(false);
   const [isIOS, setIsIOS] = useState(false);
@@ -93,7 +96,7 @@ export function InstallPrompt() {
           <AlertDescription className="ml-2">
             <div className="flex justify-between items-start gap-2">
               <div className="flex-1">
-                <p className="font-semibold mb-2">Install MD Benefits Navigator</p>
+                <p className="font-semibold mb-2">Install {stateName} Benefits Navigator</p>
                 <p className="text-sm opacity-90 mb-3">
                   Install this app on your iPhone: tap <Share className="inline h-4 w-4 mx-1" /> then "Add to Home Screen"
                 </p>
@@ -138,7 +141,7 @@ export function InstallPrompt() {
               <div>
                 <CardTitle className="text-base">Install App</CardTitle>
                 <CardDescription className="text-xs">
-                  MD Benefits Navigator
+                  {stateName} Benefits Navigator
                 </CardDescription>
               </div>
             </div>
