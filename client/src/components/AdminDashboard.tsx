@@ -40,7 +40,7 @@ export default function AdminDashboard() {
   });
 
   const { data: benefitPrograms = [] } = useQuery({
-    queryKey: ["/api/benefit-programs"],
+    queryKey: ["/api/public/benefit-programs"],
   });
 
   const { data: systemStatus } = useQuery({

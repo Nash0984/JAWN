@@ -16,11 +16,11 @@ export default function DocumentUpload() {
   const { toast } = useToast();
 
   const { data: documentTypes = [] } = useQuery({
-    queryKey: ["/api/document-types"],
+    queryKey: ["/api/public/document-types"],
   });
 
   const { data: benefitPrograms = [] } = useQuery({
-    queryKey: ["/api/benefit-programs"],
+    queryKey: ["/api/public/benefit-programs"],
   });
 
   const handleGetUploadParameters = async () => {

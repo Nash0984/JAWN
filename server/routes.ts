@@ -53,6 +53,7 @@ import { textGenerationService } from "./services/textGenerationService";
 import { notificationService } from "./services/notification.service";
 import { cacheService, CACHE_KEYS, invalidateRulesCache, generateHouseholdHash } from "./services/cacheService";
 import { kpiTrackingService } from "./services/kpiTracking.service";
+import { rateLimiters } from "./middleware/enhancedRateLimiting";
 import { achievementSystemService } from "./services/achievementSystem.service";
 import { leaderboardService } from "./services/leaderboard.service";
 import { GoogleGenAI } from "@google/genai";
@@ -224,25 +225,25 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
   // Startup probe (has service completed startup?)
   app.get("/startup", startupCheck);
   
-  // Database backup monitoring endpoints
+  // Database backup monitoring endpoints - ADMIN ONLY
   const { databaseBackupService } = await import("./services/databaseBackup.service");
   
-  app.get("/api/backup/status", asyncHandler(async (req: Request, res: Response) => {
+  app.get("/api/backup/status", requireAuth, requireAdmin, asyncHandler(async (req: Request, res: Response) => {
     const status = await databaseBackupService.getBackupStatus();
     res.json(status);
   }));
   
-  app.get("/api/backup/metrics", asyncHandler(async (req: Request, res: Response) => {
+  app.get("/api/backup/metrics", requireAuth, requireAdmin, asyncHandler(async (req: Request, res: Response) => {
     const metrics = await databaseBackupService.getBackupMetrics();
     res.json(metrics);
   }));
   
-  app.get("/api/backup/verify", asyncHandler(async (req: Request, res: Response) => {
+  app.get("/api/backup/verify", requireAuth, requireAdmin, asyncHandler(async (req: Request, res: Response) => {
     const verification = await databaseBackupService.verifyBackupRestoration();
     res.json(verification);
   }));
   
-  app.get("/api/backup/recommendations", asyncHandler(async (req: Request, res: Response) => {
+  app.get("/api/backup/recommendations", requireAuth, requireAdmin, asyncHandler(async (req: Request, res: Response) => {
     const recommendations = await databaseBackupService.getBackupRecommendations();
     res.json({ recommendations });
   }));
@@ -642,27 +643,17 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
     res.json(consent);
   }));
 
-  // Get benefit programs
-  app.get("/api/benefit-programs", async (req: Request, res: Response) => {
-    try {
-      const programs = await storage.getBenefitPrograms();
-      res.json(programs);
-    } catch (error) {
-      logger.error("Error fetching benefit programs", error);
-      res.status(500).json({ error: "Failed to fetch benefit programs" });
-    }
-  });
+  // Get benefit programs - PUBLIC endpoint with rate limiting
+  app.get("/api/public/benefit-programs", rateLimiters.public, asyncHandler(async (req: Request, res: Response) => {
+    const programs = await storage.getBenefitPrograms();
+    res.json(programs);
+  }));
 
-  // Get document types
-  app.get("/api/document-types", async (req: Request, res: Response) => {
-    try {
-      const types = await storage.getDocumentTypes();
-      res.json(types);
-    } catch (error) {
-      logger.error("Error fetching document types", error);
-      res.status(500).json({ error: "Failed to fetch document types" });
-    }
-  });
+  // Get document types - PUBLIC endpoint with rate limiting
+  app.get("/api/public/document-types", rateLimiters.public, asyncHandler(async (req: Request, res: Response) => {
+    const types = await storage.getDocumentTypes();
+    res.json(types);
+  }));
 
   // Document verification endpoint with Gemini Vision API
   app.post("/api/verify-document", requireAuth, upload.single("document"), asyncHandler(async (req: Request, res: Response) => {

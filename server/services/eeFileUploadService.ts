@@ -1,9 +1,10 @@
 import Papa from 'papaparse';
-import * as XLSX from 'xlsx';
 import { nanoid } from 'nanoid';
 import type { InsertEeDataset, InsertEeDatasetFile, InsertEeClient } from '@shared/schema';
 import { ObjectStorageService } from '../objectStorage';
 import { storage } from '../storage';
+import { secureXlsxParser } from '../utils/secureXlsxParser';
+import { logger } from './logger.service';
 
 const objectStorage = new ObjectStorageService();
 
@@ -174,19 +175,30 @@ export class EeFileUploadService {
                       mimeType.includes('vnd.openxmlformats');
 
       if (isExcel) {
-        // Parse Excel file using xlsx
-        const workbook = XLSX.read(fileBuffer, { type: 'buffer' });
-        
-        // Get first sheet
-        const firstSheetName = workbook.SheetNames[0];
-        if (!firstSheetName) {
-          return { success: false, error: 'Excel file contains no sheets' };
+        // Parse Excel file using SECURE wrapper (mitigates GHSA-4r6h-8v6p-xvw6, GHSA-5pgg-2g8v-p4x9)
+        const parseResult = await secureXlsxParser.parseExcelToCSV(fileBuffer, {
+          maxFileSizeBytes: 5 * 1024 * 1024, // 5MB limit
+          maxParsingTimeMs: 5000, // 5 second timeout (ReDoS protection)
+          allowedSheets: 10,
+        });
+
+        if (!parseResult.success) {
+          logger.error('Secure Excel parsing failed', {
+            error: parseResult.error,
+            fileSizeBytes: fileBuffer.length,
+          });
+          return { success: false, error: parseResult.error };
         }
-        
-        const worksheet = workbook.Sheets[firstSheetName];
-        
-        // Convert to CSV
-        csvContent = XLSX.utils.sheet_to_csv(worksheet);
+
+        // Log warnings if any (e.g., long processing time)
+        if (parseResult.warnings && parseResult.warnings.length > 0) {
+          logger.warn('Excel parsing warnings', {
+            warnings: parseResult.warnings,
+            metadata: parseResult.metadata,
+          });
+        }
+
+        csvContent = parseResult.data as string;
       } else {
         // Assume CSV format
         csvContent = fileBuffer.toString('utf-8');

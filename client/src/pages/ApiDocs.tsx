@@ -759,9 +759,9 @@ const health = await response.json();
       },
       {
         method: "GET",
-        path: "/api/benefit-programs",
+        path: "/api/public/benefit-programs",
         title: "Get Benefit Programs",
-        description: "List available benefit programs",
+        description: "List available benefit programs (public endpoint with rate limiting)",
         auth: "none",
         responseExample: {
           programs: [
@@ -776,9 +776,9 @@ const health = await response.json();
       },
       {
         method: "GET",
-        path: "/api/document-types",
+        path: "/api/public/document-types",
         title: "Get Document Types",
-        description: "List supported verification document types",
+        description: "List supported verification document types (public endpoint with rate limiting)",
         auth: "none",
         responseExample: {
           documentTypes: [

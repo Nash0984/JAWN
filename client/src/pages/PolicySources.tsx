@@ -60,7 +60,7 @@ export default function PolicySources() {
   });
 
   const { data: programs } = useQuery<BenefitProgram[]>({
-    queryKey: ["/api/benefit-programs"],
+    queryKey: ["/api/public/benefit-programs"],
   });
 
   const updateSourceMutation = useMutation({

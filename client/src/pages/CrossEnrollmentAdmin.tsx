@@ -43,7 +43,7 @@ export default function CrossEnrollmentAdmin() {
 
   // Fetch benefit programs
   const { data: programs = [] } = useQuery<BenefitProgram[]>({
-    queryKey: ["/api/benefit-programs"],
+    queryKey: ["/api/public/benefit-programs"],
   });
 
   // Analyze cross-enrollment

@@ -101,7 +101,7 @@ export default function SearchInterface() {
   };
 
   const { data: benefitPrograms = [] } = useQuery({
-    queryKey: ["/api/benefit-programs"],
+    queryKey: ["/api/public/benefit-programs"],
   });
 
   const searchMutation = useMutation({

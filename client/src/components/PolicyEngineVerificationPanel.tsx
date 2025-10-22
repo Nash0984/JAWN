@@ -37,7 +37,7 @@ export function PolicyEngineVerificationPanel() {
   
   // Fetch benefit programs
   const { data: programs } = useQuery<BenefitProgram[]>({
-    queryKey: ['/api/benefit-programs'],
+    queryKey: ['/api/public/benefit-programs'],
   });
   
   // Fetch verification stats for selected program
