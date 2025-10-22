@@ -192,13 +192,15 @@ app.use(passport.initialize());
 app.use(passport.session());
 
 // CSRF Protection - using csrf-csrf with double-submit cookie pattern
+// NOTE: Using constant session identifier to avoid issues with saveUninitialized: false
+// The double-submit cookie pattern doesn't require session-specific identifiers
 const csrfProtection = doubleCsrf({
   getSecret: () => process.env.SESSION_SECRET || "fallback-secret",
-  getSessionIdentifier: (req) => req.sessionID ?? (req.session as any)?.id ?? "",
+  getSessionIdentifier: (req) => "csrf-session", // Constant identifier - session security handled separately
   cookieName: "x-csrf-token",
   cookieOptions: {
     httpOnly: true,
-    sameSite: "lax",
+    sameSite: "strict", // Match session cookie's sameSite policy
     secure: process.env.NODE_ENV === "production",
     maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
   },
@@ -257,11 +259,32 @@ app.get("/api/health/detailed", async (req, res) => {
 // Endpoint to get CSRF token (before county context middleware)
 app.get("/api/csrf-token", (req, res) => {
   try {
-    const csrfToken = csrfProtection.generateCsrfToken(req, res);
-    if (!csrfToken) {
-      return res.status(500).json({ error: "Failed to generate CSRF token" });
+    // Ensure session exists before generating CSRF token
+    // This fixes the bug where saveUninitialized: false prevents session creation
+    // until login, causing CSRF validation to fail
+    if (!req.session) {
+      logger.error("[CSRF] Session not found on /api/csrf-token request");
+      return res.status(500).json({ error: "Session not initialized" });
     }
-    res.json({ token: csrfToken });
+    
+    // Force session save to ensure sessionID is available
+    req.session.save((err) => {
+      if (err) {
+        logger.error("❌ Session save error:", err);
+        return res.status(500).json({ error: "Failed to initialize session" });
+      }
+      
+      logger.info("[CSRF] Generating token with sessionID:", { sessionID: req.sessionID });
+      
+      const csrfToken = csrfProtection.generateCsrfToken(req, res);
+      if (!csrfToken) {
+        logger.error("[CSRF] Token generation returned null");
+        return res.status(500).json({ error: "Failed to generate CSRF token" });
+      }
+      
+      logger.info("[CSRF] Token generated successfully", { tokenLength: csrfToken.length });
+      res.json({ token: csrfToken });
+    });
   } catch (error) {
     logger.error("❌ CSRF token generation error:", error);
     res.status(500).json({ error: "Internal server error generating CSRF token" });
@@ -311,8 +334,28 @@ app.use("/api/", (req, res, next) => {
     });
   }
   
+  logger.info('[CSRF] Validating token', { 
+    method: req.method, 
+    path: req.path,
+    sessionID: req.sessionID,
+    hasToken: !!csrfToken,
+    tokenPreview: csrfToken ? String(csrfToken).substring(0, 10) + '...' : 'none'
+  });
+  
   // Apply CSRF protection
-  csrfProtection.doubleCsrfProtection(req, res, next);
+  csrfProtection.doubleCsrfProtection(req, res, (err) => {
+    if (err) {
+      logger.error('[CSRF] Validation failed', {
+        error: err.message,
+        method: req.method,
+        path: req.path,
+        sessionID: req.sessionID
+      });
+      return next(err);
+    }
+    logger.info('[CSRF] Validation passed', { method: req.method, path: req.path });
+    next();
+  });
 });
 
 // ============================================================================
