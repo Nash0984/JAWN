@@ -151,10 +151,10 @@ class HealthCheckService {
     const startTime = Date.now();
     
     try {
-      const isConnected = await redisCache.isConnected();
+      const status = redisCache.getStatus();
       const latency = Date.now() - startTime;
       
-      if (!isConnected) {
+      if (status === 'fallback') {
         // Redis not configured - this is OK in development
         return {
           name: 'redis',
@@ -164,18 +164,35 @@ class HealthCheckService {
           details: {
             configured: false,
             fallback: 'NodeCache (L1)',
+            connectionStatus: status,
           },
         };
       }
       
+      if (status === 'connected') {
+        return {
+          name: 'redis',
+          status: 'healthy',
+          latency,
+          message: 'Redis connected',
+          details: {
+            configured: true,
+            connectionStatus: status,
+            mode: 'L1 + L2 distributed cache',
+          },
+        };
+      }
+      
+      // Status is 'connecting' or 'disconnected'
       return {
         name: 'redis',
-        status: 'healthy',
+        status: 'degraded',
         latency,
-        message: 'Redis connected',
+        message: `Redis ${status}`,
         details: {
           configured: true,
-          mode: 'L1 + L2 distributed cache',
+          connectionStatus: status,
+          fallback: 'Using L1 cache only',
         },
       };
     } catch (error) {

@@ -203,26 +203,25 @@ const csrfProtection = doubleCsrf({
 // HEALTH CHECK ENDPOINTS - Database connectivity and system status
 // ============================================================================
 
-// Basic health check (fast, minimal overhead)
+// Basic health check (includes scheduler status for production monitoring)
 app.get("/api/health", async (req, res) => {
   try {
-    // Check database connectivity
-    await db.execute(sql`SELECT 1`);
+    const { healthCheckService } = await import("./services/healthCheckService");
+    const healthStatus = await healthCheckService.checkAll();
     
-    res.json({
-      status: "healthy",
-      timestamp: new Date().toISOString(),
-      uptime: process.uptime(),
-      database: "connected",
-      environment: process.env.NODE_ENV || "development",
-    });
+    // Return appropriate HTTP status code based on health
+    const statusCode = healthStatus.status === 'unhealthy' ? 503 
+                     : healthStatus.status === 'degraded' ? 200  // Degraded still returns 200 but with status in body
+                     : 200;
+    
+    res.status(statusCode).json(healthStatus);
   } catch (error) {
     logger.error("❌ Health check failed:", error);
     res.status(503).json({
       status: "unhealthy",
       timestamp: new Date().toISOString(),
-      database: "disconnected",
-      error: "Database connection failed",
+      error: "Health check service failed",
+      message: error instanceof Error ? error.message : "Unknown error",
     });
   }
 });
