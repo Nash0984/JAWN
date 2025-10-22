@@ -5,8 +5,11 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Users, Shield, FileCheck, Search, Calculator, BookOpen, ClipboardCheck } from "lucide-react";
 import { LDSSOfficeInfo } from "@/components/LDSSOfficeInfo";
+import { useTenant } from "@/contexts/TenantContext";
 
 export default function NavigatorDashboard() {
+  const { stateConfig } = useTenant();
+  const stateName = stateConfig?.stateName || 'State';
   const { user } = useAuth();
 
   const quickActions = [
@@ -67,7 +70,7 @@ export default function NavigatorDashboard() {
   return (
     <>
       <Helmet>
-        <title>Navigator Dashboard - MD Benefits Navigator</title>
+        <title>Navigator Dashboard - {stateName} Benefits Navigator</title>
       </Helmet>
       <div className="container mx-auto px-4 py-8 max-w-6xl">
       {/* Welcome Header */}

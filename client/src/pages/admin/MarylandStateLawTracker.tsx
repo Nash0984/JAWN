@@ -19,8 +19,9 @@ import {
   Building2
 } from "lucide-react";
 import { EmptyState } from "@/components/ui/empty-state";
+import { useTenant } from "@/contexts/TenantContext";
 
-type MarylandBill = {
+type StateBill = {
   id: string;
   billNumber: string;
   session: string;
@@ -38,20 +39,23 @@ type MarylandBill = {
   createdAt: string;
 };
 
-type MarylandBillsResponse = {
+type StateBillsResponse = {
   success: boolean;
   total: number;
-  bills: MarylandBill[];
+  bills: StateBill[];
 };
 
-export default function MarylandStateLawTracker() {
+export default function StateLawTracker() {
+  const { stateConfig } = useTenant();
+  const stateName = stateConfig?.stateName || 'State';
+  const stateCode = stateConfig?.stateCode || 'MD';
   const { toast } = useToast();
   const [statusFilter, setStatusFilter] = useState("all");
   const [sessionFilter, setSessionFilter] = useState("2025RS");
   const [billTypeFilter, setBillTypeFilter] = useState("all");
   const [searchTerm, setSearchTerm] = useState("");
 
-  // Build API URL with filters
+  // Build API URL with filters (backend uses maryland-bills endpoint for backward compatibility)
   const apiUrl = `/api/legislative/maryland-bills?${new URLSearchParams({
     ...(statusFilter !== "all" && { status: statusFilter }),
     ...(sessionFilter && { session: sessionFilter }),
@@ -59,8 +63,8 @@ export default function MarylandStateLawTracker() {
     limit: "100"
   }).toString()}`;
 
-  // Fetch Maryland bills
-  const { data, isLoading } = useQuery<MarylandBillsResponse>({
+  // Fetch state legislature bills (backend uses maryland-bills endpoint for backward compatibility)
+  const { data, isLoading } = useQuery<StateBillsResponse>({
     queryKey: ['/api/legislative/maryland-bills', statusFilter, sessionFilter, billTypeFilter],
     queryFn: () => fetch(apiUrl).then(res => res.json()),
   });
@@ -68,7 +72,7 @@ export default function MarylandStateLawTracker() {
   // Extract bills array from wrapped response
   const bills = data?.bills ?? [];
 
-  // Scrape mutation for Maryland Legislature
+  // Scrape mutation for state legislature (backend uses maryland-scrape endpoint for backward compatibility)
   const scrapeMutation = useMutation({
     mutationFn: async () => {
       return await apiRequest('POST', '/api/legislative/maryland-scrape', {
@@ -78,14 +82,14 @@ export default function MarylandStateLawTracker() {
     onSuccess: () => {
       toast({
         title: "Success",
-        description: "Maryland bills scraped successfully from MGA Legislature website",
+        description: `${stateName} bills scraped successfully from state legislature website`,
       });
       queryClient.invalidateQueries({ queryKey: ['/api/legislative/maryland-bills'] });
     },
     onError: (error: any) => {
       toast({
         title: "Scrape Failed",
-        description: error.message || "Failed to scrape Maryland bills",
+        description: error.message || `Failed to scrape ${stateName} bills`,
         variant: "destructive",
       });
     },
@@ -126,11 +130,11 @@ export default function MarylandStateLawTracker() {
   };
 
   return (
-    <div className="container mx-auto max-w-7xl py-8 space-y-6" data-testid="page-maryland-law-tracker">
+    <div className="container mx-auto max-w-7xl py-8 space-y-6" data-testid="page-state-law-tracker">
       <div>
-        <h1 className="text-3xl font-bold" data-testid="text-page-title">Maryland State Law Tracker</h1>
+        <h1 className="text-3xl font-bold" data-testid="text-page-title">{stateName} State Law Tracker</h1>
         <p className="text-muted-foreground" data-testid="text-page-description">
-          Track Maryland General Assembly legislation affecting SNAP, Medicaid, TANF, and other state benefit programs
+          Track {stateName} state legislature legislation affecting SNAP, Medicaid, TANF, and other state benefit programs
         </p>
       </div>
 
@@ -221,7 +225,7 @@ export default function MarylandStateLawTracker() {
                 data-testid="button-scrape-bills"
               >
                 <RefreshCw className={`h-4 w-4 mr-2 ${scrapeMutation.isPending ? 'animate-spin' : ''}`} />
-                {scrapeMutation.isPending ? 'Scraping...' : 'Scrape MGA Bills'}
+                {scrapeMutation.isPending ? 'Scraping...' : `Scrape ${stateCode} Bills`}
               </Button>
             </div>
           </div>
@@ -231,14 +235,14 @@ export default function MarylandStateLawTracker() {
       {/* Bills List */}
       {isLoading ? (
         <div className="text-center py-12" data-testid="loading-bills">
-          Loading Maryland bills...
+          Loading {stateName} bills...
         </div>
       ) : !filteredBills || filteredBills.length === 0 ? (
         <EmptyState
           icon={Building2}
           iconColor="text-indigo-500"
-          title="No Maryland bills found"
-          description={`Click "Scrape MGA Bills" to load the latest legislation from the Maryland General Assembly for the ${sessionFilter.replace('RS', ' Regular Session')}.`}
+          title={`No ${stateName} bills found`}
+          description={`Click "Scrape ${stateCode} Bills" to load the latest legislation from the ${stateName} state legislature for the ${sessionFilter.replace('RS', ' Regular Session')}.`}
         />
       ) : (
         <div className="space-y-4">

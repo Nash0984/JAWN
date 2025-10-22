@@ -5,14 +5,17 @@ import { Camera, FileText, Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Helmet } from "react-helmet-async";
+import { useTenant } from "@/contexts/TenantContext";
 
 export default function Home() {
+  const { stateConfig } = useTenant();
+  const stateName = stateConfig?.stateName || 'State';
   const { t } = useLanguage();
   
   return (
     <>
       <Helmet>
-        <title>Home - MD Benefits Navigator</title>
+        <title>Home - {stateName} Benefits Navigator</title>
       </Helmet>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
       {/* Hero Section - Conversational Search Priority */}
