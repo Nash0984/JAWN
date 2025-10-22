@@ -18,7 +18,7 @@
 
 ## Quick Setup Checklist
 
-**Production-Ready (6 Critical Variables):**
+**Production-Ready (5 Critical Variables):**
 
 ```bash
 # 1. ENCRYPTION_KEY (Generate: openssl rand -hex 32)
@@ -33,14 +33,15 @@ ALLOWED_ORIGINS=https://marylandbenefits.gov
 # 4. GEMINI_API_KEY (Google AI Studio)
 GEMINI_API_KEY=<your-api-key>
 
-# 5. GCS_BUCKET_NAME (Google Cloud Storage)
+# 5. OBJECT STORAGE (Choose one):
+# Option A (Recommended): Enable Replit Object Storage (auto-configured, zero setup)
+# Option B (Advanced): GCS with base64-encoded credentials
 GCS_BUCKET_NAME=jawn-production-documents
-
-# 6. GOOGLE_APPLICATION_CREDENTIALS (GCS Service Account)
-GOOGLE_APPLICATION_CREDENTIALS=/path/to/service-account.json
+GCS_SERVICE_ACCOUNT_BASE64=<base64-encoded-service-account-json>
+# Note: GOOGLE_APPLICATION_CREDENTIALS is set automatically at runtime
 ```
 
-**Recommended for Production (5 Variables):**
+**Recommended for Production (Optional Variables):**
 - Redis/Upstash (distributed caching)
 - SMTP (email notifications)
 - Sentry (error monitoring)
@@ -147,18 +148,40 @@ GOOGLE_API_KEY=<your-api-key>
 
 ---
 
-### 6. Object Storage (Google Cloud Storage)
+### 6. Object Storage
+
+**⚠️ RECOMMENDED: Use Replit's Built-In Object Storage**
+
+Replit provides built-in object storage that is automatically configured and secured. This is the recommended option for Replit deployments.
+
+**Replit Object Storage Setup** (Recommended):
+1. Enable Object Storage in Replit workspace
+2. Environment variables are automatically configured:
+   - `PUBLIC_OBJECT_SEARCH_PATHS` (auto-set)
+   - `PRIVATE_OBJECT_DIR` (auto-set)
+3. No additional configuration needed
+4. Zero credential management required
+5. Fully integrated with Replit security model
+
+**When to Use**: All Replit deployments (recommended default)
+
+---
+
+**Alternative: Google Cloud Storage (Advanced)**
+
+⚠️ **Only use GCS if you have specific requirements not met by Replit Object Storage**
 
 ```bash
 # Bucket name
 GCS_BUCKET_NAME=jawn-production-documents
 
-# Service account credentials (JSON file path)
-GOOGLE_APPLICATION_CREDENTIALS=/path/to/service-account.json
+# Service account credentials (Base64-encoded JSON)
+GCS_SERVICE_ACCOUNT_BASE64=<base64-encoded-json>
 ```
 
-**Purpose**: Stores uploaded documents (tax forms, verification documents, policy PDFs)
-**Required**: Production (falls back to in-memory storage in development)
+**Purpose**: External object storage for deployments outside Replit
+**Required**: Only if NOT using Replit Object Storage
+**Security**: Uses base64-encoded secrets (never commit raw JSON files)
 
 **Setup Instructions**:
 
@@ -169,8 +192,7 @@ gcloud storage buckets create gs://jawn-production-documents \
   --location=us-east1 \
   --uniform-bucket-level-access
 
-# Or via Google Cloud Console
-# https://console.cloud.google.com/storage
+# Or via Google Cloud Console: https://console.cloud.google.com/storage
 ```
 
 2. **Create Service Account**:
@@ -184,23 +206,67 @@ gcloud storage buckets add-iam-policy-binding gs://jawn-production-documents \
   --member="serviceAccount:jawn-storage@PROJECT_ID.iam.gserviceaccount.com" \
   --role="roles/storage.objectAdmin"
 
-# Generate key file
+# Generate key file (temporary - will be converted to base64)
 gcloud iam service-accounts keys create gcs-credentials.json \
   --iam-account=jawn-storage@PROJECT_ID.iam.gserviceaccount.com
 ```
 
-3. **Add to Replit**:
+3. **⚠️ SECURE CREDENTIAL STORAGE** (Critical - Never skip this step):
+
 ```bash
-# Upload gcs-credentials.json to Replit Files
+# Option A: Base64 encode and store in Replit Secrets (Recommended)
+base64 -i gcs-credentials.json | tr -d '\n' > gcs-credentials-base64.txt
+
+# Copy the contents of gcs-credentials-base64.txt
 # Add to Replit Secrets:
+# Key: GCS_SERVICE_ACCOUNT_BASE64
+# Value: <paste-base64-content>
+
+# IMMEDIATELY delete both JSON files after storing in secrets:
+rm gcs-credentials.json gcs-credentials-base64.txt
+
+# Option B: Use a secrets manager (AWS Secrets Manager, GCP Secret Manager, HashiCorp Vault)
+# Store the service account JSON in your secrets manager
+# Configure runtime secret retrieval
+```
+
+4. **Runtime Credential Decoding**:
+
+The application must decode the base64 secret at runtime. Add this to your application startup:
+
+```typescript
+// server/objectStorage.ts or server/index.ts
+if (process.env.GCS_SERVICE_ACCOUNT_BASE64) {
+  // Decode base64 secret and create temporary credential file
+  const credentialsJson = Buffer.from(
+    process.env.GCS_SERVICE_ACCOUNT_BASE64,
+    'base64'
+  ).toString('utf-8');
+  
+  const tempCredPath = '/tmp/gcs-credentials.json';
+  fs.writeFileSync(tempCredPath, credentialsJson);
+  
+  // Set environment variable for Google Cloud SDK
+  process.env.GOOGLE_APPLICATION_CREDENTIALS = tempCredPath;
+}
+```
+
+5. **Add to Replit Secrets**:
+```bash
 # Key: GCS_BUCKET_NAME
 # Value: jawn-production-documents
 
-# Key: GOOGLE_APPLICATION_CREDENTIALS
-# Value: /home/runner/YourRepl/gcs-credentials.json
+# Key: GCS_SERVICE_ACCOUNT_BASE64
+# Value: <base64-encoded-service-account-json>
 ```
 
-**Replit Alternative**: Use Replit's built-in Object Storage (auto-configured, no GCS needed)
+**🚨 CRITICAL SECURITY RULES FOR GCS**:
+- ❌ **NEVER upload raw JSON credentials to Replit Files**
+- ❌ **NEVER commit service account JSON to git**
+- ❌ **NEVER store credentials in environment files**
+- ✅ **ALWAYS use base64-encoded secrets in Replit Secrets**
+- ✅ **ALWAYS delete temporary credential files after encoding**
+- ✅ **ALWAYS use /tmp/ for runtime credential files (auto-cleaned)**
 
 ---
 
@@ -505,9 +571,15 @@ GEMINI_API_KEY=
 # REQUIRED - OBJECT STORAGE
 # ============================================================================
 
-# Google Cloud Storage (or use Replit Object Storage)
-GCS_BUCKET_NAME=jawn-production-documents
-GOOGLE_APPLICATION_CREDENTIALS=/path/to/service-account.json
+# RECOMMENDED: Use Replit's built-in Object Storage (auto-configured)
+# If using Replit Object Storage, these are set automatically:
+# PUBLIC_OBJECT_SEARCH_PATHS=
+# PRIVATE_OBJECT_DIR=
+
+# ALTERNATIVE: Google Cloud Storage (Advanced - only if needed)
+# ⚠️ Use base64-encoded secrets in Replit Secrets (never upload raw JSON)
+# GCS_BUCKET_NAME=jawn-production-documents
+# GCS_SERVICE_ACCOUNT_BASE64=<base64-encoded-service-account-json>
 
 # ============================================================================
 # OPTIONAL - DISTRIBUTED CACHING (Recommended for production)
@@ -576,23 +648,34 @@ openssl rand -base64 64
 - Upstash (optional): https://upstash.com
 - Sentry (optional): https://sentry.io
 
-**Step 3: Configure Replit Secrets**
+**Step 3: Configure Object Storage**
+- **Recommended**: Enable Replit's built-in Object Storage (auto-configured)
+- **Alternative**: Set up Google Cloud Storage with base64-encoded credentials (see section 6 above)
+
+**Step 4: Configure Replit Secrets**
 1. Open Replit Secrets pane
-2. Add required variables (6 critical)
+2. Add required variables (5 critical - see checklist at top)
 3. Add optional variables (as needed)
 
-**Step 4: Test**
+**Step 5: Validate Configuration**
 ```bash
-# Start server
+# Development validation (shows warnings for missing optional services)
 npm run dev
 
-# Check health
+# Check health endpoint
 curl http://localhost:5000/api/health
+
+# Production validation (fails fast on critical issues)
+NODE_ENV=production npm start
+
+# Expected output if ready:
+# ✅ Production readiness validation passed
+# ✅ System is READY for production deployment
 ```
 
-**Step 5: Deploy**
+**Step 6: Deploy to Production**
 ```bash
-# Production mode
+# After validation passes
 NODE_ENV=production npm start
 ```
 
@@ -610,8 +693,8 @@ NODE_ENV=production npm start
 
 **Issue**: "Object storage not configured"
 **Fix**: Either:
-- Set up Google Cloud Storage (GCS_BUCKET_NAME + GOOGLE_APPLICATION_CREDENTIALS)
-- OR use Replit's built-in Object Storage (auto-configured)
+- **Recommended**: Enable Replit's built-in Object Storage (auto-configured, zero setup)
+- **Advanced**: Set up Google Cloud Storage with GCS_BUCKET_NAME + GCS_SERVICE_ACCOUNT_BASE64 (base64-encoded credentials - see section 6)
 
 **Issue**: "Redis connection failed"
 **Fix**: Non-critical. App works with in-memory cache. Add Redis/Upstash for multi-instance deployments only.
@@ -621,7 +704,7 @@ NODE_ENV=production npm start
 ## Production Deployment Checklist
 
 **Before Going Live**:
-- [ ] All 6 required variables configured
+- [ ] All 5 required variables configured (see Quick Setup Checklist)
 - [ ] Secrets stored in Replit Secrets (not `.env` file)
 - [ ] NODE_ENV=production
 - [ ] ALLOWED_ORIGINS set to production domain

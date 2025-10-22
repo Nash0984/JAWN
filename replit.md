@@ -70,13 +70,14 @@ The backend uses Express.js with TypeScript and PostgreSQL via Drizzle ORM on Ne
 
 # Production Environment Configuration
 
-## Required Variables (6 Critical)
+## Required Variables (5 Critical)
 1. **ENCRYPTION_KEY**: AES-256-GCM key for PII encryption (generate: `openssl rand -hex 32`)
 2. **SESSION_SECRET**: Cookie signing secret (generate: `openssl rand -base64 64`)
 3. **ALLOWED_ORIGINS**: CORS whitelist (production domains only, comma-separated)
 4. **GEMINI_API_KEY**: Google Gemini API key (https://aistudio.google.com/app/apikey)
-5. **GCS_BUCKET_NAME**: Google Cloud Storage bucket name
-6. **GOOGLE_APPLICATION_CREDENTIALS**: Path to GCS service account JSON
+5. **Object Storage** (choose one):
+   - **Recommended**: Replit's built-in Object Storage (auto-configured, zero setup)
+   - **Advanced**: Google Cloud Storage (GCS_BUCKET_NAME + GCS_SERVICE_ACCOUNT_BASE64 - base64-encoded credentials)
 
 ## Optional Variables (Recommended)
 -   **Redis/Upstash**: Distributed caching (REDIS_URL or UPSTASH_REDIS_REST_URL + UPSTASH_REDIS_REST_TOKEN)
