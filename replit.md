@@ -1,10 +1,49 @@
 # Overview
 
-The Maryland Universal Financial Navigator (JAWN) is an AI-powered platform that optimizes financial well-being by integrating public benefits eligibility with federal and state tax preparation. It acts as a universal financial command center, utilizing Retrieval-Augmented Generation (RAG), Rules as Code, and the Google Gemini API. The platform provides comprehensive financial optimization through a single conversational interface, supporting six Maryland benefit programs and VITA tax assistance. A key innovation is the use of a single household profile for both benefit calculations and tax preparation, combined with AI-driven cross-enrollment intelligence to identify unclaimed benefits. The system is fully operational, including GDPR/HIPAA compliance, production-grade infrastructure, a complete E-Filing Dashboard, and an autonomous Benefits Access Review system, deployed as a single unified application at marylandbenefits.gov for all 24 Maryland LDSS offices with multi-tenant architecture.
+The Maryland Universal Financial Navigator (JAWN) is an AI-powered platform that optimizes financial well-being by integrating public benefits eligibility with federal and state tax preparation. The platform is being transformed into a white-label multi-state system (JAWN - Joint Access Welfare Network) supporting Maryland, Pennsylvania, Virginia, Utah, Indiana, and Michigan. It acts as a universal financial command center, utilizing Retrieval-Augmented Generation (RAG), Rules as Code, and the Google Gemini API. The platform provides comprehensive financial optimization through a single conversational interface, supporting six Maryland benefit programs and VITA tax assistance. A key innovation is the use of a single household profile for both benefit calculations and tax preparation, combined with AI-driven cross-enrollment intelligence to identify unclaimed benefits. The system is fully operational, including GDPR/HIPAA compliance, production-grade infrastructure, a complete E-Filing Dashboard, and an autonomous Benefits Access Review system, deployed as a single unified application at marylandbenefits.gov for all 24 Maryland LDSS offices with multi-tenant architecture.
 
 # User Preferences
 
 Preferred communication style: Simple, everyday language.
+
+# White-Labeling Progress (Multi-State Transformation)
+
+## Goal
+Transform JAWN into a white-label multi-state platform supporting 6 states: Maryland (primary), Pennsylvania (priority #2), Virginia, Utah, Indiana, and Michigan.
+
+## Component White-Labeling Status (Last Updated: 2025-10-22)
+
+### Completed Components (9 total)
+1. **VitaTaxPreviewSidebar.tsx** (6 refs) - State tax preview with dynamic stateCode
+2. **BenchmarkInsightsPanel.tsx** (6 refs) - State-neutral test case descriptions
+3. **PolicyChatWidget.tsx** (4 refs) - State-agnostic SNAP policy chat
+4. **ExportButton.tsx** (4 refs) - Dynamic tenant branding colors for PDF exports
+5. **DocumentIngestionPanel.tsx** (3 refs) - State SNAP policy manual ingestion
+6. **TaxSlayerDataEntry.tsx** (2 refs) - State tax return form entry
+7. **SearchInterface.tsx** (2 refs) - State SNAP information search
+8. **PolicyEngineVerificationBadge.tsx** (2 refs) - State-neutral calculation verification
+9. **AIIntakeChat.tsx** (2 refs) - Multi-language welcome messages with stateName
+
+### Remaining Components (13 active + 2 legacy)
+- **High Priority**: BenefitsEligibilityCard, BenefitCalculationBreakdown
+- **Medium Priority**: BenefitsTable, NotificationCenter, DataTable, HouseholdMembersList, EnrollmentRecommendations, FraudAlertPanel
+- **Low Priority**: DisqualificationPolicyInfo, NavigatorWorkspacePanel, MultiProgramCalculatorCard
+- **Legacy (to deprecate)**: BenefitsCalculator, BenefitProgramsTable
+
+### Key Architectural Pattern
+Components use async tenant synchronization:
+```typescript
+const { stateConfig } = useTenant();
+const stateName = stateConfig?.stateName || 'State';
+useEffect(() => {
+  if (stateCode && selectedState !== stateCode) {
+    setSelectedState(stateCode);
+  }
+}, [stateCode]);
+```
+
+### Backend Field Preservation
+API field names remain unchanged (e.g., `marylandTax`, `MarylandStatus`) with clarifying comments for backward compatibility. Only UI text is white-labeled.
 
 # System Architecture
 
