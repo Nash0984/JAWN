@@ -11,6 +11,7 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import PublicPortalNav from "@/components/PublicPortalNav";
 import { Helmet } from "react-helmet-async";
+import { useTenant } from "@/contexts/TenantContext";
 
 interface NoticeTemplate {
   id: string;
@@ -38,6 +39,8 @@ interface ExplainedNotice {
 }
 
 export default function NoticeExplainer() {
+  const { stateConfig } = useTenant();
+  const stateName = stateConfig?.stateName || 'State';
   const { toast } = useToast();
   const [mode, setMode] = useState<"simple" | "smart">("simple");
   const [selectedNoticeType, setSelectedNoticeType] = useState<string>("");
@@ -91,7 +94,7 @@ export default function NoticeExplainer() {
   return (
     <>
       <Helmet>
-        <title>Notice Explainer - MD Benefits Navigator</title>
+        <title>Notice Explainer - {stateName} Benefits Navigator</title>
       </Helmet>
       <PublicPortalNav />
       <div className="container mx-auto px-4 py-8 max-w-6xl">

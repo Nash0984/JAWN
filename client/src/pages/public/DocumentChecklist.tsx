@@ -11,6 +11,7 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import PublicPortalNav from "@/components/PublicPortalNav";
 import { Helmet } from "react-helmet-async";
+import { useTenant } from "@/contexts/TenantContext";
 
 interface DocumentTemplate {
   id: string;
@@ -31,6 +32,8 @@ interface ExtractedDocument {
 }
 
 export default function DocumentChecklist() {
+  const { stateConfig } = useTenant();
+  const stateName = stateConfig?.stateName || 'State';
   const { toast } = useToast();
   const [mode, setMode] = useState<"simple" | "smart">("simple");
   const [selectedDocuments, setSelectedDocuments] = useState<string[]>([]);
@@ -102,7 +105,7 @@ export default function DocumentChecklist() {
   return (
     <>
       <Helmet>
-        <title>Document Checklist - MD Benefits Navigator</title>
+        <title>Document Checklist - {stateName} Benefits Navigator</title>
       </Helmet>
       <PublicPortalNav />
       <div className="container mx-auto px-4 py-8 max-w-6xl">
