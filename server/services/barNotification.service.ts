@@ -500,6 +500,7 @@ export class BARNotificationService {
   
   /**
    * Get checkpoint data with caseworker information
+   * Uses LEFT JOINs to handle deleted cases/users gracefully
    */
   private async getCheckpointData(checkpointId: string): Promise<CheckpointData | null> {
     try {
@@ -511,16 +512,45 @@ export class BARNotificationService {
         caseId: clientCases.id,
       })
         .from(caseLifecycleEvents)
-        .innerJoin(clientCases, eq(caseLifecycleEvents.caseId, clientCases.id))
-        .innerJoin(users, eq(clientCases.assignedNavigator, users.id))
+        .leftJoin(clientCases, eq(caseLifecycleEvents.caseId, clientCases.id))
+        .leftJoin(users, eq(clientCases.assignedNavigator, users.id))
         .where(eq(caseLifecycleEvents.id, checkpointId))
         .limit(1);
       
       if (result.length === 0) {
+        logger.warn('Checkpoint not found in database', { checkpointId });
         return null;
       }
       
       const row = result[0];
+      
+      // Check for orphaned checkpoint (missing case or user)
+      if (!row.caseId || !row.caseworkerEmail) {
+        logger.warn('Orphaned checkpoint detected - marking as cancelled', {
+          checkpointId,
+          hasCaseId: !!row.caseId,
+          hasCaseworkerEmail: !!row.caseworkerEmail,
+          missingEntity: !row.caseId ? 'case' : 'user',
+          suggestedAction: 'Auto-cancelling checkpoint due to missing reference'
+        });
+        
+        // Auto-cancel orphaned checkpoint
+        await db.update(caseLifecycleEvents)
+          .set({
+            status: 'cancelled',
+            metadata: {
+              ...row.checkpoint.metadata,
+              cancelledReason: 'Orphaned checkpoint - referenced case or user was deleted',
+              autoCancelledAt: new Date().toISOString(),
+            },
+            updatedAt: new Date(),
+          })
+          .where(eq(caseLifecycleEvents.id, checkpointId));
+        
+        logger.info('Orphaned checkpoint auto-cancelled', { checkpointId });
+        return null;
+      }
+      
       return {
         checkpoint: row.checkpoint,
         caseworkerEmail: row.caseworkerEmail || '',
@@ -530,7 +560,8 @@ export class BARNotificationService {
     } catch (error) {
       logger.error('Error fetching checkpoint data', {
         checkpointId,
-        error: error instanceof Error ? error.message : 'Unknown error'
+        error: error instanceof Error ? error.message : 'Unknown error',
+        stack: error instanceof Error ? error.stack : undefined
       });
       return null;
     }
