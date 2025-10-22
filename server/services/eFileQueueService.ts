@@ -341,7 +341,22 @@ export class EFileQueueService {
         qualityReview: mergedReview
       });
 
-      // 9. TODO: Transmit to IRS/Maryland (placeholder)
+      /**
+       * Production e-file transmission:
+       * 
+       * After successful XML generation and validation, returns would be transmitted
+       * to the appropriate tax authority (IRS MeF or Maryland iFile).
+       * 
+       * Requirements for production implementation:
+       * - IRS: EFIN (Electronic Filing Identification Number) from IRS e-file program
+       * - Maryland: iFile credentials from Maryland Comptroller's Office
+       * - SSL/TLS certificates for secure transmission
+       * - Digital signatures for authentication
+       * 
+       * Current behavior: Returns are marked as "ready" for transmission
+       * and can be manually submitted through official tax software.
+       */
+      // Production code would transmit here:
       // const irsResult = await this.transmitToIRS(form1040Xml, federalReturn);
       // const mdResult = form502Xml ? await this.transmitToMaryland(form502Xml, marylandReturn) : null;
 
@@ -841,14 +856,25 @@ export class EFileQueueService {
   }
 
   /**
-   * TODO: Transmit to IRS MeF API
-   * This is a placeholder for actual IRS MeF transmission
+   * Transmit tax return to IRS Modernized e-File (MeF) System
    * 
-   * Requirements:
-   * - EFIN (Electronic Filing Identification Number)
-   * - IRS MeF production credentials
-   * - Digital signature/authentication
-   * - IRS-approved transmission software
+   * Production Requirements:
+   * 1. EFIN (Electronic Filing Identification Number) - obtained through IRS e-file application
+   * 2. ETIN (Electronic Transmitter Identification Number) for transmitter
+   * 3. IRS MeF production credentials and X.509 certificates
+   * 4. Implementation of IRS MeF SOAP web service protocols
+   * 5. Compliance with IRS Publication 4164 (MeF Guide)
+   * 
+   * Transmission Process:
+   * - Package XML in SOAP envelope with WS-Security headers
+   * - Sign with X.509 certificate
+   * - Submit to IRS MeF endpoint (https://la.www4.irs.gov/EFileServices/services)
+   * - Receive acknowledgment with Submission ID
+   * - Poll for acceptance/rejection status
+   * 
+   * Current Implementation:
+   * Generates mock transmission ID for testing. In production, this method
+   * would integrate with IRS MeF web services for actual transmission.
    */
   private async transmitToIRS(
     xmlData: string,
@@ -885,14 +911,31 @@ export class EFileQueueService {
   }
 
   /**
-   * TODO: Transmit to Maryland iFile API
-   * This is a placeholder for actual Maryland iFile transmission
+   * Transmit tax return to Maryland iFile System
    * 
-   * Requirements:
-   * - Maryland iFile credentials from MD Comptroller
-   * - Official Maryland XML schema (XSD)
-   * - Digital signature/authentication
-   * - MD-approved transmission software
+   * Production Requirements:
+   * 1. Maryland iFile Software Developer ID from Comptroller of Maryland
+   * 2. Maryland Tax Preparer Registration Number (if professional preparer)
+   * 3. Maryland iFile test and production credentials
+   * 4. Implementation of Maryland XML schema specifications
+   * 5. Compliance with Maryland iFile Developer Guide
+   * 
+   * Transmission Process:
+   * - Format return according to Maryland XML Schema (XSD) version 2025
+   * - Include county tax calculations for all 23 Maryland counties + Baltimore City
+   * - Submit via HTTPS POST to Maryland iFile gateway
+   * - Authentication via OAuth 2.0 or API key
+   * - Receive Maryland Confirmation Number
+   * - Check status via polling endpoint
+   * 
+   * County-Specific Requirements:
+   * - Each county has different tax rates (stored in county_tax_rates table)
+   * - Special calculations for Baltimore City residents vs non-residents
+   * - Piggyback tax calculations for local jurisdictions
+   * 
+   * Current Implementation:
+   * Generates mock transmission ID for testing. Production implementation
+   * requires official Maryland iFile developer credentials and certification.
    */
   private async transmitToMaryland(
     xmlData: string,

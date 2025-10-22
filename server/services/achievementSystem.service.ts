@@ -115,7 +115,37 @@ class AchievementSystemService {
 
     await storage.awardAchievement(award);
 
-    // TODO: Send notification to navigator
+    /**
+     * Achievement notification implementation:
+     * Notifications are sent via email service when available.
+     * In-app notifications are automatically displayed via the BarNotification system
+     * which polls for unnotified achievements.
+     * 
+     * Production enhancement: Add real-time WebSocket notifications
+     */
+    try {
+      // Get navigator's email for email notification
+      const navigator = await storage.getUser(navigatorId);
+      if (navigator?.email) {
+        // Import email service dynamically to avoid circular dependencies
+        const { emailService } = await import('./email.service');
+        
+        await emailService.sendNotificationEmail(
+          navigator.email,
+          `🏆 Achievement Unlocked: ${achievement.name}`,
+          `Congratulations! You've earned the "${achievement.name}" achievement.\n\n${achievement.description}\n\nPoints earned: ${achievement.pointsAwarded}`,
+          undefined // No action URL needed for achievements
+        );
+      }
+    } catch (emailError) {
+      // Email notification failure is non-critical
+      logger.warn('Failed to send achievement email notification', {
+        error: emailError instanceof Error ? emailError.message : 'Unknown error',
+        achievementId: achievement.id,
+        navigatorId
+      });
+    }
+
     logger.info('🏆 Achievement awarded', {
       achievementName: achievement.name,
       achievementId: achievement.id,

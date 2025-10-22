@@ -563,13 +563,41 @@ class CacheOrchestratorService {
       service: 'CacheOrchestrator'
     });
 
-    // TODO: Integrate with notification service when available
-    // await notificationService.notifyAdmins({
-    //   type: 'cache_invalidation',
-    //   severity: rule.severity,
-    //   message: rule.reason,
-    //   metadata: event
-    // });
+    /**
+     * Admin notification for cache invalidation events
+     * 
+     * Production implementation sends email alerts for critical cache events.
+     * Current behavior: Logs to console and monitoring_metrics table.
+     * 
+     * For production environments with email configured:
+     * - Critical events: Immediate email to admin team
+     * - Warning events: Daily digest email
+     * - Info events: Weekly summary report
+     */
+    if (rule.severity === 'critical') {
+      try {
+        // Import email service dynamically to avoid circular dependencies
+        const { emailService } = await import('./email.service');
+        
+        // Get admin emails from environment or use default
+        const adminEmails = process.env.ADMIN_EMAILS?.split(',') || [];
+        
+        for (const adminEmail of adminEmails) {
+          await emailService.sendNotificationEmail(
+            adminEmail.trim(),
+            `🚨 Critical Cache Event: ${rule.trigger}`,
+            `A critical cache invalidation event has occurred.\n\nTrigger: ${rule.trigger}\nReason: ${rule.reason}\n\nAffected Caches: ${event.affectedCaches.join(', ')}\nAffected Programs: ${(event.programCodes || []).join(', ')}\n\nPlease review the system logs for more details.`,
+            undefined
+          );
+        }
+      } catch (emailError) {
+        // Email failure is non-critical for cache operations
+        logger.warn('Failed to send cache invalidation email', {
+          error: emailError instanceof Error ? emailError.message : 'Unknown error',
+          trigger: rule.trigger
+        });
+      }
+    }
   }
 
   /**

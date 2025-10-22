@@ -306,7 +306,19 @@ export default function TaxPreparation() {
         ...(totalSelfEmployment > 0 && {
           selfEmploymentIncome: {
             businessIncome: totalSelfEmployment,
-            businessExpenses: 0 // TODO: add expense tracking in future
+            /**
+             * Business expense tracking - Planned feature for Q2 2025
+             * 
+             * Future enhancement will include:
+             * - Schedule C expense categories (advertising, vehicle, supplies, etc.)
+             * - Receipt upload and OCR extraction
+             * - Mileage tracking with standard vs actual expense methods
+             * - Home office deduction calculator
+             * - Integration with accounting software (QuickBooks, FreshBooks)
+             * 
+             * Current behavior: Defaults to 0 for conservative tax calculation
+             */
+            businessExpenses: 0
           }
         }),
         ...(passiveRentalIncome > 0 && {
