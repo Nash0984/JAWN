@@ -576,6 +576,169 @@ class AIOrchestrator {
   getEmbeddingCacheStats() {
     return embeddingCache.getStats();
   }
+
+  /**
+   * Analyze document for field extraction (from aiService)
+   */
+  async analyzeDocumentForFieldExtraction(
+    text: string,
+    documentType: string,
+    options: GenerateTextOptions = {}
+  ) {
+    const { feature = 'document_field_extraction', priority = 'normal' } = options;
+    const model = this.selectModel('text');
+
+    const prompt = `You are an AI assistant specialized in extracting structured information from government publications, with an emphasis on public benefit programs and federal and state EITC and CTC
+      
+For the document type "${documentType}", extract relevant fields such as:
+- Eligibility requirements
+- Income limits
+- Asset limits
+- Application deadlines
+- Contact information
+- Effective dates
+- Program codes
+- Geographic restrictions
+
+Respond with JSON containing the extracted fields and their values.
+Use null for fields that cannot be determined.
+
+Format: {
+  "eligibilityRequirements": ["req1", "req2"],
+  "incomeLimits": {"1person": "amount", "2person": "amount"},
+  "assetLimits": "amount",
+  "applicationDeadline": "date or null",
+  "effectiveDate": "date or null",
+  "contactInfo": {"phone": "number", "website": "url"},
+  "programCodes": ["code1", "code2"],
+  "geographicScope": "federal|state|local|specific location",
+  "confidence": number
+}
+
+Document text: ${text}`;
+
+    const execute = async () => {
+      const ai = this.getGeminiClient();
+      const response = await ai.models.generateContent({
+        model: "gemini-1.5-pro",
+        contents: [{ role: 'user', parts: [{ text: prompt }] }]
+      });
+
+      const result = response.text || "{}";
+      const totalTokens = this.estimateTokens(prompt) + this.estimateTokens(result);
+      await this.trackAIUsage(feature, "gemini-1.5-pro", totalTokens);
+
+      try {
+        return JSON.parse(result);
+      } catch {
+        return { error: "Failed to parse extraction result", confidence: 0 };
+      }
+    };
+
+    return this.queueRequest(feature, model, priority, execute);
+  }
+
+  /**
+   * Generate document summary (from aiService)
+   */
+  async generateDocumentSummary(
+    text: string,
+    maxLength: number = 200,
+    options: GenerateTextOptions = {}
+  ): Promise<string> {
+    const { feature = 'document_summarization', priority = 'normal' } = options;
+    const model = this.selectModel('text');
+
+    const prompt = `Summarize the following government benefits document in ${maxLength} words or less.
+Focus on:
+- Main purpose of the document
+- Key eligibility requirements
+- Important dates or deadlines
+- Primary benefit amounts or limits
+- Application process overview
+
+Make the summary clear and actionable for benefits administrators.
+
+Document text: ${text}`;
+
+    const execute = async () => {
+      const ai = this.getGeminiClient();
+      const response = await ai.models.generateContent({
+        model: "gemini-1.5-pro",
+        contents: [{ role: 'user', parts: [{ text: prompt }] }]
+      });
+
+      const result = response.text || "Summary generation failed";
+      const totalTokens = this.estimateTokens(prompt) + this.estimateTokens(result);
+      await this.trackAIUsage(feature, "gemini-1.5-pro", totalTokens);
+
+      return result;
+    };
+
+    return this.queueRequest(feature, model, priority, execute);
+  }
+
+  /**
+   * Detect document changes (from aiService)
+   */
+  async detectDocumentChanges(
+    oldText: string,
+    newText: string,
+    options: GenerateTextOptions = {}
+  ) {
+    const { feature = 'document_change_detection', priority = 'background' } = options;
+    const model = this.selectModel('text');
+
+    const prompt = `You are comparing two versions of a government benefits document to identify changes.
+
+Analyze the differences and categorize them as:
+- POLICY_CHANGE: Changes to eligibility, benefits amounts, or requirements
+- PROCEDURAL_CHANGE: Changes to application or administrative processes
+- DATE_CHANGE: Updates to effective dates or deadlines  
+- CONTACT_CHANGE: Updates to contact information
+- FORMATTING_CHANGE: Minor formatting or structural changes
+- OTHER: Any other type of change
+
+Respond with JSON:
+{
+  "hasChanges": boolean,
+  "changesSummary": "brief description of main changes",
+  "changes": [
+    {
+      "type": "POLICY_CHANGE|PROCEDURAL_CHANGE|etc",
+      "description": "specific change description",
+      "severity": "HIGH|MEDIUM|LOW",
+      "oldValue": "previous value if applicable",
+      "newValue": "new value if applicable"
+    }
+  ],
+  "confidence": number
+}
+
+Old version: ${oldText}
+
+New version: ${newText}`;
+
+    const execute = async () => {
+      const ai = this.getGeminiClient();
+      const response = await ai.models.generateContent({
+        model: "gemini-1.5-pro",
+        contents: [{ role: 'user', parts: [{ text: prompt }] }]
+      });
+
+      const result = response.text || "{}";
+      const totalTokens = this.estimateTokens(prompt) + this.estimateTokens(result);
+      await this.trackAIUsage(feature, "gemini-1.5-pro", totalTokens);
+
+      try {
+        return JSON.parse(result);
+      } catch {
+        return { hasChanges: false, changesSummary: "Failed to detect changes", changes: [], confidence: 0 };
+      }
+    };
+
+    return this.queueRequest(feature, model, priority, execute);
+  }
 }
 
 // ============================================================================

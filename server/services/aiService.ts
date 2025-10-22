@@ -1,18 +1,5 @@
-import { GoogleGenAI } from "@google/genai";
 import { logger } from './logger.service';
-
-// Using Gemini for all AI operations
-let gemini: GoogleGenAI | null = null;
-function getGemini(): GoogleGenAI {
-  if (!gemini) {
-    const apiKey = process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY;
-    if (!apiKey) {
-      throw new Error('GOOGLE_API_KEY or GEMINI_API_KEY environment variable is required');
-    }
-    gemini = new GoogleGenAI({ apiKey });
-  }
-  return gemini;
-}
+import { aiOrchestrator } from './aiOrchestrator';
 
 export interface ModelPerformanceMetrics {
   accuracy: number;
@@ -33,163 +20,65 @@ export interface TrainingMetrics {
 
 class AIService {
   async analyzeDocumentForFieldExtraction(text: string, documentType: string) {
-    try {
-      const prompt = `You are an AI assistant specialized in extracting structured information from government publications, with an emphasis on public benefit programs and federal and state EITC and CTC
-      
-      For the document type "${documentType}", extract relevant fields such as:
-      - Eligibility requirements
-      - Income limits
-      - Asset limits
-      - Application deadlines
-      - Contact information
-      - Effective dates
-      - Program codes
-      - Geographic restrictions
-      
-      Respond with JSON containing the extracted fields and their values.
-      Use null for fields that cannot be determined.
-      
-      Format: {
-        "eligibilityRequirements": ["req1", "req2"],
-        "incomeLimits": {"1person": "amount", "2person": "amount"},
-        "assetLimits": "amount",
-        "applicationDeadline": "date or null",
-        "effectiveDate": "date or null",
-        "contactInfo": {"phone": "number", "website": "url"},
-        "programCodes": ["code1", "code2"],
-        "geographicScope": "federal|state|local|specific location",
-        "confidence": number
-      }
-      
-      Document text: ${text}`;
-      
-      const ai = getGemini();
-      const response = await ai.models.generateContent({
-        model: "gemini-1.5-pro",
-        contents: [{ role: 'user', parts: [{ text: prompt }] }]
-      });
-      
-      return JSON.parse(response.text || "{}");
-    } catch (error) {
-      logger.error("Field extraction error", { error, documentType });
-      return { error: "Failed to extract fields", confidence: 0 };
-    }
+    return aiOrchestrator.analyzeDocumentForFieldExtraction(text, documentType, {
+      feature: 'document_field_extraction',
+      priority: 'normal'
+    });
   }
 
   async generateDocumentSummary(text: string, maxLength: number = 200) {
-    try {
-      const prompt = `Summarize the following government benefits document in ${maxLength} words or less.
-      Focus on:
-      - Main purpose of the document
-      - Key eligibility requirements
-      - Important dates or deadlines
-      - Primary benefit amounts or limits
-      - Application process overview
-      
-      Make the summary clear and actionable for benefits administrators.
-      
-      Document text: ${text}`;
-      
-      const ai = getGemini();
-      const response = await ai.models.generateContent({
-        model: "gemini-1.5-pro",
-        contents: [{ role: 'user', parts: [{ text: prompt }] }]
-      });
-      
-      return response.text || "Summary generation failed";
-    } catch (error) {
-      logger.error("Summary generation error", { error, maxLength });
-      return "Summary generation failed";
-    }
+    return aiOrchestrator.generateDocumentSummary(text, maxLength, {
+      feature: 'document_summarization',
+      priority: 'normal'
+    });
   }
 
   async detectDocumentChanges(oldText: string, newText: string) {
-    try {
-      const prompt = `You are comparing two versions of a government benefits document to identify changes.
-      
-      Analyze the differences and categorize them as:
-      - POLICY_CHANGE: Changes to eligibility, benefits amounts, or requirements
-      - PROCEDURAL_CHANGE: Changes to application or administrative processes
-      - DATE_CHANGE: Updates to effective dates or deadlines  
-      - CONTACT_CHANGE: Updates to contact information
-      - FORMATTING_CHANGE: Minor formatting or structural changes
-      - OTHER: Any other type of change
-      
-      Respond with JSON:
-      {
-        "hasChanges": boolean,
-        "changesSummary": "brief description of main changes",
-        "changes": [
-          {
-            "type": "POLICY_CHANGE|PROCEDURAL_CHANGE|etc",
-            "description": "specific change description",
-            "oldValue": "previous value or null",
-            "newValue": "new value or null",
-            "impact": "HIGH|MEDIUM|LOW"
-          }
-        ],
-        "recommendedActions": ["action1", "action2"]
-      }
-      
-      OLD VERSION:
-      ${oldText}
-      
-      NEW VERSION:
-      ${newText}`;
-      
-      const ai = getGemini();
-      const response = await ai.models.generateContent({
-        model: "gemini-1.5-pro",
-        contents: [{ role: 'user', parts: [{ text: prompt }] }]
-      });
-      
-      return JSON.parse(response.text || "{}");
-    } catch (error) {
-      logger.error("Change detection error", { error });
-      return { 
-        hasChanges: false, 
-        changesSummary: "Change detection failed",
-        changes: [],
-        recommendedActions: []
-      };
-    }
+    return aiOrchestrator.detectDocumentChanges(oldText, newText, {
+      feature: 'document_change_detection',
+      priority: 'background'
+    });
   }
 
   async validateDocumentCompliance(text: string, benefitProgram: string) {
     try {
       const prompt = `You are a compliance expert for government benefit programs.
       
-      Review the document for compliance with federal regulations for ${benefitProgram}.
-      Check for:
-      - Required legal language and disclaimers
-      - Proper citation of relevant regulations
-      - Accessibility requirements (plain language, reading level)
-      - Non-discrimination clauses
-      - Appeal rights information
-      - Privacy notices
-      - Reasonable accommodation information
+Review the document for compliance with federal regulations for ${benefitProgram}.
+Check for:
+- Required legal language and disclaimers
+- Proper citation of relevant regulations
+- Accessibility requirements (plain language, reading level)
+- Non-discrimination clauses
+- Appeal rights information
+- Privacy notices
+- Reasonable accommodation information
+
+Respond with JSON:
+{
+  "complianceScore": number (0-1),
+  "passedChecks": ["check1", "check2"],
+  "failedChecks": ["check1", "check2"], 
+  "warnings": ["warning1", "warning2"],
+  "requiredAdditions": ["addition1", "addition2"],
+  "overallAssessment": "COMPLIANT|NON_COMPLIANT|NEEDS_REVIEW"
+}
+
+Document text: ${text}`;
       
-      Respond with JSON:
-      {
-        "complianceScore": number (0-1),
-        "passedChecks": ["check1", "check2"],
-        "failedChecks": ["check1", "check2"], 
-        "warnings": ["warning1", "warning2"],
-        "requiredAdditions": ["addition1", "addition2"],
-        "overallAssessment": "COMPLIANT|NON_COMPLIANT|NEEDS_REVIEW"
-      }
-      
-      Document text: ${text}`;
-      
-      const ai = getGemini();
-      const response = await ai.models.generateContent({
-        model: "gemini-1.5-pro",
-        contents: [{ role: 'user', parts: [{ text: prompt }] }]
+      const response = await aiOrchestrator.generateText(prompt, {
+        feature: 'document_compliance',
+        priority: 'normal'
       });
       
-      return JSON.parse(response.text || "{}");
+      return JSON.parse(response || "{}");
     } catch (error) {
-      logger.error("Compliance validation error", { error, benefitProgram });
+      logger.error("Compliance validation error", {
+        service: 'AIService',
+        method: 'validateDocumentCompliance',
+        error: error instanceof Error ? error.message : 'Unknown error',
+        benefitProgram
+      });
       return {
         complianceScore: 0.5,
         passedChecks: [],
@@ -202,9 +91,6 @@ class AIService {
   }
 
   async generateTrainingData(documents: string[], labels: string[]) {
-    // This would implement automated training data generation
-    // for fine-tuning models on specific benefit programs
-    
     try {
       const trainingExamples = [];
       
@@ -212,28 +98,26 @@ class AIService {
         const doc = documents[i];
         const label = labels[i];
         
-        // Generate variations and synthetic examples
         const prompt = `Generate 3 variations of the following document that maintain the same classification label "${label}".
-        Vary the language while preserving the key information and intent.
+Vary the language while preserving the key information and intent.
+
+Respond with JSON:
+{
+  "variations": [
+    {"text": "variation1", "label": "${label}"},
+    {"text": "variation2", "label": "${label}"},
+    {"text": "variation3", "label": "${label}"}
+  ]
+}
+
+Original document: ${doc}`;
         
-        Respond with JSON:
-        {
-          "variations": [
-            {"text": "variation1", "label": "${label}"},
-            {"text": "variation2", "label": "${label}"},
-            {"text": "variation3", "label": "${label}"}
-          ]
-        }
-        
-        Original document: ${doc}`;
-        
-        const ai = getGemini();
-        const response = await ai.models.generateContent({
-          model: "gemini-1.5-pro",
-          contents: prompt
+        const response = await aiOrchestrator.generateText(prompt, {
+          feature: 'training_data_generation',
+          priority: 'background'
         });
         
-        const result = JSON.parse(response.text || "{}");
+        const result = JSON.parse(response || "{}");
         if (result.variations) {
           trainingExamples.push(...result.variations);
         }
@@ -241,7 +125,11 @@ class AIService {
       
       return trainingExamples;
     } catch (error) {
-      logger.error("Training data generation error", { error });
+      logger.error("Training data generation error", {
+        service: 'AIService',
+        method: 'generateTrainingData',
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
       return [];
     }
   }
@@ -311,36 +199,38 @@ class AIService {
   async generateModelReport(modelType: string, metrics: ModelPerformanceMetrics, trainingHistory: TrainingMetrics[]) {
     try {
       const prompt = `Generate a comprehensive model performance report for a ${modelType} model.
+
+Include:
+- Performance summary and key metrics analysis
+- Training progress assessment
+- Recommendations for improvement
+- Production readiness assessment
+- Potential issues or concerns
+
+Use clear, technical language appropriate for ML engineers and data scientists.
+
+Model Performance Metrics:
+Accuracy: ${metrics.accuracy.toFixed(3)}
+Precision: ${metrics.precision.toFixed(3)}
+Recall: ${metrics.recall.toFixed(3)}
+F1 Score: ${metrics.f1Score.toFixed(3)}
+
+Training History (last 5 epochs):
+${trainingHistory.slice(-5).map(h => 
+  `Epoch ${h.epoch}: Loss=${h.loss.toFixed(3)}, Acc=${h.accuracy.toFixed(3)}, Val_Loss=${h.valLoss.toFixed(3)}, Val_Acc=${h.valAccuracy.toFixed(3)}`
+).join('\n')}`;
       
-      Include:
-      - Performance summary and key metrics analysis
-      - Training progress assessment
-      - Recommendations for improvement
-      - Production readiness assessment
-      - Potential issues or concerns
-      
-      Use clear, technical language appropriate for ML engineers and data scientists.
-      
-      Model Performance Metrics:
-      Accuracy: ${metrics.accuracy.toFixed(3)}
-      Precision: ${metrics.precision.toFixed(3)}
-      Recall: ${metrics.recall.toFixed(3)}
-      F1 Score: ${metrics.f1Score.toFixed(3)}
-      
-      Training History (last 5 epochs):
-      ${trainingHistory.slice(-5).map(h => 
-        `Epoch ${h.epoch}: Loss=${h.loss.toFixed(3)}, Acc=${h.accuracy.toFixed(3)}, Val_Loss=${h.valLoss.toFixed(3)}, Val_Acc=${h.valAccuracy.toFixed(3)}`
-      ).join('\n')}`;
-      
-      const ai = getGemini();
-      const response = await ai.models.generateContent({
-        model: "gemini-1.5-pro",
-        contents: [{ role: 'user', parts: [{ text: prompt }] }]
+      return await aiOrchestrator.generateText(prompt, {
+        feature: 'model_report_generation',
+        priority: 'background'
       });
-      
-      return response.text || "Report generation failed";
     } catch (error) {
-      logger.error("Model report generation error", { error, modelType });
+      logger.error("Model report generation error", {
+        service: 'AIService',
+        method: 'generateModelReport',
+        error: error instanceof Error ? error.message : 'Unknown error',
+        modelType
+      });
       return "Failed to generate model report";
     }
   }
