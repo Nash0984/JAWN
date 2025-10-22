@@ -5,9 +5,9 @@ export default function Footer() {
   const currentYear = new Date().getFullYear();
   const { stateConfig } = useTenant();
   
-  const stateName = stateConfig?.stateName || 'Maryland';
+  const stateName = stateConfig?.stateName || 'State';
   const contactEmail = stateConfig?.contactEmail || 'support@benefits.gov';
-  const contactPhone = stateConfig?.contactPhone || '(410) 555-HELP';
+  const contactPhone = stateConfig?.contactPhone || '555-HELP';
   
   return (
     <footer className="border-t bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60" data-testid="footer">
