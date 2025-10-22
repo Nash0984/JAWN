@@ -2,10 +2,10 @@
  * MAIVE Dashboard - AI Validation Engine Monitoring
  * 
  * Displays test results, accuracy trends, and validation gates for AI systems.
- * Ensures 95%+ accuracy for Maryland benefits policies.
+ * Ensures 95%+ accuracy for state benefits policies.
  */
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -44,6 +44,7 @@ import {
 import { format } from "date-fns";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { useTenant } from "@/contexts/TenantContext";
 
 interface TestCase {
   id: string;
@@ -96,9 +97,18 @@ const CATEGORIES = [
 
 export default function MAIVEDashboard() {
   const { toast } = useToast();
+  const { stateConfig } = useTenant();
+  const stateCode = stateConfig?.stateCode || 'MD';
   const [selectedCategory, setSelectedCategory] = useState<string>("all");
-  const [selectedState, setSelectedState] = useState<string>("MD");
+  const [selectedState, setSelectedState] = useState<string>(stateCode);
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
+
+  // Sync selectedState when tenant context loads
+  useEffect(() => {
+    if (stateCode && selectedState !== stateCode) {
+      setSelectedState(stateCode);
+    }
+  }, [stateCode]);
 
   // Fetch test cases
   const { data: testCases, isLoading: testCasesLoading } = useQuery<TestCase[]>({
@@ -289,11 +299,11 @@ export default function MAIVEDashboard() {
             <SelectValue placeholder="Select state" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="MD">Maryland</SelectItem>
-            <SelectItem value="CA">California</SelectItem>
-            <SelectItem value="TX">Texas</SelectItem>
-            <SelectItem value="NY">New York</SelectItem>
-            <SelectItem value="FL">Florida</SelectItem>
+            <SelectItem value="MD">MD</SelectItem>
+            <SelectItem value="CA">CA</SelectItem>
+            <SelectItem value="TX">TX</SelectItem>
+            <SelectItem value="NY">NY</SelectItem>
+            <SelectItem value="FL">FL</SelectItem>
           </SelectContent>
         </Select>
 

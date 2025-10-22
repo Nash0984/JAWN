@@ -10,12 +10,15 @@ import { Code, Search, Lock, Zap, BookOpen, Filter, Copy, Check } from 'lucide-r
 import { Helmet } from 'react-helmet-async';
 import { useToast } from '@/hooks/use-toast';
 import { generateCodeSnippets } from '@/lib/codeSnippets';
+import { useTenant } from '@/contexts/TenantContext';
 
 export default function APIExplorer() {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [copiedSnippet, setCopiedSnippet] = useState<string | null>(null);
   const { toast } = useToast();
+  const { stateConfig } = useTenant();
+  const stateName = stateConfig?.stateName || 'State';
 
   // Filter endpoints based on search and category
   const filteredEndpoints = API_ENDPOINTS.filter(endpoint => {
@@ -77,7 +80,7 @@ export default function APIExplorer() {
   return (
     <>
       <Helmet>
-        <title>API Explorer - Maryland Universal Benefits-Tax Navigator</title>
+        <title>API Explorer - {stateName} Universal Benefits-Tax Navigator</title>
         <meta name="description" content="Interactive API documentation with 218 endpoints covering benefits, tax, AI, and more" />
       </Helmet>
 

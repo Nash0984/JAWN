@@ -8,6 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Skeleton } from "@/components/ui/skeleton";
 import { Trophy, Medal, Crown, TrendingUp, DollarSign, Target } from "lucide-react";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { useTenant } from "@/contexts/TenantContext";
 
 interface LeaderboardEntry {
   navigatorId: string;
@@ -26,6 +27,8 @@ export default function Leaderboard() {
   const [periodType, setPeriodType] = useState<'daily' | 'weekly' | 'monthly' | 'all_time'>('all_time');
   const [scope, setScope] = useState<'county' | 'statewide'>('statewide');
   const [selectedCounty, setSelectedCounty] = useState<string>('');
+  const { stateConfig } = useTenant();
+  const stateName = stateConfig?.stateName || 'State';
 
   // Fetch counties for county-specific leaderboard
   const { data: counties } = useQuery<any[]>({
@@ -127,7 +130,7 @@ export default function Leaderboard() {
                 Statewide Rankings
               </CardTitle>
               <CardDescription>
-                Top performers across all Maryland counties
+                Top performers across all {stateName} counties
               </CardDescription>
             </CardHeader>
             <CardContent>

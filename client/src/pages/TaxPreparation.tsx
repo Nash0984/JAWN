@@ -46,7 +46,7 @@ interface TaxCalculation {
   childTaxCredit: number;
   additionalChildTaxCredit: number;
   refundAmount: number;
-  marylandTax?: {
+  marylandTax?: { // Backend field name 'maryland', UI displays stateName
     marylandAGI: number;
     marylandStateTax: number;
     countyTax: number;
@@ -456,7 +456,7 @@ export default function TaxPreparation() {
     },
   });
 
-  // Maryland Form 502 PDF generation
+  // State tax form PDF generation (Form 502 for MD, PA-40 for PA, etc.)
   const generateForm502Mutation = useMutation({
     mutationFn: async () => {
       if (!calculationResult) {
@@ -1189,7 +1189,7 @@ export default function TaxPreparation() {
                           </p>
                         </div>
                         <div className="space-y-2">
-                          <Label className="text-muted-foreground">MD State Tax</Label>
+                          <Label className="text-muted-foreground">{stateCode} State Tax</Label>
                           <p className="text-2xl font-bold" data-testid="text-md-state-tax">
                             ${calculationResult.marylandTax.marylandStateTax.toLocaleString()}
                           </p>
@@ -1203,20 +1203,20 @@ export default function TaxPreparation() {
                           </p>
                         </div>
                         <div className="space-y-2">
-                          <Label className="text-muted-foreground">Total MD Tax</Label>
+                          <Label className="text-muted-foreground">Total {stateCode} Tax</Label>
                           <p className="text-2xl font-bold" data-testid="text-total-md-tax">
                             ${calculationResult.marylandTax.totalMarylandTax.toLocaleString()}
                           </p>
                         </div>
                         <div className="space-y-2">
-                          <Label className="text-muted-foreground">MD EITC (50% of Federal)</Label>
+                          <Label className="text-muted-foreground">{stateCode} EITC (50% of Federal)</Label>
                           <p className="text-2xl font-bold text-green-600" data-testid="text-md-eitc">
                             ${calculationResult.marylandTax.marylandEITC.toLocaleString()}
                           </p>
                         </div>
                         <div className="space-y-2">
                           <Label className="text-muted-foreground">
-                            {calculationResult.marylandTax.marylandRefund >= 0 ? 'MD Refund' : 'MD Amount Owed'}
+                            {calculationResult.marylandTax.marylandRefund >= 0 ? `${stateCode} Refund` : `${stateCode} Amount Owed`}
                           </Label>
                           <p 
                             className={`text-3xl font-bold ${calculationResult.marylandTax.marylandRefund >= 0 ? 'text-green-600' : 'text-red-600'}`}

@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { useTenant } from "@/contexts/TenantContext";
 
 const legalPages = [
   {
@@ -26,7 +27,7 @@ const legalPages = [
   {
     id: "terms",
     title: "Terms of Service",
-    description: "Your rights and responsibilities when using the Maryland Benefits Platform.",
+    description: "Your rights and responsibilities when using the Benefits Platform.",
     icon: FileText,
     path: "/legal/terms",
     lastUpdated: "October 16, 2025",
@@ -80,13 +81,16 @@ const legalPages = [
 ];
 
 export default function LegalHub() {
+  const { stateConfig } = useTenant();
+  const stateName = stateConfig?.stateName || 'State';
+  
   return (
     <>
       <Helmet>
-        <title>Legal & Policy Documentation - Maryland Benefits Platform</title>
+        <title>Legal & Policy Documentation - {stateName} Benefits Platform</title>
         <meta 
           name="description" 
-          content="Access all legal and policy documentation for Maryland Benefits Platform including Privacy Policy, Terms of Service, Accessibility Statement, and Security policies." 
+          content={`Access all legal and policy documentation for ${stateName} Benefits Platform including Privacy Policy, Terms of Service, Accessibility Statement, and Security policies.`}
         />
       </Helmet>
       
@@ -100,7 +104,7 @@ export default function LegalHub() {
             <p className="text-lg text-muted-foreground max-w-3xl mx-auto" data-testid="text-legal-hub-description">
               Welcome to our legal hub. Here you'll find comprehensive information about how we protect your data, 
               ensure accessibility, and maintain security standards. All policies comply with HIPAA regulations and 
-              Maryland state law.
+              {stateName} state law.
             </p>
           </div>
 
@@ -195,18 +199,18 @@ export default function LegalHub() {
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
               <div>
                 <p className="font-semibold">Privacy Inquiries</p>
-                <p className="text-muted-foreground">privacy@marylandbenefits.org</p>
-                <p className="text-muted-foreground">(410) 555-PRIVACY</p>
+                <p className="text-muted-foreground">privacy@benefits.{stateConfig?.stateCode?.toLowerCase() || 'state'}.gov</p>
+                <p className="text-muted-foreground">Contact your local office</p>
               </div>
               <div>
                 <p className="font-semibold">Accessibility Support</p>
-                <p className="text-muted-foreground">accessibility@marylandbenefits.org</p>
-                <p className="text-muted-foreground">(410) 555-ACCESS</p>
+                <p className="text-muted-foreground">accessibility@benefits.{stateConfig?.stateCode?.toLowerCase() || 'state'}.gov</p>
+                <p className="text-muted-foreground">Contact your local office</p>
               </div>
               <div>
                 <p className="font-semibold">Security Issues</p>
-                <p className="text-muted-foreground">security@marylandbenefits.org</p>
-                <p className="text-muted-foreground">(410) 555-SECURE</p>
+                <p className="text-muted-foreground">security@benefits.{stateConfig?.stateCode?.toLowerCase() || 'state'}.gov</p>
+                <p className="text-muted-foreground">Contact your local office</p>
               </div>
             </div>
           </div>

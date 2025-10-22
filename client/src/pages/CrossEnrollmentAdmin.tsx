@@ -10,6 +10,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Network, Search, TrendingUp, Users, CheckCircle2, AlertCircle, Info } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { useTenant } from "@/contexts/TenantContext";
 
 interface BenefitProgram {
   id: string;
@@ -38,6 +39,8 @@ interface CrossEnrollmentAnalysis {
 
 export default function CrossEnrollmentAdmin() {
   const { toast } = useToast();
+  const { stateConfig } = useTenant();
+  const stateName = stateConfig?.stateName || 'State';
   const [clientIdentifier, setClientIdentifier] = useState("");
   const [analysisResult, setAnalysisResult] = useState<CrossEnrollmentAnalysis | null>(null);
 
@@ -113,7 +116,7 @@ export default function CrossEnrollmentAdmin() {
       <div>
         <h1 className="text-3xl font-bold tracking-tight">Cross-Enrollment Analysis</h1>
         <p className="text-muted-foreground mt-2">
-          Identify benefit program enrollment opportunities across Maryland's 7 benefit programs
+          Identify benefit program enrollment opportunities across {stateName}'s benefit programs
         </p>
       </div>
 

@@ -19,6 +19,8 @@ import { format } from "date-fns";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
+import { useTenant } from "@/contexts/TenantContext";
+import Papa from 'papaparse';
 
 interface ClientVerificationDocument {
   id: string;
@@ -54,6 +56,8 @@ type ReviewFormValues = z.infer<typeof reviewFormSchema>;
 
 export default function DocumentReviewQueue() {
   const { toast } = useToast();
+  const { stateConfig } = useTenant();
+  const stateName = stateConfig?.stateName || 'State';
   const [filterStatus, setFilterStatus] = useState<string>("pending_review");
   const [filterCaseId, setFilterCaseId] = useState("");
   const [selectedDoc, setSelectedDoc] = useState<ClientVerificationDocument | null>(null);
@@ -296,13 +300,13 @@ export default function DocumentReviewQueue() {
       import('jspdf-autotable').then(() => {
         const doc = new jsPDF.default();
         
-        // Maryland DHS Header
-        doc.setFillColor(13, 79, 139); // MD Blue
+        // State Benefits Header
+        doc.setFillColor(13, 79, 139); // Brand primary color
         doc.rect(0, 0, 210, 30, 'F');
         
         doc.setTextColor(255, 255, 255);
         doc.setFontSize(20);
-        doc.text('Maryland Benefits Navigator', 105, 15, { align: 'center' });
+        doc.text(`${stateName} Benefits Navigator`, 105, 15, { align: 'center' });
         
         doc.setFontSize(12);
         doc.text('Document Review History Report', 105, 23, { align: 'center' });
@@ -356,7 +360,7 @@ export default function DocumentReviewQueue() {
           doc.setFontSize(8);
           doc.setTextColor(128, 128, 128);
           doc.text(
-            `Maryland Department of Human Services - Page ${i} of ${pageCount}`,
+            `${stateName} Department of Human Services - Page ${i} of ${pageCount}`,
             105,
             285,
             { align: 'center' }
@@ -376,7 +380,7 @@ export default function DocumentReviewQueue() {
   return (
     <>
       <Helmet>
-        <title>Document Review - MD Benefits Navigator</title>
+        <title>Document Review - {stateName} Benefits Navigator</title>
       </Helmet>
       <div className="space-y-6">
       <div className="flex items-start justify-between">

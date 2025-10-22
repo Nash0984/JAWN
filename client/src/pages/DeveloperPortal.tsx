@@ -27,10 +27,13 @@ import {
   FileJson
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
+import { useTenant } from "@/contexts/TenantContext";
 
 export default function DeveloperPortal() {
   const { user } = useAuth();
   const { toast } = useToast();
+  const { stateConfig } = useTenant();
+  const stateName = stateConfig?.stateName || 'State';
   const [selectedTenantId, setSelectedTenantId] = useState("");
   const [newKeyName, setNewKeyName] = useState("");
   const [selectedScopes, setSelectedScopes] = useState<string[]>([]);
@@ -163,7 +166,7 @@ print(result)`
             Developer Portal
           </h1>
           <p className="text-muted-foreground" data-testid="text-portal-description">
-            Integrate Maryland Benefits Platform into your applications
+            Integrate {stateName} Benefits Platform into your applications
           </p>
         </div>
 
@@ -199,7 +202,7 @@ print(result)`
               <CardHeader>
                 <CardTitle>API Overview</CardTitle>
                 <CardDescription>
-                  The Maryland Benefits Platform API provides programmatic access to benefit eligibility checking,
+                  The {stateName} Benefits Platform API provides programmatic access to benefit eligibility checking,
                   document verification, and screening services.
                 </CardDescription>
               </CardHeader>
@@ -301,7 +304,7 @@ print(result)`
               <CardHeader>
                 <CardTitle>Get Started in 3 Steps</CardTitle>
                 <CardDescription>
-                  Start integrating the Maryland Benefits Platform API in minutes
+                  Start integrating the {stateName} Benefits Platform API in minutes
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-6">

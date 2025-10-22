@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Code, Copy, CheckCircle2, Book, Shield, Database, Search, FileText, Users, Settings, Activity, Download } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { useTenant } from "@/contexts/TenantContext";
 
 interface EndpointDoc {
   method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
@@ -277,7 +278,7 @@ eligibility = response.json()`
           },
           citations: [
             {
-              title: "SNAP Income Limits - Maryland",
+              title: "SNAP Income Limits",
               section: "Section 310: Income Eligibility Standards",
               page: 45
             }
@@ -766,9 +767,9 @@ const health = await response.json();
         responseExample: {
           programs: [
             {
-              id: "maryland-snap",
-              name: "Maryland SNAP",
-              state: "MD",
+              id: "state-snap",
+              name: "State SNAP",
+              state: "ST",
               description: "Food Supplement Program"
             }
           ]
@@ -795,6 +796,8 @@ export default function ApiDocs() {
   const [activeCategory, setActiveCategory] = useState("authentication");
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
   const { toast } = useToast();
+  const { stateConfig } = useTenant();
+  const stateName = stateConfig?.stateName || 'State';
 
   const copyToClipboard = (text: string, id: string) => {
     navigator.clipboard.writeText(text);
@@ -1041,7 +1044,7 @@ export default function ApiDocs() {
           API Documentation
         </h1>
         <p className="text-gray-600 dark:text-gray-400">
-          Complete API reference for Maryland Universal Benefits-Tax Navigator integration
+          Complete API reference for {stateName} Universal Benefits-Tax Navigator integration
         </p>
       </div>
 

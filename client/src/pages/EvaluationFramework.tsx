@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -18,8 +18,8 @@ import { useToast } from "@/hooks/use-toast";
 import { PlayCircle, Plus, Edit, Trash2, Filter, Download, Upload, CheckCircle2, XCircle, AlertCircle, BarChart3, TrendingUp, Target } from "lucide-react";
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from "recharts";
 import type { EvaluationTestCase, EvaluationRun, EvaluationResult } from "@shared/schema";
+import { useTenant } from "@/contexts/TenantContext";
 
-const PROGRAMS = ["MD_SNAP", "MD_MEDICAID", "MD_TANF", "MD_TCA"];
 const CATEGORIES = ["eligibility", "calculation", "edge_case", "categorical_eligibility", "asset_test"];
 const VARIANCE_COLORS = {
   green: "#22c55e",
@@ -29,6 +29,18 @@ const VARIANCE_COLORS = {
 
 export default function EvaluationFramework() {
   const { toast } = useToast();
+  const { stateConfig } = useTenant();
+  const stateName = stateConfig?.stateName || 'State';
+  const stateCode = stateConfig?.stateCode || 'ST';
+  
+  // Dynamically generate program codes based on tenant
+  const PROGRAMS = useMemo(() => [
+    `${stateCode}_SNAP`,
+    `${stateCode}_MEDICAID`,
+    `${stateCode}_TANF`,
+    `${stateCode}_TCA`
+  ], [stateCode]);
+  
   const [activeTab, setActiveTab] = useState("test-cases");
   const [filterProgram, setFilterProgram] = useState<string>("");
   const [filterCategory, setFilterCategory] = useState<string>("");
@@ -147,8 +159,8 @@ export default function EvaluationFramework() {
     <div className="container mx-auto py-8 space-y-6" data-testid="page-evaluation-framework">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold" data-testid="text-page-title">Maryland Evaluation Framework</h1>
-          <p className="text-muted-foreground">Test and validate Maryland benefit program calculations</p>
+          <h1 className="text-3xl font-bold" data-testid="text-page-title">{stateName} Evaluation Framework</h1>
+          <p className="text-muted-foreground">Test and validate {stateName} benefit program calculations</p>
         </div>
         <Button onClick={() => setCreateDialogOpen(true)} data-testid="button-create-test-case">
           <Plus className="mr-2 h-4 w-4" />
@@ -218,7 +230,7 @@ export default function EvaluationFramework() {
           <Card data-testid="card-test-cases-list">
             <CardHeader>
               <CardTitle>Test Cases ({testCases.length})</CardTitle>
-              <CardDescription>Manage evaluation test cases for Maryland benefit programs</CardDescription>
+              <CardDescription>Manage evaluation test cases for {stateName} benefit programs</CardDescription>
             </CardHeader>
             <CardContent>
               {loadingTestCases ? (
@@ -520,7 +532,7 @@ export default function EvaluationFramework() {
                 <BarChart data={[
                   { name: "Column Tax (Strict)", value: 41 },
                   { name: "Column Tax (Lenient)", value: 61 },
-                  { name: "Maryland System", value: parseFloat(passRate) }
+                  { name: `${stateName} System`, value: parseFloat(passRate) }
                 ]}>
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis dataKey="name" />
@@ -735,9 +747,20 @@ function TestCaseDialog({
   onSave: (data: any) => void;
   isPending: boolean;
 }) {
+  const { stateConfig } = useTenant();
+  const stateCode = stateConfig?.stateCode || 'ST';
+  
+  // Dynamically generate program codes based on tenant
+  const PROGRAMS = useMemo(() => [
+    `${stateCode}_SNAP`,
+    `${stateCode}_MEDICAID`,
+    `${stateCode}_TANF`,
+    `${stateCode}_TCA`
+  ], [stateCode]);
+  
   const [formData, setFormData] = useState({
     name: testCase?.name || "",
-    program: testCase?.program || "MD_SNAP",
+    program: testCase?.program || PROGRAMS[0], // Default to first program for current state
     category: testCase?.category || "eligibility",
     description: testCase?.description || "",
     inputData: JSON.stringify(testCase?.inputData || {}, null, 2),

@@ -6,6 +6,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
 import { TrendingUp, TrendingDown, DollarSign, FileCheck, Users, Clock } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useTenant } from "@/contexts/TenantContext";
 
 interface CountyComparison {
   county: {
@@ -28,6 +29,8 @@ interface CountyComparison {
 
 export default function CountyAnalytics() {
   const [periodType, setPeriodType] = useState<string>("monthly");
+  const { stateConfig } = useTenant();
+  const stateName = stateConfig?.stateName || 'State';
 
   const { data: comparison, isLoading, error } = useQuery<CountyComparison[]>({
     queryKey: [`/api/county-analytics/comparison?periodType=${periodType}`],
@@ -126,7 +129,7 @@ export default function CountyAnalytics() {
             County Performance Analytics
           </h1>
           <p className="text-muted-foreground" data-testid="text-page-description">
-            Compare performance metrics across Maryland LDSSs
+            Compare performance metrics across {stateName} LDSSs
           </p>
         </div>
         <Select value={periodType} onValueChange={setPeriodType}>

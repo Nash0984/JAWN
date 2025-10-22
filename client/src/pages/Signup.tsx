@@ -50,7 +50,7 @@ export default function Signup() {
   const { toast } = useToast();
   const { stateConfig } = useTenant();
   
-  const stateName = stateConfig?.stateName || 'Maryland';
+  const stateName = stateConfig?.stateName || 'State';
   
   const form = useForm<SignupFormData>({
     resolver: zodResolver(signupSchema),
