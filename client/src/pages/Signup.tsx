@@ -32,6 +32,8 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { Loader2 } from "lucide-react";
 import { Helmet } from "react-helmet-async";
+import { useTenant } from "@/contexts/TenantContext";
+import { TenantLogo } from "@/components/TenantLogo";
 
 const signupSchema = z.object({
   username: z.string().min(3, "Your username needs to be at least 3 characters"),
@@ -46,6 +48,9 @@ type SignupFormData = z.infer<typeof signupSchema>;
 export default function Signup() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
+  const { stateConfig } = useTenant();
+  
+  const stateName = stateConfig?.stateName || 'Maryland';
   
   const form = useForm<SignupFormData>({
     resolver: zodResolver(signupSchema),
@@ -102,21 +107,18 @@ export default function Signup() {
   return (
     <>
       <Helmet>
-        <title>Signup - MD Benefits Navigator</title>
+        <title>Sign Up - {stateName} Benefits Navigator</title>
+        <meta name="description" content={`Create a ${stateName} benefits account to access assistance programs and services`} />
       </Helmet>
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-white to-gray-50 px-4 py-8">
-      <Card className="w-full max-w-md border-maryland-red/20" data-testid="card-signup">
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background to-muted/20 px-4 py-8">
+      <Card className="w-full max-w-md card-elevated" data-testid="card-signup">
         <CardHeader className="space-y-1 text-center">
-          <div className="mb-4">
-            <div className="h-12 flex items-center justify-center">
-              <span className="text-3xl font-semibold text-maryland-red" style={{ fontFamily: 'Montserrat, sans-serif' }}>
-                Maryland SNAP
-              </span>
-            </div>
+          <div className="mb-4 flex justify-center">
+            <TenantLogo variant="primary" className="h-16 w-16" />
           </div>
           <CardTitle className="text-2xl font-semibold">Create an account</CardTitle>
           <CardDescription>
-            Join the Maryland Benefits Navigator to access SNAP benefits information
+            Join the {stateName} Benefits Navigator to access assistance programs
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -237,7 +239,7 @@ export default function Signup() {
 
               <Button
                 type="submit"
-                className="w-full bg-maryland-red hover:bg-maryland-red/90"
+                className="w-full bg-brand-primary hover:bg-brand-primary/90"
                 disabled={signupMutation.isPending}
                 data-testid="button-signup"
               >
@@ -253,7 +255,7 @@ export default function Signup() {
             <span className="text-muted-foreground">Already have an account? </span>
             <button
               onClick={() => setLocation("/login")}
-              className="text-maryland-red hover:underline font-medium"
+              className="text-brand-primary hover:underline font-medium"
               data-testid="link-login"
             >
               Log in

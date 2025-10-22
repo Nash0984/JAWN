@@ -1,7 +1,13 @@
 import { Link } from "wouter";
+import { useTenant } from "@/contexts/TenantContext";
 
 export default function Footer() {
   const currentYear = new Date().getFullYear();
+  const { stateConfig } = useTenant();
+  
+  const stateName = stateConfig?.stateName || 'Maryland';
+  const contactEmail = stateConfig?.contactEmail || 'support@benefits.gov';
+  const contactPhone = stateConfig?.contactPhone || '(410) 555-HELP';
   
   return (
     <footer className="border-t bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60" data-testid="footer">
@@ -11,7 +17,7 @@ export default function Footer() {
           <div>
             <h3 className="font-semibold mb-4" data-testid="text-footer-about">About</h3>
             <p className="text-sm text-muted-foreground">
-              Maryland Benefits Platform helps Maryland residents access government benefits and tax assistance through a secure, HIPAA-compliant platform.
+              {stateName} Benefits Navigator helps residents access government benefits and tax assistance through a secure, HIPAA-compliant platform.
             </p>
           </div>
           
@@ -83,8 +89,8 @@ export default function Footer() {
           <div>
             <h3 className="font-semibold mb-4" data-testid="text-footer-contact">Contact</h3>
             <ul className="space-y-2 text-sm text-muted-foreground">
-              <li>Email: support@marylandbenefits.org</li>
-              <li>Phone: (410) 555-HELP</li>
+              <li>Email: {contactEmail}</li>
+              <li>Phone: {contactPhone}</li>
               <li>Hours: Mon-Fri, 8 AM - 6 PM EST</li>
             </ul>
           </div>
@@ -94,7 +100,7 @@ export default function Footer() {
         <div className="pt-6 border-t flex flex-col sm:flex-row justify-between items-center gap-4">
           <div className="text-sm text-muted-foreground text-center sm:text-left">
             <p data-testid="text-footer-copyright">
-              © {currentYear} Maryland Benefits Navigator Contributors. All rights reserved.
+              © {currentYear} {stateName} Benefits Navigator Contributors. All rights reserved.
             </p>
             <p className="mt-1" data-testid="text-footer-license">
               Licensed under{" "}

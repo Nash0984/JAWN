@@ -1,9 +1,11 @@
 import { useBranding } from "@/contexts/BrandingContext";
 import { Building2 } from "lucide-react";
-import { MarylandLogo } from "./MarylandLogo";
+import { TenantSeal } from "./TenantSeal";
+import { useTenant } from "@/contexts/TenantContext";
 
 export function CountyHeader() {
   const { branding, isLoading } = useBranding();
+  const { stateConfig } = useTenant();
 
   if (isLoading || !branding) {
     return null;
@@ -28,11 +30,12 @@ export function CountyHeader() {
           className="h-10 w-10 object-contain"
           data-testid="img-county-logo"
         />
-      ) : branding.countyName?.toLowerCase().includes('maryland') || branding.countyName?.toLowerCase().includes('state') ? (
-        <MarylandLogo 
-          variant="seal"
+      ) : (branding.countyName?.toLowerCase().includes(stateConfig?.stateName?.toLowerCase() || 'maryland') || 
+             branding.countyName?.toLowerCase().includes('state')) ? (
+        <TenantSeal
+          size="md"
           className="h-10 w-10" 
-          data-testid="img-maryland-seal"
+          data-testid="img-state-seal"
         />
       ) : (
         <Building2 

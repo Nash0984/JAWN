@@ -65,10 +65,10 @@ export default function Demo() {
   return (
     <>
       <Helmet>
-        <title>Demo Dashboard - Maryland Universal Benefits-Tax Navigator</title>
+        <title>Demo Dashboard - Universal Benefits-Tax Navigator</title>
         <meta
           name="description"
-          content="Interactive showcase of 99 features across the Maryland Universal Benefits-Tax Navigator platform. Explore AI capabilities, system architecture, and real-time performance metrics."
+          content="Interactive showcase of 99 features across the Universal Benefits-Tax Navigator platform. Explore AI capabilities, system architecture, and real-time performance metrics."
         />
       </Helmet>
 
@@ -77,7 +77,7 @@ export default function Demo() {
         <section className="text-center space-y-6" data-testid="hero-section">
           <div className="space-y-2">
             <h1 className="text-4xl md:text-5xl font-bold tracking-tight" data-testid="hero-title">
-              Maryland Universal Benefits-Tax Navigator
+              Universal Benefits-Tax Navigator
             </h1>
             <p className="text-xl text-muted-foreground" data-testid="hero-subtitle">
               Interactive Platform Showcase
@@ -390,7 +390,7 @@ export default function Demo() {
                 Sample Household Data
               </h2>
               <p className="text-muted-foreground">
-                Representative test cases for Maryland households
+                Representative test cases for diverse households
               </p>
             </div>
 
@@ -525,7 +525,7 @@ export default function Demo() {
                       Multi-Tenant & Mobile
                     </h4>
                     <ul className="list-disc list-inside text-sm text-muted-foreground space-y-1">
-                      <li>Support for all 24 Maryland counties</li>
+                      <li>Multi-county and multi-state deployment support</li>
                       <li>County-specific branding and configuration</li>
                       <li>Mobile-first responsive design</li>
                       <li>10 language support with plain language validation</li>

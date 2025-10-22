@@ -87,7 +87,7 @@ export function LDSSOfficeInfo() {
             <CardDescription>
               {primaryOffice.region ? (
                 <Badge variant="secondary" className="mt-2 capitalize">
-                  {primaryOffice.region} Maryland
+                  {primaryOffice.region} Region
                 </Badge>
               ) : null}
             </CardDescription>
@@ -156,7 +156,7 @@ export function LDSSOfficeInfo() {
           </h3>
           <div className="pl-6 text-sm text-muted-foreground space-y-1" data-testid="office-hours">
             <p>Monday - Friday: 8:00 AM - 4:30 PM</p>
-            <p className="text-xs">Closed on Maryland state holidays</p>
+            <p className="text-xs">Closed on state and federal holidays</p>
           </div>
         </div>
 

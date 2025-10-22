@@ -7,21 +7,31 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel,
 import LanguageSelector from "./LanguageSelector";
 import NotificationBell from "./NotificationBell";
 import BarNotificationBadge from "./BarNotificationBadge";
-import { MarylandFlag } from "./MarylandFlag";
+import { TenantSeal } from "./TenantSeal";
 import { useLanguage } from "@/hooks/useLanguage";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
+import { useTenant } from "@/contexts/TenantContext";
 
-// Maryland State Header Component matching official branding
-const MarylandStateHeader = ({ t }: { t: any }) => (
-  <div className="flex items-center gap-3">
-    <MarylandFlag className="h-10 w-10 flex-shrink-0" />
-    <div className="hidden sm:block">
-      <div className="text-sm font-semibold text-white leading-tight">State of Maryland</div>
-      <div className="text-xs text-white/90">Benefits Navigator</div>
+// State Header Component with tenant branding
+const StateHeader = ({ t }: { t: any }) => {
+  const { stateConfig } = useTenant();
+  
+  const stateName = stateConfig?.stateName || 'Maryland';
+  const agencyAcronym = stateConfig?.agencyAcronym || 'DHS';
+  
+  return (
+    <div className="flex items-center gap-3">
+      <TenantSeal size="md" className="flex-shrink-0" />
+      <div className="hidden sm:block">
+        <div className="text-sm font-semibold text-white leading-tight">
+          {stateName}
+        </div>
+        <div className="text-xs text-white/90">Benefits Navigator</div>
+      </div>
     </div>
-  </div>
-);
+  );
+};
 
 export default function Navigation() {
   const [location] = useLocation();
@@ -29,6 +39,9 @@ export default function Navigation() {
   const { currentLanguage, changeLanguage, t } = useLanguage();
   const { user, isAuthenticated, isClient, isStaff, isAdmin, logout, isLoading } = useAuth();
   const { toast } = useToast();
+  const { stateConfig } = useTenant();
+  
+  const stateName = stateConfig?.stateName || 'Maryland';
 
   // Define all navigation items with role requirements
   const allNavigationItems = [
@@ -97,7 +110,7 @@ export default function Navigation() {
                 ? mobile ? "bg-accent text-accent-foreground" : "bg-white/20 text-white"
                 : mobile ? "" : "hover:bg-white/10"
             } ${
-              item.highlight && !mobile ? "ring-2 ring-md-gold/50" : ""
+              item.highlight && !mobile ? "ring-2 ring-brand-secondary/50" : ""
             } inline-flex items-center px-3 py-2 rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50`}
             data-testid={`nav-${item.href === "/" ? "home" : item.href.slice(1)}`}
             aria-current={item.current ? "page" : undefined}
@@ -111,14 +124,14 @@ export default function Navigation() {
   );
 
   return (
-    <nav className="bg-md-red border-b-4 border-md-gold sticky top-0 z-50" role="navigation" aria-label="Main navigation">
+    <nav className="bg-brand-primary border-b-4 border-brand-secondary sticky top-0 z-50" role="navigation" aria-label="Main navigation">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between items-center h-16">
-          {/* Maryland State Logo/Branding */}
+          {/* State Logo/Branding */}
           <div className="flex items-center">
             <Link href="/">
               <div className="cursor-pointer" data-testid="nav-logo">
-                <MarylandStateHeader t={t} />
+                <StateHeader t={t} />
               </div>
             </Link>
             
@@ -183,7 +196,7 @@ export default function Navigation() {
                     <span className="hidden sm:inline">Log in</span>
                   </Link>
                 </Button>
-                <Button size="sm" className="bg-md-gold text-black hover:bg-md-gold/90" asChild data-testid="nav-signup">
+                <Button size="sm" className="bg-brand-secondary text-black hover:bg-brand-secondary/90" asChild data-testid="nav-signup">
                   <Link href="/signup">
                     <UserPlus className="h-4 w-4 mr-2" />
                     <span className="hidden sm:inline">Sign up</span>
@@ -206,7 +219,7 @@ export default function Navigation() {
                       <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
                         <File className="text-primary-foreground h-5 w-5" />
                       </div>
-                      <h2 className="text-lg font-semibold text-foreground">Maryland SNAP Policy Manual</h2>
+                      <h2 className="text-lg font-semibold text-foreground">{stateName} Policy Manual</h2>
                     </div>
                     
                     {isAuthenticated && user && (

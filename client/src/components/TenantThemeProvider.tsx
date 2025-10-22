@@ -6,26 +6,51 @@ interface TenantThemeProviderProps {
 }
 
 export function TenantThemeProvider({ children }: TenantThemeProviderProps) {
-  const { tenant, branding, isLoading } = useTenant();
+  const { tenant, branding, stateConfig, isLoading } = useTenant();
 
   useEffect(() => {
-    if (!branding && !tenant) return;
+    if (isLoading) return;
 
-    // Apply primary and secondary colors as CSS custom properties
     const root = document.documentElement;
 
+    // Apply tenant brand colors
     if (branding?.primaryColor) {
-      root.style.setProperty('--tenant-primary', branding.primaryColor);
-      // Also update the primary color for shadcn components
-      // Convert hex to HSL for CSS variables
       const primaryHsl = hexToHSL(branding.primaryColor);
-      root.style.setProperty('--primary', primaryHsl);
+      root.style.setProperty('--tenant-primary', primaryHsl);
+      
+      // Calculate hover variant (10% darker)
+      const primaryHoverHsl = adjustLightness(primaryHsl, -10);
+      root.style.setProperty('--primary-hover', primaryHoverHsl);
+    } else {
+      // Clear custom primary, use default
+      root.style.removeProperty('--tenant-primary');
+      root.style.removeProperty('--primary-hover');
     }
 
     if (branding?.secondaryColor) {
-      root.style.setProperty('--tenant-secondary', branding.secondaryColor);
       const secondaryHsl = hexToHSL(branding.secondaryColor);
-      root.style.setProperty('--secondary', secondaryHsl);
+      root.style.setProperty('--tenant-secondary', secondaryHsl);
+      
+      // Calculate hover variant
+      const secondaryHoverHsl = adjustLightness(secondaryHsl, -5);
+      root.style.setProperty('--secondary-hover', secondaryHoverHsl);
+    } else {
+      root.style.removeProperty('--tenant-secondary');
+      root.style.removeProperty('--secondary-hover');
+    }
+
+    // Some states might define an accent color, fallback to primary if not
+    const accentColor = (branding as any)?.accentColor || branding?.primaryColor;
+    if (accentColor) {
+      const accentHsl = hexToHSL(accentColor);
+      root.style.setProperty('--tenant-accent', accentHsl);
+      
+      // Calculate subtle accent background (very light)
+      const accentSubtle = adjustLightnessAndSaturation(accentHsl, 45, -20);
+      root.style.setProperty('--accent-subtle', accentSubtle);
+    } else {
+      root.style.removeProperty('--tenant-accent');
+      root.style.removeProperty('--accent-subtle');
     }
 
     // Apply custom CSS if provided
@@ -40,41 +65,54 @@ export function TenantThemeProvider({ children }: TenantThemeProviderProps) {
       }
       
       styleElement.textContent = branding.customCss;
-    }
-
-    // Update favicon if provided
-    if (branding?.faviconUrl) {
-      let favicon = document.querySelector("link[rel*='icon']") as HTMLLinkElement;
-      if (!favicon) {
-        favicon = document.createElement('link');
-        favicon.rel = 'icon';
-        document.head.appendChild(favicon);
+    } else {
+      const styleElement = document.getElementById('tenant-custom-css');
+      if (styleElement) {
+        styleElement.remove();
       }
-      favicon.href = branding.faviconUrl;
     }
 
-    // Update page title with tenant name
-    if (tenant?.name) {
-      document.title = `${tenant.name} - Benefits Portal`;
+    // Update favicon
+    if (branding?.faviconUrl) {
+      updateFavicon(branding.faviconUrl);
+    } else if (stateConfig?.stateCode) {
+      // Fallback to state seal if no custom favicon
+      const fallbackFavicon = `/assets/${stateConfig.stateCode.toLowerCase()}/favicon.ico`;
+      updateFavicon(fallbackFavicon);
     }
+
+    // Update page title with tenant/state name
+    const siteName = stateConfig?.stateName || tenant?.name || 'Benefits Navigator';
+    const agencyName = stateConfig?.agencyAcronym || '';
+    document.title = agencyName 
+      ? `${siteName} ${agencyName} - Universal Benefits Portal`
+      : `${siteName} - Universal Benefits Portal`;
+
+    // Update meta theme-color for mobile browsers
+    let themeColorMeta = document.querySelector('meta[name="theme-color"]') as HTMLMetaElement;
+    if (!themeColorMeta) {
+      themeColorMeta = document.createElement('meta');
+      themeColorMeta.name = 'theme-color';
+      document.head.appendChild(themeColorMeta);
+    }
+    themeColorMeta.content = branding?.primaryColor || '#0D4F8B'; // Maryland blue fallback
 
     // Cleanup function
     return () => {
-      // Remove custom styles when tenant changes
       const styleElement = document.getElementById('tenant-custom-css');
       if (styleElement) {
         styleElement.remove();
       }
     };
-  }, [tenant, branding]);
+  }, [tenant, branding, stateConfig, isLoading]);
 
-  // Show loading state while tenant is being fetched
+  // Show modern loading state
   if (isLoading) {
     return (
-      <div className="flex h-screen items-center justify-center">
+      <div className="flex h-screen items-center justify-center bg-background">
         <div className="text-center">
-          <div className="h-8 w-8 animate-spin rounded-full border-4 border-gray-300 border-t-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading...</p>
+          <div className="h-10 w-10 animate-spin rounded-full border-4 border-muted border-t-primary mx-auto mb-4"></div>
+          <p className="text-sm text-muted-foreground font-medium">Loading benefits portal...</p>
         </div>
       </div>
     );
@@ -85,11 +123,16 @@ export function TenantThemeProvider({ children }: TenantThemeProviderProps) {
 
 /**
  * Convert hex color to HSL format for CSS variables
- * Shadcn uses HSL format: "hue saturation lightness"
+ * Returns format: "hue saturation% lightness%"
  */
 function hexToHSL(hex: string): string {
   // Remove # if present
   hex = hex.replace('#', '');
+
+  // Handle 3-character hex codes
+  if (hex.length === 3) {
+    hex = hex[0] + hex[0] + hex[1] + hex[1] + hex[2] + hex[2];
+  }
 
   // Convert to RGB
   const r = parseInt(hex.substring(0, 2), 16) / 255;
@@ -124,4 +167,52 @@ function hexToHSL(hex: string): string {
   const lValue = Math.round(l * 100);
 
   return `${h} ${s}% ${lValue}%`;
+}
+
+/**
+ * Adjust the lightness of an HSL color
+ * @param hsl - HSL string in format "hue saturation% lightness%"
+ * @param adjustment - Lightness adjustment in percentage points (-100 to 100)
+ */
+function adjustLightness(hsl: string, adjustment: number): string {
+  const parts = hsl.split(' ');
+  if (parts.length !== 3) return hsl;
+
+  const h = parts[0];
+  const s = parts[1];
+  let l = parseInt(parts[2].replace('%', ''));
+
+  l = Math.max(0, Math.min(100, l + adjustment));
+
+  return `${h} ${s} ${l}%`;
+}
+
+/**
+ * Adjust both lightness and saturation
+ */
+function adjustLightnessAndSaturation(hsl: string, lightnessAdjustment: number, saturationAdjustment: number): string {
+  const parts = hsl.split(' ');
+  if (parts.length !== 3) return hsl;
+
+  const h = parts[0];
+  let s = parseInt(parts[1].replace('%', ''));
+  let l = parseInt(parts[2].replace('%', ''));
+
+  s = Math.max(0, Math.min(100, s + saturationAdjustment));
+  l = Math.max(0, Math.min(100, l + lightnessAdjustment));
+
+  return `${h} ${s}% ${l}%`;
+}
+
+/**
+ * Update favicon helper
+ */
+function updateFavicon(url: string) {
+  let favicon = document.querySelector("link[rel*='icon']") as HTMLLinkElement;
+  if (!favicon) {
+    favicon = document.createElement('link');
+    favicon.rel = 'icon';
+    document.head.appendChild(favicon);
+  }
+  favicon.href = url;
 }

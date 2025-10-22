@@ -29,6 +29,8 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import { Helmet } from "react-helmet-async";
+import { useTenant } from "@/contexts/TenantContext";
+import { TenantLogo } from "@/components/TenantLogo";
 
 const loginSchema = z.object({
   username: z.string().min(3, "Your username needs to be at least 3 characters"),
@@ -67,6 +69,10 @@ const demoAccounts = [
 export default function Login() {
   const [location, setLocation] = useLocation();
   const { toast } = useToast();
+  const { stateConfig } = useTenant();
+  
+  const stateName = stateConfig?.stateName || 'Maryland';
+  const agencyAcronym = stateConfig?.agencyAcronym || 'DHS';
   
   // Get returnUrl from query string
   const params = new URLSearchParams(window.location.search);
@@ -141,21 +147,18 @@ export default function Login() {
   return (
     <>
       <Helmet>
-        <title>Login - MD Benefits Navigator</title>
+        <title>Login - {stateName} Benefits Navigator</title>
+        <meta name="description" content={`Access your ${stateName} benefits account and manage your applications`} />
       </Helmet>
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-white to-gray-50 px-4">
-      <Card className="w-full max-w-md border-maryland-red/20" data-testid="card-login">
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background to-muted/20 px-4">
+      <Card className="w-full max-w-md card-elevated" data-testid="card-login">
         <CardHeader className="space-y-1 text-center">
-          <div className="mb-4">
-            <div className="h-12 flex items-center justify-center">
-              <span className="text-3xl font-semibold text-maryland-red" style={{ fontFamily: 'Montserrat, sans-serif' }}>
-                Maryland SNAP
-              </span>
-            </div>
+          <div className="mb-4 flex justify-center">
+            <TenantLogo variant="primary" className="h-16 w-16" />
           </div>
           <CardTitle className="text-2xl font-semibold">Log in to your account</CardTitle>
           <CardDescription>
-            Enter your username and password to access the Maryland Benefits Navigator
+            Enter your username and password to access the {stateName} Benefits Navigator
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -170,6 +173,7 @@ export default function Login() {
                     <FormControl>
                       <Input
                         placeholder="Enter your username"
+                        className="input-modern"
                         {...field}
                         data-testid="input-username"
                         disabled={loginMutation.isPending}
@@ -189,6 +193,7 @@ export default function Login() {
                       <Input
                         type="password"
                         placeholder="Enter your password"
+                        className="input-modern"
                         {...field}
                         data-testid="input-password"
                         disabled={loginMutation.isPending}
@@ -200,7 +205,7 @@ export default function Login() {
               />
               <Button
                 type="submit"
-                className="w-full bg-maryland-red hover:bg-maryland-red/90"
+                className="w-full bg-brand-primary hover:bg-brand-primary/90"
                 disabled={loginMutation.isPending}
                 data-testid="button-login"
               >
@@ -255,7 +260,7 @@ export default function Login() {
             <span className="text-muted-foreground">Don't have an account? </span>
             <button
               onClick={() => setLocation("/signup")}
-              className="text-maryland-red hover:underline font-medium"
+              className="text-brand-primary hover:underline font-medium"
               data-testid="link-signup"
             >
               Sign up

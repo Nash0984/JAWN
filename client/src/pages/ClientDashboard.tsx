@@ -24,7 +24,7 @@ export default function ClientDashboard() {
     },
     {
       title: "Policy Manual",
-      description: "Browse Maryland's complete SNAP policy manual",
+      description: "Browse the complete SNAP policy manual",
       icon: BookOpen,
       href: "/manual",
       testId: "action-manual",
@@ -46,7 +46,7 @@ export default function ClientDashboard() {
           Welcome{user?.fullName ? `, ${user.fullName}` : ""}
         </h1>
         <p className="text-muted-foreground">
-          Get information about Maryland's Food Supplement Program (SNAP)
+          Get information about the Food Supplement Program (SNAP)
         </p>
       </div>
 
@@ -85,14 +85,14 @@ export default function ClientDashboard() {
       {/* Information Section */}
       <Card data-testid="info-section">
         <CardHeader>
-          <CardTitle>About Maryland SNAP</CardTitle>
+          <CardTitle>About SNAP Benefits</CardTitle>
           <CardDescription>Food Supplement Program Information</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div>
             <h3 className="font-medium mb-2">What is SNAP?</h3>
             <p className="text-sm text-muted-foreground">
-              The Supplemental Nutrition Assistance Program (SNAP), known as the Food Supplement Program in Maryland,
+              The Supplemental Nutrition Assistance Program (SNAP), also known as the Food Supplement Program,
               helps eligible low-income individuals and families buy the food they need for good health.
             </p>
           </div>
@@ -100,7 +100,7 @@ export default function ClientDashboard() {
             <h3 className="font-medium mb-2">How to Use This System</h3>
             <p className="text-sm text-muted-foreground">
               Use the tools above to check your eligibility, search for policy information, or find help with your benefits.
-              All information is based on official Maryland Department of Human Services policies.
+              All information is based on official state policies and federal regulations.
             </p>
           </div>
         </CardContent>

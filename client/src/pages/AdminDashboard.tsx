@@ -156,7 +156,7 @@ export default function AdminDashboard() {
 
       {/* Restricted Access Alert */}
       <MDAlert variant="restricted" title="For Authorized Personnel Only" className="mb-8">
-        This administrative dashboard contains sensitive Maryland DHS system controls and confidential 
+        This administrative dashboard contains sensitive system controls and confidential 
         benefit program data. Unauthorized access or disclosure of information is strictly prohibited 
         and may result in disciplinary action and legal consequences. All actions are logged and monitored 
         for security and compliance purposes.
@@ -230,14 +230,14 @@ export default function AdminDashboard() {
       <Card data-testid="system-info">
         <CardHeader>
           <CardTitle>System Overview</CardTitle>
-          <CardDescription>Maryland Universal Benefits-Tax Navigator</CardDescription>
+          <CardDescription>Universal Benefits-Tax Navigator</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div>
             <h3 className="font-medium mb-2">Document Processing</h3>
             <p className="text-sm text-muted-foreground">
               The system uses Google Gemini AI for document analysis, OCR, and semantic search.
-              Policy documents are automatically ingested from official Maryland DHS sources.
+              Policy documents are automatically ingested from official state sources.
             </p>
           </div>
           <div>
@@ -250,8 +250,8 @@ export default function AdminDashboard() {
           <div>
             <h3 className="font-medium mb-2">Integration Status</h3>
             <p className="text-sm text-muted-foreground">
-              The system is designed to integrate with marylandbenefits.gov for SSO and the Maryland DHS
-              Eligibility & Enrollment (E&E) system for case data exchange.
+              The system is designed to integrate with state benefits portals for SSO and state
+              Eligibility & Enrollment (E&E) systems for case data exchange.
             </p>
           </div>
         </CardContent>

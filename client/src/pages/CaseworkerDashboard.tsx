@@ -117,14 +117,14 @@ export default function CaseworkerDashboard() {
           <div>
             <h3 className="font-medium mb-2">Policy Compliance</h3>
             <p className="text-sm text-muted-foreground">
-              All eligibility determinations are based on current Maryland SNAP policies (COMAR Title 10)
+              All eligibility determinations are based on current state SNAP policies
               and federal regulations (7 CFR Part 273). Use the policy search tool to verify specific requirements.
             </p>
           </div>
           <div>
             <h3 className="font-medium mb-2">E&E System Integration</h3>
             <p className="text-sm text-muted-foreground">
-              Client interaction data can be exported to the Maryland DHS Eligibility & Enrollment system
+              Client interaction data can be exported to the state Eligibility & Enrollment system
               for official case management and benefit issuance.
             </p>
           </div>
