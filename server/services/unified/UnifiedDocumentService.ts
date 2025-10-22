@@ -445,9 +445,16 @@ export class UnifiedDocumentService {
 Return as JSON with documentType, extractedData, quality, and confidence fields.`;
 
     try {
+      logger.debug('Analyzing document with Gemini Vision', {
+        service: 'UnifiedDocumentService',
+        method: 'analyzeDocument',
+        mimeType,
+        base64Length: base64Image.length
+      });
+
       const ai = getGemini();
       const result = await ai.models.generateContent({
-        model: "gemini-2.5-flash",
+        model: "gemini-2.0-flash",  // Use 2.0-flash for better compatibility
         contents: [{
           role: 'user',
           parts: [
@@ -468,14 +475,24 @@ Return as JSON with documentType, extractedData, quality, and confidence fields.
       // Cache the result
       this.analysisCache.set(base64Image, analysis);
       
+      logger.info('Document analysis successful', {
+        service: 'UnifiedDocumentService',
+        method: 'analyzeDocument',
+        documentType: analysis.documentType,
+        confidence: analysis.confidence
+      });
+      
       return analysis;
     } catch (error) {
       logger.error('Document analysis failed', {
         service: 'UnifiedDocumentService',
         method: 'analyzeDocument',
-        error: error instanceof Error ? error.message : 'Unknown error'
+        mimeType,
+        base64Length: base64Image.length,
+        error: error instanceof Error ? error.message : 'Unknown error',
+        errorDetails: JSON.stringify(error)
       });
-      throw new Error(`Failed to analyze document: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      throw new Error(`Failed to analyze document: ${error instanceof Error ? error.message : JSON.stringify(error)}`);
     }
   }
 
@@ -492,11 +509,18 @@ Return as JSON with documentType, extractedData, quality, and confidence fields.
       throw new Error(`Document ${documentId} not found`);
     }
 
-    // Download from storage
-    const file = gcs.bucket(bucketName).file(document.objectPath!);
-    const [buffer] = await file.download();
+    // Use provided buffer if available (avoids redundant storage fetch)
+    let buffer: Buffer;
+    if (contextInfo?.fileBuffer) {
+      buffer = contextInfo.fileBuffer;
+    } else {
+      // Download from storage
+      const file = gcs.bucket(bucketName).file(document.objectPath!);
+      [buffer] = await file.download();
+    }
+    
     const base64Image = buffer.toString('base64');
-    const mimeType = document.mimeType || 'image/jpeg';
+    const mimeType = contextInfo?.mimeType || document.mimeType || 'image/jpeg';
 
     // Analyze the document
     const analysis = await this.analyzeDocument(base64Image, mimeType);

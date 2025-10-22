@@ -655,8 +655,8 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
     res.json(types);
   }));
 
-  // Document verification endpoint with Gemini Vision API
-  app.post("/api/verify-document", requireAuth, upload.single("document"), asyncHandler(async (req: Request, res: Response) => {
+  // Document verification endpoint with Gemini Vision API (allows images + PDFs)
+  app.post("/api/verify-document", requireAuth, taxDocumentUpload.single("document"), asyncHandler(async (req: Request, res: Response) => {
     if (!req.file) {
       throw validationError("No document uploaded");
     }
@@ -701,15 +701,15 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
 
     // Verify the document using Gemini Vision API
     // Pass buffer for immediate verification (avoids redundant storage fetch)
-    const result = await documentVerificationService.verifyDocument({
-      documentId: document.id,
-      requirementType: documentType,
-      clientCaseId,
-      contextInfo: {
+    const result = await documentVerificationService.verifyDocument(
+      document.id,
+      documentType,
+      {
         fileBuffer: req.file.buffer,
-        mimeType: req.file.mimetype
+        mimeType: req.file.mimetype,
+        clientCaseId
       }
-    });
+    );
 
     // Get plain-language explanation
     const explanation = documentVerificationService.getVerificationExplanation(result);
