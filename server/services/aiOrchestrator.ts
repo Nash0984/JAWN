@@ -62,6 +62,23 @@ export interface MetricsReport {
   }>;
 }
 
+export interface CachedContentInfo {
+  name: string;
+  displayName: string;
+  model: string;
+  tokenCount: number;
+  expireTime: Date;
+  createTime: Date;
+}
+
+export interface CreateCacheOptions {
+  displayName: string;
+  systemInstruction?: string;
+  contents: string[];
+  ttlSeconds?: number; // Default: 3600 (1 hour)
+  model?: string; // Default: gemini-1.5-flash-001
+}
+
 interface QueuedRequest {
   id: string;
   priority: number; // Higher = more urgent
@@ -575,6 +592,282 @@ class AIOrchestrator {
    */
   getEmbeddingCacheStats() {
     return embeddingCache.getStats();
+  }
+
+  // ============================================================================
+  // Gemini Context Caching Methods (90% cost savings)
+  // ============================================================================
+
+  /**
+   * Create a context cache for repeated prompts
+   * Minimum 1,024 tokens required for Gemini 1.5 Flash
+   * 90% cost reduction on cached content
+   */
+  async createContextCache(options: CreateCacheOptions): Promise<CachedContentInfo> {
+    const {
+      displayName,
+      systemInstruction,
+      contents,
+      ttlSeconds = 3600, // Default: 1 hour
+      model = 'gemini-1.5-flash-001' // Must use versioned model
+    } = options;
+
+    try {
+      const ai = this.getGeminiClient();
+      
+      // Combine all contents into single text for caching
+      const combinedContent = contents.join('\n\n');
+      
+      // Estimate token count (must be at least 1,024)
+      const estimatedTokens = this.estimateTokens(combinedContent);
+      if (estimatedTokens < 1024) {
+        logger.warn('Content too small for caching', {
+          service: 'AIOrchestrator',
+          operation: 'createContextCache',
+          estimatedTokens,
+          minimumRequired: 1024
+        });
+      }
+
+      // Create cache
+      const cache = await ai.caches.create({
+        model,
+        config: {
+          displayName,
+          systemInstruction: systemInstruction ? {
+            parts: [{ text: systemInstruction }]
+          } : undefined,
+          contents: [{
+            role: 'user',
+            parts: [{ text: combinedContent }]
+          }],
+          ttl: `${ttlSeconds}s`
+        }
+      });
+
+      logger.info('Context cache created', {
+        service: 'AIOrchestrator',
+        operation: 'createContextCache',
+        cacheName: cache.name,
+        displayName,
+        tokenCount: cache.usageMetadata?.totalTokenCount || estimatedTokens,
+        ttlSeconds
+      });
+
+      return {
+        name: cache.name || '',
+        displayName: cache.displayName || displayName,
+        model: cache.model || model,
+        tokenCount: cache.usageMetadata?.totalTokenCount || estimatedTokens,
+        expireTime: cache.expireTime ? new Date(cache.expireTime) : new Date(Date.now() + ttlSeconds * 1000),
+        createTime: cache.createTime ? new Date(cache.createTime) : new Date()
+      };
+    } catch (error) {
+      logger.error('Error creating context cache', {
+        service: 'AIOrchestrator',
+        operation: 'createContextCache',
+        error: PiiMaskingUtils.redactPII(String(error)),
+        displayName
+      });
+      throw error;
+    }
+  }
+
+  /**
+   * Generate text using cached content (90% cost savings)
+   */
+  async generateTextWithCache(
+    prompt: string,
+    cachedContentName: string,
+    options: GenerateTextOptions = {}
+  ): Promise<string> {
+    const {
+      feature = 'cached_generation',
+      priority = 'normal',
+    } = options;
+
+    const model = 'gemini-1.5-flash-001'; // Must match cache model
+    const estimatedTokens = this.estimateTokens(prompt);
+
+    const execute = async () => {
+      const ai = this.getGeminiClient();
+      const response = await ai.models.generateContent({
+        model,
+        contents: [{ role: 'user', parts: [{ text: prompt }] }],
+        config: {
+          cachedContent: cachedContentName
+        }
+      });
+
+      const result = response.text || "";
+      
+      // Track usage with cache metrics
+      const cachedTokens = response.usageMetadata?.cachedContentTokenCount || 0;
+      const totalTokens = response.usageMetadata?.totalTokenCount || estimatedTokens + this.estimateTokens(result);
+      
+      logger.info('Cached content generation', {
+        service: 'AIOrchestrator',
+        feature,
+        cachedTokens,
+        totalTokens,
+        cacheHitRate: cachedTokens / totalTokens,
+        estimatedSavings: '90%'
+      });
+
+      await this.trackAIUsage(feature, model, totalTokens);
+      
+      return result;
+    };
+
+    return this.queueRequest(feature, model, priority, execute);
+  }
+
+  /**
+   * List all active caches
+   */
+  async listCaches(): Promise<CachedContentInfo[]> {
+    try {
+      const ai = this.getGeminiClient();
+      const caches = await ai.caches.list();
+      
+      return (caches.cachedContents || []).map((cache: any) => ({
+        name: cache.name || '',
+        displayName: cache.displayName || '',
+        model: cache.model || '',
+        tokenCount: cache.usageMetadata?.totalTokenCount || 0,
+        expireTime: cache.expireTime ? new Date(cache.expireTime) : new Date(),
+        createTime: cache.createTime ? new Date(cache.createTime) : new Date()
+      }));
+    } catch (error) {
+      logger.error('Error listing caches', {
+        service: 'AIOrchestrator',
+        operation: 'listCaches',
+        error: PiiMaskingUtils.redactPII(String(error))
+      });
+      return [];
+    }
+  }
+
+  /**
+   * Get specific cache details
+   */
+  async getCache(cacheName: string): Promise<CachedContentInfo | null> {
+    try {
+      const ai = this.getGeminiClient();
+      const cache = await ai.caches.get({ name: cacheName });
+      
+      return {
+        name: cache.name || '',
+        displayName: cache.displayName || '',
+        model: cache.model || '',
+        tokenCount: cache.usageMetadata?.totalTokenCount || 0,
+        expireTime: cache.expireTime ? new Date(cache.expireTime) : new Date(),
+        createTime: cache.createTime ? new Date(cache.createTime) : new Date()
+      };
+    } catch (error) {
+      logger.error('Error getting cache', {
+        service: 'AIOrchestrator',
+        operation: 'getCache',
+        error: PiiMaskingUtils.redactPII(String(error)),
+        cacheName
+      });
+      return null;
+    }
+  }
+
+  /**
+   * Update cache expiration time
+   */
+  async updateCacheExpiration(cacheName: string, newTtlSeconds: number): Promise<boolean> {
+    try {
+      const ai = this.getGeminiClient();
+      const newExpireTime = new Date(Date.now() + newTtlSeconds * 1000);
+      
+      await ai.caches.update({
+        name: cacheName,
+        config: {
+          expireTime: newExpireTime
+        }
+      });
+
+      logger.info('Cache expiration updated', {
+        service: 'AIOrchestrator',
+        operation: 'updateCacheExpiration',
+        cacheName,
+        newTtlSeconds,
+        newExpireTime
+      });
+
+      return true;
+    } catch (error) {
+      logger.error('Error updating cache expiration', {
+        service: 'AIOrchestrator',
+        operation: 'updateCacheExpiration',
+        error: PiiMaskingUtils.redactPII(String(error)),
+        cacheName
+      });
+      return false;
+    }
+  }
+
+  /**
+   * Delete a cache to avoid storage costs
+   */
+  async deleteCache(cacheName: string): Promise<boolean> {
+    try {
+      const ai = this.getGeminiClient();
+      await ai.caches.delete({ name: cacheName });
+
+      logger.info('Cache deleted', {
+        service: 'AIOrchestrator',
+        operation: 'deleteCache',
+        cacheName
+      });
+
+      return true;
+    } catch (error) {
+      logger.error('Error deleting cache', {
+        service: 'AIOrchestrator',
+        operation: 'deleteCache',
+        error: PiiMaskingUtils.redactPII(String(error)),
+        cacheName
+      });
+      return false;
+    }
+  }
+
+  /**
+   * Helper: Create cache for policy manual sections (common use case)
+   */
+  async createPolicyManualCache(
+    programName: string,
+    manualSections: string[],
+    ttlSeconds: number = 86400 // 24 hours default
+  ): Promise<CachedContentInfo> {
+    return this.createContextCache({
+      displayName: `${programName} Policy Manual`,
+      systemInstruction: `You are an expert on ${programName} program policies and regulations. Answer questions based on the cached policy manual sections.`,
+      contents: manualSections,
+      ttlSeconds,
+      model: 'gemini-1.5-flash-001'
+    });
+  }
+
+  /**
+   * Helper: Create cache for form templates (common use case)
+   */
+  async createFormTemplateCache(
+    formType: string,
+    formTemplates: string[],
+    ttlSeconds: number = 86400 // 24 hours default
+  ): Promise<CachedContentInfo> {
+    return this.createContextCache({
+      displayName: `${formType} Form Templates`,
+      systemInstruction: `You are a form processing assistant. Help extract information from ${formType} forms using the cached templates.`,
+      contents: formTemplates,
+      ttlSeconds,
+      model: 'gemini-1.5-flash-001'
+    });
   }
 
   /**
