@@ -138,7 +138,7 @@ export default function Monitoring() {
             System Monitoring Dashboard
           </h1>
           <p className="text-muted-foreground">
-            Realtime observability across 7 domains
+            Realtime observability across 8 domains (includes immutable audit logs)
             {isConnected && (
               <Badge variant="outline" className="ml-2" data-testid="badge-websocket-status">
                 <Activity className="h-3 w-3 mr-1 text-green-500" />
@@ -160,7 +160,7 @@ export default function Monitoring() {
 
       {/* Tabs for different domains */}
       <Tabs defaultValue="overview" className="space-y-4">
-        <TabsList className="grid w-full grid-cols-4 lg:grid-cols-8">
+        <TabsList className="grid w-full grid-cols-5 lg:grid-cols-9">
           <TabsTrigger value="overview" data-testid="tab-overview">Overview</TabsTrigger>
           <TabsTrigger value="errors" data-testid="tab-errors">Errors</TabsTrigger>
           <TabsTrigger value="security" data-testid="tab-security">Security</TabsTrigger>
@@ -169,6 +169,7 @@ export default function Monitoring() {
           <TabsTrigger value="ai" data-testid="tab-ai">AI</TabsTrigger>
           <TabsTrigger value="cache" data-testid="tab-cache">Cache</TabsTrigger>
           <TabsTrigger value="health" data-testid="tab-health">Health</TabsTrigger>
+          <TabsTrigger value="audit" data-testid="tab-audit">Audit Logs</TabsTrigger>
         </TabsList>
 
         {/* Overview Tab */}
@@ -703,8 +704,212 @@ export default function Monitoring() {
             </CardContent>
           </Card>
         </TabsContent>
+
+        {/* Audit Logs Tab */}
+        <TabsContent value="audit" className="space-y-4" data-testid="content-audit">
+          <AuditLogsTabContent />
+        </TabsContent>
       </Tabs>
     </div>
     </>
+  );
+}
+
+// Audit Logs Tab Component (inline to avoid creating separate file - reduces bloat)
+function AuditLogsTabContent() {
+  const [isVerifying, setIsVerifying] = useState(false);
+  const [verificationResult, setVerificationResult] = useState<any>(null);
+
+  const { data: auditStats, isLoading: statsLoading, refetch: refetchStats } = useQuery<{success: boolean; statistics: any}>({
+    queryKey: ['/api/audit/statistics'],
+  });
+
+  const handleVerifyChain = async () => {
+    setIsVerifying(true);
+    try {
+      const response = await fetch('/api/audit/verify-chain', {
+        method: 'GET',
+        credentials: 'include',
+      });
+      const result = await response.json();
+      setVerificationResult(result.verification);
+      refetchStats();
+    } catch (error) {
+      console.error('Verification failed:', error);
+    } finally {
+      setIsVerifying(false);
+    }
+  };
+
+  if (statsLoading) {
+    return (
+      <div className="space-y-4">
+        <Skeleton className="h-32 w-full" />
+        <Skeleton className="h-32 w-full" />
+      </div>
+    );
+  }
+
+  const stats = auditStats?.statistics;
+
+  return (
+    <div className="space-y-4">
+      {/* Header with manual verification button */}
+      <div className="flex justify-between items-center">
+        <div>
+          <h3 className="text-lg font-semibold">Immutable Audit Log Chain</h3>
+          <p className="text-sm text-muted-foreground">
+            Cryptographic hash chain verification (NIST 800-53 AU-9, IRS Pub 1075 9.3.1)
+          </p>
+        </div>
+        <Button 
+          onClick={handleVerifyChain} 
+          disabled={isVerifying}
+          variant="outline"
+          data-testid="button-verify-chain"
+        >
+          {isVerifying ? (
+            <>
+              <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+              Verifying...
+            </>
+          ) : (
+            <>
+              <Shield className="h-4 w-4 mr-2" />
+              Verify Chain
+            </>
+          )}
+        </Button>
+      </div>
+
+      {/* Statistics KPI Cards */}
+      <div className="grid gap-6 md:grid-cols-4">
+        <KPICard
+          title="Total Entries"
+          value={stats?.totalEntries?.toLocaleString() || '0'}
+          icon={<FileText className="h-5 w-5" />}
+          testId="kpi-audit-total"
+        />
+        <KPICard
+          title="Chain Length"
+          value={stats?.chainLength?.toLocaleString() || '0'}
+          icon={<Database className="h-5 w-5" />}
+          testId="kpi-audit-chain-length"
+        />
+        <KPICard
+          title="Last Verified"
+          value={stats?.lastVerified ? new Date(stats.lastVerified).toLocaleDateString() : 'Never'}
+          trendValue={stats?.lastVerified ? new Date(stats.lastVerified).toLocaleTimeString() : ''}
+          icon={<Shield className="h-5 w-5" />}
+          testId="kpi-audit-last-verified"
+        />
+        <KPICard
+          title="Chain Integrity"
+          value={stats?.integrityStatus || 'Unknown'}
+          icon={<Shield className="h-5 w-5" />}
+          status={stats?.integrityStatus === 'valid' ? 'healthy' : stats?.integrityStatus === 'pending' ? 'warning' : 'critical'}
+          testId="kpi-audit-integrity"
+        />
+      </div>
+
+      {/* Verification Result */}
+      {verificationResult && (
+        <Alert variant={verificationResult.isValid ? "default" : "destructive"} data-testid="alert-verification-result">
+          <Shield className="h-4 w-4" />
+          <AlertDescription>
+            <div className="font-semibold">
+              {verificationResult.isValid ? '✓ Chain Integrity Verified' : '✗ Chain Integrity Compromised'}
+            </div>
+            <div className="text-sm mt-2">
+              Verified {verificationResult.verifiedEntries} of {verificationResult.totalEntries} entries.
+              {verificationResult.brokenLinks && verificationResult.brokenLinks.length > 0 && (
+                <div className="mt-2 text-red-600 dark:text-red-400">
+                  Found {verificationResult.brokenLinks.length} broken link(s) at sequence: {verificationResult.brokenLinks.join(', ')}
+                </div>
+              )}
+            </div>
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {/* Recent Activity Stats */}
+      <div className="grid gap-6 md:grid-cols-2">
+        <Card data-testid="card-audit-actions">
+          <CardHeader>
+            <CardTitle>Recent Actions (Last 24h)</CardTitle>
+            <CardDescription>Audit log activity breakdown</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2">
+              {stats?.recentActionCounts?.slice(0, 10).map((action: any, index: number) => (
+                <div key={index} className="flex justify-between items-center">
+                  <span className="text-sm">{action.action}</span>
+                  <Badge variant="outline">{action.count}</Badge>
+                </div>
+              )) || <p className="text-sm text-muted-foreground">No recent activity</p>}
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card data-testid="card-audit-info">
+          <CardHeader>
+            <CardTitle>Chain Information</CardTitle>
+            <CardDescription>Audit log technical details</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2 text-sm">
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Hash Algorithm:</span>
+                <span className="font-mono">SHA-256</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Genesis Hash:</span>
+                <span className="font-mono text-xs">NULL</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Concurrency Control:</span>
+                <span className="font-mono text-xs">pg_advisory_xact_lock</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Immutability:</span>
+                <span className="text-green-600 dark:text-green-400">PostgreSQL Trigger</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Verification Schedule:</span>
+                <span>Weekly (Sundays 3 AM)</span>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Export Buttons */}
+      <div className="flex justify-end gap-2">
+        <Button 
+          variant="outline" 
+          size="sm"
+          onClick={() => {
+            // Export functionality will be implemented
+            console.log('Export audit logs to CSV');
+          }}
+          data-testid="button-export-csv-audit"
+        >
+          <Download className="h-4 w-4 mr-2" />
+          Export CSV
+        </Button>
+        <Button 
+          variant="outline" 
+          size="sm"
+          onClick={() => {
+            // Export functionality will be implemented
+            console.log('Export audit logs to JSON');
+          }}
+          data-testid="button-export-json-audit"
+        >
+          <Download className="h-4 w-4 mr-2" />
+          Export JSON
+        </Button>
+      </div>
+    </div>
   );
 }
