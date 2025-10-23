@@ -173,6 +173,46 @@ export class SmartScheduler {
           }
         },
       },
+      {
+        name: 'audit_chain_verification',
+        cronExpression: '0 3 * * 0', // Weekly on Sunday at 3 AM (per NIST AU-6)
+        description: 'Audit chain verification (weekly recent entries, monthly full chain per NIST AU-6)',
+        enabled: true,
+        checkFunction: async () => {
+          log('📅 Smart Scheduler: Running audit chain verification...');
+          try {
+            const { auditChainMonitor } = await import('./auditChainMonitor.service');
+            
+            // Check if today is the first Sunday of the month for full chain verification
+            if (auditChainMonitor.isFirstSundayOfMonth()) {
+              log('🔍 Audit Chain: Running MONTHLY full chain verification...');
+              const result = await auditChainMonitor.verifyFullChain();
+              
+              if (result.success && result.isValid) {
+                log(`✅ Audit Chain: Full chain verified (${result.verifiedEntries} entries)`);
+              } else if (result.success && !result.isValid) {
+                log(`❌ Audit Chain: Full chain compromised (${result.brokenLinks} broken links)`);
+              } else {
+                log(`❌ Audit Chain: Full verification failed`);
+              }
+            } else {
+              // Weekly: verify recent 1000 entries
+              log('🔍 Audit Chain: Running WEEKLY recent entries verification...');
+              const result = await auditChainMonitor.verifyRecentEntries();
+              
+              if (result.success && result.isValid) {
+                log(`✅ Audit Chain: Recent entries verified (${result.verifiedEntries} entries)`);
+              } else if (result.success && !result.isValid) {
+                log(`❌ Audit Chain: Recent entries compromised (${result.brokenLinks} broken links)`);
+              } else {
+                log(`❌ Audit Chain: Verification failed`);
+              }
+            }
+          } catch (error) {
+            log(`❌ Audit chain verification failed: ${error}`);
+          }
+        },
+      },
     ];
 
     // Load overrides from database
