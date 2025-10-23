@@ -57,9 +57,20 @@ export class AuditService {
   /**
    * Log a general audit event
    * 
-   * Now uses ImmutableAuditService for cryptographic hash chain protection
+   * Security Model:
+   * - Primary: ImmutableAuditService with cryptographic hash chain (Task 2)
+   * - Fallback: Structured logger only (NO database fallback to prevent audit gaps)
+   * 
+   * CRITICAL: If immutable logging fails, we capture the error in structured logs
+   * but DO NOT write to database with a different mechanism. This ensures:
+   * 1. Audit log integrity is never compromised
+   * 2. Failed audit attempts are visible in application logs
+   * 3. Monitoring systems can alert on audit logging failures
+   * 
+   * For operations requiring guaranteed audit trails, caller should check
+   * return value and handle failures appropriately.
    */
-  async logEvent(entry: AuditLogEntry): Promise<void> {
+  async logEvent(entry: AuditLogEntry): Promise<boolean> {
     try {
       const log: InsertAuditLog = {
         action: entry.action,
@@ -74,9 +85,18 @@ export class AuditService {
 
       // Use immutableAuditService for hash chain protection (Task 2)
       await immutableAuditService.log(log);
+      return true;
     } catch (error) {
-      // Log to structured logger if database logging fails
-      logger.error("Failed to write audit log", { error, entry });
+      // SECURITY: Log failure prominently but do NOT write to alternative storage
+      // This prevents creating unaudited "shadow" audit logs that bypass hash chain
+      logger.error("AUDIT LOG FAILURE - Immutable audit logging failed", { 
+        error, 
+        entry,
+        severity: 'HIGH',
+        action: 'AUDIT_LOG_FAILURE',
+        alert: true, // Flag for monitoring systems
+      });
+      return false;
     }
   }
 

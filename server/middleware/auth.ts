@@ -118,3 +118,47 @@ export function requireActiveAccount(req: Request, res: Response, next: NextFunc
 
   next();
 }
+
+/**
+ * Middleware to require Multi-Factor Authentication (MFA/2FA)
+ * 
+ * Security: Critical for sensitive operations like audit log access, data export, user management
+ * 
+ * This middleware ensures:
+ * - User is authenticated
+ * - User has MFA enabled (mfaEnabled = true)
+ * - User has verified their MFA session (session.mfaVerified = true)
+ * 
+ * Usage:
+ *   app.get('/api/sensitive-endpoint', requireAuth, requireAdmin, requireMFA, handler);
+ */
+export function requireMFA(req: Request, res: Response, next: NextFunction) {
+  if (!req.isAuthenticated() || !req.user) {
+    return res.status(401).json({ 
+      error: "Authentication required",
+      message: "Please log in to access this resource" 
+    });
+  }
+
+  const user = req.user as User;
+  
+  // Check if user has MFA enabled
+  if (!user.mfaEnabled) {
+    return res.status(403).json({ 
+      error: "MFA required",
+      message: "Multi-factor authentication must be enabled to access this resource",
+      mfaSetupRequired: true
+    });
+  }
+
+  // Check if MFA has been verified in this session
+  if (!req.session?.mfaVerified) {
+    return res.status(403).json({ 
+      error: "MFA verification required",
+      message: "Please verify your MFA token to access this resource",
+      mfaVerificationRequired: true
+    });
+  }
+
+  next();
+}
