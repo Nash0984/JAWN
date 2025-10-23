@@ -1,7 +1,7 @@
 import crypto from 'crypto';
 import { db } from '../db';
 import { auditLogs, type InsertAuditLog, type AuditLog } from '@shared/schema';
-import { desc, sql } from 'drizzle-orm';
+import { desc, sql, eq } from 'drizzle-orm';
 import { logger } from './logger.service';
 
 /**
@@ -325,13 +325,16 @@ class ImmutableAuditService {
   }
   
   /**
-   * Get audit log statistics
+   * Get audit log statistics (enhanced for dashboard)
    */
   async getStatistics(): Promise<{
     totalEntries: number;
     firstEntry: Date | null;
     lastEntry: Date | null;
     chainLength: number;
+    lastVerified: Date | null;
+    integrityStatus: 'valid' | 'pending' | 'compromised';
+    recentActionCounts: Array<{ action: string; count: number }>;
   }> {
     const [stats] = await db
       .select({
@@ -342,11 +345,55 @@ class ImmutableAuditService {
       })
       .from(auditLogs);
     
+    // Get last verification timestamp from audit logs
+    const [lastVerification] = await db
+      .select({ createdAt: auditLogs.createdAt })
+      .from(auditLogs)
+      .where(eq(auditLogs.action, 'audit_chain_verified'))
+      .orderBy(desc(auditLogs.createdAt))
+      .limit(1);
+
+    // Get last verification result (check for chain_integrity_compromised action)
+    const [compromised] = await db
+      .select({ createdAt: auditLogs.createdAt })
+      .from(auditLogs)
+      .where(eq(auditLogs.action, 'chain_integrity_compromised'))
+      .orderBy(desc(auditLogs.createdAt))
+      .limit(1);
+
+    // Determine integrity status
+    let integrityStatus: 'valid' | 'pending' | 'compromised' = 'pending';
+    if (compromised) {
+      // If there's a compromise record, check if verification happened after
+      if (lastVerification && new Date(lastVerification.createdAt) > new Date(compromised.createdAt)) {
+        integrityStatus = 'valid'; // Verified after compromise was found and fixed
+      } else {
+        integrityStatus = 'compromised';
+      }
+    } else if (lastVerification) {
+      integrityStatus = 'valid';
+    }
+
+    // Get recent action counts (last 24 hours)
+    const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const recentActions = await db
+      .select({
+        action: auditLogs.action,
+        count: sql<number>`count(*)::int`,
+      })
+      .from(auditLogs)
+      .where(sql`${auditLogs.createdAt} >= ${twentyFourHoursAgo}`)
+      .groupBy(auditLogs.action)
+      .orderBy(desc(sql`count(*)`));
+    
     return {
       totalEntries: stats?.count || 0,
       firstEntry: stats?.firstEntry || null,
       lastEntry: stats?.lastEntry || null,
       chainLength: stats?.maxSequence || 0,
+      lastVerified: lastVerification?.createdAt || null,
+      integrityStatus,
+      recentActionCounts: recentActions.map(r => ({ action: r.action, count: r.count })),
     };
   }
 }
