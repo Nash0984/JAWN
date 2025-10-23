@@ -8,11 +8,11 @@ Preferred communication style: Simple, everyday language.
 
 # White-Labeling Progress (Multi-State Transformation)
 
-## Status: ✅ ALL PHASES COMPLETE (Last Updated: 2025-10-23)
+## Status: ✅ ALL PHASES + E2E TESTING DISCOVERY COMPLETE (Last Updated: 2025-10-23)
 
 Transform JAWN from Maryland-specific to production-ready white-label multi-state platform supporting 6 states: Maryland (primary), Pennsylvania (priority #2 - Philadelphia Revenue LITA expertise), Virginia, Utah, Indiana, and Michigan.
 
-## White-Labeling Achievement: 29 Files Across 5 Phases
+## White-Labeling Achievement: 30 Files Across 5 Phases + Post-Testing Discovery
 
 ### Phase 1: Critical Components (7 files) ✅
 1. **IncomeLimitsManager.tsx** - State SNAP income limits
@@ -52,6 +52,14 @@ Transform JAWN from Maryland-specific to production-ready white-label multi-stat
 9. **DocumentReviewQueue.tsx** - Document processing queue
 10. **admin/StateLawTracker.tsx** - State-specific law tracker wrapper/router
 11. **Analytics.tsx & HouseholdProfiler.tsx** - Verified zero Maryland UI refs
+
+### Post-Testing Discovery: Branding Component (1 file) ✅
+1. **CountyHeader.tsx** - State-level tenant detection with intelligent branding override
+   - Discovered via e2e testing showing "Baltimore City Department of Social Services" instead of state branding
+   - Implemented smart detection: if `countyName` contains "city"/"county"/"baltimore" AND no custom branding configured AND stateConfig available → show state-level branding
+   - Shows "{stateName} Department of Human Services" and "Welcome to {stateName} Benefits Navigator" for state-level tenants
+   - Preserves custom county branding when `brandingConfig.headerText` or `brandingConfig.logoUrl` are configured
+   - **Database Dependency Note:** Default branding data contains Baltimore City-specific values; CountyHeader compensates at runtime, but future state deployments should seed state-level defaults in database
 
 ### Key Architectural Pattern
 All components use async tenant synchronization:
