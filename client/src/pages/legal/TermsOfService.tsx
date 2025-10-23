@@ -135,7 +135,7 @@ export default function TermsOfService() {
         <section data-testid="section-limitation-liability">
           <h2>Limitation of Liability</h2>
           <p>
-            TO THE MAXIMUM EXTENT PERMITTED BY LAW, THE MARYLAND BENEFITS PLATFORM AND ITS OPERATORS, VOLUNTEERS, 
+            TO THE MAXIMUM EXTENT PERMITTED BY LAW, THE {stateName.toUpperCase()} BENEFITS PLATFORM AND ITS OPERATORS, VOLUNTEERS, 
             AND AFFILIATES SHALL NOT BE LIABLE FOR:
           </p>
           <ul>
@@ -258,7 +258,7 @@ export default function TermsOfService() {
             <p>{stateName} Benefits Platform</p>
             <p>Email: legal@marylandbenefits.org</p>
             <p>Phone: (410) 555-LEGAL (534-2583)</p>
-            <p>Mail: Legal Office, 123 Benefits Way, Baltimore, MD 21201</p>
+            <p>Mail: Legal Office, {stateName} Benefits Platform (Address TBD - Contact via phone or email)</p>
           </div>
         </section>
 

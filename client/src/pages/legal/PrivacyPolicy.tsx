@@ -199,7 +199,7 @@ export default function PrivacyPolicy() {
             <p>{stateName} Benefits Platform</p>
             <p>Email: privacy@marylandbenefits.org</p>
             <p>Phone: (410) 555-PRIVACY (774-8229)</p>
-            <p>Mail: Privacy Office, 123 Benefits Way, Baltimore, MD 21201</p>
+            <p>Mail: Privacy Office, {stateName} Benefits Platform (Address TBD - Contact via phone or email)</p>
           </div>
         </section>
 

@@ -338,7 +338,7 @@ export default function BreachNotificationPolicy() {
             <p>Hotline: (410) 555-BREACH (273-2242) [24/7]</p>
             <p>Email: breach-response@marylandbenefits.org</p>
             <p>Secure Reporting: https://marylandbenefits.org/report-incident</p>
-            <p>Mail: Security Incident Response, 123 Benefits Way, Baltimore, MD 21201</p>
+            <p>Mail: Security Incident Response, {stateName} Benefits Platform (Address TBD - Contact via phone or email)</p>
             <p className="mt-2 text-sm text-muted-foreground">Response time: Within 1 hour for critical incidents</p>
           </div>
         </section>

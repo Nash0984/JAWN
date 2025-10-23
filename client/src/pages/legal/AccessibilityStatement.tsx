@@ -210,7 +210,7 @@ export default function AccessibilityStatement() {
             <p>Phone: (410) 555-ACCESS (222-377)</p>
             <p>TTY: (410) 555-8833</p>
             <p>Videophone (ASL): accessibility-vp@marylandbenefits.org</p>
-            <p>Mail: Accessibility Office, 123 Benefits Way, Baltimore, MD 21201</p>
+            <p>Mail: Accessibility Office, {stateName} Benefits Platform (Address TBD - Contact via phone or email)</p>
             <p className="mt-2 text-sm text-muted-foreground">Response time: 2 business days</p>
           </div>
         </section>
