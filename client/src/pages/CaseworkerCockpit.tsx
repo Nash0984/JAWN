@@ -1,6 +1,7 @@
 import { useState, Fragment } from "react";
 import { Helmet } from "react-helmet-async";
 import { useQuery } from "@tanstack/react-query";
+import { useTenant } from "@/contexts/TenantContext";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -61,6 +62,8 @@ interface TrainingIntervention {
 }
 
 export default function CaseworkerCockpit() {
+  const { stateConfig } = useTenant();
+  const stateName = stateConfig?.stateName || 'State';
   const [expandedCaseId, setExpandedCaseId] = useState<string | null>(null);
   const [jobAidCategory, setJobAidCategory] = useState<string>("all");
   const [jobAidSearch, setJobAidSearch] = useState<string>("");
@@ -155,7 +158,7 @@ export default function CaseworkerCockpit() {
   return (
     <>
       <Helmet>
-        <title>Caseworker Cockpit - MD Benefits Navigator</title>
+        <title>Caseworker Cockpit - {stateName} Benefits Navigator</title>
       </Helmet>
       <TooltipProvider>
         <div className="container mx-auto p-6 space-y-6">

@@ -1,5 +1,5 @@
 import { useTenant } from "@/contexts/TenantContext";
-import MarylandStateLawTracker from "./MarylandStateLawTracker";
+import MarylandStateLawTrackerComponent from "./MarylandStateLawTracker"; // Backend file name preserved for compatibility
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Building2, AlertCircle } from "lucide-react";
@@ -24,12 +24,12 @@ import { Building2, AlertCircle } from "lucide-react";
 export default function StateLawTracker() {
   const { stateConfig } = useTenant();
   const stateCode = stateConfig?.stateCode || 'MD';
-  const stateName = stateConfig?.stateName || 'Maryland';
+  const stateName = stateConfig?.stateName || 'State';
 
   // Route to state-specific tracker
   switch (stateCode) {
     case 'MD':
-      return <MarylandStateLawTracker />;
+      return <MarylandStateLawTrackerComponent />;
     
     // TODO: Add Pennsylvania tracker
     // case 'PA':
@@ -82,10 +82,10 @@ export default function StateLawTracker() {
 
               <div className="text-sm text-muted-foreground space-y-2">
                 <p>
-                  <strong>Currently Available:</strong> Maryland General Assembly tracker
+                  <strong>Currently Available:</strong> Maryland (MD) state legislature tracker
                 </p>
                 <p>
-                  <strong>Planned Implementation:</strong> Pennsylvania, Virginia, Utah, Indiana, Michigan
+                  <strong>Planned Implementation:</strong> Pennsylvania (PA), Virginia (VA), Utah (UT), Indiana (IN), Michigan (MI)
                 </p>
                 <p className="pt-2">
                   Federal legislative tracking (Congress.gov) is available under "Federal Law Tracker"

@@ -1,5 +1,6 @@
 import { Helmet } from "react-helmet-async";
 import { useQuery } from "@tanstack/react-query";
+import { useTenant } from "@/contexts/TenantContext";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -43,6 +44,8 @@ import type { MonitoringDashboardMetrics } from "@shared/monitoring";
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884D8'];
 
 export default function Monitoring() {
+  const { stateConfig } = useTenant();
+  const stateName = stateConfig?.stateName || 'State';
   const [metrics, setMetrics] = useState<MonitoringDashboardMetrics | null>(null);
   const { subscribe, isConnected, send } = useWebSocket();
 
@@ -125,7 +128,7 @@ export default function Monitoring() {
   return (
     <>
       <Helmet>
-        <title>System Monitoring - MD Benefits Navigator</title>
+        <title>System Monitoring - {stateName} Benefits Navigator</title>
       </Helmet>
       <div className="container mx-auto p-6 space-y-6" data-testid="monitoring-dashboard">
       {/* Header */}

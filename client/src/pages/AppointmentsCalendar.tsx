@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Helmet } from "react-helmet-async";
 import { useQuery, useMutation } from "@tanstack/react-query";
+import { useTenant } from "@/contexts/TenantContext";
 import { Calendar } from "@/components/ui/calendar";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -48,6 +49,8 @@ const appointmentFormSchema = z.object({
 type AppointmentFormData = z.infer<typeof appointmentFormSchema>;
 
 export default function AppointmentsCalendar() {
+  const { stateConfig } = useTenant();
+  const stateName = stateConfig?.stateName || 'State';
   const { toast } = useToast();
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
   const [isBookingDialogOpen, setIsBookingDialogOpen] = useState(false);
@@ -187,7 +190,7 @@ export default function AppointmentsCalendar() {
   return (
     <>
       <Helmet>
-        <title>Appointments - MD Benefits Navigator</title>
+        <title>Appointments - {stateName} Benefits Navigator</title>
       </Helmet>
       <div className="container mx-auto p-6 space-y-6">
       <div className="flex justify-between items-center">

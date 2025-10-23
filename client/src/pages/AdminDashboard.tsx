@@ -1,12 +1,15 @@
 import { Link } from "wouter";
 import { Helmet } from "react-helmet-async";
 import { useAuth } from "@/hooks/useAuth";
+import { useTenant } from "@/contexts/TenantContext";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { MDAlert } from "@/components/ui/md-alert";
 import { Settings, FileText, Database, Upload, Users, Shield, RefreshCw, BookOpen, Activity, Code, MessageSquare, UserCheck, Network } from "lucide-react";
 
 export default function AdminDashboard() {
+  const { stateConfig } = useTenant();
+  const stateName = stateConfig?.stateName || 'State';
   const { user } = useAuth();
 
   const adminActions = [
@@ -140,7 +143,7 @@ export default function AdminDashboard() {
   return (
     <>
       <Helmet>
-        <title>Admin Dashboard - MD Benefits Navigator</title>
+        <title>Admin Dashboard - {stateName} Benefits Navigator</title>
       </Helmet>
       <div className="container mx-auto px-4 py-8 max-w-6xl">
       {/* Welcome Header */}

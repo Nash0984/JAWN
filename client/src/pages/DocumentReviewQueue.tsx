@@ -335,7 +335,7 @@ export default function DocumentReviewQueue() {
           body: tableData,
           theme: 'striped',
           headStyles: {
-            fillColor: [13, 79, 139], // MD Blue
+            fillColor: [13, 79, 139], // Brand blue
             textColor: [255, 255, 255],
             fontStyle: 'bold'
           },

@@ -320,7 +320,7 @@ export default function CrossEnrollmentAdmin() {
               <li>Program-specific eligibility rules</li>
             </ul>
             <p className="mt-2">
-              Supported programs: MD SNAP, MD Medicaid, MD TCA/TANF, MD OHEP (Energy), MD WIC, MD MCHP, and IRS VITA Tax Assistance
+              Supported programs: SNAP, Medicaid, TCA/TANF, OHEP (Energy), WIC, MCHP, and IRS VITA Tax Assistance
             </p>
           </AlertDescription>
         </Alert>

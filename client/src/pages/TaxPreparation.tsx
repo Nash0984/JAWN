@@ -130,10 +130,11 @@ interface HouseholdProfile {
 }
 
 export default function TaxPreparation() {
-  const { user } = useAuth();
-  const { toast } = useToast();
   const { stateConfig } = useTenant();
   const stateName = stateConfig?.stateName || 'State';
+  const stateCode = stateConfig?.stateCode || 'MD';
+  const { user } = useAuth();
+  const { toast } = useToast();
   const [activeTab, setActiveTab] = useState("documents");
   const [selectedDocType, setSelectedDocType] = useState<string>("w2");
   const [taxYear, setTaxYear] = useState<number>(new Date().getFullYear() - 1);
@@ -366,7 +367,7 @@ export default function TaxPreparation() {
       
       toast({
         title: "Calculation Complete",
-        description: `Federal refund: $${taxCalcResult.refundAmount.toFixed(2)}${taxCalcResult.marylandTax ? `, MD refund: $${taxCalcResult.marylandTax.marylandRefund.toFixed(2)}` : ''}`,
+        description: `Federal refund: $${taxCalcResult.refundAmount.toFixed(2)}${taxCalcResult.marylandTax ? `, ${stateCode} refund: $${taxCalcResult.marylandTax.marylandRefund.toFixed(2)}` : ''}`,
       });
       setActiveTab("review");
     },
@@ -1050,7 +1051,7 @@ export default function TaxPreparation() {
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="county">County (for MD taxes)</Label>
+                    <Label htmlFor="county">County (for state taxes)</Label>
                     <Select value={personalInfo.county} onValueChange={(v) => setPersonalInfo({...personalInfo, county: v})}>
                       <SelectTrigger id="county" data-testid="select-county">
                         <SelectValue />
@@ -1307,7 +1308,7 @@ export default function TaxPreparation() {
                           {generateForm502Mutation.isPending ? (
                             <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Generating...</>
                           ) : (
-                            <><Download className="h-4 w-4 mr-2" /> Generate MD Form 502</>
+                            <><Download className="h-4 w-4 mr-2" /> Generate {stateCode} State Tax Form</>
                           )}
                         </Button>
                       </div>

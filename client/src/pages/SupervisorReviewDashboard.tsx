@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Helmet } from "react-helmet-async";
 import { useQuery } from "@tanstack/react-query";
+import { useTenant } from "@/contexts/TenantContext";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -32,6 +33,8 @@ interface UpcomingCheckpoint {
 }
 
 export default function SupervisorReviewDashboard() {
+  const { stateConfig } = useTenant();
+  const stateName = stateConfig?.stateName || 'State';
   const [selectedReviewId, setSelectedReviewId] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<string>("active");
   const [pendingCount, setPendingCount] = useState(0);
@@ -119,7 +122,7 @@ export default function SupervisorReviewDashboard() {
   return (
     <>
       <Helmet>
-        <title>Case Review Dashboard - MD Benefits Navigator</title>
+        <title>Case Review Dashboard - {stateName} Benefits Navigator</title>
       </Helmet>
       <div className="container mx-auto p-6 space-y-6">
         {/* Header Section */}
