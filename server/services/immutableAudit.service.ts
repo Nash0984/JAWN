@@ -83,49 +83,61 @@ class ImmutableAuditService {
   }
   
   /**
-   * Get the latest audit log entry for hash chaining
-   */
-  private async getLatestEntry(): Promise<Pick<AuditLog, 'sequenceNumber' | 'entryHash'> | null> {
-    const [latest] = await db
-      .select({
-        sequenceNumber: auditLogs.sequenceNumber,
-        entryHash: auditLogs.entryHash,
-      })
-      .from(auditLogs)
-      .orderBy(desc(auditLogs.sequenceNumber))
-      .limit(1);
-    
-    return latest || null;
-  }
-  
-  /**
    * Log an audit event with cryptographic hash chain
    * 
-   * This is the primary method for creating audit logs
+   * This is the primary method for creating audit logs.
+   * 
+   * Concurrency Safety (Architect-reviewed fix for race condition):
+   * - Uses PostgreSQL advisory lock (pg_advisory_xact_lock) to serialize writes
+   * - Advisory lock is automatically released at end of transaction
+   * - Ensures only one audit log is created at a time across all sessions
+   * - Prevents previousHash from being NULL or duplicated
+   * 
+   * Lock ID: 1234567890 (arbitrary constant for audit log chain)
    */
-  async log(entry: AuditLogEntry): Promise<void> {
+  async log(entry: AuditLogEntry): Promise<AuditLog> {
     try {
-      // Get previous entry for hash chaining
-      const latestEntry = await this.getLatestEntry();
-      const previousHash = latestEntry?.entryHash || null;
-      
-      // Compute hash for this entry
-      const entryHash = this.computeEntryHash(entry, previousHash);
-      
-      // Insert with hash chain
-      await db.insert(auditLogs).values({
-        ...entry,
-        previousHash,
-        entryHash,
+      // Wrap in transaction to prevent concurrent hash chain corruption
+      const result = await db.transaction(async (tx) => {
+        // CRITICAL: Acquire advisory lock to serialize all audit log writes
+        // This lock is automatically released when the transaction completes
+        // Lock ID 1234567890 is used specifically for audit log hash chain
+        await tx.execute(sql`SELECT pg_advisory_xact_lock(1234567890)`);
+        
+        // Now that we have the lock, safely read the latest entry
+        const [latestEntry] = await tx
+          .select({
+            sequenceNumber: auditLogs.sequenceNumber,
+            entryHash: auditLogs.entryHash,
+          })
+          .from(auditLogs)
+          .orderBy(desc(auditLogs.sequenceNumber))
+          .limit(1);
+        
+        const previousHash = latestEntry?.entryHash || null;
+        
+        // Compute hash for this entry
+        const entryHash = this.computeEntryHash(entry, previousHash);
+        
+        // Insert with hash chain
+        const [created] = await tx.insert(auditLogs).values({
+          ...entry,
+          previousHash,
+          entryHash,
+        }).returning();
+        
+        logger.debug('Immutable audit log created', {
+          action: entry.action,
+          resource: entry.resource,
+          sequenceNumber: created.sequenceNumber,
+          previousHash: previousHash ? previousHash.substring(0, 8) + '...' : null,
+          entryHash: entryHash.substring(0, 8) + '...',
+        });
+        
+        return created;
       });
       
-      logger.debug('Immutable audit log created', {
-        action: entry.action,
-        resource: entry.resource,
-        sequenceNumber: latestEntry ? latestEntry.sequenceNumber + 1 : 1,
-        previousHash: previousHash ? previousHash.substring(0, 8) + '...' : null,
-        entryHash: entryHash.substring(0, 8) + '...',
-      });
+      return result;
       
     } catch (error) {
       // Never fail the main operation due to audit logging failure
@@ -134,6 +146,9 @@ class ImmutableAuditService {
         action: entry.action,
         resource: entry.resource,
       });
+      
+      // Re-throw to maintain backwards compatibility with callers
+      throw error;
     }
   }
   

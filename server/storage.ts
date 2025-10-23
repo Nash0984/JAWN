@@ -280,6 +280,7 @@ import {
 import { db } from "./db";
 import { eq, desc, and, ilike, sql, or, isNull, lte, gte, inArray } from "drizzle-orm";
 import { createLogger } from "./services/logger.service";
+import { immutableAuditService } from "./services/immutableAudit.service";
 
 const logger = createLogger("storage");
 
@@ -4334,9 +4335,9 @@ export class DatabaseStorage implements IStorage {
   // ============================================================================
 
   // Audit Logs
+  // Now uses ImmutableAuditService for cryptographic hash chain protection (Task 2)
   async createAuditLog(log: InsertAuditLog): Promise<AuditLog> {
-    const [created] = await db.insert(auditLogs).values(log).returning();
-    return created;
+    return await immutableAuditService.log(log);
   }
 
   async getAuditLog(id: string): Promise<AuditLog | undefined> {
