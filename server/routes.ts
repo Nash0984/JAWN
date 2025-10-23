@@ -49,6 +49,7 @@ import { rulesEngine } from "./services/rulesEngine";
 import { rulesAsCodeService } from "./services/rulesAsCodeService";
 import { hybridService } from "./services/hybridService";
 import { auditService } from "./services/auditService";
+import { immutableAuditService } from "./services/immutableAudit.service";
 import { textGenerationService } from "./services/textGenerationService";
 import { notificationService } from "./services/notification.service";
 import { mfaService } from "./services/mfa.service";
@@ -5055,6 +5056,81 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
       total: totalResult[0]?.count || 0,
       limit: limitNum,
       offset: offsetNum
+    });
+  }));
+
+  // ============================================================================
+  // IMMUTABLE AUDIT LOG VERIFICATION - Cryptographic chain integrity (Task 2)
+  // ============================================================================
+
+  // Verify entire audit log chain integrity
+  app.get("/api/audit/verify-chain", requireAuth, requireAdmin, asyncHandler(async (req: Request, res: Response) => {
+    logger.info('Starting full audit chain verification', {
+      initiatedBy: req.user?.id,
+      initiatedByUsername: req.user?.username,
+    });
+
+    const verificationResult = await immutableAuditService.verifyChain();
+
+    // Log the verification attempt
+    await immutableAuditService.log({
+      userId: req.user?.id || null,
+      username: req.user?.username || null,
+      userRole: req.user?.role || null,
+      action: 'VERIFY_AUDIT_CHAIN',
+      resource: 'audit_log',
+      resourceId: null,
+      details: {
+        totalEntries: verificationResult.totalEntries,
+        verifiedEntries: verificationResult.verifiedEntries,
+        isValid: verificationResult.isValid,
+        brokenLinksCount: verificationResult.brokenLinks.length,
+      },
+      ipAddress: req.ip,
+      userAgent: req.get('user-agent') || null,
+      sessionId: req.sessionID,
+      success: true,
+    });
+
+    res.json({
+      success: true,
+      verification: verificationResult,
+      timestamp: new Date().toISOString(),
+    });
+  }));
+
+  // Verify recent audit log entries (faster routine check)
+  app.get("/api/audit/verify-recent", requireAuth, requireAdmin, asyncHandler(async (req: Request, res: Response) => {
+    const count = parseInt(req.query.count as string || '100');
+
+    if (count < 1 || count > 1000) {
+      return res.status(400).json({
+        error: 'Count must be between 1 and 1000',
+      });
+    }
+
+    logger.info('Starting recent audit entries verification', {
+      count,
+      initiatedBy: req.user?.id,
+    });
+
+    const verificationResult = await immutableAuditService.verifyRecentEntries(count);
+
+    res.json({
+      success: true,
+      verification: verificationResult,
+      timestamp: new Date().toISOString(),
+    });
+  }));
+
+  // Get audit log statistics
+  app.get("/api/audit/statistics", requireAuth, requireAdmin, asyncHandler(async (req: Request, res: Response) => {
+    const statistics = await immutableAuditService.getStatistics();
+
+    res.json({
+      success: true,
+      statistics,
+      timestamp: new Date().toISOString(),
     });
   }));
 

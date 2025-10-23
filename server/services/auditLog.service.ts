@@ -2,12 +2,15 @@ import { storage } from '../storage';
 import type { InsertAuditLog, InsertSecurityEvent } from '../../shared/schema';
 import type { Request } from 'express';
 import { logger } from './logger.service';
+import { immutableAuditService } from './immutableAudit.service';
 
 /**
  * Audit Logging Service
  * 
  * Comprehensive audit trail for compliance, security, and debugging
  * Logs all sensitive operations with full context for HIPAA/PII compliance
+ * 
+ * NOTE: Now uses ImmutableAuditService for cryptographic hash chain (Task 2)
  */
 
 interface AuditLogOptions {
@@ -40,6 +43,8 @@ class AuditLogService {
   
   /**
    * Log an audit event
+   * 
+   * Now uses ImmutableAuditService for cryptographic hash chain protection
    */
   async log(options: AuditLogOptions): Promise<void> {
     try {
@@ -64,7 +69,8 @@ class AuditLogService {
         countyId: (options.req as any)?.countyContext?.countyId || null,
       };
       
-      await storage.createAuditLog(auditLog);
+      // Use immutableAuditService for hash chain protection (Task 2)
+      await immutableAuditService.log(auditLog);
     } catch (error) {
       // Never fail the main operation due to audit logging failure
       logger.error('Audit log error', { error, action: options.action, resource: options.resource });
