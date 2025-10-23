@@ -25,6 +25,12 @@ export const users = pgTable("users", {
   // TaxSlayer role tracking (for VITA coordination documentation only - not permission control)
   taxslayerRole: text("taxslayer_role"), // Administrator, Superuser, Preparer Current Year, Preparer All Years, Interviewer, Reviewer
   isActive: boolean("is_active").default(true).notNull(),
+  // Data retention tracking (CRIT-002: IRS/HIPAA 7-year retention, GDPR storage limitation)
+  retentionCategory: text("retention_category"), // user_account_90d, reference_data_permanent
+  retentionUntil: timestamp("retention_until"), // Calculated expiration date
+  scheduledForDeletion: boolean("scheduled_for_deletion").default(false).notNull(), // Soft delete flag
+  deletionApprovedBy: varchar("deletion_approved_by"), // Admin who approved deletion
+  deletionApprovedAt: timestamp("deletion_approved_at"), // When deletion was approved
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
@@ -108,6 +114,12 @@ export const documents = pgTable("documents", {
   sectionNumber: text("section_number"), // e.g., "100", "200", for SNAP manual sections
   lastModifiedAt: timestamp("last_modified_at"), // last modified date from source
   auditTrail: jsonb("audit_trail"), // detailed provenance information
+  // Data retention tracking (CRIT-002: IRS/HIPAA 7-year retention, GDPR storage limitation)
+  retentionCategory: text("retention_category"), // tax_7yr, benefit_7yr, audit_log_7yr, phi_7yr, user_account_90d, reference_data_permanent
+  retentionUntil: timestamp("retention_until"), // Calculated expiration date
+  scheduledForDeletion: boolean("scheduled_for_deletion").default(false).notNull(), // Soft delete flag
+  deletionApprovedBy: varchar("deletion_approved_by"), // Admin who approved deletion
+  deletionApprovedAt: timestamp("deletion_approved_at"), // When deletion was approved
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 }, (table) => ({
@@ -977,6 +989,12 @@ export const clientCases = pgTable("client_cases", {
   notes: text("notes"),
   tags: jsonb("tags"), // For categorization/filtering
   createdBy: varchar("created_by").references(() => users.id).notNull(),
+  // Data retention tracking (CRIT-002: IRS/HIPAA 7-year retention, GDPR storage limitation)
+  retentionCategory: text("retention_category"), // tax_7yr, benefit_7yr, audit_log_7yr, phi_7yr, user_account_90d, reference_data_permanent
+  retentionUntil: timestamp("retention_until"), // Calculated expiration date
+  scheduledForDeletion: boolean("scheduled_for_deletion").default(false).notNull(), // Soft delete flag
+  deletionApprovedBy: varchar("deletion_approved_by"), // Admin who approved deletion
+  deletionApprovedAt: timestamp("deletion_approved_at"), // When deletion was approved
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 }, (table) => ({
@@ -2840,7 +2858,12 @@ export const householdProfiles = pgTable("household_profiles", {
   notes: text("notes"),
   tags: text("tags").array(),
   isActive: boolean("is_active").notNull().default(true),
-  
+  // Data retention tracking (CRIT-002: IRS/HIPAA 7-year retention, GDPR storage limitation)
+  retentionCategory: text("retention_category"), // tax_7yr, benefit_7yr, audit_log_7yr, phi_7yr, user_account_90d, reference_data_permanent
+  retentionUntil: timestamp("retention_until"), // Calculated expiration date
+  scheduledForDeletion: boolean("scheduled_for_deletion").default(false).notNull(), // Soft delete flag
+  deletionApprovedBy: varchar("deletion_approved_by"), // Admin who approved deletion
+  deletionApprovedAt: timestamp("deletion_approved_at"), // When deletion was approved
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 }, (table) => ({
@@ -3069,6 +3092,12 @@ export const vitaIntakeSessions = pgTable("vita_intake_sessions", {
   // Timestamps
   completedAt: timestamp("completed_at"),
   filedAt: timestamp("filed_at"),
+  // Data retention tracking (CRIT-002: IRS/HIPAA 7-year retention, GDPR storage limitation)
+  retentionCategory: text("retention_category"), // tax_7yr, benefit_7yr, audit_log_7yr, phi_7yr, user_account_90d, reference_data_permanent
+  retentionUntil: timestamp("retention_until"), // Calculated expiration date
+  scheduledForDeletion: boolean("scheduled_for_deletion").default(false).notNull(), // Soft delete flag
+  deletionApprovedBy: varchar("deletion_approved_by"), // Admin who approved deletion
+  deletionApprovedAt: timestamp("deletion_approved_at"), // When deletion was approved
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 }, (table) => ({
@@ -3810,6 +3839,12 @@ export const federalTaxReturns = pgTable("federal_tax_returns", {
   
   // Audit trail
   notes: text("notes"),
+  // Data retention tracking (CRIT-002: IRS/HIPAA 7-year retention, GDPR storage limitation)
+  retentionCategory: text("retention_category"), // tax_7yr, benefit_7yr, audit_log_7yr, phi_7yr, user_account_90d, reference_data_permanent
+  retentionUntil: timestamp("retention_until"), // Calculated expiration date
+  scheduledForDeletion: boolean("scheduled_for_deletion").default(false).notNull(), // Soft delete flag
+  deletionApprovedBy: varchar("deletion_approved_by"), // Admin who approved deletion
+  deletionApprovedAt: timestamp("deletion_approved_at"), // When deletion was approved
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 }, (table) => ({
@@ -3852,6 +3887,12 @@ export const marylandTaxReturns = pgTable("maryland_tax_returns", {
   efileAcceptedAt: timestamp("efile_accepted_at"),
   
   // Audit trail
+  // Data retention tracking (CRIT-002: IRS/HIPAA 7-year retention, GDPR storage limitation)
+  retentionCategory: text("retention_category"), // tax_7yr, benefit_7yr, audit_log_7yr, phi_7yr, user_account_90d, reference_data_permanent
+  retentionUntil: timestamp("retention_until"), // Calculated expiration date
+  scheduledForDeletion: boolean("scheduled_for_deletion").default(false).notNull(), // Soft delete flag
+  deletionApprovedBy: varchar("deletion_approved_by"), // Admin who approved deletion
+  deletionApprovedAt: timestamp("deletion_approved_at"), // When deletion was approved
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 }, (table) => ({
@@ -3889,6 +3930,12 @@ export const taxDocuments = pgTable("tax_documents", {
   // Metadata
   taxYear: integer("tax_year"), // Which tax year this document applies to
   notes: text("notes"),
+  // Data retention tracking (CRIT-002: IRS/HIPAA 7-year retention, GDPR storage limitation)
+  retentionCategory: text("retention_category"), // tax_7yr, benefit_7yr, audit_log_7yr, phi_7yr, user_account_90d, reference_data_permanent
+  retentionUntil: timestamp("retention_until"), // Calculated expiration date
+  scheduledForDeletion: boolean("scheduled_for_deletion").default(false).notNull(), // Soft delete flag
+  deletionApprovedBy: varchar("deletion_approved_by"), // Admin who approved deletion
+  deletionApprovedAt: timestamp("deletion_approved_at"), // When deletion was approved
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 }, (table) => ({
@@ -5119,7 +5166,12 @@ export const auditLogs = pgTable("audit_logs", {
   
   // Metadata
   countyId: varchar("county_id").references(() => counties.id), // Multi-tenant context
-  
+  // Data retention tracking (CRIT-002: IRS/HIPAA 7-year retention, GDPR storage limitation)
+  retentionCategory: text("retention_category"), // tax_7yr, benefit_7yr, audit_log_7yr, phi_7yr, user_account_90d, reference_data_permanent
+  retentionUntil: timestamp("retention_until"), // Calculated expiration date
+  scheduledForDeletion: boolean("scheduled_for_deletion").default(false).notNull(), // Soft delete flag
+  deletionApprovedBy: varchar("deletion_approved_by"), // Admin who approved deletion
+  deletionApprovedAt: timestamp("deletion_approved_at"), // When deletion was approved
   createdAt: timestamp("created_at").defaultNow().notNull(),
 }, (table) => ({
   userIdx: index("audit_logs_user_idx").on(table.userId, table.createdAt),
@@ -5174,6 +5226,12 @@ export const securityEvents = pgTable("security_events", {
   falsePositive: boolean("false_positive").default(false),
   
   occurredAt: timestamp("occurred_at").defaultNow().notNull(),
+  // Data retention tracking (CRIT-002: IRS/HIPAA 7-year retention, GDPR storage limitation)
+  retentionCategory: text("retention_category"), // tax_7yr, benefit_7yr, audit_log_7yr, phi_7yr, user_account_90d, reference_data_permanent
+  retentionUntil: timestamp("retention_until"), // Calculated expiration date
+  scheduledForDeletion: boolean("scheduled_for_deletion").default(false).notNull(), // Soft delete flag
+  deletionApprovedBy: varchar("deletion_approved_by"), // Admin who approved deletion
+  deletionApprovedAt: timestamp("deletion_approved_at"), // When deletion was approved
   createdAt: timestamp("created_at").defaultNow().notNull(),
 }, (table) => ({
   eventTypeIdx: index("security_events_type_idx").on(table.eventType, table.occurredAt),
@@ -7117,6 +7175,12 @@ export const gdprConsents = pgTable("gdpr_consents", {
   withdrawnAt: timestamp("withdrawn_at"), // When consent was withdrawn
   withdrawalReason: text("withdrawal_reason"),
   notes: text("notes"),
+  // Data retention tracking (CRIT-002: IRS/HIPAA 7-year retention, GDPR storage limitation)
+  retentionCategory: text("retention_category"), // tax_7yr, benefit_7yr, audit_log_7yr, phi_7yr, user_account_90d, reference_data_permanent
+  retentionUntil: timestamp("retention_until"), // Calculated expiration date
+  scheduledForDeletion: boolean("scheduled_for_deletion").default(false).notNull(), // Soft delete flag
+  deletionApprovedBy: varchar("deletion_approved_by"), // Admin who approved deletion
+  deletionApprovedAt: timestamp("deletion_approved_at"), // When deletion was approved
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 }, (table) => ({
@@ -7145,6 +7209,12 @@ export const gdprDataSubjectRequests = pgTable("gdpr_data_subject_requests", {
   notes: text("notes"),
   remindersSent: integer("reminders_sent").default(0), // Track deadline reminders
   lastReminderAt: timestamp("last_reminder_at"),
+  // Data retention tracking (CRIT-002: IRS/HIPAA 7-year retention, GDPR storage limitation)
+  retentionCategory: text("retention_category"), // tax_7yr, benefit_7yr, audit_log_7yr, phi_7yr, user_account_90d, reference_data_permanent
+  retentionUntil: timestamp("retention_until"), // Calculated expiration date
+  scheduledForDeletion: boolean("scheduled_for_deletion").default(false).notNull(), // Soft delete flag
+  deletionApprovedBy: varchar("deletion_approved_by"), // Admin who approved deletion
+  deletionApprovedAt: timestamp("deletion_approved_at"), // When deletion was approved
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 }, (table) => ({
@@ -7272,6 +7342,12 @@ export const gdprBreachIncidents = pgTable("gdpr_breach_incidents", {
   preventiveMeasures: jsonb("preventive_measures"), // Measures to prevent recurrence
   documents: jsonb("documents"), // Links to related documents
   notes: text("notes"),
+  // Data retention tracking (CRIT-002: IRS/HIPAA 7-year retention, GDPR storage limitation)
+  retentionCategory: text("retention_category"), // tax_7yr, benefit_7yr, audit_log_7yr, phi_7yr, user_account_90d, reference_data_permanent
+  retentionUntil: timestamp("retention_until"), // Calculated expiration date
+  scheduledForDeletion: boolean("scheduled_for_deletion").default(false).notNull(), // Soft delete flag
+  deletionApprovedBy: varchar("deletion_approved_by"), // Admin who approved deletion
+  deletionApprovedAt: timestamp("deletion_approved_at"), // When deletion was approved
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 }, (table) => ({
@@ -7436,6 +7512,12 @@ export const hipaaPhiAccessLogs = pgTable("hipaa_phi_access_logs", {
   flaggedForReview: boolean("flagged_for_review").default(false),
   flagReason: text("flag_reason"),
   accessedAt: timestamp("accessed_at").defaultNow().notNull(),
+  // Data retention tracking (CRIT-002: IRS/HIPAA 7-year retention, GDPR storage limitation)
+  retentionCategory: text("retention_category"), // tax_7yr, benefit_7yr, audit_log_7yr, phi_7yr, user_account_90d, reference_data_permanent
+  retentionUntil: timestamp("retention_until"), // Calculated expiration date
+  scheduledForDeletion: boolean("scheduled_for_deletion").default(false).notNull(), // Soft delete flag
+  deletionApprovedBy: varchar("deletion_approved_by"), // Admin who approved deletion
+  deletionApprovedAt: timestamp("deletion_approved_at"), // When deletion was approved
   createdAt: timestamp("created_at").defaultNow().notNull(),
 }, (table) => ({
   userIdIdx: index("hipaa_phi_access_user_id_idx").on(table.userId),
@@ -7486,6 +7568,12 @@ export const hipaaBusinessAssociateAgreements = pgTable("hipaa_business_associat
   notes: text("notes"),
   createdBy: varchar("created_by").references(() => users.id).notNull(),
   updatedBy: varchar("updated_by").references(() => users.id),
+  // Data retention tracking (CRIT-002: IRS/HIPAA 7-year retention, GDPR storage limitation)
+  retentionCategory: text("retention_category"), // tax_7yr, benefit_7yr, audit_log_7yr, phi_7yr, user_account_90d, reference_data_permanent
+  retentionUntil: timestamp("retention_until"), // Calculated expiration date
+  scheduledForDeletion: boolean("scheduled_for_deletion").default(false).notNull(), // Soft delete flag
+  deletionApprovedBy: varchar("deletion_approved_by"), // Admin who approved deletion
+  deletionApprovedAt: timestamp("deletion_approved_at"), // When deletion was approved
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 }, (table) => ({
@@ -7532,6 +7620,12 @@ export const hipaaRiskAssessments = pgTable("hipaa_risk_assessments", {
   approvalDate: timestamp("approval_date"),
   documentUrl: text("document_url"),
   notes: text("notes"),
+  // Data retention tracking (CRIT-002: IRS/HIPAA 7-year retention, GDPR storage limitation)
+  retentionCategory: text("retention_category"), // tax_7yr, benefit_7yr, audit_log_7yr, phi_7yr, user_account_90d, reference_data_permanent
+  retentionUntil: timestamp("retention_until"), // Calculated expiration date
+  scheduledForDeletion: boolean("scheduled_for_deletion").default(false).notNull(), // Soft delete flag
+  deletionApprovedBy: varchar("deletion_approved_by"), // Admin who approved deletion
+  deletionApprovedAt: timestamp("deletion_approved_at"), // When deletion was approved
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 }, (table) => ({
@@ -7594,6 +7688,12 @@ export const hipaaSecurityIncidents = pgTable("hipaa_security_incidents", {
   trainingNeeded: boolean("training_needed").default(false),
   documentUrl: text("document_url"),
   notes: text("notes"),
+  // Data retention tracking (CRIT-002: IRS/HIPAA 7-year retention, GDPR storage limitation)
+  retentionCategory: text("retention_category"), // tax_7yr, benefit_7yr, audit_log_7yr, phi_7yr, user_account_90d, reference_data_permanent
+  retentionUntil: timestamp("retention_until"), // Calculated expiration date
+  scheduledForDeletion: boolean("scheduled_for_deletion").default(false).notNull(), // Soft delete flag
+  deletionApprovedBy: varchar("deletion_approved_by"), // Admin who approved deletion
+  deletionApprovedAt: timestamp("deletion_approved_at"), // When deletion was approved
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 }, (table) => ({
@@ -8027,6 +8127,39 @@ export type FraudDetectionAlert = typeof fraudDetectionAlerts.$inferSelect;
 export type InsertFraudDetectionAlert = z.infer<typeof insertFraudDetectionAlertSchema>;
 export type AiUsageLog = typeof aiUsageLogs.$inferSelect;
 export type InsertAiUsageLog = z.infer<typeof insertAiUsageLogSchema>;
+
+// ============================================================================
+// DATA DISPOSAL AUDIT TRAIL - CRIT-002 Compliance
+// ============================================================================
+
+// Data Disposal Logs - Comprehensive audit trail for all data deletion operations
+export const dataDisposalLogs = pgTable("data_disposal_logs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tableName: text("table_name").notNull(),
+  recordId: varchar("record_id").notNull(),
+  deletionReason: text("deletion_reason").notNull(), // retention_expired, gdpr_request, legal_purge, manual_admin
+  deletedBy: varchar("deleted_by").references(() => users.id).notNull(),
+  deletionMethod: text("deletion_method").notNull(), // soft_delete, hard_delete, crypto_shred
+  recordSnapshot: jsonb("record_snapshot"), // Metadata of deleted record (NOT full data)
+  legalHoldStatus: text("legal_hold_status"), // none, irs_7yr, litigation_hold, regulatory_hold
+  approvalChain: jsonb("approval_chain"), // Audit trail of approvals
+  deletedAt: timestamp("deleted_at").defaultNow().notNull(),
+  auditTrail: jsonb("audit_trail"), // Compliance evidence
+}, (table) => ({
+  tableNameIdx: index("data_disposal_logs_table_name_idx").on(table.tableName),
+  recordIdIdx: index("data_disposal_logs_record_id_idx").on(table.recordId),
+  deletedAtIdx: index("data_disposal_logs_deleted_at_idx").on(table.deletedAt),
+}));
+
+// Insert schema for data disposal logs
+export const insertDataDisposalLogSchema = createInsertSchema(dataDisposalLogs).omit({
+  id: true,
+  deletedAt: true,
+});
+
+// Types for data disposal logs
+export type DataDisposalLog = typeof dataDisposalLogs.$inferSelect;
+export type InsertDataDisposalLog = z.infer<typeof insertDataDisposalLogSchema>;
 
 // Export tax return tables from taxReturnSchema
 // COMMENTED OUT DURING SCHEMA ROLLBACK - taxReturnSchema.ts moved to backup
