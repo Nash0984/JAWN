@@ -7,28 +7,33 @@ export function CountyHeader() {
   const { branding, isLoading } = useBranding();
   const { stateConfig } = useTenant();
 
-  if (isLoading || !branding) {
+  // Wait for both contexts to load before rendering
+  if (isLoading || !branding || !stateConfig) {
     return null;
   }
 
   // White-label: Detect state-level vs county-level tenant
   const logoUrl = branding.brandingConfig?.logoUrl;
   
-  // State-level tenant if: no custom branding AND countyName indicates county-level (contains city/county keywords)
-  // For white-labeling: prefer state-level branding when county appears to be default/demo data
+  // Check if branding data looks like county-level (contains city/county/baltimore keywords)
   const countyLower = (branding.countyName || '').toLowerCase();
-  const looksLikeCountyLevel = branding.countyName && 
-    (countyLower.includes('city') || 
-     countyLower.includes('county') ||
-     countyLower.includes('baltimore'));
+  const headerLower = (branding.brandingConfig?.headerText || '').toLowerCase();
+  const looksLikeCountyBranding = 
+    countyLower.includes('city') || 
+    countyLower.includes('county') ||
+    countyLower.includes('baltimore') ||
+    headerLower.includes('city') ||
+    headerLower.includes('county') ||
+    headerLower.includes('baltimore');
   
-  const hasCustomBranding = !!(branding.brandingConfig?.headerText || branding.brandingConfig?.logoUrl);
-  const isStateLevelTenant = !hasCustomBranding && looksLikeCountyLevel && stateConfig?.stateName;
+  // State-level tenant if: branding looks county-level AND state config available
+  // This overrides Baltimore City defaults with state-level branding
+  const isStateLevelTenant = looksLikeCountyBranding && stateConfig?.stateName;
   
-  const headerText = branding.brandingConfig?.headerText || 
-                     (isStateLevelTenant 
+  // Priority: state-level tenant override > custom branding > county name
+  const headerText = isStateLevelTenant 
                        ? `${stateConfig.stateName} Department of Human Services`
-                       : branding.countyName);
+                       : (branding.brandingConfig?.headerText || branding.countyName);
 
   return (
     <div 
