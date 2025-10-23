@@ -1,5 +1,7 @@
 import crypto from 'crypto';
 import { createLogger } from './logger.service';
+import { db } from '../db';
+import { sql } from 'drizzle-orm';
 
 const logger = createLogger('Encryption');
 
@@ -310,11 +312,17 @@ class EncryptionService {
   /**
    * Securely delete an encryption key from environment/key store
    * 
+   * Multi-cloud KMS integration for FedRAMP-compliant deployments:
+   * - AWS GovCloud: AWS KMS ScheduleKeyDeletion (7-30 day waiting period)
+   * - GCP: Cloud KMS DestroyCryptoKeyVersion
+   * - Azure Government: Key Vault DeleteKey (soft-delete with purge protection)
+   * - Local/Dev: Environment variable removal (non-production only)
+   * 
    * WARNING: This permanently destroys the key. All data encrypted with
-   * this key will become irrecoverable. Use only for CRIT-002 data disposal.
+   * this key will become irrecoverably unusable. Use only for CRIT-002 data disposal.
    * 
    * @param keyVersion - Key version to delete (1 = current, higher for rotated keys)
-   * @returns Promise<boolean> - True if key was deleted
+   * @returns Promise<boolean> - True if key deletion was scheduled/completed
    */
   async deleteEncryptionKey(keyVersion: number): Promise<boolean> {
     logger.warn(`🔒 Cryptographic Shredding: Deleting encryption key v${keyVersion}`, {
@@ -323,25 +331,330 @@ class EncryptionService {
       action: 'deleteEncryptionKey'
     });
     
-    // In production, this would interface with a key management service (KMS):
-    // - AWS KMS: ScheduleKeyDeletion (7-30 day waiting period)
-    // - GCP KMS: DestroyCryptoKeyVersion
-    // - Azure Key Vault: DeleteKey with soft-delete
+    // Detect cloud environment for KMS routing
+    const cloudProvider = this.detectCloudProvider();
     
-    // For now, we log the deletion request. In production deployment:
-    // 1. Remove key from environment variables
-    // 2. Call KMS deletion API
-    // 3. Wait for KMS purge completion
-    // 4. Verify key is irrecoverable
+    try {
+      switch (cloudProvider) {
+        case 'aws':
+          return await this.deleteKeyAWS(keyVersion);
+        
+        case 'gcp':
+          return await this.deleteKeyGCP(keyVersion);
+        
+        case 'azure':
+          return await this.deleteKeyAzure(keyVersion);
+        
+        case 'local':
+        default:
+          return await this.deleteKeyLocal(keyVersion);
+      }
+    } catch (error) {
+      logger.error(`Failed to delete encryption key v${keyVersion}`, {
+        keyVersion,
+        cloudProvider,
+        error: error instanceof Error ? error.message : 'Unknown error',
+        service: 'Encryption'
+      });
+      throw error;
+    }
+  }
+  
+  /**
+   * Detect cloud provider for KMS routing
+   * Deployment-agnostic design supports AWS/GCP/Azure/Local
+   */
+  private detectCloudProvider(): 'aws' | 'gcp' | 'azure' | 'local' {
+    // AWS GovCloud detection (AWS_REGION env var)
+    if (process.env.AWS_REGION) {
+      return 'aws';
+    }
     
-    logger.info(`✅ Encryption key v${keyVersion} scheduled for deletion`, {
+    // GCP detection (GCP_PROJECT or GOOGLE_CLOUD_PROJECT env var)
+    if (process.env.GCP_PROJECT || process.env.GOOGLE_CLOUD_PROJECT) {
+      return 'gcp';
+    }
+    
+    // Azure Government detection (AZURE_TENANT_ID env var)
+    if (process.env.AZURE_TENANT_ID) {
+      return 'azure';
+    }
+    
+    // Local/development (no cloud KMS)
+    return 'local';
+  }
+  
+  /**
+   * AWS KMS key deletion (AWS GovCloud compatible)
+   * Uses ScheduleKeyDeletion with 7-30 day waiting period
+   * 
+   * PRODUCTION SETUP:
+   * 1. Install AWS SDK: npm install @aws-sdk/client-kms
+   * 2. Set AWS_REGION environment variable
+   * 3. Configure IAM role with kms:ScheduleKeyDeletion permission
+   * 4. Create KMS key alias: alias/jawn-encryption-key-v{version}
+   */
+  private async deleteKeyAWS(keyVersion: number): Promise<boolean> {
+    logger.info(`AWS KMS: Scheduling key deletion v${keyVersion}`, {
       keyVersion,
+      region: process.env.AWS_REGION,
       service: 'Encryption',
-      action: 'deleteEncryptionKey',
-      compliance: 'NIST 800-88 cryptographic shredding'
+      cloudProvider: 'aws'
+    });
+    
+    try {
+      // Attempt to load AWS KMS SDK (may not be installed in dev)
+      const { KMSClient, ScheduleKeyDeletionCommand, DescribeKeyCommand } = await import('@aws-sdk/client-kms').catch(() => {
+        throw new Error('AWS KMS SDK not installed. Run: npm install @aws-sdk/client-kms');
+      });
+      
+      const kms = new KMSClient({ region: process.env.AWS_REGION });
+      const keyAlias = `alias/jawn-encryption-key-v${keyVersion}`;
+      
+      // Step 1: Look up key ARN from alias (ScheduleKeyDeletion requires ARN, not alias)
+      const describeResult = await kms.send(new DescribeKeyCommand({
+        KeyId: keyAlias
+      }));
+      
+      if (!describeResult.KeyMetadata?.KeyId) {
+        throw new Error(`Failed to resolve key ARN for alias: ${keyAlias}`);
+      }
+      
+      const keyArn = describeResult.KeyMetadata.Arn || describeResult.KeyMetadata.KeyId;
+      
+      // Step 2: Schedule key deletion using ARN
+      const result = await kms.send(new ScheduleKeyDeletionCommand({
+        KeyId: keyArn, // Use ARN, not alias
+        PendingWindowInDays: 7 // Minimum for GovCloud compliance
+      }));
+      
+      logger.info(`✅ AWS KMS: Key v${keyVersion} scheduled for deletion`, {
+        keyVersion,
+        region: process.env.AWS_REGION,
+        deletionDate: result.DeletionDate,
+        keyId: result.KeyId,
+        service: 'Encryption',
+        compliance: 'NIST 800-88, FedRAMP Rev. 5',
+        kmsOperation: 'ScheduleKeyDeletion'
+      });
+      
+      return true;
+    } catch (error) {
+      logger.error(`AWS KMS key deletion failed - cryptographic shredding incomplete`, {
+        keyVersion,
+        region: process.env.AWS_REGION,
+        error: error instanceof Error ? error.message : 'Unknown error',
+        service: 'Encryption'
+      });
+      throw new Error(`AWS KMS key deletion failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+  
+  /**
+   * GCP Cloud KMS key deletion
+   * Uses DestroyCryptoKeyVersion for immediate destruction
+   * 
+   * PRODUCTION SETUP:
+   * 1. Install GCP SDK: npm install @google-cloud/kms
+   * 2. Set GCP_PROJECT or GOOGLE_CLOUD_PROJECT environment variable
+   * 3. Configure service account with cloudkms.cryptoKeyVersions.destroy permission
+   * 4. Create KMS key: projects/{project}/locations/us/keyRings/jawn/cryptoKeys/encryption-key
+   */
+  private async deleteKeyGCP(keyVersion: number): Promise<boolean> {
+    const project = process.env.GCP_PROJECT || process.env.GOOGLE_CLOUD_PROJECT;
+    
+    logger.info(`GCP Cloud KMS: Destroying key version v${keyVersion}`, {
+      keyVersion,
+      project,
+      service: 'Encryption',
+      cloudProvider: 'gcp'
+    });
+    
+    try {
+      // Attempt to load GCP KMS SDK (may not be installed in dev)
+      const { KeyManagementServiceClient } = await import('@google-cloud/kms').catch(() => {
+        throw new Error('GCP KMS SDK not installed. Run: npm install @google-cloud/kms');
+      });
+      
+      const client = new KeyManagementServiceClient();
+      const name = `projects/${project}/locations/us/keyRings/jawn/cryptoKeys/encryption-key/cryptoKeyVersions/${keyVersion}`;
+      const [result] = await client.destroyCryptoKeyVersion({ name });
+      
+      logger.info(`✅ GCP Cloud KMS: Key v${keyVersion} destroyed`, {
+        keyVersion,
+        project,
+        state: result.state,
+        destroyTime: result.destroyTime,
+        service: 'Encryption',
+        compliance: 'NIST 800-88, FedRAMP Rev. 5',
+        kmsOperation: 'DestroyCryptoKeyVersion'
+      });
+      
+      return true;
+    } catch (error) {
+      logger.error(`GCP KMS key deletion failed - cryptographic shredding incomplete`, {
+        keyVersion,
+        project,
+        error: error instanceof Error ? error.message : 'Unknown error',
+        service: 'Encryption'
+      });
+      throw new Error(`GCP KMS key deletion failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+  
+  /**
+   * Azure Key Vault key deletion (Azure Government compatible)
+   * Uses DeleteKey with soft-delete and purge protection
+   * 
+   * PRODUCTION SETUP:
+   * 1. Install Azure SDKs: npm install @azure/keyvault-keys @azure/identity
+   * 2. Set AZURE_TENANT_ID and AZURE_KEYVAULT_URL environment variables
+   * 3. Configure managed identity or service principal with Key Vault Crypto Officer role
+   * 4. Create Key Vault key: jawn-encryption-key-v{version}
+   */
+  private async deleteKeyAzure(keyVersion: number): Promise<boolean> {
+    const tenantId = process.env.AZURE_TENANT_ID;
+    const vaultUrl = process.env.AZURE_KEYVAULT_URL;
+    
+    if (!vaultUrl) {
+      throw new Error('AZURE_KEYVAULT_URL environment variable required for Azure Key Vault');
+    }
+    
+    logger.info(`Azure Key Vault: Deleting key v${keyVersion}`, {
+      keyVersion,
+      tenantId,
+      vaultUrl,
+      service: 'Encryption',
+      cloudProvider: 'azure'
+    });
+    
+    try {
+      // Attempt to load Azure Key Vault SDK (may not be installed in dev)
+      const { KeyClient } = await import('@azure/keyvault-keys').catch(() => {
+        throw new Error('Azure Key Vault SDK not installed. Run: npm install @azure/keyvault-keys @azure/identity');
+      });
+      const { DefaultAzureCredential } = await import('@azure/identity').catch(() => {
+        throw new Error('Azure Identity SDK not installed. Run: npm install @azure/identity');
+      });
+      
+      const credential = new DefaultAzureCredential();
+      const client = new KeyClient(vaultUrl, credential);
+      const keyName = `jawn-encryption-key-v${keyVersion}`;
+      
+      // Step 1: Soft delete the key
+      const deletePoller = await client.beginDeleteKey(keyName);
+      const deletedKey = await deletePoller.pollUntilDone();
+      
+      logger.info(`Azure Key Vault: Key v${keyVersion} soft-deleted, purging...`, {
+        keyVersion,
+        deletedOn: deletedKey.deletedOn,
+        service: 'Encryption'
+      });
+      
+      // Step 2: Purge the key (permanent destruction)
+      await client.purgeDeletedKey(keyName);
+      
+      logger.info(`✅ Azure Key Vault: Key v${keyVersion} purged`, {
+        keyVersion,
+        tenantId,
+        vaultUrl,
+        service: 'Encryption',
+        compliance: 'NIST 800-88, FedRAMP Rev. 5',
+        kmsOperation: 'DeleteKey + PurgeDeletedKey'
+      });
+      
+      return true;
+    } catch (error) {
+      logger.error(`Azure Key Vault key deletion failed - cryptographic shredding incomplete`, {
+        keyVersion,
+        tenantId,
+        vaultUrl,
+        error: error instanceof Error ? error.message : 'Unknown error',
+        service: 'Encryption'
+      });
+      throw new Error(`Azure Key Vault key deletion failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+  
+  /**
+   * Local key deletion (development/non-cloud environments)
+   * Removes key from environment variables (NOT for production FTI/PHI)
+   */
+  private async deleteKeyLocal(keyVersion: number): Promise<boolean> {
+    const keyEnvVar = keyVersion === 1 ? 'ENCRYPTION_KEY' : `ENCRYPTION_KEY_V${keyVersion}`;
+    
+    logger.warn(`Local key deletion: ${keyEnvVar} (dev/non-cloud only)`, {
+      keyVersion,
+      keyEnvVar,
+      service: 'Encryption',
+      cloudProvider: 'local',
+      warning: 'Local key deletion is NOT suitable for production FTI/PHI. Use cloud KMS.'
+    });
+    
+    // In local/dev environments, remove from process.env
+    // NOTE: This does NOT provide NIST 800-88 compliance for production
+    delete process.env[keyEnvVar];
+    
+    logger.info(`✅ Local key v${keyVersion} removed from environment`, {
+      keyVersion,
+      keyEnvVar,
+      service: 'Encryption',
+      compliance: 'Local dev only - NOT NIST 800-88 compliant'
     });
     
     return true;
+  }
+  
+  /**
+   * Recursively extract all keyVersion values from record snapshots
+   * Handles nested structures like { encrypted: { keyVersion, ... } }
+   * 
+   * @param recordSnapshots - Record snapshots to inspect
+   * @returns Set of unique key versions found
+   */
+  private extractKeyVersionsFromRecords(recordSnapshots: Record<string, any>): Set<number> {
+    const keyVersions = new Set<number>();
+    
+    /**
+     * Recursive helper to traverse object tree and find keyVersion fields
+     */
+    const extractFromValue = (value: any): void => {
+      if (!value) return;
+      
+      // Check if this object has a keyVersion field (EncryptionResult structure)
+      if (typeof value === 'object' && 'keyVersion' in value) {
+        const version = value.keyVersion || this.currentKeyVersion;
+        keyVersions.add(version);
+      }
+      
+      // If it's an object, recursively check all its properties
+      if (typeof value === 'object' && !Array.isArray(value)) {
+        for (const key in value) {
+          extractFromValue(value[key]);
+        }
+      }
+      // If it's an array, check each element
+      else if (Array.isArray(value)) {
+        value.forEach(item => extractFromValue(item));
+      }
+      // If it's a string, try parsing as JSON (might be stringified EncryptionResult)
+      else if (typeof value === 'string') {
+        try {
+          const parsed = JSON.parse(value);
+          extractFromValue(parsed);
+        } catch {
+          // Not JSON, skip
+        }
+      }
+    };
+    
+    // Traverse all record snapshots
+    for (const recordId in recordSnapshots) {
+      const snapshot = recordSnapshots[recordId];
+      extractFromValue(snapshot);
+    }
+    
+    return keyVersions;
   }
   
   /**
@@ -368,33 +681,129 @@ class EncryptionService {
       action: 'shredEncryptedData'
     });
     
-    // Step 1: Identify unique key versions used by these records
-    const keyVersions = new Set<number>();
-    // In production, query records to find their keyVersion values
-    keyVersions.add(this.currentKeyVersion);
-    
-    // Step 2: Delete encryption keys (makes data irrecoverable)
-    for (const keyVersion of keyVersions) {
-      await this.deleteEncryptionKey(keyVersion);
-    }
-    
-    // Step 3: Log disposal to data_disposal_logs (GDPR/IRS compliance evidence)
-    // This would be called by dataRetention.service.ts which has database access
     const disposalLogIds: string[] = [];
     
-    logger.info(`✅ Cryptographic shredding complete: ${recordIds.length} records`, {
-      tableName,
-      recordCount: recordIds.length,
-      keyVersionsDeleted: Array.from(keyVersions),
-      deletedBy,
-      service: 'Encryption',
-      compliance: 'NIST 800-88, IRS Pub 1075, GDPR Art. 5'
-    });
-    
-    return {
-      shreddedCount: recordIds.length,
-      disposalLogIds
-    };
+    try {
+      // Step 1: Fetch record snapshots before key deletion
+      const recordSnapshots: Record<string, any> = {};
+      for (const recordId of recordIds) {
+        try {
+          const result = await db.execute(sql`
+            SELECT *
+            FROM ${sql.identifier(tableName)}
+            WHERE id = ${recordId}
+          `);
+          
+          if (result.rows.length > 0) {
+            recordSnapshots[recordId] = result.rows[0];
+          }
+        } catch (error) {
+          logger.error(`Failed to fetch record snapshot for ${tableName}:${recordId}`, {
+            tableName,
+            recordId,
+            error: error instanceof Error ? error.message : 'Unknown error',
+            service: 'Encryption'
+          });
+        }
+      }
+      
+      // Step 2: Identify unique key versions used by these records
+      // Recursively extract keyVersion from all encrypted fields in the record snapshots
+      const keyVersions = this.extractKeyVersionsFromRecords(recordSnapshots);
+      
+      // Fallback: if no key versions found in encrypted fields, use current key
+      if (keyVersions.size === 0) {
+        logger.warn('No encrypted key versions found in records, using current key version', {
+          currentKeyVersion: this.currentKeyVersion,
+          service: 'Encryption'
+        });
+        keyVersions.add(this.currentKeyVersion);
+      }
+      
+      logger.info(`Detected ${keyVersions.size} unique encryption key versions for shredding`, {
+        keyVersions: Array.from(keyVersions),
+        recordCount: Object.keys(recordSnapshots).length,
+        service: 'Encryption'
+      });
+      
+      // Step 3: Delete encryption keys (makes data irrecoverably unusable)
+      const keyDeletionResults: Record<number, boolean> = {};
+      for (const keyVersion of keyVersions) {
+        keyDeletionResults[keyVersion] = await this.deleteEncryptionKey(keyVersion);
+      }
+      
+      // Step 4: Write disposal logs to data_disposal_logs table (immutable audit trail)
+      for (const recordId of recordIds) {
+        try {
+          const recordSnapshot = recordSnapshots[recordId];
+          
+          const result = await db.execute(sql`
+            INSERT INTO data_disposal_logs (
+              table_name,
+              record_id,
+              deletion_reason,
+              deleted_by,
+              deletion_method,
+              record_snapshot,
+              legal_hold_status,
+              audit_trail
+            ) VALUES (
+              ${tableName},
+              ${recordId},
+              'retention_period_expired_cryptographic_shredding',
+              ${deletedBy},
+              'crypto_shred',
+              ${JSON.stringify(recordSnapshot || {})},
+              'no_holds',
+              ${JSON.stringify({
+                action: 'cryptographic_shredding',
+                timestamp: new Date().toISOString(),
+                performedBy: deletedBy,
+                keyVersionsDeleted: Array.from(keyVersions),
+                keyDeletionResults,
+                compliance: 'NIST 800-88 Rev. 1, IRS Pub 1075 §9.3.4, GDPR Art. 5',
+                method: 'encryption_key_destruction'
+              })}
+            )
+            RETURNING id
+          `);
+          
+          if (result.rows.length > 0) {
+            disposalLogIds.push(result.rows[0].id);
+          }
+        } catch (error) {
+          logger.error(`Failed to write disposal log for ${tableName}:${recordId}`, {
+            tableName,
+            recordId,
+            error: error instanceof Error ? error.message : 'Unknown error',
+            service: 'Encryption'
+          });
+        }
+      }
+      
+      logger.info(`✅ Cryptographic shredding complete: ${recordIds.length} records, ${disposalLogIds.length} disposal logs`, {
+        tableName,
+        recordCount: recordIds.length,
+        disposalLogsCreated: disposalLogIds.length,
+        keyVersionsDeleted: Array.from(keyVersions),
+        deletedBy,
+        service: 'Encryption',
+        compliance: 'NIST 800-88, IRS Pub 1075, GDPR Art. 5'
+      });
+      
+      return {
+        shreddedCount: recordIds.length,
+        disposalLogIds
+      };
+    } catch (error) {
+      logger.error(`Cryptographic shredding failed`, {
+        tableName,
+        recordCount: recordIds.length,
+        error: error instanceof Error ? error.message : 'Unknown error',
+        service: 'Encryption'
+      });
+      throw error;
+    }
   }
   
   /**
