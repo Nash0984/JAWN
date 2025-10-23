@@ -59,6 +59,7 @@
 |----------|--------|-------------|
 | **[DATABASE_SCHEMA.md](official/DATABASE_SCHEMA.md)** | ✅ New | Visual ER diagrams for 179 tables |
 | **[API_ARCHITECTURE.md](official/API_ARCHITECTURE.md)** | ✅ New | API reference with sequence diagrams (367 endpoints) |
+| **[TLS_DEPLOYMENT_GUIDE.md](official/TLS_DEPLOYMENT_GUIDE.md)** | ✅ New | FedRAMP-compliant TLS configurations for AWS/GCP/Azure/nginx/Apache |
 | **[SYSTEM_ARCHITECTURE.md](official/SYSTEM_ARCHITECTURE.md)** | 🚧 Pending | System design and deployment topology |
 | **[DEPLOYMENT_GUIDE.md](official/DEPLOYMENT_GUIDE.md)** | 🚧 Pending | Deployment procedures and runbooks |
 | **[COMPLIANCE_MATRIX.md](official/COMPLIANCE_MATRIX.md)** | 🚧 Pending | GDPR/HIPAA/FERPA compliance mapping |
