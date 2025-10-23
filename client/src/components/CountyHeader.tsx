@@ -11,8 +11,24 @@ export function CountyHeader() {
     return null;
   }
 
+  // White-label: Detect state-level vs county-level tenant
   const logoUrl = branding.brandingConfig?.logoUrl;
-  const headerText = branding.brandingConfig?.headerText || branding.countyName;
+  
+  // State-level tenant if: no custom branding AND countyName indicates county-level (contains city/county keywords)
+  // For white-labeling: prefer state-level branding when county appears to be default/demo data
+  const countyLower = (branding.countyName || '').toLowerCase();
+  const looksLikeCountyLevel = branding.countyName && 
+    (countyLower.includes('city') || 
+     countyLower.includes('county') ||
+     countyLower.includes('baltimore'));
+  
+  const hasCustomBranding = !!(branding.brandingConfig?.headerText || branding.brandingConfig?.logoUrl);
+  const isStateLevelTenant = !hasCustomBranding && looksLikeCountyLevel && stateConfig?.stateName;
+  
+  const headerText = branding.brandingConfig?.headerText || 
+                     (isStateLevelTenant 
+                       ? `${stateConfig.stateName} Department of Human Services`
+                       : branding.countyName);
 
   return (
     <div 
@@ -26,11 +42,12 @@ export function CountyHeader() {
       {logoUrl ? (
         <img 
           src={logoUrl} 
-          alt={`${branding.countyName} Logo`}
+          alt={`${headerText} Logo`}
           className="h-10 w-10 object-contain"
           data-testid="img-county-logo"
         />
-      ) : ((stateConfig?.stateName && branding.countyName?.toLowerCase().includes(stateConfig.stateName.toLowerCase())) || 
+      ) : (isStateLevelTenant || 
+             (stateConfig?.stateName && branding.countyName?.toLowerCase().includes(stateConfig.stateName.toLowerCase())) || 
              branding.countyName?.toLowerCase().includes('state') || 
              branding.countyName?.toLowerCase().includes('commonwealth')) ? (
         <TenantSeal
@@ -54,7 +71,15 @@ export function CountyHeader() {
         >
           {headerText}
         </h1>
-        {branding.welcomeMessage && (
+        {isStateLevelTenant ? (
+          <p 
+            className="text-sm"
+            style={{ color: `color-mix(in srgb, var(--county-primary), black 10%)` }}
+            data-testid="text-county-welcome"
+          >
+            Welcome to {stateConfig.stateName} Benefits Navigator
+          </p>
+        ) : branding.welcomeMessage ? (
           <p 
             className="text-sm"
             style={{ color: `color-mix(in srgb, var(--county-primary), black 10%)` }}
@@ -62,7 +87,7 @@ export function CountyHeader() {
           >
             {branding.welcomeMessage}
           </p>
-        )}
+        ) : null}
       </div>
 
       {branding.contactInfo?.phone && (
