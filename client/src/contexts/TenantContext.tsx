@@ -68,10 +68,16 @@ interface TenantProviderProps {
 export function TenantProvider({ children }: TenantProviderProps) {
   const [tenantError, setTenantError] = useState<Error | null>(null);
   
-  // Extract state code from URL
+  // Extract state code from URL (exclude admin/public/api paths)
   const currentPath = window.location.pathname;
   const stateMatch = currentPath.match(/^\/([a-z]+)\//);
-  const stateCodeFromUrl = stateMatch ? stateMatch[1].toUpperCase() : 'MD'; // Default to Maryland
+  const matchedPath = stateMatch ? stateMatch[1] : null;
+  
+  // Don't treat admin/public/api as state codes
+  const excludedPaths = ['admin', 'public', 'api', 'auth', 'legal', 'demo'];
+  const stateCodeFromUrl = matchedPath && !excludedPaths.includes(matchedPath) 
+    ? matchedPath.toUpperCase() 
+    : 'MD'; // Default to Maryland
 
   // Fetch current tenant info
   const { data, isLoading, error } = useQuery<{ tenant: Tenant; branding?: TenantBranding }>({
