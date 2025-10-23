@@ -214,7 +214,7 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
   // ============================================================================
   // HEALTH CHECK ENDPOINTS - For load balancers and monitoring
   // ============================================================================
-  const { healthCheck, readinessCheck, startupCheck } = await import("./middleware/healthCheck");
+  const { healthCheck, readinessCheck, startupCheck, tlsHealthCheck } = await import("./middleware/healthCheck");
   
   // Liveness probe (is service running?)
   app.get("/health", healthCheck);
@@ -224,6 +224,9 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
   
   // Startup probe (has service completed startup?)
   app.get("/startup", startupCheck);
+  
+  // TLS/HTTPS configuration health check (CRIT-001: FedRAMP SC-8 compliance)
+  app.get("/api/health/tls", tlsHealthCheck);
   
   // Database backup monitoring endpoints - ADMIN ONLY
   const { databaseBackupService } = await import("./services/databaseBackup.service");
