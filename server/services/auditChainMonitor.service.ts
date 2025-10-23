@@ -1,6 +1,10 @@
 import { log } from '../vite';
 import { immutableAuditService } from './immutableAudit.service';
 import { logger } from './logger.service';
+import { notificationService } from './notification.service';
+import { db } from '../db';
+import { users } from '@shared/schema';
+import { eq } from 'drizzle-orm';
 
 /**
  * Audit Chain Monitor Service
@@ -18,6 +22,58 @@ import { logger } from './logger.service';
  */
 
 export class AuditChainMonitorService {
+  
+  /**
+   * Send alert notifications to all admin users when chain integrity is compromised
+   */
+  private async notifyAdminsOfChainFailure(details: {
+    verificationType: string;
+    brokenLinks: number;
+    verifiedEntries: number;
+    totalEntries: number;
+  }): Promise<void> {
+    try {
+      // Get all admin users
+      const adminUsers = await db
+        .select({ id: users.id, username: users.username })
+        .from(users)
+        .where(eq(users.role, 'admin'));
+      
+      if (adminUsers.length === 0) {
+        logger.warn('No admin users found to notify about chain integrity compromise');
+        return;
+      }
+      
+      // Send notification to each admin
+      for (const admin of adminUsers) {
+        await notificationService.createNotification({
+          userId: admin.id,
+          type: 'alert',
+          title: '🚨 CRITICAL: Audit Log Chain Integrity Compromised',
+          message: `The immutable audit log chain has ${details.brokenLinks} broken link(s). Immediate investigation required. Verification type: ${details.verificationType}. Verified ${details.verifiedEntries} of ${details.totalEntries} entries.`,
+          priority: 'high',
+          relatedEntityType: 'audit_log',
+          relatedEntityId: null,
+          actionUrl: '/admin/monitoring?tab=audit',
+          metadata: {
+            brokenLinks: details.brokenLinks,
+            verificationType: details.verificationType,
+            verifiedEntries: details.verifiedEntries,
+            totalEntries: details.totalEntries,
+            severity: 'critical',
+            complianceImpact: 'NIST 800-53 AU-9, IRS Pub 1075 9.3.1, HIPAA § 164.312(b)',
+          },
+        });
+      }
+      
+      logger.info('Sent chain integrity failure notifications to admin users', {
+        adminCount: adminUsers.length,
+        brokenLinks: details.brokenLinks,
+      });
+    } catch (error) {
+      logger.error('Failed to send admin notifications for chain failure', { error });
+    }
+  }
   
   /**
    * Verify recent audit log entries (last 1000)
@@ -69,6 +125,14 @@ export class AuditChainMonitorService {
             totalEntries: result.totalEntries,
             verificationType: 'recent_1000',
           },
+        });
+        
+        // Send critical alert to all admins
+        await this.notifyAdminsOfChainFailure({
+          verificationType: 'recent_1000',
+          brokenLinks: result.brokenLinks.length,
+          verifiedEntries: result.verifiedEntries,
+          totalEntries: result.totalEntries,
         });
       }
       
@@ -142,6 +206,14 @@ export class AuditChainMonitorService {
             totalEntries: result.totalEntries,
             verificationType: 'full_chain',
           },
+        });
+        
+        // Send critical alert to all admins
+        await this.notifyAdminsOfChainFailure({
+          verificationType: 'full_chain',
+          brokenLinks: result.brokenLinks.length,
+          verifiedEntries: result.verifiedEntries,
+          totalEntries: result.totalEntries,
         });
       }
       
