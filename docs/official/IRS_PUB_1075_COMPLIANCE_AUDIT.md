@@ -15,12 +15,12 @@
 ┌──────────────────────────────────────────────────────────────┐
 │  IRS Publication 1075 Compliance Status                      │
 ├──────────────────────────────────────────────────────────────┤
-│  Overall Compliance:        72% (SUBSTANTIAL)                │
+│  Overall Compliance:        75% (SUBSTANTIAL)                │
 │  Safeguards Assessed:       22                               │
 │  Safeguards Implemented:    14 of 22                         │
-│  Safeguards Partial:        4                                │
-│  Safeguards Planned:        4                                │
-│  Critical Gaps:             2                                │
+│  Safeguards Partial:        5                                │
+│  Safeguards Planned:        3                                │
+│  Critical Gaps:             1 (§9.3.4 Retention/Disposal)    │
 │  High Priority Gaps:        4                                │
 │  Medium Priority Gaps:      2                                │
 │  FTI Classification:        Returns and Return Information   │
@@ -155,7 +155,7 @@ graph LR
 |-------------|--------|----------------|----------|-----|
 | **Access Controls** | ✅ Implemented | RBAC with 4 roles, ownership verification | `requireAuth`, ownership middleware | None |
 | **Encryption (Data at Rest)** | ✅ Implemented | AES-256-GCM for all FTI fields | `encryptionService` | None |
-| **Encryption (Data in Transit)** | ⚠️ Infrastructure | TLS handled by Replit infrastructure (not app-controlled), HSTS headers configured | Helmet HSTS, Replit TLS | Verify TLS 1.2+ |
+| **Encryption (Data in Transit)** | ✅ Implemented | TLS 1.2+ enforced, `/api/health/tls` verification endpoint, production HTTPS enforcement (426 Upgrade Required), FedRAMP-compliant deployment guide | `healthCheck.ts`, `enforceHttpsProduction`, `TLS_DEPLOYMENT_GUIDE.md` | ✅ Resolved October 2025 |
 | **Firewall Protection** | ✅ Implemented | GCP Cloud Armor, security headers (CSP) | `securityHeaders.ts` | None |
 | **Intrusion Detection** | ✅ Implemented | Security event logging, rate limiting, Sentry monitoring | `securityEvents` table | None |
 | **Audit Trails** | ✅ Implemented | Comprehensive audit logging for all FTI access | `auditLogs` table | None |
@@ -164,7 +164,7 @@ graph LR
 | **Patch Management** | ✅ Implemented | npm audit, Dependabot, Sentry notifications | Automated dependency updates | None |
 | **Incident Response Plan** | ✅ Implemented | Security event classification, breach notification procedures | SECURITY.md, `logSecurityEvent()` | None |
 
-**Safeguard Status: 80% Implemented (8/10, 1 infrastructure dependency)**
+**Safeguard Status: 90% Implemented (9/10)**
 
 ---
 
@@ -179,10 +179,10 @@ graph LR
 | **Log Success/Failure** | ✅ Implemented | Success flag and error message for failed operations | `auditLogs.success`, `errorMessage` | None |
 | **Log Source IP Address** | ✅ Implemented | IP address captured (handles proxies with X-Forwarded-For) | `auditLogs.ipAddress` | None |
 | **Tamper-Evident Logs** | ⚠️ Planned | Audit logs can be deleted by admins (should be append-only) | None | HIGH-004 (from NIST audit GAP-017) |
-| **Log Retention (7 Years)** | 🔴 Critical Gap | No automated 7-year retention (IRS Pub 1075 §9.3.4 VIOLATION) | None | CRIT-002 |
+| **Log Retention (7 Years)** | ⚠️ Partial | Retention tracking infrastructure complete (35 tables), but IRS Pub 1075 §9.3.4 requires cryptographic purge/shredding which is not yet implemented; KMS key destruction planned Q1 2026 | `dataRetention.service.ts`, `migrations/0003` | ⚠️ HIGH-CRIT-002 |
 | **Regular Log Review** | ⚠️ Planned | Audit query API exists, no automated review dashboard | None | MED-006 |
 
-**Safeguard Status: 56% Implemented (5/9, 1 critical gap)**
+**Safeguard Status: 56% Implemented (5/9, 1 partial)**
 
 ### Audit Log Sample (FTI Access)
 

@@ -15,10 +15,10 @@
 ┌──────────────────────────────────────────────────────────────┐
 │  GDPR & HIPAA Compliance Status                              │
 ├──────────────────────────────────────────────────────────────┤
-│  GDPR Compliance:           80% (STRONG)                     │
-│  HIPAA Compliance:          77% (SUBSTANTIAL)                │
-│  Overall Privacy Rating:    78% (SUBSTANTIAL)                │
-│  Critical Gaps:             2                                │
+│  GDPR Compliance:           81% (STRONG)                     │
+│  HIPAA Compliance:          78% (SUBSTANTIAL)                │
+│  Overall Privacy Rating:    80% (STRONG)                     │
+│  Critical Gaps:             2 (GDPR Art.5 & HIPAA §164.310)  │
 │  High Priority Gaps:        2                                │
 │  PHI Data Types:            Medicaid applications, health    │
 │  PII Data Types:            SSN, names, addresses, income    │
@@ -169,11 +169,11 @@ sequenceDiagram
 | **Encryption** | ✅ Implemented | AES-256-GCM for all special category data (SSN, health, bank accounts) | `encryption.service.ts` |
 | **Minimization** | ✅ Implemented | Only collect data necessary for service delivery | Schema design |
 | **Accuracy** | ✅ Implemented | Data validation with Zod schemas, user can correct errors | Validation throughout |
-| **Storage Limitation** | ⚠️ Planned | No automated data purge after retention period | GAP-GDPR-001 |
+| **Storage Limitation** | ⚠️ Partial | Retention tracking infrastructure complete (35 tables), but GDPR Art. 5(1)(e) and HIPAA §164.310(d)(2) require enforceable disposal via cryptographic shredding which is not yet implemented; KMS key destruction planned Q1 2026 | `dataRetention.service.ts`, `migrations/0003`, ⚠️ GAP-GDPR-001 |
 | **Integrity & Confidentiality** | ✅ Implemented | TLS 1.3, access controls, audit logging | Comprehensive security |
 | **Accountability** | ✅ Implemented | Audit logs, data processing records, consent tracking | GDPR service |
 
-**GDPR Article 25 Compliance: 86% (6/7)**
+**GDPR Article 25 Compliance: 86% (6/7 implemented, 1 partial requiring KMS)**
 
 ---
 
