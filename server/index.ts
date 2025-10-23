@@ -24,7 +24,7 @@ import crypto from "crypto";
 import passport from "./auth";
 import { registerRoutes } from "./routes";
 import { corsOptions, logCorsConfig } from "./middleware/corsConfig";
-import { helmetConfig, additionalSecurityHeaders, logSecurityHeadersConfig } from "./middleware/securityHeaders";
+import { helmetConfig, additionalSecurityHeaders, enforceHttpsProduction, logSecurityHeadersConfig } from "./middleware/securityHeaders";
 import { initializeSystemData } from "./seedData";
 import { seedCountiesAndGamification } from "./seedCountiesAndGamification";
 import { seedMarylandLDSS } from "./seedMarylandLDSS";
@@ -100,6 +100,13 @@ app.use(cors(corsOptions));
 // ============================================================================
 app.use(helmetConfig);
 app.use(additionalSecurityHeaders);
+
+// ============================================================================
+// HTTPS ENFORCEMENT (CRIT-001) - Production TLS verification
+// ============================================================================
+// Must be applied after Helmet but before routes
+// Blocks HTTP requests in production with 426 Upgrade Required
+app.use(enforceHttpsProduction);
 
 // Parse JSON and URL-encoded bodies with size limits for security
 app.use(express.json({ limit: '10mb' })); // Limit JSON payload to 10MB

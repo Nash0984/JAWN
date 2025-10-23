@@ -133,6 +133,83 @@ export function additionalSecurityHeaders(req: any, res: any, next: any) {
 }
 
 /**
+ * Production HTTPS Enforcement Middleware (CRIT-001)
+ * 
+ * Enforces HTTPS transport encryption in production environments:
+ * - Checks X-Forwarded-Proto header from reverse proxy (AWS ALB/GCP LB/Azure Gateway/nginx)
+ * - Returns 426 Upgrade Required for HTTP requests in production
+ * - Logs security events for compliance auditing (IRS Pub 1075, FedRAMP SC-8)
+ * - Skips enforcement in development for local testing
+ * 
+ * Deployment-agnostic: Works with any reverse proxy that sets X-Forwarded-Proto
+ * 
+ * @see /api/health/tls for TLS configuration verification
+ */
+export function enforceHttpsProduction(req: any, res: any, next: any) {
+  const isProd = process.env.NODE_ENV === 'production';
+  
+  // Skip HTTPS enforcement in development
+  if (!isProd) {
+    return next();
+  }
+  
+  // Check if connection is HTTPS (via reverse proxy headers)
+  // All major cloud providers set X-Forwarded-Proto
+  const protocol = req.headers['x-forwarded-proto'] as string || 
+                   req.headers['x-forwarded-protocol'] as string ||
+                   req.protocol;
+  
+  const isHttps = protocol === 'https' || 
+                  req.secure || 
+                  req.headers['x-forwarded-ssl'] === 'on';
+  
+  if (!isHttps) {
+    // Log security event for compliance auditing
+    logger.warn('🚨 HTTP request blocked in production - HTTPS required', {
+      service: 'securityHeaders',
+      action: 'httpsEnforcement',
+      method: req.method,
+      path: req.path,
+      ip: req.ip || req.headers['x-forwarded-for'] || req.connection.remoteAddress,
+      userAgent: req.headers['user-agent'],
+      protocol: protocol || 'http',
+      secure: req.secure,
+      headers: {
+        'x-forwarded-proto': req.headers['x-forwarded-proto'],
+        'x-forwarded-ssl': req.headers['x-forwarded-ssl'],
+        'x-forwarded-protocol': req.headers['x-forwarded-protocol']
+      },
+      compliance: {
+        standard: 'IRS Pub 1075 + FedRAMP SC-8',
+        requirement: 'HTTPS transport encryption mandatory in production',
+        action: 'HTTP request rejected with 426 Upgrade Required'
+      }
+    });
+    
+    // Return 426 Upgrade Required
+    return res.status(426).json({
+      error: 'HTTPS Required',
+      message: 'This service requires HTTPS transport encryption for FedRAMP/IRS compliance. Please access via HTTPS.',
+      compliance: {
+        standard: 'IRS Publication 1075 + FedRAMP SC-8',
+        requirement: 'All connections must use TLS 1.2+ for FTI/PHI protection',
+        action: 'Configure reverse proxy to terminate TLS and set X-Forwarded-Proto: https'
+      },
+      deployment: {
+        'AWS GovCloud': 'Configure ALB with HTTPS listener and target group',
+        'GCP': 'Configure Cloud Load Balancer with HTTPS frontend',
+        'Azure Government': 'Configure Application Gateway with HTTPS listener',
+        'On-premises': 'Configure nginx/Apache with TLS termination'
+      },
+      documentation: '/api/health/tls'
+    });
+  }
+  
+  // HTTPS verified, continue
+  next();
+}
+
+/**
  * Log security headers configuration on startup
  */
 export function logSecurityHeadersConfig() {
@@ -169,5 +246,10 @@ export function logSecurityHeadersConfig() {
   logger.info(`   Permissions-Policy: Restrictive`, {
     service: "securityHeaders",
     action: "permissionsPolicy"
+  });
+  logger.info(`   HTTPS Enforcement: ${isDevelopment ? 'Disabled (Dev)' : 'Enabled (Production only)'}`, {
+    service: "securityHeaders",
+    action: "httpsEnforcement",
+    enabled: !isDevelopment
   });
 }
