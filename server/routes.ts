@@ -4095,9 +4095,11 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
       notes,
     }).returning();
     
-    // Log audit event
-    await db.insert(auditLogs).values({
+    // Log audit event using immutableAudit service for hash chain integrity
+    await immutableAuditService.log({
       userId: req.user!.id,
+      username: req.user!.username,
+      userRole: req.user!.role,
       action: 'irs_consent_recorded',
       resource: 'client_consent',
       resourceId: consent.id,
@@ -4110,6 +4112,7 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
       },
       ipAddress: ipAddress?.toString(),
       userAgent,
+      sessionId: req.sessionID,
     });
     
     res.status(201).json({
@@ -4209,9 +4212,11 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
       }
     }).returning();
     
-    // Create audit log entry
-    await db.insert(auditLogs).values({
+    // Create audit log entry using immutableAudit service for hash chain integrity
+    await immutableAuditService.log({
       userId: req.user!.id,
+      username: req.user!.username,
+      userRole: req.user!.role,
       action: 'irs_consent_recorded',
       resource: 'client_consent',
       resourceId: consent.id,
@@ -4221,7 +4226,10 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
         benefitPrograms,
         ipAddress,
         userAgent
-      }
+      },
+      ipAddress,
+      userAgent,
+      sessionId,
     });
     
     res.json({ success: true, data: consent });

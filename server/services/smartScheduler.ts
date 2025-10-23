@@ -175,7 +175,7 @@ export class SmartScheduler {
       },
       {
         name: 'audit_chain_verification',
-        cronExpression: '0 3 * * 0', // Weekly on Sunday at 3 AM (per NIST AU-6)
+        cronExpression: '0 0 * * 0', // Weekly on Sunday at midnight (per NIST AU-6)
         description: 'Audit chain verification (weekly recent entries, monthly full chain per NIST AU-6)',
         enabled: true,
         checkFunction: async () => {

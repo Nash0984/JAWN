@@ -95,7 +95,7 @@ export class AuditChainMonitorService {
         log(`✅ Audit Chain: Verified ${result.verifiedEntries} recent entries - integrity intact`);
         
         // Log successful verification to audit log
-        await immutableAuditService.logEvent({
+        await immutableAuditService.log({
           userId: 'system',
           action: 'audit_chain_verified',
           resource: 'audit_chain',
@@ -114,7 +114,7 @@ export class AuditChainMonitorService {
         });
         
         // Log chain integrity compromise
-        await immutableAuditService.logEvent({
+        await immutableAuditService.log({
           userId: 'system',
           action: 'chain_integrity_compromised',
           resource: 'audit_chain',
@@ -176,7 +176,7 @@ export class AuditChainMonitorService {
         log(`✅ Audit Chain: Verified ${result.verifiedEntries} total entries - full chain integrity intact`);
         
         // Log successful full chain verification
-        await immutableAuditService.logEvent({
+        await immutableAuditService.log({
           userId: 'system',
           action: 'audit_chain_verified',
           resource: 'audit_chain',
@@ -195,7 +195,7 @@ export class AuditChainMonitorService {
         });
         
         // Log chain integrity compromise
-        await immutableAuditService.logEvent({
+        await immutableAuditService.log({
           userId: 'system',
           action: 'chain_integrity_compromised',
           resource: 'audit_chain',
