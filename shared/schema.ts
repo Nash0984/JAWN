@@ -25,6 +25,11 @@ export const users = pgTable("users", {
   // TaxSlayer role tracking (for VITA coordination documentation only - not permission control)
   taxslayerRole: text("taxslayer_role"), // Administrator, Superuser, Preparer Current Year, Preparer All Years, Interviewer, Reviewer
   isActive: boolean("is_active").default(true).notNull(),
+  // Multi-Factor Authentication (MFA/2FA) - NIST 800-53 IA-2(1), IRS Pub 1075 requirement
+  mfaEnabled: boolean("mfa_enabled").default(false).notNull(), // Whether MFA is enabled for this user
+  mfaSecret: text("mfa_secret"), // Encrypted TOTP secret (Base32 encoded)
+  mfaBackupCodes: jsonb("mfa_backup_codes"), // Array of encrypted backup codes (one-time use)
+  mfaEnrolledAt: timestamp("mfa_enrolled_at"), // When user enrolled in MFA
   // Data retention tracking (CRIT-002: IRS/HIPAA 7-year retention, GDPR storage limitation)
   retentionCategory: text("retention_category"), // user_account_90d, reference_data_permanent
   retentionUntil: timestamp("retention_until"), // Calculated expiration date

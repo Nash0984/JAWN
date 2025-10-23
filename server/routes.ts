@@ -51,6 +51,7 @@ import { hybridService } from "./services/hybridService";
 import { auditService } from "./services/auditService";
 import { textGenerationService } from "./services/textGenerationService";
 import { notificationService } from "./services/notification.service";
+import { mfaService } from "./services/mfa.service";
 import { cacheService, CACHE_KEYS, invalidateRulesCache, generateHouseholdHash } from "./services/cacheService";
 import { kpiTrackingService } from "./services/kpiTracking.service";
 import { rateLimiters } from "./middleware/enhancedRateLimiting";
@@ -497,9 +498,9 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
     });
   }));
 
-  // Login
-  app.post("/api/auth/login", (req: Request, res: Response, next: NextFunction) => {
-    passport.authenticate("local", (err: any, user: any, info: any) => {
+  // Login with rate limiting to prevent brute-force attacks
+  app.post("/api/auth/login", rateLimiters.auth, (req: Request, res: Response, next: NextFunction) => {
+    passport.authenticate("local", async (err: any, user: any, info: any) => {
       if (err) {
         logger.error("Login authentication error", err);
         return next(err);
@@ -510,6 +511,17 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
         return res.status(401).json({ error: info?.message || "Invalid credentials" });
       }
 
+      // Check if user has MFA enabled
+      if (user.mfaEnabled) {
+        logger.info("Login requires MFA verification", { userId: user.id });
+        return res.json({
+          mfaRequired: true,
+          userId: user.id,
+          username: user.username,
+        });
+      }
+
+      // No MFA, proceed with normal login
       req.login(user, (err) => {
         if (err) {
           logger.error("Session creation error after login", err);
@@ -522,6 +534,48 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
       });
     })(req, res, next);
   });
+
+  // Complete login after MFA verification with rate limiting
+  app.post("/api/auth/mfa-login", rateLimiters.auth, asyncHandler(async (req: Request, res: Response, next: NextFunction) => {
+    const { userId, token, useBackupCode } = req.body;
+
+    if (!userId || !token) {
+      throw validationError("User ID and token are required");
+    }
+
+    // Verify the MFA token or backup code
+    let isValid = false;
+    if (useBackupCode) {
+      isValid = await mfaService.verifyBackupCode(userId, token);
+    } else {
+      isValid = await mfaService.verifyUserToken(userId, token);
+    }
+
+    if (!isValid) {
+      logger.warn("MFA login failed - invalid token", { userId });
+      return res.status(401).json({ error: "Invalid verification code" });
+    }
+
+    // Get the user
+    const [user] = await db.select().from(users).where(eq(users.id, userId));
+    if (!user) {
+      throw notFoundError("User not found");
+    }
+
+    // Create session
+    req.login(user, (err) => {
+      if (err) {
+        logger.error("Session creation error after MFA verification", err);
+        return next(err);
+      }
+
+      logger.info("MFA login successful", { userId });
+
+      // Return user without password
+      const { password, ...userWithoutPassword } = user;
+      res.json({ user: userWithoutPassword });
+    });
+  }));
 
   // Logout
   app.post("/api/auth/logout", (req: Request, res: Response) => {
@@ -598,6 +652,150 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
     const { password, ...userWithoutPassword } = req.user as any;
     res.json({ user: userWithoutPassword });
   });
+
+  // ============================================================================
+  // MULTI-FACTOR AUTHENTICATION (MFA/2FA) ENDPOINTS
+  // NIST 800-53 IA-2(1), IRS Pub 1075 compliance requirement
+  // ============================================================================
+
+  // Get MFA status for current user
+  app.get("/api/mfa/status", requireAuth, asyncHandler(async (req: Request, res: Response) => {
+    const userId = req.user!.id;
+    const [user] = await db
+      .select({ mfaEnabled: users.mfaEnabled, mfaEnrolledAt: users.mfaEnrolledAt })
+      .from(users)
+      .where(eq(users.id, userId))
+      .limit(1);
+
+    if (!user) {
+      throw notFoundError("User not found");
+    }
+
+    res.json({
+      mfaEnabled: user.mfaEnabled,
+      mfaEnrolledAt: user.mfaEnrolledAt,
+    });
+  }));
+
+  // Initiate MFA setup (generate QR code and backup codes)
+  app.post("/api/mfa/setup", requireAuth, asyncHandler(async (req: Request, res: Response) => {
+    const userId = req.user!.id;
+    const userEmail = req.user!.email || req.user!.username;
+
+    // Check if MFA is already enabled
+    const isMFAEnabled = await mfaService.isMFAEnabled(userId);
+    if (isMFAEnabled) {
+      throw validationError("MFA is already enabled for this account");
+    }
+
+    const setupData = await mfaService.setupMFA(userId, userEmail);
+
+    res.json({
+      secret: setupData.secret,
+      qrCode: setupData.qrCodeUrl,
+      backupCodes: setupData.backupCodes,
+    });
+  }));
+
+  // Enable MFA after verifying token from authenticator app
+  app.post("/api/mfa/enable", requireAuth, asyncHandler(async (req: Request, res: Response) => {
+    const { secret, token, backupCodes } = req.body;
+    const userId = req.user!.id;
+
+    if (!secret || !token || !backupCodes || !Array.isArray(backupCodes)) {
+      throw validationError("Secret, token, and backup codes are required");
+    }
+
+    const success = await mfaService.enableMFA(userId, secret, token, backupCodes);
+
+    if (!success) {
+      throw validationError("Invalid verification code. Please try again.");
+    }
+
+    res.json({ message: "MFA enabled successfully" });
+  }));
+
+  // Verify MFA token (used during login flow)
+  app.post("/api/mfa/verify", asyncHandler(async (req: Request, res: Response) => {
+    const { userId, token } = req.body;
+
+    if (!userId || !token) {
+      throw validationError("User ID and token are required");
+    }
+
+    const isValid = await mfaService.verifyUserToken(userId, token);
+
+    if (!isValid) {
+      return res.status(401).json({ error: "Invalid verification code" });
+    }
+
+    res.json({ verified: true });
+  }));
+
+  // Verify backup code (alternative to TOTP token)
+  app.post("/api/mfa/verify-backup", asyncHandler(async (req: Request, res: Response) => {
+    const { userId, code } = req.body;
+
+    if (!userId || !code) {
+      throw validationError("User ID and backup code are required");
+    }
+
+    const isValid = await mfaService.verifyBackupCode(userId, code);
+
+    if (!isValid) {
+      return res.status(401).json({ error: "Invalid or already used backup code" });
+    }
+
+    res.json({ verified: true });
+  }));
+
+  // Disable MFA (requires password verification)
+  app.post("/api/mfa/disable", requireAuth, asyncHandler(async (req: Request, res: Response) => {
+    const { password } = req.body;
+    const userId = req.user!.id;
+
+    if (!password) {
+      throw validationError("Password is required to disable MFA");
+    }
+
+    // Verify password
+    const [user] = await db.select().from(users).where(eq(users.id, userId));
+    if (!user) {
+      throw notFoundError("User not found");
+    }
+
+    const isValidPassword = await bcrypt.compare(password, user.password);
+    if (!isValidPassword) {
+      throw authorizationError("Incorrect password");
+    }
+
+    await mfaService.disableMFA(userId);
+
+    res.json({ message: "MFA disabled successfully" });
+  }));
+
+  // Regenerate backup codes (requires MFA verification)
+  app.post("/api/mfa/regenerate-backup-codes", requireAuth, asyncHandler(async (req: Request, res: Response) => {
+    const { token } = req.body;
+    const userId = req.user!.id;
+
+    if (!token) {
+      throw validationError("MFA token is required to regenerate backup codes");
+    }
+
+    // Verify MFA token before regenerating
+    const isValid = await mfaService.verifyUserToken(userId, token);
+    if (!isValid) {
+      throw authorizationError("Invalid MFA token");
+    }
+
+    const newBackupCodes = await mfaService.regenerateBackupCodes(userId);
+
+    res.json({
+      message: "Backup codes regenerated successfully",
+      backupCodes: newBackupCodes,
+    });
+  }));
 
   // ============================================================================
   // LEGAL CONSENT ENDPOINTS - HIPAA Compliance & Policy Tracking

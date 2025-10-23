@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -31,6 +32,7 @@ import {
 import { Helmet } from "react-helmet-async";
 import { useTenant } from "@/contexts/TenantContext";
 import { TenantLogo } from "@/components/TenantLogo";
+import { MFAVerification } from "@/components/MFAVerification";
 
 const loginSchema = z.object({
   username: z.string().min(3, "Your username needs to be at least 3 characters"),
@@ -70,6 +72,9 @@ export default function Login() {
   const [location, setLocation] = useLocation();
   const { toast } = useToast();
   const { stateConfig } = useTenant();
+  const [mfaRequired, setMfaRequired] = useState(false);
+  const [mfaUserId, setMfaUserId] = useState<string | null>(null);
+  const [mfaUsername, setMfaUsername] = useState<string | null>(null);
   
   const stateName = stateConfig?.stateName || 'State';
   const agencyAcronym = stateConfig?.agencyAcronym || '';
@@ -86,44 +91,56 @@ export default function Login() {
     },
   });
 
+  const navigateAfterLogin = (user: any) => {
+    // If there's a returnUrl, navigate there; otherwise, determine dashboard URL based on role
+    let destinationUrl = returnUrl || "/";
+    
+    if (!returnUrl) {
+      const role = user.role;
+      if (role === "admin" || role === "super_admin") {
+        destinationUrl = "/dashboard/admin";
+      } else if (role === "navigator") {
+        destinationUrl = "/dashboard/navigator";
+      } else if (role === "caseworker") {
+        destinationUrl = "/dashboard/caseworker";
+      } else if (role === "client") {
+        destinationUrl = "/dashboard/client";
+      }
+    }
+    
+    // Show appropriate toast message
+    if (returnUrl) {
+      toast({
+        title: "Welcome back!",
+        description: "Your work has been restored.",
+      });
+    } else {
+      toast({
+        title: "Welcome back!",
+        description: `Logged in as ${user.username}`,
+      });
+    }
+    
+    setLocation(destinationUrl);
+  };
+
   const loginMutation = useMutation({
     mutationFn: async (data: LoginFormData) => {
       const response = await apiRequest("POST", "/api/auth/login", data);
       return response.json();
     },
     onSuccess: (data) => {
+      // Check if MFA is required
+      if (data.mfaRequired) {
+        setMfaRequired(true);
+        setMfaUserId(data.userId);
+        setMfaUsername(data.username);
+        return;
+      }
+
+      // No MFA required, proceed with normal login
       queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
-      
-      // If there's a returnUrl, navigate there; otherwise, determine dashboard URL based on role
-      let destinationUrl = returnUrl || "/";
-      
-      if (!returnUrl) {
-        const role = data.user.role;
-        if (role === "admin" || role === "super_admin") {
-          destinationUrl = "/dashboard/admin";
-        } else if (role === "navigator") {
-          destinationUrl = "/dashboard/navigator";
-        } else if (role === "caseworker") {
-          destinationUrl = "/dashboard/caseworker";
-        } else if (role === "client") {
-          destinationUrl = "/dashboard/client";
-        }
-      }
-      
-      // Show appropriate toast message
-      if (returnUrl) {
-        toast({
-          title: "Welcome back!",
-          description: "Your work has been restored.",
-        });
-      } else {
-        toast({
-          title: "Welcome back!",
-          description: `Logged in as ${data.user.username}`,
-        });
-      }
-      
-      setLocation(destinationUrl);
+      navigateAfterLogin(data.user);
     },
     onError: (error: Error) => {
       toast({
@@ -131,6 +148,24 @@ export default function Login() {
         description: error.message || "Your username or password isn't correct. Please try again.",
         variant: "destructive",
       });
+    },
+  });
+
+  const mfaLoginMutation = useMutation({
+    mutationFn: async ({ token, useBackupCode }: { token: string; useBackupCode: boolean }) => {
+      const response = await apiRequest("POST", "/api/auth/mfa-login", {
+        userId: mfaUserId,
+        token,
+        useBackupCode,
+      });
+      return response.json();
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
+      navigateAfterLogin(data.user);
+    },
+    onError: (error: Error) => {
+      throw error; // Let MFAVerification component handle the error
     },
   });
 
@@ -143,6 +178,36 @@ export default function Login() {
     form.setValue("password", password);
     loginMutation.mutate({ username, password });
   };
+
+  const handleMFAVerify = async (token: string, useBackupCode: boolean) => {
+    await mfaLoginMutation.mutateAsync({ token, useBackupCode });
+  };
+
+  const handleMFACancel = () => {
+    setMfaRequired(false);
+    setMfaUserId(null);
+    setMfaUsername(null);
+    form.reset();
+  };
+
+  // Show MFA verification if required
+  if (mfaRequired && mfaUserId && mfaUsername) {
+    return (
+      <>
+        <Helmet>
+          <title>Two-Factor Authentication - {stateName} Benefits Navigator</title>
+        </Helmet>
+        <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background to-muted/20 px-4">
+          <MFAVerification
+            username={mfaUsername}
+            userId={mfaUserId}
+            onVerify={handleMFAVerify}
+            onCancel={handleMFACancel}
+          />
+        </div>
+      </>
+    );
+  }
 
   return (
     <>
