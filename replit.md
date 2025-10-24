@@ -57,6 +57,7 @@ A production-ready Immutable Audit Log System uses blockchain-style cryptographi
 -   **Monitoring**: Unified Metrics Service.
 -   **Feature Management**: Universal Feature Registry for program access.
 -   **Deployment**: PM2 cluster mode, Maryland LDSS single-instance deployment.
+-   **Bloat Reduction (October 2025)**: Removed deprecated county-based tenant isolation (middleware, countyUsers table, user-county assignments) and 87% of unused fonts, improving performance and maintainability. County master data and metrics retained for reporting pending migration to office-based structure.
 
 # External Dependencies
 

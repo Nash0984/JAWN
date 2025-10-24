@@ -4926,28 +4926,9 @@ export const counties = pgTable("counties", {
   regionIdx: index("counties_region_idx").on(table.region),
 }));
 
-// County Users - Junction table for user-county assignments
-export const countyUsers = pgTable("county_users", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  countyId: varchar("county_id").references(() => counties.id, { onDelete: "cascade" }).notNull(),
-  userId: varchar("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
-  
-  // Assignment details
-  role: text("role").notNull(), // "navigator", "caseworker", "supervisor", "admin"
-  isPrimary: boolean("is_primary").default(true).notNull(), // Primary county assignment
-  accessLevel: text("access_level").default("full"), // full, readonly, limited
-  
-  // Assignment period
-  assignedAt: timestamp("assigned_at").defaultNow().notNull(),
-  assignedBy: varchar("assigned_by").references(() => users.id),
-  deactivatedAt: timestamp("deactivated_at"),
-  
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-}, (table) => ({
-  countyUserIdx: index("county_users_county_user_idx").on(table.countyId, table.userId),
-  userIdx: index("county_users_user_idx").on(table.userId),
-  primaryIdx: index("county_users_primary_idx").on(table.isPrimary),
-}));
+// County Users - DEPRECATED: Removed as part of multi-state migration (bloat-2)
+// User-county assignments replaced by office-based role assignments
+// See officeRoles table in MULTI-STATE ARCHITECTURE section
 
 // County Metrics - Aggregate performance metrics per county
 export const countyMetrics = pgTable("county_metrics", {
@@ -5525,10 +5506,7 @@ export const insertCountySchema = createInsertSchema(counties).omit({
   updatedAt: true,
 });
 
-export const insertCountyUserSchema = createInsertSchema(countyUsers).omit({
-  id: true,
-  createdAt: true,
-});
+// insertCountyUserSchema - DEPRECATED: Removed with countyUsers table (bloat-2)
 
 export const insertCountyMetricSchema = createInsertSchema(countyMetrics).omit({
   id: true,
@@ -5537,8 +5515,7 @@ export const insertCountyMetricSchema = createInsertSchema(countyMetrics).omit({
 
 export type InsertCounty = z.infer<typeof insertCountySchema>;
 export type County = typeof counties.$inferSelect;
-export type InsertCountyUser = z.infer<typeof insertCountyUserSchema>;
-export type CountyUser = typeof countyUsers.$inferSelect;
+// InsertCountyUser and CountyUser types - DEPRECATED: Removed (bloat-2)
 export type InsertCountyMetric = z.infer<typeof insertCountyMetricSchema>;
 export type CountyMetric = typeof countyMetrics.$inferSelect;
 

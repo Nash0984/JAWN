@@ -35,7 +35,7 @@ import {
   officeRoles, 
   routingRules,
   counties,
-  countyUsers,
+  // countyUsers - DEPRECATED: Removed (bloat-2) - county-based tenant isolation
   users,
   clientCases,
   documents,
@@ -625,67 +625,22 @@ export async function migrateToMultiState(): Promise<MigrationStats> {
 
       // ========================================================================
       // STEP 5: Migrate County User Assignments → Office Roles
+      // DEPRECATED: Removed (bloat-2) - county-based tenant isolation
       // ========================================================================
-      logger.info("👥 Step 5: Migrating county user assignments → office roles", {
+      logger.info("ℹ️  Step 5: County user assignments migration skipped (deprecated)", {
         service: "migrateToMultiState",
         step: 5,
+        reason: "CountyUsers table removed in bloat-2 cleanup",
+        alternative: "Office roles now managed directly via officeRoles table"
       });
 
-      // Get all county users
-      const allCountyUsers = await tx.select().from(countyUsers);
-
-      for (const countyUser of allCountyUsers) {
-        // Get the county to find its code
-        const [county] = await tx
-          .select()
-          .from(counties)
-          .where(eq(counties.id, countyUser.countyId))
-          .limit(1);
-
-        if (!county) {
-          logger.warn(`    ⚠️  County not found for user assignment`, {
-            countyUserId: countyUser.id,
-            countyId: countyUser.countyId,
-          });
-          continue;
-        }
-
-        const officeId = countyToOfficeMap.get(county.code);
-        if (!officeId) {
-          logger.warn(`    ⚠️  Office not found for county code`, {
-            countyCode: county.code,
-          });
-          continue;
-        }
-
-        // Check if office role already exists
-        const [existingRole] = await tx
-          .select()
-          .from(officeRoles)
-          .where(
-            and(
-              eq(officeRoles.userId, countyUser.userId),
-              eq(officeRoles.officeId, officeId)
-            )
-          )
-          .limit(1);
-
-        if (!existingRole) {
-          await tx.insert(officeRoles).values({
-            officeId,
-            userId: countyUser.userId,
-            role: countyUser.role,
-            isPrimary: countyUser.isPrimary,
-            accessLevel: countyUser.accessLevel || "full",
-            assignedBy: countyUser.assignedBy,
-          });
-
-          stats.userRolesMigrated++;
-        }
-      }
-
-      logger.info(`    ✅ Migrated ${stats.userRolesMigrated} user role assignments`, {
+      // REMOVED: County user migration code (bloat-2)
+      // County-based user assignments replaced by office-based role assignments
+      // All county user migration logic has been commented out since countyUsers table no longer exists
+      
+      logger.info(`    ℹ️  User role migration skipped (0 migrated - countyUsers table removed)`, {
         service: "migrateToMultiState",
+        reason: "CountyUsers table removed in bloat-2 cleanup"
       });
 
       // ========================================================================

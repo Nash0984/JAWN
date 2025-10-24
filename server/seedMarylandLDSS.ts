@@ -1,5 +1,6 @@
 import { db } from "./db";
-import { counties, countyUsers, users, tenants } from "@shared/schema";
+import { counties, users, tenants } from "@shared/schema";
+// countyUsers - DEPRECATED: Removed (bloat-2) - county-based tenant isolation replaced by office-based hierarchy
 import { eq } from "drizzle-orm";
 import { logger } from "./services/logger.service";
 
@@ -333,81 +334,16 @@ export async function seedMarylandLDSS() {
     // Get Baltimore City office (largest office)
     const [baltimoreCity] = await db.select().from(counties).where(eq(counties.code, "BALTIMORE_CITY")).limit(1);
 
-    if (baltimoreCity && demoNavigator) {
-      // Check if assignment exists
-      const [existingAssignment] = await db
-        .select()
-        .from(countyUsers)
-        .where(eq(countyUsers.userId, demoNavigator.id))
-        .limit(1);
-
-      if (!existingAssignment) {
-        await db.insert(countyUsers).values({
-          countyId: baltimoreCity.id,
-          userId: demoNavigator.id,
-          role: "navigator",
-          isPrimary: true,
-          accessLevel: "full",
-        });
-        logger.info("  ✓ Assigned demo.navigator to Baltimore City LDSS", {
-          service: "seedMarylandLDSS",
-          action: "assignUser",
-          username: "demo.navigator",
-          office: "Baltimore City LDSS",
-          role: "navigator"
-        });
-      }
-    }
-
-    if (baltimoreCity && demoCaseworker) {
-      const [existingAssignment] = await db
-        .select()
-        .from(countyUsers)
-        .where(eq(countyUsers.userId, demoCaseworker.id))
-        .limit(1);
-
-      if (!existingAssignment) {
-        await db.insert(countyUsers).values({
-          countyId: baltimoreCity.id,
-          userId: demoCaseworker.id,
-          role: "caseworker",
-          isPrimary: true,
-          accessLevel: "full",
-        });
-        logger.info("  ✓ Assigned demo.caseworker to Baltimore City LDSS", {
-          service: "seedMarylandLDSS",
-          action: "assignUser",
-          username: "demo.caseworker",
-          office: "Baltimore City LDSS",
-          role: "caseworker"
-        });
-      }
-    }
-
-    if (baltimoreCity && demoAdmin) {
-      const [existingAssignment] = await db
-        .select()
-        .from(countyUsers)
-        .where(eq(countyUsers.userId, demoAdmin.id))
-        .limit(1);
-
-      if (!existingAssignment) {
-        await db.insert(countyUsers).values({
-          countyId: baltimoreCity.id,
-          userId: demoAdmin.id,
-          role: "supervisor",
-          isPrimary: true,
-          accessLevel: "full",
-        });
-        logger.info("  ✓ Assigned demo.admin to Baltimore City LDSS (supervisor role)", {
-          service: "seedMarylandLDSS",
-          action: "assignUser",
-          username: "demo.admin",
-          office: "Baltimore City LDSS",
-          role: "supervisor"
-        });
-      }
-    }
+    // County-user assignments - DEPRECATED: Removed (bloat-2)
+    // User-county assignments replaced by office-based role assignments
+    // See officeRoles table in MULTI-STATE ARCHITECTURE section
+    // Demo users will use office-based roles instead of county assignments
+    
+    logger.info("  ℹ️  County-user assignments skipped (replaced by office-based roles)", {
+      service: "seedMarylandLDSS",
+      action: "skipDeprecatedAssignments",
+      details: "County-based tenant isolation removed in bloat-2 cleanup"
+    });
 
     logger.info("✅ LDSS seeding complete!", {
       service: "seedMarylandLDSS",

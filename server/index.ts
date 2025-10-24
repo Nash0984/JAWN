@@ -31,7 +31,7 @@ import { seedMarylandLDSS } from "./seedMarylandLDSS";
 import { setupVite, serveStatic, log } from "./vite";
 import { errorHandler } from "./middleware/errorHandler";
 import { requestLoggerMiddleware, timingHeadersMiddleware, performanceMonitoringMiddleware } from "./middleware/requestLogger";
-import { detectCountyContext } from "./middleware/countyContext";
+// detectCountyContext - DEPRECATED: Removed (bloat-2) - county-based tenant isolation replaced by office-based hierarchy
 import { db } from "./db";
 import { sql } from "drizzle-orm";
 import { EnvValidator } from "./utils/envValidation";
@@ -298,8 +298,9 @@ app.get("/api/csrf-token", (req, res) => {
   }
 });
 
-// County Context Middleware - detects user's county for tenant isolation
-app.use(detectCountyContext);
+// County Context Middleware - DEPRECATED: Removed (bloat-2)
+// County-based tenant isolation replaced by office-based hierarchy
+// No middleware needed - office routing handled in officeRouting.service.ts
 
 // Public calculation endpoints bypass CSRF (read-only calculations, no state changes)
 app.use([

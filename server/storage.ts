@@ -159,9 +159,7 @@ import {
   counties,
   type County,
   type InsertCounty,
-  countyUsers,
-  type CountyUser,
-  type InsertCountyUser,
+  // countyUsers - DEPRECATED: Removed (bloat-2)
   countyMetrics,
   type CountyMetric,
   type InsertCountyMetric,
@@ -651,13 +649,9 @@ export interface IStorage {
   updateCounty(id: string, updates: Partial<County>): Promise<County>;
   deleteCounty(id: string): Promise<void>;
 
-  // County Users - User-County Assignments
-  assignUserToCounty(assignment: InsertCountyUser): Promise<CountyUser>;
-  getUserCounties(userId: string): Promise<CountyUser[]>;
-  getCountyUsers(countyId: string, role?: string): Promise<CountyUser[]>;
-  getPrimaryCounty(userId: string): Promise<County | undefined>;
-  removeUserFromCounty(id: string): Promise<void>;
-  updateCountyUserAssignment(id: string, updates: Partial<CountyUser>): Promise<CountyUser>;
+  // County Users - DEPRECATED: Removed (bloat-2)
+  // User-county assignments replaced by office-based role assignments
+  // See officeRoles methods in Multi-State Architecture section
 
   // County Metrics
   createCountyMetric(metric: InsertCountyMetric): Promise<CountyMetric>;
@@ -3368,73 +3362,10 @@ export class DatabaseStorage implements IStorage {
     await db.delete(counties).where(eq(counties.id, id));
   }
 
-  // County Users
-  async assignUserToCounty(assignment: InsertCountyUser): Promise<CountyUser> {
-    const [created] = await db.insert(countyUsers).values(assignment).returning();
-    return created;
-  }
-
-  async getUserCounties(userId: string): Promise<CountyUser[]> {
-    const assignments = await db
-      .select({
-        id: countyUsers.id,
-        countyId: countyUsers.countyId,
-        userId: countyUsers.userId,
-        role: countyUsers.role,
-        isPrimary: countyUsers.isPrimary,
-        accessLevel: countyUsers.accessLevel,
-        assignedAt: countyUsers.assignedAt,
-        assignedBy: countyUsers.assignedBy,
-        deactivatedAt: countyUsers.deactivatedAt,
-        createdAt: countyUsers.createdAt,
-        county: counties,
-      })
-      .from(countyUsers)
-      .leftJoin(counties, eq(countyUsers.countyId, counties.id))
-      .where(eq(countyUsers.userId, userId))
-      .orderBy(desc(countyUsers.isPrimary), desc(countyUsers.assignedAt));
-    
-    return assignments as any;
-  }
-
-  async getCountyUsers(countyId: string, role?: string): Promise<CountyUser[]> {
-    let query = db.select().from(countyUsers).where(eq(countyUsers.countyId, countyId));
-    
-    if (role) {
-      query = query.where(and(eq(countyUsers.countyId, countyId), eq(countyUsers.role, role))) as any;
-    }
-    
-    return await query.orderBy(desc(countyUsers.assignedAt));
-  }
-
-  async getPrimaryCounty(userId: string): Promise<County | undefined> {
-    const primaryAssignment = await db.query.countyUsers.findFirst({
-      where: and(
-        eq(countyUsers.userId, userId),
-        eq(countyUsers.isPrimary, true),
-        isNull(countyUsers.deactivatedAt)
-      ),
-    });
-
-    if (!primaryAssignment) {
-      return undefined;
-    }
-
-    return await this.getCounty(primaryAssignment.countyId);
-  }
-
-  async removeUserFromCounty(id: string): Promise<void> {
-    await db.delete(countyUsers).where(eq(countyUsers.id, id));
-  }
-
-  async updateCountyUserAssignment(id: string, updates: Partial<CountyUser>): Promise<CountyUser> {
-    const [updated] = await db
-      .update(countyUsers)
-      .set(updates)
-      .where(eq(countyUsers.id, id))
-      .returning();
-    return updated;
-  }
+  // County Users - DEPRECATED: Removed (bloat-2)
+  // Implementations removed: assignUserToCounty, getUserCounties, getCountyUsers, 
+  // getPrimaryCounty, removeUserFromCounty, updateCountyUserAssignment
+  // Replaced by office-based role assignments (see officeRoles methods)
 
   // County Metrics
   async createCountyMetric(metric: InsertCountyMetric): Promise<CountyMetric> {
