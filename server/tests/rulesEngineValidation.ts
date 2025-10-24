@@ -1,26 +1,26 @@
 import { logger } from "../services/logger.service";
-import { ohepRulesEngine } from "../services/ohepRulesEngine";
+import { liheapRulesEngine } from "../services/liheapRulesEngine";
 import { tanfRulesEngine } from "../services/tanfRulesEngine";
 import { medicaidRulesEngine } from "../services/medicaidRulesEngine";
 import { vitaTaxRulesEngine } from "../services/vitaTaxRulesEngine";
 
 /**
- * Validation tests for OHEP and TANF Rules Engines
+ * Validation tests for LIHEAP and TANF Rules Engines
  * 
  * This tests the Maryland Rules-as-Code implementation with realistic scenarios
  */
 
-logger.info("🧪 Testing OHEP and TANF Rules Engines");
+logger.info("🧪 Testing LIHEAP and TANF Rules Engines");
 logger.info("=".repeat(70));
 
-async function testOHEPEngine() {
-  logger.info("📋 OHEP (Energy Assistance) Rules Engine Tests");
+async function testLIHEAPEngine() {
+  logger.info("📋 LIHEAP (Energy Assistance) Rules Engine Tests");
 
   // Test Case 1: Eligible household with crisis situation
   logger.info("Test 1: Single parent with child, crisis situation (disconnect notice)");
   logger.info("-".repeat(70));
   
-  const ohepCase1 = await ohepRulesEngine.calculateEligibility({
+  const liheapCase1 = await liheapRulesEngine.calculateEligibility({
     size: 2,
     grossMonthlyIncome: 90000, // $900/month
     grossAnnualIncome: 108000, // $1,080/year
@@ -32,24 +32,24 @@ async function testOHEPEngine() {
     heatingFuelType: "gas",
   });
 
-  logger.info(`✅ Result: ${ohepCase1.isEligible ? "ELIGIBLE" : "INELIGIBLE"}`, {
-    incomeTest: ohepCase1.incomeTest.passed ? "PASS" : "FAIL",
-    percentOfFPL: `${ohepCase1.incomeTest.percentOfFPL}%`,
-    benefitType: ohepCase1.benefitType,
-    benefitAmount: `$${(ohepCase1.benefitAmount / 100).toFixed(2)}`,
-    season: ohepCase1.season,
-    priorityGroup: ohepCase1.priorityGroup || undefined
+  logger.info(`✅ Result: ${liheapCase1.isEligible ? "ELIGIBLE" : "INELIGIBLE"}`, {
+    incomeTest: liheapCase1.incomeTest.passed ? "PASS" : "FAIL",
+    percentOfFPL: `${liheapCase1.incomeTest.percentOfFPL}%`,
+    benefitType: liheapCase1.benefitType,
+    benefitAmount: `$${(liheapCase1.benefitAmount / 100).toFixed(2)}`,
+    season: liheapCase1.season,
+    priorityGroup: liheapCase1.priorityGroup || undefined
   });
   
   logger.info("Calculation Breakdown:", {
-    breakdown: ohepCase1.calculationBreakdown
+    breakdown: liheapCase1.calculationBreakdown
   });
 
   // Test Case 2: Ineligible due to income
   logger.info("Test 2: Household exceeds income limit");
   logger.info("-".repeat(70));
   
-  const ohepCase2 = await ohepRulesEngine.calculateEligibility({
+  const liheapCase2 = await liheapRulesEngine.calculateEligibility({
     size: 3,
     grossMonthlyIncome: 300000, // $3,000/month - way over limit
     grossAnnualIncome: 360000,  // $3,600/year
@@ -60,18 +60,18 @@ async function testOHEPEngine() {
     hasArrearage: true,
   });
 
-  logger.info(`❌ Result: ${ohepCase2.isEligible ? "ELIGIBLE" : "INELIGIBLE"}`, {
-    incomeTest: ohepCase2.incomeTest.passed ? "PASS" : "FAIL",
-    percentOfFPL: `${ohepCase2.incomeTest.percentOfFPL}%`,
-    reason: ohepCase2.reason,
-    breakdown: ohepCase2.calculationBreakdown
+  logger.info(`❌ Result: ${liheapCase2.isEligible ? "ELIGIBLE" : "INELIGIBLE"}`, {
+    incomeTest: liheapCase2.incomeTest.passed ? "PASS" : "FAIL",
+    percentOfFPL: `${liheapCase2.incomeTest.percentOfFPL}%`,
+    reason: liheapCase2.reason,
+    breakdown: liheapCase2.calculationBreakdown
   });
 
   // Test Case 3: Regular assistance, elderly household
   logger.info("Test 3: Elderly couple, regular heating assistance");
   logger.info("-".repeat(70));
   
-  const ohepCase3 = await ohepRulesEngine.calculateEligibility({
+  const liheapCase3 = await liheapRulesEngine.calculateEligibility({
     size: 2,
     grossMonthlyIncome: 95000,  // $950/month
     grossAnnualIncome: 114000,  // $1,140/year
@@ -83,19 +83,19 @@ async function testOHEPEngine() {
     heatingFuelType: "oil",
   });
 
-  logger.info(`✅ Result: ${ohepCase3.isEligible ? "ELIGIBLE" : "INELIGIBLE"}`, {
-    incomeTest: ohepCase3.incomeTest.passed ? "PASS" : "FAIL",
-    percentOfFPL: `${ohepCase3.incomeTest.percentOfFPL}%`,
-    benefitType: ohepCase3.benefitType,
-    benefitAmount: `$${(ohepCase3.benefitAmount / 100).toFixed(2)}`,
-    priorityGroup: ohepCase3.priorityGroup
+  logger.info(`✅ Result: ${liheapCase3.isEligible ? "ELIGIBLE" : "INELIGIBLE"}`, {
+    incomeTest: liheapCase3.incomeTest.passed ? "PASS" : "FAIL",
+    percentOfFPL: `${liheapCase3.incomeTest.percentOfFPL}%`,
+    benefitType: liheapCase3.benefitType,
+    benefitAmount: `$${(liheapCase3.benefitAmount / 100).toFixed(2)}`,
+    priorityGroup: liheapCase3.priorityGroup
   });
 
   // Test Case 4: Arrearage assistance - REGRESSION TEST for $300 limit
   logger.info("Test 4: Arrearage assistance (REGRESSION TEST - must be $300 max)");
   logger.info("-".repeat(70));
   
-  const ohepCase4 = await ohepRulesEngine.calculateEligibility({
+  const liheapCase4 = await liheapRulesEngine.calculateEligibility({
     size: 4,
     grossMonthlyIncome: 120000,  // $1,200/month
     grossAnnualIncome: 144000,   // $1,440/year
@@ -107,17 +107,17 @@ async function testOHEPEngine() {
     heatingFuelType: "electric",
   });
 
-  logger.info(`✅ Result: ${ohepCase4.isEligible ? "ELIGIBLE" : "INELIGIBLE"}`, {
-    incomeTest: ohepCase4.incomeTest.passed ? "PASS" : "FAIL",
-    benefitType: ohepCase4.benefitType,
-    benefitAmount: `$${(ohepCase4.benefitAmount / 100).toFixed(2)}`
+  logger.info(`✅ Result: ${liheapCase4.isEligible ? "ELIGIBLE" : "INELIGIBLE"}`, {
+    incomeTest: liheapCase4.incomeTest.passed ? "PASS" : "FAIL",
+    benefitType: liheapCase4.benefitType,
+    benefitAmount: `$${(liheapCase4.benefitAmount / 100).toFixed(2)}`
   });
   
   // CRITICAL ASSERTION: Arrearage benefit must be exactly $300
-  if (ohepCase4.benefitAmount !== 30000) {
+  if (liheapCase4.benefitAmount !== 30000) {
     throw new Error(
       `❌ ARREARAGE REGRESSION TEST FAILED! ` +
-      `Expected $300.00, got $${(ohepCase4.benefitAmount / 100).toFixed(2)}. ` +
+      `Expected $300.00, got $${(liheapCase4.benefitAmount / 100).toFixed(2)}. ` +
       `This is a compliance violation - check seed data and DHS policy!`
     );
   }
@@ -518,7 +518,7 @@ async function testVITATaxEngine() {
 
 async function runValidationTests() {
   try {
-    await testOHEPEngine();
+    await testLIHEAPEngine();
     await testTANFEngine();
     await testMedicaidEngine();
     await testVITATaxEngine();

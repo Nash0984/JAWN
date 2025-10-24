@@ -6,7 +6,7 @@
  */
 
 import { rulesEngine } from './rulesEngine';
-import { ohepRulesEngine } from './ohepRulesEngine';
+import { liheapRulesEngine } from './liheapRulesEngine';
 import { tanfRulesEngine } from './tanfRulesEngine';
 import { medicaidRulesEngine } from './medicaidRulesEngine';
 import { vitaTaxRulesEngine } from './vitaTaxRulesEngine';
@@ -90,7 +90,8 @@ type RulesEngineAdapter = (
 class RulesEngineAdapterService {
   private adapters: Record<string, RulesEngineAdapter> = {
     'MD_SNAP': this.snapAdapter.bind(this),
-    'MD_OHEP': this.ohepAdapter.bind(this),
+    'LIHEAP_MD': this.liheapAdapter.bind(this),
+    'MD_OHEP': this.liheapAdapter.bind(this), // Backward compatibility - deprecated, use LIHEAP_MD
     'MD_TANF': this.tanfAdapter.bind(this),
     'MEDICAID': this.medicaidAdapter.bind(this),
     'MD_VITA_TAX': this.vitaTaxAdapter.bind(this),
@@ -197,9 +198,9 @@ class RulesEngineAdapterService {
   }
 
   /**
-   * OHEP Adapter
+   * LIHEAP Adapter (Maryland OHEP)
    */
-  private async ohepAdapter(input: HybridEligibilityPayload): Promise<HybridCalculationResult | null> {
+  private async liheapAdapter(input: HybridEligibilityPayload): Promise<HybridCalculationResult | null> {
     const monthlyIncome = input.income || 0;
     const household = {
       size: input.householdSize || 1,
@@ -212,7 +213,7 @@ class RulesEngineAdapterService {
       hasArrearage: (input.utilityArrears || 0) > 0,
     };
 
-    const result = await ohepRulesEngine.calculateEligibility(household);
+    const result = await liheapRulesEngine.calculateEligibility(household);
 
     return {
       eligible: result.isEligible,
@@ -220,7 +221,7 @@ class RulesEngineAdapterService {
       reason: result.reason || '',
       breakdown: result.calculationBreakdown,
       citations: result.policyCitations.map(c => `${c.sectionNumber}: ${c.description}`),
-      programCode: 'MD_OHEP',
+      programCode: 'LIHEAP_MD',
       calculationType: 'eligibility'
     };
   }

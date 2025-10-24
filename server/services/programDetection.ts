@@ -18,7 +18,11 @@ class ProgramDetection {
       keywords: ['snap', 'food stamps', 'food assistance', 'ebt', 'food benefits', 'nutrition assistance', 'supplemental nutrition'],
       displayName: 'SNAP (Food Assistance)'
     },
-    'MD_OHEP': {
+    'LIHEAP_MD': {
+      keywords: ['liheap', 'ohep', 'energy', 'utility', 'electric', 'gas', 'heating', 'cooling', 'utility bills', 'energy assistance', 'energy bill', 'power bill', 'fuel assistance', 'meap', 'eusp'],
+      displayName: 'Maryland Energy Assistance (OHEP)'
+    },
+    'MD_OHEP': { // Backward compatibility - deprecated
       keywords: ['ohep', 'energy', 'utility', 'electric', 'gas', 'heating', 'cooling', 'utility bills', 'energy assistance', 'energy bill', 'power bill', 'fuel assistance'],
       displayName: 'OHEP (Energy Assistance)'
     },

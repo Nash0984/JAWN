@@ -74,8 +74,9 @@ export function LDSSOfficeInfo() {
     "MD_MEDICAID": "Medicaid",
     "TANF": "Cash Assistance (TANF)",
     "MD_TANF": "Cash Assistance (TANF)",
+    "LIHEAP_MD": "Maryland Energy Assistance (OHEP)",
     "OHEP": "Energy Assistance",
-    "MD_OHEP": "Energy Assistance",
+    "MD_OHEP": "Energy Assistance", // Backward compatibility
     "TAX_CREDITS": "Tax Credits",
     "MD_TAX_CREDITS": "Tax Credits",
     "VITA": "VITA Tax Assistance",

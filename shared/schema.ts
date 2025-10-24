@@ -48,6 +48,7 @@ export const benefitPrograms = pgTable("benefit_programs", {
   code: text("code").notNull().unique(), // SNAP, MEDICAID, VITA, etc.
   description: text("description"),
   programType: text("program_type").notNull().default("benefit"), // benefit, tax, hybrid
+  stateAgencyName: text("state_agency_name"), // State-specific agency name (e.g., 'Office of Home Energy Programs' for MD LIHEAP)
   // Program capabilities flags
   hasRulesEngine: boolean("has_rules_engine").default(false).notNull(), // supports deterministic rules extraction
   hasPolicyEngineValidation: boolean("has_policy_engine_validation").default(false).notNull(), // can verify with PolicyEngine
@@ -60,6 +61,28 @@ export const benefitPrograms = pgTable("benefit_programs", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
+
+// ============================================================================
+// PROGRAM JARGON GLOSSARY - Cross-State Terminology Mapping
+// ============================================================================
+// Maps federal program names to state-specific terminology for cross-state collaboration
+// Example: LIHEAP (federal) → OHEP (Maryland), LIHEAP (Pennsylvania)
+export const programJargonGlossary = pgTable("program_jargon_glossary", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  federalProgram: text("federal_program").notNull(), // LIHEAP, SNAP, TANF, Medicaid, etc.
+  stateCode: text("state_code"), // MD, PA, VA, null for national/common terms
+  localTerm: text("local_term").notNull(), // OHEP, TCA, Food Stamps, etc.
+  officialName: text("official_name").notNull(), // Office of Home Energy Programs, Temporary Cash Assistance
+  commonAbbreviation: text("common_abbreviation"), // Additional abbreviations
+  description: text("description"), // Explanation of the term and its usage
+  isActive: boolean("is_active").default(true).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  federalProgramIdx: index("program_jargon_federal_program_idx").on(table.federalProgram),
+  stateCodeIdx: index("program_jargon_state_code_idx").on(table.stateCode),
+  federalStateIdx: index("program_jargon_federal_state_idx").on(table.federalProgram, table.stateCode),
+}));
 
 export const documentTypes = pgTable("document_types", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -1986,6 +2009,12 @@ export const insertBenefitProgramSchema = createInsertSchema(benefitPrograms).om
   createdAt: true,
 });
 
+export const insertProgramJargonGlossarySchema = createInsertSchema(programJargonGlossary).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
 export const insertDocumentSchema = createInsertSchema(documents).omit({
   id: true,
   createdAt: true,
@@ -2068,6 +2097,9 @@ export type User = typeof users.$inferSelect;
 
 export type InsertBenefitProgram = z.infer<typeof insertBenefitProgramSchema>;
 export type BenefitProgram = typeof benefitPrograms.$inferSelect;
+
+export type InsertProgramJargonGlossary = z.infer<typeof insertProgramJargonGlossarySchema>;
+export type ProgramJargonGlossary = typeof programJargonGlossary.$inferSelect;
 
 export type InsertDocument = z.infer<typeof insertDocumentSchema>;
 export type Document = typeof documents.$inferSelect;

@@ -90,6 +90,20 @@ export async function seedMarylandBenefitPrograms() {
   try {
     const programs = await storage.getBenefitPrograms();
     
+    // MIGRATION STEP: Rename MD_OHEP → LIHEAP_MD if old code exists
+    const oldOhepProgram = programs.find(p => p.code === 'MD_OHEP');
+    if (oldOhepProgram) {
+      logger.info('🔄 Migrating MD_OHEP → LIHEAP_MD...');
+      await db.update(benefitPrograms)
+        .set({ code: 'LIHEAP_MD' })
+        .where(eq(benefitPrograms.code, 'MD_OHEP'));
+      logger.info('✓ Migrated program code MD_OHEP → LIHEAP_MD');
+      // Refresh programs list after migration
+      const updatedPrograms = await storage.getBenefitPrograms();
+      programs.length = 0;
+      programs.push(...updatedPrograms);
+    }
+    
     // Define all Maryland benefit programs + VITA
     const programsToSeed = [
       {
@@ -162,8 +176,8 @@ export async function seedMarylandBenefitPrograms() {
       },
       {
         name: 'Maryland Energy Assistance (OHEP)',
-        code: 'MD_OHEP',
-        description: 'Office of Home Energy Programs providing MEAP and EUSP assistance, administered by Maryland DHS',
+        code: 'LIHEAP_MD',
+        description: 'Low Income Home Energy Assistance Program (federal), administered by Maryland DHS Office of Home Energy Programs (OHEP) providing MEAP and EUSP assistance',
         programType: 'benefit',
         hasRulesEngine: true,
         hasPolicyEngineValidation: false,
@@ -172,7 +186,7 @@ export async function seedMarylandBenefitPrograms() {
         sourceType: 'pdf',
         scrapingConfig: {
           type: 'pdf_download',
-          supplementalRegulations: 'COMAR 07.03.22'
+          supplementalRegulations: 'COMAR 14.02.01'
         },
         isActive: true
       },
@@ -243,6 +257,113 @@ export async function seedMarylandBenefitPrograms() {
     logger.info('✓ Program cache invalidated after seeding');
   } catch (error) {
     logger.error('Error seeding benefit programs:', error);
+    throw error;
+  }
+}
+
+export async function seedProgramJargonGlossary() {
+  try {
+    const { programJargonGlossary } = await import('../shared/schema');
+    
+    const glossaryEntries = [
+      // LIHEAP → State-specific energy assistance programs
+      {
+        federalProgram: 'LIHEAP',
+        stateCode: 'MD',
+        localTerm: 'OHEP',
+        officialName: 'Office of Home Energy Programs',
+        commonAbbreviation: 'MEAP, EUSP',
+        description: 'Maryland administers LIHEAP through OHEP, providing MEAP (Maryland Energy Assistance Program) and EUSP (Electric Universal Service Program)',
+        isActive: true
+      },
+      {
+        federalProgram: 'LIHEAP',
+        stateCode: 'PA',
+        localTerm: 'LIHEAP',
+        officialName: 'Low Income Home Energy Assistance Program',
+        commonAbbreviation: 'LIHEAP',
+        description: 'Pennsylvania uses the federal program name LIHEAP directly',
+        isActive: true
+      },
+      // SNAP → Food Stamps common term
+      {
+        federalProgram: 'SNAP',
+        stateCode: null, // National common term
+        localTerm: 'Food Stamps',
+        officialName: 'Supplemental Nutrition Assistance Program',
+        commonAbbreviation: 'Food Stamps, EBT',
+        description: 'Commonly known as "Food Stamps" despite official name change to SNAP in 2008',
+        isActive: true
+      },
+      // TANF → State-specific cash assistance programs
+      {
+        federalProgram: 'TANF',
+        stateCode: 'MD',
+        localTerm: 'TCA',
+        officialName: 'Temporary Cash Assistance',
+        commonAbbreviation: 'TCA, FIP',
+        description: 'Maryland implements TANF as TCA through the Family Investment Program (FIP)',
+        isActive: true
+      },
+      {
+        federalProgram: 'TANF',
+        stateCode: 'PA',
+        localTerm: 'TANF',
+        officialName: 'Temporary Assistance for Needy Families',
+        commonAbbreviation: 'Cash Assistance',
+        description: 'Pennsylvania uses the federal program name TANF',
+        isActive: true
+      },
+      // Medicaid → Medical Assistance
+      {
+        federalProgram: 'Medicaid',
+        stateCode: 'MD',
+        localTerm: 'Medical Assistance',
+        officialName: 'Maryland Medical Assistance Program',
+        commonAbbreviation: 'MA, HealthChoice',
+        description: 'Maryland brands Medicaid as Medical Assistance, with managed care through HealthChoice',
+        isActive: true
+      },
+      {
+        federalProgram: 'Medicaid',
+        stateCode: 'PA',
+        localTerm: 'Medical Assistance',
+        officialName: 'Pennsylvania Medical Assistance',
+        commonAbbreviation: 'MA',
+        description: 'Pennsylvania brands Medicaid as Medical Assistance',
+        isActive: true
+      },
+    ];
+
+    let createdCount = 0;
+    for (const entry of glossaryEntries) {
+      const existing = await db
+        .select()
+        .from(programJargonGlossary)
+        .where(
+          and(
+            eq(programJargonGlossary.federalProgram, entry.federalProgram),
+            entry.stateCode 
+              ? eq(programJargonGlossary.stateCode, entry.stateCode)
+              : isNull(programJargonGlossary.stateCode)
+          )
+        )
+        .limit(1);
+
+      if (existing.length === 0) {
+        await db.insert(programJargonGlossary).values(entry);
+        createdCount++;
+        logger.info(`✓ Added jargon: ${entry.federalProgram} → ${entry.localTerm} (${entry.stateCode || 'national'})`);
+      }
+    }
+
+    if (createdCount > 0) {
+      logger.info(`✓ Seeded ${createdCount} program jargon glossary entries`);
+    } else {
+      logger.info('✓ Program jargon glossary already populated');
+    }
+  } catch (error) {
+    logger.error('Error seeding program jargon glossary:', error);
     throw error;
   }
 }
@@ -540,6 +661,7 @@ export async function initializeSystemData() {
   try {
     await seedDemoUsers();
     await seedMarylandBenefitPrograms();
+    await seedProgramJargonGlossary();
     await seedDocumentTypes();
     await policySourceScraper.seedPolicySources();
     await seedMarylandDemoScenarios();

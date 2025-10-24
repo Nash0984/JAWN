@@ -3,9 +3,9 @@ import { eq } from "drizzle-orm";
 import { 
   benefitPrograms,
   povertyLevels,
-  ohepIncomeLimits,
-  ohepBenefitTiers,
-  ohepSeasonalFactors,
+  liheapIncomeLimits,
+  liheapBenefitTiers,
+  liheapSeasonalFactors,
   tanfIncomeLimits,
   tanfAssetLimits,
   tanfWorkRequirements,
@@ -15,7 +15,7 @@ import {
 import { logger } from "../services/logger.service";
 
 /**
- * Seed test data for OHEP and TANF Rules Engines
+ * Seed test data for LIHEAP and TANF Rules Engines
  * 
  * This populates the database with realistic Maryland rules data
  * for testing the Rules-as-Code engines.
@@ -26,16 +26,17 @@ export async function seedRulesEngineData() {
     action: "start"
   });
 
-  // Step 1: Get or create OHEP and TANF benefit programs
+  // Step 1: Get or create LIHEAP and TANF benefit programs
   const programs = await db.select().from(benefitPrograms);
   
-  let ohepProgram = programs.find(p => p.code === "OHEP");
+  // Look for LIHEAP_MD first, fall back to MD_OHEP (legacy) if needed
+  let liheapProgram = programs.find(p => p.code === "LIHEAP_MD" || p.code === "MD_OHEP");
   let tanfProgram = programs.find(p => p.code === "TANF");
 
-  if (!ohepProgram) {
+  if (!liheapProgram) {
     const [created] = await db.insert(benefitPrograms).values({
-      name: "Office of Home Energy Programs",
-      code: "OHEP",
+      name: "Maryland Energy Assistance (OHEP)",
+      code: "LIHEAP_MD",
       description: "Maryland energy assistance program (MEAP)",
       programType: "benefit",
       hasRulesEngine: true,
@@ -43,11 +44,11 @@ export async function seedRulesEngineData() {
       hasConversationalAI: true,
       isActive: true,
     }).returning();
-    ohepProgram = created;
+    liheapProgram = created;
     logger.info("✓ Created OHEP program", {
       service: "seedRulesEngineData",
       action: "createProgram",
-      programCode: "OHEP"
+      programCode: "LIHEAP_MD"
     });
   }
 
@@ -102,8 +103,8 @@ export async function seedRulesEngineData() {
   }
 
   // Step 3: Seed OHEP Income Limits (60% FPL for regular assistance)
-  const existingOhepLimits = await db.select().from(ohepIncomeLimits);
-  if (existingOhepLimits.length === 0) {
+  const existingLiheapLimits = await db.select().from(liheapIncomeLimits);
+  if (existingLiheapLimits.length === 0) {
     const ohepLimitsData = [
       { size: 1, monthly: 74700, annual: 89640 },    // 60% of FPL
       { size: 2, monthly: 100980, annual: 121176 },
@@ -116,8 +117,8 @@ export async function seedRulesEngineData() {
     ];
 
     for (const limit of ohepLimitsData) {
-      await db.insert(ohepIncomeLimits).values({
-        benefitProgramId: ohepProgram!.id,
+      await db.insert(liheapIncomeLimits).values({
+        benefitProgramId: liheapProgram!.id,
         householdSize: limit.size,
         percentOfFPL: 60,
         monthlyIncomeLimit: limit.monthly,
@@ -135,11 +136,11 @@ export async function seedRulesEngineData() {
   }
 
   // Step 4: Seed OHEP Benefit Tiers
-  const existingOhepTiers = await db.select().from(ohepBenefitTiers);
-  if (existingOhepTiers.length === 0) {
-    await db.insert(ohepBenefitTiers).values([
+  const existingLiheapTiers = await db.select().from(liheapBenefitTiers);
+  if (existingLiheapTiers.length === 0) {
+    await db.insert(liheapBenefitTiers).values([
       {
-        benefitProgramId: ohepProgram!.id,
+        benefitProgramId: liheapProgram!.id,
         tierType: "crisis",
         benefitName: "Crisis Assistance",
         maxBenefitAmount: 60000, // $600 max
@@ -150,7 +151,7 @@ export async function seedRulesEngineData() {
         notes: "Emergency assistance for households facing disconnect or no heat",
       },
       {
-        benefitProgramId: ohepProgram!.id,
+        benefitProgramId: liheapProgram!.id,
         tierType: "regular",
         benefitName: "Regular Assistance",
         maxBenefitAmount: 100000, // $1,000 max
@@ -161,7 +162,7 @@ export async function seedRulesEngineData() {
         notes: "Standard seasonal energy assistance",
       },
       {
-        benefitProgramId: ohepProgram!.id,
+        benefitProgramId: liheapProgram!.id,
         tierType: "arrearage",
         benefitName: "Arrearage Assistance",
         maxBenefitAmount: 30000, // $300 max (CORRECTED per MD DHS policy)
@@ -180,11 +181,11 @@ export async function seedRulesEngineData() {
   }
 
   // Step 5: Seed OHEP Seasonal Factors
-  const existingSeasons = await db.select().from(ohepSeasonalFactors);
+  const existingSeasons = await db.select().from(liheapSeasonalFactors);
   if (existingSeasons.length === 0) {
-    await db.insert(ohepSeasonalFactors).values([
+    await db.insert(liheapSeasonalFactors).values([
       {
-        benefitProgramId: ohepProgram!.id,
+        benefitProgramId: liheapProgram!.id,
         season: "heating",
         startMonth: 10, // October
         endMonth: 4,    // April
@@ -194,7 +195,7 @@ export async function seedRulesEngineData() {
         notes: "Heating season October through April",
       },
       {
-        benefitProgramId: ohepProgram!.id,
+        benefitProgramId: liheapProgram!.id,
         season: "cooling",
         startMonth: 5,  // May
         endMonth: 9,    // September
