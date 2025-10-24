@@ -83,6 +83,19 @@ export interface CrossEnrollmentAnalysis {
   };
 }
 
+/**
+ * Express Lane Auto-Enrollment Result
+ */
+export interface AutoEnrollmentResult {
+  success: boolean;
+  newCaseId?: string;
+  program: string;
+  sourceProgram: string;
+  reason: string;
+  auditLogId?: string;
+  error?: string;
+}
+
 export class CrossEnrollmentIntelligenceService {
   private gemini: GoogleGenAI | null = null;
   private model: any;
@@ -386,6 +399,206 @@ export class CrossEnrollmentIntelligenceService {
     }
     
     return opportunities;
+  }
+  
+  /**
+   * Express Lane Auto-Enrollment: SNAP → Medicaid
+   * 
+   * When SNAP application is approved AND categorical eligibility confirmed,
+   * automatically create Medicaid application with pre-filled data.
+   * 
+   * Federal Basis: Express Lane Eligibility (ELE) - 42 USC § 1396a(e)(13)
+   * Maryland Authority: COMAR 10.09.24 - Medicaid categorical eligibility via SNAP
+   * 
+   * @param snapCaseId - Approved SNAP case ID
+   * @param userId - User creating the auto-enrollment (navigator or system)
+   * @param storage - Database storage instance
+   * @returns Auto-enrollment result with new Medicaid case ID
+   */
+  async autoEnrollMedicaidFromSNAP(
+    snapCaseId: string,
+    userId: string,
+    storage: any
+  ): Promise<AutoEnrollmentResult> {
+    try {
+      // 1. Fetch approved SNAP case
+      const snapCase = await storage.getClientCase(snapCaseId);
+      
+      if (!snapCase) {
+        return {
+          success: false,
+          program: 'Medicaid',
+          sourceProgram: 'SNAP',
+          reason: 'SNAP case not found',
+          error: `Case ${snapCaseId} does not exist`
+        };
+      }
+      
+      // 2. Verify SNAP case is approved
+      if (snapCase.status !== 'approved') {
+        return {
+          success: false,
+          program: 'Medicaid',
+          sourceProgram: 'SNAP',
+          reason: 'SNAP case not approved',
+          error: `SNAP case status is '${snapCase.status}', must be 'approved' for Express Lane enrollment`
+        };
+      }
+      
+      // 3. Check if already enrolled in Medicaid (fetch all cases and filter)
+      const medicaidProgram = await storage.getBenefitProgramByCode('MD_MEDICAID');
+      
+      if (!medicaidProgram) {
+        return {
+          success: false,
+          program: 'Medicaid',
+          sourceProgram: 'SNAP',
+          reason: 'Medicaid program not found in system',
+          error: 'MD_MEDICAID program configuration missing'
+        };
+      }
+      
+      const allCases = await storage.getClientCases();
+      const existingMedicaid = allCases.filter(c => 
+        c.clientIdentifier === snapCase.clientIdentifier && 
+        c.benefitProgramId === medicaidProgram.id
+      );
+      
+      if (existingMedicaid && existingMedicaid.length > 0) {
+        return {
+          success: false,
+          program: 'Medicaid',
+          sourceProgram: 'SNAP',
+          reason: 'Client already enrolled in Medicaid',
+          error: `Medicaid case already exists for client ${snapCase.clientIdentifier}`
+        };
+      }
+      
+      // 4. Verify categorical eligibility (SNAP approval = Medicaid categorical)
+      // Maryland: SNAP recipients with children, pregnant women, elderly, or disabled
+      // qualify for Medicaid via categorical eligibility
+      const isCategoricallyEligible = this.checkMedicaidCategoricalEligibility(snapCase);
+      
+      if (!isCategoricallyEligible) {
+        logger.info('SNAP case does not meet Medicaid categorical eligibility criteria', {
+          service: 'CrossEnrollmentIntelligence',
+          snapCaseId,
+          householdSize: snapCase.householdSize
+        });
+        
+        return {
+          success: false,
+          program: 'Medicaid',
+          sourceProgram: 'SNAP',
+          reason: 'Does not meet Medicaid categorical eligibility criteria',
+          error: 'SNAP approval alone insufficient - manual screening required'
+        };
+      }
+      
+      // 5. Create new Medicaid case with pre-filled data
+      const medicaidCase = await storage.createClientCase({
+        clientName: snapCase.clientName,
+        clientIdentifier: snapCase.clientIdentifier,
+        benefitProgramId: medicaidProgram.id,
+        assignedNavigator: snapCase.assignedNavigator,
+        tenantId: snapCase.tenantId,
+        stateCode: snapCase.stateCode,
+        countyCode: snapCase.countyCode,
+        status: 'screening', // Start in screening - still needs verification
+        householdSize: snapCase.householdSize,
+        estimatedIncome: snapCase.estimatedIncome,
+        notes: `AUTO-ENROLLED via Express Lane from approved SNAP case ${snapCaseId}. Federal basis: 42 USC § 1396a(e)(13). Categorical eligibility confirmed. Requires verification and final approval.`,
+        tags: { 
+          expressLane: true, 
+          sourceCaseId: snapCaseId, 
+          sourceProgram: 'SNAP',
+          enrollmentMethod: 'automatic'
+        },
+        createdBy: userId,
+        residentialOfficeId: snapCase.residentialOfficeId,
+        processingOfficeId: snapCase.processingOfficeId
+      });
+      
+      // 6. Create audit log entry for compliance
+      const auditEntry = await storage.createAuditLog({
+        action: 'EXPRESS_LANE_AUTO_ENROLLMENT',
+        entityType: 'CLIENT_CASE',
+        entityId: medicaidCase.id,
+        userId,
+        changes: {
+          sourceCase: snapCaseId,
+          sourceProgram: 'SNAP',
+          targetProgram: 'Medicaid',
+          categoricalEligibility: 'confirmed',
+          legalBasis: '42 USC § 1396a(e)(13) - Express Lane Eligibility',
+          stateAuthority: 'COMAR 10.09.24',
+          householdSize: snapCase.householdSize,
+          estimatedIncome: snapCase.estimatedIncome
+        },
+        metadata: {
+          expressLane: true,
+          automatic: true,
+          requiresVerification: true
+        }
+      });
+      
+      logger.info('✅ Express Lane auto-enrollment successful', {
+        service: 'CrossEnrollmentIntelligence',
+        snapCaseId,
+        medicaidCaseId: medicaidCase.id,
+        clientIdentifier: snapCase.clientIdentifier,
+        auditLogId: auditEntry.id
+      });
+      
+      return {
+        success: true,
+        newCaseId: medicaidCase.id,
+        program: 'Medicaid',
+        sourceProgram: 'SNAP',
+        reason: 'Express Lane categorical eligibility confirmed via SNAP approval',
+        auditLogId: auditEntry.id
+      };
+      
+    } catch (error) {
+      logger.error('Express Lane auto-enrollment failed', {
+        service: 'CrossEnrollmentIntelligence',
+        snapCaseId,
+        error: error instanceof Error ? error.message : String(error)
+      });
+      
+      return {
+        success: false,
+        program: 'Medicaid',
+        sourceProgram: 'SNAP',
+        reason: 'System error during auto-enrollment',
+        error: error instanceof Error ? error.message : String(error)
+      };
+    }
+  }
+  
+  /**
+   * Check if SNAP case meets Medicaid categorical eligibility criteria
+   * Maryland specific logic per COMAR 10.09.24
+   * 
+   * Categorical eligibility requires ONE of the following:
+   * - Household with children under 18 (or 19 if in school)
+   * - Pregnant women
+   * - Elderly individuals (65+)
+   * - Disabled individuals
+   * 
+   * NOTE: Two-adult households WITHOUT children are NOT categorically eligible.
+   */
+  private checkMedicaidCategoricalEligibility(snapCase: any): boolean {
+    const tags = snapCase.tags || {};
+    
+    // Check explicit qualifying conditions
+    const hasChildren = tags.hasChildren === true || tags.hasChildrenUnder18 === true;
+    const isPregnant = tags.isPregnant === true;
+    const hasElderly = tags.hasElderly === true || tags.hasElderly65Plus === true;
+    const hasDisability = tags.hasDisability === true || tags.hasDisabledMember === true;
+    
+    // Must have at least ONE qualifying condition
+    return hasChildren || isPregnant || hasElderly || hasDisability;
   }
   
   /**
