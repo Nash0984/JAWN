@@ -48,6 +48,7 @@ import { ObjectStorageService, objectStorageClient, parseObjectPath } from "./ob
 import { rulesEngine } from "./services/rulesEngine";
 import { rulesAsCodeService } from "./services/rulesAsCodeService";
 import { hybridService } from "./services/hybridService";
+import { crossEnrollmentIntelligenceService } from "./services/crossEnrollmentIntelligence";
 import { auditService } from "./services/auditService";
 import { immutableAuditService } from "./services/immutableAudit.service";
 import { textGenerationService } from "./services/textGenerationService";
@@ -3057,6 +3058,95 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
     });
     
     res.json(comparison);
+  }));
+
+  // Express Lane Auto-Enrollment - SNAP → Medicaid
+  // Federal Authority: 42 USC § 1396a(e)(13) - Express Lane Eligibility
+  // Maryland Authority: COMAR 10.09.24 - Categorical eligibility
+  app.post("/api/enrollment/express-lane", requireStaff, asyncHandler(async (req: Request, res: Response) => {
+    const inputSchema = z.object({
+      snapCaseId: z.string().uuid(),
+      userConsent: z.boolean().refine(val => val === true, {
+        message: "User consent required for Express Lane auto-enrollment"
+      }),
+    });
+
+    const validated = inputSchema.parse(req.body);
+    
+    if (!req.user) {
+      return res.status(401).json({ 
+        success: false, 
+        error: "Authentication required" 
+      });
+    }
+    
+    logger.info('Express Lane auto-enrollment initiated', {
+      service: 'ExpressLaneEnrollment',
+      snapCaseId: validated.snapCaseId,
+      userId: req.user.id,
+      userConsent: validated.userConsent
+    });
+    
+    // Trigger auto-enrollment
+    const result = await crossEnrollmentIntelligenceService.autoEnrollMedicaidFromSNAP(
+      validated.snapCaseId,
+      req.user.id,
+      storage
+    );
+    
+    if (result.success) {
+      logger.info('✅ Express Lane auto-enrollment successful', {
+        service: 'ExpressLaneEnrollment',
+        snapCaseId: validated.snapCaseId,
+        medicaidCaseId: result.newCaseId,
+        auditLogId: result.auditLogId
+      });
+      
+      // Send notification to navigator
+      await notificationService.createNotification({
+        userId: req.user.id,
+        type: 'express_lane_enrollment',
+        title: 'Express Lane Enrollment Successful',
+        message: `Medicaid application auto-created for client (SNAP case ${validated.snapCaseId}). Review and complete verification.`,
+        priority: 'high',
+        actionUrl: `/navigator?caseId=${result.newCaseId}`,
+        metadata: {
+          snapCaseId: validated.snapCaseId,
+          medicaidCaseId: result.newCaseId,
+          program: 'Medicaid',
+          sourceProgram: 'SNAP',
+          legalBasis: '42 USC § 1396a(e)(13)',
+        }
+      });
+      
+      return res.json({
+        success: true,
+        medicaidCaseId: result.newCaseId,
+        message: result.reason,
+        auditLogId: result.auditLogId,
+        nextSteps: [
+          'Review pre-filled Medicaid application',
+          'Verify household information',
+          'Collect required documentation',
+          'Submit for final approval'
+        ]
+      });
+    } else {
+      logger.warn('Express Lane auto-enrollment failed', {
+        service: 'ExpressLaneEnrollment',
+        snapCaseId: validated.snapCaseId,
+        reason: result.reason,
+        error: result.error
+      });
+      
+      return res.status(400).json({
+        success: false,
+        reason: result.reason,
+        error: result.error,
+        program: result.program,
+        sourceProgram: result.sourceProgram
+      });
+    }
   }));
 
   // Get active SNAP income limits
