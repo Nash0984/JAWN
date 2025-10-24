@@ -10,6 +10,8 @@ import { unifiedExportService } from "./services/unified/UnifiedExportService";
 import { unifiedIngestionService } from "./services/unified/UnifiedIngestionService";
 // Cross-State Rules
 import { registerCrossStateRulesRoutes } from "./api/crossStateRules.routes";
+// Circuit Breaker Monitoring
+import { registerCircuitBreakerRoutes } from "./api/circuitBreaker.routes";
 // SMS Screening Service - COMMENTED OUT DURING SCHEMA ROLLBACK
 // import { 
 //   generateScreeningLink, 
@@ -12066,6 +12068,11 @@ If the question cannot be answered with the available information, say so clearl
   // Mount Cross-State Rules Routes - Cross-State Rules Architecture
   // ============================================================================
   registerCrossStateRulesRoutes(app);
+
+  // ============================================================================
+  // Mount Circuit Breaker Monitoring Routes - External API Resilience
+  // ============================================================================
+  registerCircuitBreakerRoutes(app);
 
   // ============================================================================
   // Mount E-File Routes - IRS Electronic Filing Infrastructure

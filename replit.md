@@ -71,6 +71,7 @@ A production-ready Immutable Audit Log System uses blockchain-style cryptographi
 -   **Testing**: Vitest, @testing-library/react, supertest.
 -   **Caching**: Distributed caching with Redis/Upstash, including a tenant-aware program cache (1-hour TTL, stale-while-revalidate).
 -   **Scalability**: Neon Pooled Connections.
+-   **Circuit Breakers**: External API resilience with PolicyEngine third-party verification (15s timeout, 5-failure threshold) and Google Calendar (10s timeout, 3-failure threshold).
 -   **Real-Time**: WebSocket service with session-based authentication.
 -   **Monitoring**: Unified Metrics Service with parallelized metric queries.
 -   **Feature Management**: Universal Feature Registry for program access.
