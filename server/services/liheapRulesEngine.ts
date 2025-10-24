@@ -1,20 +1,20 @@
 import { db } from "../db";
 import { eq, and, lte, gte, isNull, desc, or } from "drizzle-orm";
 import {
-  ohepIncomeLimits,
-  ohepBenefitTiers,
-  ohepSeasonalFactors,
+  liheapIncomeLimits,
+  liheapBenefitTiers,
+  liheapSeasonalFactors,
   povertyLevels,
-  type OhepIncomeLimit,
-  type OhepBenefitTier,
-  type OhepSeasonalFactor,
+  type LiheapIncomeLimit,
+  type LiheapBenefitTier,
+  type LiheapSeasonalFactor,
 } from "../../shared/schema";
 
 // ============================================================================
-// Maryland OHEP Rules Engine - Energy Assistance Program
+// Maryland LIHEAP Rules Engine - Energy Assistance Program
 // ============================================================================
 
-export interface OHEPHouseholdInput {
+export interface LIHEAPHouseholdInput {
   size: number;
   grossMonthlyIncome: number; // in cents
   grossAnnualIncome: number; // in cents
@@ -27,7 +27,7 @@ export interface OHEPHouseholdInput {
   utilityDisconnectDate?: Date;
 }
 
-export interface OHEPEligibilityResult {
+export interface LIHEAPEligibilityResult {
   isEligible: boolean;
   reason?: string;
   ineligibilityReasons?: string[];
@@ -55,29 +55,29 @@ export interface OHEPEligibilityResult {
   }>;
 }
 
-class OHEPRulesEngine {
+class LIHEAPRulesEngine {
   /**
-   * Get active OHEP income limits for household size
+   * Get active LIHEAP income limits for household size
    */
   private async getActiveIncomeLimits(
     householdSize: number,
     effectiveDate: Date = new Date()
-  ): Promise<OhepIncomeLimit | null> {
+  ): Promise<LiheapIncomeLimit | null> {
     const limits = await db
       .select()
-      .from(ohepIncomeLimits)
+      .from(liheapIncomeLimits)
       .where(
         and(
-          eq(ohepIncomeLimits.householdSize, householdSize),
-          eq(ohepIncomeLimits.isActive, true),
-          lte(ohepIncomeLimits.effectiveDate, effectiveDate),
+          eq(liheapIncomeLimits.householdSize, householdSize),
+          eq(liheapIncomeLimits.isActive, true),
+          lte(liheapIncomeLimits.effectiveDate, effectiveDate),
           or(
-            isNull(ohepIncomeLimits.endDate),
-            gte(ohepIncomeLimits.endDate, effectiveDate)
+            isNull(liheapIncomeLimits.endDate),
+            gte(liheapIncomeLimits.endDate, effectiveDate)
           )
         )
       )
-      .orderBy(desc(ohepIncomeLimits.effectiveDate))
+      .orderBy(desc(liheapIncomeLimits.effectiveDate))
       .limit(1);
 
     return limits[0] || null;
@@ -88,21 +88,21 @@ class OHEPRulesEngine {
    */
   private async getActiveBenefitTiers(
     effectiveDate: Date = new Date()
-  ): Promise<OhepBenefitTier[]> {
+  ): Promise<LiheapBenefitTier[]> {
     return await db
       .select()
-      .from(ohepBenefitTiers)
+      .from(liheapBenefitTiers)
       .where(
         and(
-          eq(ohepBenefitTiers.isActive, true),
-          lte(ohepBenefitTiers.effectiveDate, effectiveDate),
+          eq(liheapBenefitTiers.isActive, true),
+          lte(liheapBenefitTiers.effectiveDate, effectiveDate),
           or(
-            isNull(ohepBenefitTiers.endDate),
-            gte(ohepBenefitTiers.endDate, effectiveDate)
+            isNull(liheapBenefitTiers.endDate),
+            gte(liheapBenefitTiers.endDate, effectiveDate)
           )
         )
       )
-      .orderBy(desc(ohepBenefitTiers.effectiveDate));
+      .orderBy(desc(liheapBenefitTiers.effectiveDate));
   }
 
   /**
@@ -110,17 +110,17 @@ class OHEPRulesEngine {
    */
   private async getCurrentSeason(
     effectiveDate: Date = new Date()
-  ): Promise<OhepSeasonalFactor | null> {
+  ): Promise<LiheapSeasonalFactor | null> {
     const month = effectiveDate.getMonth() + 1; // 1-12
     const year = effectiveDate.getFullYear();
 
     const seasons = await db
       .select()
-      .from(ohepSeasonalFactors)
+      .from(liheapSeasonalFactors)
       .where(
         and(
-          eq(ohepSeasonalFactors.effectiveYear, year),
-          eq(ohepSeasonalFactors.isActive, true)
+          eq(liheapSeasonalFactors.effectiveYear, year),
+          eq(liheapSeasonalFactors.isActive, true)
         )
       );
 
@@ -174,7 +174,7 @@ class OHEPRulesEngine {
   /**
    * Determine priority group
    */
-  private determinePriorityGroup(household: OHEPHouseholdInput): string | undefined {
+  private determinePriorityGroup(household: LIHEAPHouseholdInput): string | undefined {
     if (household.hasElderlyMember) return "elderly";
     if (household.hasDisabledMember) return "disabled";
     if (household.hasChildUnder6) return "children_under_6";
@@ -185,9 +185,9 @@ class OHEPRulesEngine {
    * Determine benefit type based on household circumstances
    */
   private determineBenefitType(
-    household: OHEPHouseholdInput,
-    tiers: OhepBenefitTier[]
-  ): { tierType: string; tier: OhepBenefitTier | null } {
+    household: LIHEAPHouseholdInput,
+    tiers: LiheapBenefitTier[]
+  ): { tierType: string; tier: LiheapBenefitTier | null } {
     // Crisis assistance takes priority
     if (household.isCrisisSituation) {
       const crisisTier = tiers.find((t) => t.tierType === "crisis");
@@ -214,18 +214,18 @@ class OHEPRulesEngine {
   }
 
   /**
-   * Main OHEP eligibility calculation
+   * Main LIHEAP eligibility calculation
    */
   async calculateEligibility(
-    household: OHEPHouseholdInput,
+    household: LIHEAPHouseholdInput,
     effectiveDate: Date = new Date(),
     benefitProgramId?: string
-  ): Promise<OHEPEligibilityResult> {
+  ): Promise<LIHEAPEligibilityResult> {
     const breakdown: string[] = [];
     const ineligibilityReasons: string[] = [];
 
     breakdown.push(
-      `OHEP Eligibility Calculation for household size ${household.size}`
+      `LIHEAP Eligibility Calculation for household size ${household.size}`
     );
     breakdown.push(
       `Annual Income: $${(household.grossAnnualIncome / 100).toFixed(2)}`
@@ -242,7 +242,7 @@ class OHEPRulesEngine {
         isEligible: false,
         reason: `No income limits found for household size ${household.size}`,
         ineligibilityReasons: [
-          `No OHEP income limits configured for household size ${household.size}`,
+          `No LIHEAP income limits configured for household size ${household.size}`,
         ],
         incomeTest: {
           passed: false,
@@ -273,7 +273,7 @@ class OHEPRulesEngine {
       `Household is at ${percentOfFPL}% of Federal Poverty Level (FPL)`
     );
     breakdown.push(
-      `OHEP Income Limit: ${incomeLimit.percentOfFPL}% FPL = $${(
+      `LIHEAP Income Limit: ${incomeLimit.percentOfFPL}% FPL = $${(
         incomeLimit.annualIncomeLimit / 100
       ).toFixed(2)}/year`
     );
@@ -323,7 +323,7 @@ class OHEPRulesEngine {
     return {
       isEligible: incomeTestPassed,
       reason: incomeTestPassed
-        ? `Eligible for OHEP ${tierType} assistance`
+        ? `Eligible for LIHEAP ${tierType} assistance`
         : ineligibilityReasons[0],
       ineligibilityReasons: incomeTestPassed ? undefined : ineligibilityReasons,
       incomeTest: {
@@ -344,14 +344,14 @@ class OHEPRulesEngine {
       },
       policyCitations: [
         {
-          sectionNumber: "OHEP-100",
-          sectionTitle: "OHEP Income Eligibility",
+          sectionNumber: "LIHEAP-100",
+          sectionTitle: "LIHEAP Income Eligibility",
           ruleType: "income",
           description: `Household must be at or below ${incomeLimit.percentOfFPL}% of Federal Poverty Level`,
         },
         {
-          sectionNumber: "OHEP-200",
-          sectionTitle: "OHEP Benefit Amounts",
+          sectionNumber: "LIHEAP-200",
+          sectionTitle: "LIHEAP Benefit Amounts",
           ruleType: "benefit",
           description: `${tierType} assistance: $${(
             benefitAmount / 100
@@ -362,4 +362,4 @@ class OHEPRulesEngine {
   }
 }
 
-export const ohepRulesEngine = new OHEPRulesEngine();
+export const liheapRulesEngine = new LIHEAPRulesEngine();

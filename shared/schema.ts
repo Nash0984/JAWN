@@ -155,7 +155,15 @@ export const policySources = pgTable("policy_sources", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   name: text("name").notNull(),
   sourceType: text("source_type").notNull(), // federal_regulation, state_regulation, federal_guidance, state_policy, federal_memo
-  jurisdiction: text("jurisdiction").notNull(), // federal, maryland
+  jurisdiction: text("jurisdiction").notNull(), // federal, maryland (LEGACY - use jurisdictionLevel instead)
+  // Multi-jurisdiction support (Production-ready for MD, conceptual for PA/VA)
+  jurisdictionLevel: text("jurisdiction_level"), // federal, state, municipal, county
+  stateCode: text("state_code"), // MD, PA, VA, etc. (null for federal)
+  municipalityCode: text("municipality_code"), // PHILADELPHIA, etc. (null for non-municipal)
+  countyCode: text("county_code"), // For county-level regulations
+  sourceEditionYear: text("source_edition_year"), // "2025", "2024" for legal compliance and version tracking
+  regulatoryCitation: text("regulatory_citation"), // Full citation (e.g., "7 CFR § 273.9(d)(1)", "COMAR 07.03.17.04")
+  complianceNotes: text("compliance_notes"), // Regulatory context, waivers, special provisions
   description: text("description"),
   url: text("url"),
   benefitProgramId: varchar("benefit_program_id").references(() => benefitPrograms.id),
@@ -193,6 +201,77 @@ export const documentVersions = pgTable("document_versions", {
   objectPath: text("object_path"), // Path in object storage for this version
   isActive: boolean("is_active").default(true).notNull(), // Current active version
   createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+// Policy waivers - FNS waivers and state-specific compliance exceptions
+export const policyWaivers = pgTable("policy_waivers", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  waiverCode: text("waiver_code").notNull().unique(), // FNS_ABAWD_MD_2024, SNAP_BBCE_PA, etc.
+  waiverName: text("waiver_name").notNull(),
+  benefitProgramId: varchar("benefit_program_id").references(() => benefitPrograms.id),
+  policySourceId: varchar("policy_source_id").references(() => policySources.id), // Link to authorizing regulation
+  jurisdictionLevel: text("jurisdiction_level").notNull(), // federal, state, county
+  stateCode: text("state_code"), // MD, PA, VA (null for federal waivers)
+  countyCode: text("county_code"), // For county-specific waivers
+  waiverType: text("waiver_type").notNull(), // abawd_time_limit, work_requirement, income_test, categorical_eligibility
+  description: text("description").notNull(),
+  authorizingCitation: text("authorizing_citation"), // FNS memo, state regulation, etc.
+  effectiveDate: timestamp("effective_date").notNull(),
+  expirationDate: timestamp("expiration_date"), // When waiver expires
+  renewalStatus: text("renewal_status"), // pending, approved, denied, expired
+  impactedPopulation: jsonb("impacted_population"), // Who is affected by this waiver
+  implementationNotes: text("implementation_notes"),
+  isActive: boolean("is_active").default(true).notNull(),
+  createdBy: varchar("created_by").references(() => users.id),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+// Utility assistance programs - Philadelphia municipal utilities and state programs
+export const utilityAssistancePrograms = pgTable("utility_assistance_programs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  programCode: text("program_code").notNull().unique(), // PECO_CAP, PGW_CRP, PHILA_WATER_TAP, etc.
+  programName: text("program_name").notNull(),
+  utilityProvider: text("utility_provider").notNull(), // PECO, PGW, Philadelphia Water Department
+  utilityType: text("utility_type").notNull(), // electric, gas, water, sewer
+  jurisdictionLevel: text("jurisdiction_level").notNull(), // state, municipal, county
+  stateCode: text("state_code").notNull(), // PA, MD, VA
+  municipalityCode: text("municipality_code"), // PHILADELPHIA
+  countyCode: text("county_code"), // Service area county codes (jsonb array might be better)
+  serviceArea: jsonb("service_area"), // Geographic coverage details
+  description: text("description"),
+  benefitType: text("benefit_type").notNull(), // bill_discount, fixed_rate, debt_forgiveness, crisis_assistance
+  incomeLimitPercent: integer("income_limit_percent"), // % FPL (e.g., 150 for 150% FPL)
+  fixedIncomePercent: integer("fixed_income_percent"), // For programs that cap bills at % of income (e.g., 2-4%)
+  minimumBenefit: integer("minimum_benefit"), // Minimum monthly benefit in cents
+  maximumBenefit: integer("maximum_benefit"), // Maximum benefit amount in cents
+  requiresLIHEAP: boolean("requires_liheap").default(false).notNull(), // PGW CRP requires LIHEAP assignment
+  autoQualificationSources: jsonb("auto_qualification_sources"), // Programs that auto-qualify (SNAP, LIHEAP, etc.)
+  applicationUrl: text("application_url"),
+  phoneNumber: text("phone_number"),
+  policySourceId: varchar("policy_source_id").references(() => policySources.id), // Link to municipal code/regulation
+  isActive: boolean("is_active").default(true).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+// Utility verification rules - Cross-program auto-qualification logic
+export const utilityVerificationRules = pgTable("utility_verification_rules", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  utilityProgramId: varchar("utility_program_id").references(() => utilityAssistancePrograms.id).notNull(),
+  sourceProgramId: varchar("source_program_id").references(() => benefitPrograms.id).notNull(), // SNAP, LIHEAP, TANF
+  ruleType: text("rule_type").notNull(), // auto_qualify, document_reduction, expedited_processing
+  verificationMethod: text("verification_method").notNull(), // data_sharing, award_letter, case_number, self_attestation
+  requiredDocuments: jsonb("required_documents"), // What documentation is needed
+  implementationStatus: text("implementation_status").notNull(), // production, development, planned
+  implementationDate: timestamp("implementation_date"), // When this auto-qualification went live
+  dataSharePartner: text("data_share_partner"), // e.g., "PA DHS" for PECO CAP LIHEAP auto-enroll
+  dataShareAgreement: text("data_share_agreement"), // Link to MOU/agreement
+  notes: text("notes"), // Implementation details, PA PUC orders, etc.
+  isActive: boolean("is_active").default(true).notNull(),
+  createdBy: varchar("created_by").references(() => users.id),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
 // RAG search results for transparency and caching
@@ -402,11 +481,13 @@ export const snapAllotments = pgTable("snap_allotments", {
 }));
 
 // ============================================================================
-// OHEP (Office of Home Energy Programs) RULES ENGINE TABLES
+// LIHEAP (Low Income Home Energy Assistance Program) RULES ENGINE TABLES
+// Maryland agency: OHEP (Office of Home Energy Programs)
+// Federal program: LIHEAP - using federal program name per compliance
 // ============================================================================
 
-// OHEP Income Limits - Based on % FPL
-export const ohepIncomeLimits = pgTable("ohep_income_limits", {
+// LIHEAP Income Limits - Based on % FPL
+export const liheapIncomeLimits = pgTable("liheap_income_limits", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   benefitProgramId: varchar("benefit_program_id").references(() => benefitPrograms.id).notNull(),
   manualSectionId: varchar("manual_section_id").references(() => manualSections.id),
@@ -424,13 +505,13 @@ export const ohepIncomeLimits = pgTable("ohep_income_limits", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 }, (table) => ({
-  householdSizeActiveIdx: index("ohep_income_limits_household_size_active_idx").on(table.householdSize, table.isActive),
-  effectiveDateActiveIdx: index("ohep_income_limits_effective_date_active_idx").on(table.effectiveDate, table.isActive),
-  benefitProgramHouseholdActiveIdx: index("ohep_income_limits_benefit_program_household_active_idx").on(table.benefitProgramId, table.householdSize, table.isActive),
+  householdSizeActiveIdx: index("liheap_income_limits_household_size_active_idx").on(table.householdSize, table.isActive),
+  effectiveDateActiveIdx: index("liheap_income_limits_effective_date_active_idx").on(table.effectiveDate, table.isActive),
+  benefitProgramHouseholdActiveIdx: index("liheap_income_limits_benefit_program_household_active_idx").on(table.benefitProgramId, table.householdSize, table.isActive),
 }));
 
-// OHEP Benefit Tiers - Crisis vs Regular Assistance
-export const ohepBenefitTiers = pgTable("ohep_benefit_tiers", {
+// LIHEAP Benefit Tiers - Crisis vs Regular Assistance
+export const liheapBenefitTiers = pgTable("liheap_benefit_tiers", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   benefitProgramId: varchar("benefit_program_id").references(() => benefitPrograms.id).notNull(),
   manualSectionId: varchar("manual_section_id").references(() => manualSections.id),
@@ -449,12 +530,12 @@ export const ohepBenefitTiers = pgTable("ohep_benefit_tiers", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 }, (table) => ({
-  tierTypeActiveIdx: index("ohep_benefit_tiers_tier_type_active_idx").on(table.tierType, table.isActive),
-  benefitProgramTierActiveIdx: index("ohep_benefit_tiers_benefit_program_tier_active_idx").on(table.benefitProgramId, table.tierType, table.isActive),
+  tierTypeActiveIdx: index("liheap_benefit_tiers_tier_type_active_idx").on(table.tierType, table.isActive),
+  benefitProgramTierActiveIdx: index("liheap_benefit_tiers_benefit_program_tier_active_idx").on(table.benefitProgramId, table.tierType, table.isActive),
 }));
 
-// OHEP Seasonal Factors - Heating vs Cooling Season
-export const ohepSeasonalFactors = pgTable("ohep_seasonal_factors", {
+// LIHEAP Seasonal Factors - Heating vs Cooling Season
+export const liheapSeasonalFactors = pgTable("liheap_seasonal_factors", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   benefitProgramId: varchar("benefit_program_id").references(() => benefitPrograms.id).notNull(),
   season: text("season").notNull(), // heating, cooling
@@ -1250,31 +1331,31 @@ export const snapAllotmentsRelations = relations(snapAllotments, ({ one }) => ({
 }));
 
 // OHEP Relations
-export const ohepIncomeLimitsRelations = relations(ohepIncomeLimits, ({ one }) => ({
+export const liheapIncomeLimitsRelations = relations(liheapIncomeLimits, ({ one }) => ({
   benefitProgram: one(benefitPrograms, {
-    fields: [ohepIncomeLimits.benefitProgramId],
+    fields: [liheapIncomeLimits.benefitProgramId],
     references: [benefitPrograms.id],
   }),
   manualSection: one(manualSections, {
-    fields: [ohepIncomeLimits.manualSectionId],
+    fields: [liheapIncomeLimits.manualSectionId],
     references: [manualSections.id],
   }),
 }));
 
-export const ohepBenefitTiersRelations = relations(ohepBenefitTiers, ({ one }) => ({
+export const liheapBenefitTiersRelations = relations(liheapBenefitTiers, ({ one }) => ({
   benefitProgram: one(benefitPrograms, {
-    fields: [ohepBenefitTiers.benefitProgramId],
+    fields: [liheapBenefitTiers.benefitProgramId],
     references: [benefitPrograms.id],
   }),
   manualSection: one(manualSections, {
-    fields: [ohepBenefitTiers.manualSectionId],
+    fields: [liheapBenefitTiers.manualSectionId],
     references: [manualSections.id],
   }),
 }));
 
-export const ohepSeasonalFactorsRelations = relations(ohepSeasonalFactors, ({ one }) => ({
+export const liheapSeasonalFactorsRelations = relations(liheapSeasonalFactors, ({ one }) => ({
   benefitProgram: one(benefitPrograms, {
-    fields: [ohepSeasonalFactors.benefitProgramId],
+    fields: [liheapSeasonalFactors.benefitProgramId],
     references: [benefitPrograms.id],
   }),
 }));
@@ -1963,6 +2044,24 @@ export const insertSearchResultSchema = createInsertSchema(searchResults).omit({
   createdAt: true,
 });
 
+export const insertPolicyWaiverSchema = createInsertSchema(policyWaivers).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertUtilityAssistanceProgramSchema = createInsertSchema(utilityAssistancePrograms).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertUtilityVerificationRuleSchema = createInsertSchema(utilityVerificationRules).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
 // Types
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;
@@ -1993,6 +2092,15 @@ export type DocumentVersion = typeof documentVersions.$inferSelect;
 
 export type InsertSearchResult = z.infer<typeof insertSearchResultSchema>;
 export type SearchResult = typeof searchResults.$inferSelect;
+
+export type InsertPolicyWaiver = z.infer<typeof insertPolicyWaiverSchema>;
+export type PolicyWaiver = typeof policyWaivers.$inferSelect;
+
+export type InsertUtilityAssistanceProgram = z.infer<typeof insertUtilityAssistanceProgramSchema>;
+export type UtilityAssistanceProgram = typeof utilityAssistancePrograms.$inferSelect;
+
+export type InsertUtilityVerificationRule = z.infer<typeof insertUtilityVerificationRuleSchema>;
+export type UtilityVerificationRule = typeof utilityVerificationRules.$inferSelect;
 
 export const insertDocumentTypeSchema = createInsertSchema(documentTypes).omit({
   id: true,
@@ -2174,9 +2282,9 @@ export type InsertSnapAllotment = z.infer<typeof insertSnapAllotmentSchema>;
 export type SnapAllotment = typeof snapAllotments.$inferSelect;
 
 // OHEP Types
-export type OhepIncomeLimit = typeof ohepIncomeLimits.$inferSelect;
-export type OhepBenefitTier = typeof ohepBenefitTiers.$inferSelect;
-export type OhepSeasonalFactor = typeof ohepSeasonalFactors.$inferSelect;
+export type LiheapIncomeLimit = typeof liheapIncomeLimits.$inferSelect;
+export type LiheapBenefitTier = typeof liheapBenefitTiers.$inferSelect;
+export type LiheapSeasonalFactor = typeof liheapSeasonalFactors.$inferSelect;
 
 // TANF Types
 export type TanfIncomeLimit = typeof tanfIncomeLimits.$inferSelect;
