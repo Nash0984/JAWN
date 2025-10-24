@@ -34,6 +34,11 @@ The platform is designed for compliance with FedRAMP Rev. 5, NIST 800-53, IRS Pu
 
 ## Feature Specifications
 Core features include a Navigator Workspace, Financial Opportunity Radar, Adaptive Intake Copilot, and PolicyEngine Integration for accurate benefit calculations. A comprehensive Tax Preparation System (integrating Gemini Vision, VITA upload, PolicyEngine tax calculation, and PDF generation) and an E-Filing Dashboard are provided. The system features a Cross-Enrollment Intelligence Engine, Google Calendar integration, Smart Scheduler, IRS Use & Disclosure Consent Form, and a Unified Monitoring & Analytics Platform.
+
+**Express Lane Enrollment (October 2025)**: Production-ready SNAP→Medicaid auto-enrollment implementing 42 USC § 1396a(e)(13) and COMAR 10.09.24. When SNAP applications are approved for households with qualifying categorical eligibility tags (children, pregnancy, elderly, disability), the system automatically creates pre-filled Medicaid applications. Features include user consent validation, duplicate prevention, full audit trails, navigator notifications, and compliance with federal Express Lane Eligibility requirements. API route: POST /api/enrollment/express-lane.
+
+**Benefits Cliff Calculator (October 2025)**: Interactive tool comparing current vs. proposed income scenarios to detect benefit cliffs. Displays side-by-side comparison of wages, SNAP, Medicaid, TANF, tax credits, and net total income. Provides visual warnings when cliff detected, severity classification (Minimal/Moderate/Severe/Critical), program-specific impacts, and recommendations. Uses PolicyEngine for accurate multi-program calculations. Public route: /cliff-calculator. Integrated into Command Palette and Navigator Workspace.
+
 A production-ready Immutable Audit Log System uses blockchain-style cryptographic hash chaining (SHA-256) with automated integrity verification and tamper detection. Benefits Access Review (BAR) provides autonomous case quality monitoring. AI Document Intelligence Pipeline (Gemini Vision), Conversational AI Intake Assistant, Smart RAG System, Fraud Detection Pipeline, and Smart Workflow Automation enhance operational efficiency.
 
 ## System Design Choices
