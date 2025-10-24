@@ -7,8 +7,8 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
+import { LoadingWrapper } from "@/components/common";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { MessageSquare, Filter, AlertCircle, CheckCircle2, Clock, XCircle, ChevronDown, ChevronRight } from "lucide-react";
 import { formatDistance } from "date-fns";
@@ -290,20 +290,15 @@ export default function FeedbackManagement() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          {isLoading ? (
-            <div className="space-y-3">
-              <Skeleton className="h-12 w-full" />
-              <Skeleton className="h-12 w-full" />
-              <Skeleton className="h-12 w-full" />
-            </div>
-          ) : feedbackData?.feedbacks?.length === 0 ? (
-            <div className="text-center py-8 text-gray-500 dark:text-gray-400">
-              <MessageSquare className="h-12 w-12 mx-auto mb-4 opacity-50" />
-              <p>No feedback submissions found</p>
-            </div>
-          ) : (
-            <>
-              <Table>
+          <LoadingWrapper isLoading={isLoading} skeletonType="list" skeletonCount={3}>
+            {feedbackData?.feedbacks?.length === 0 ? (
+              <div className="text-center py-8 text-gray-500 dark:text-gray-400">
+                <MessageSquare className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                <p>No feedback submissions found</p>
+              </div>
+            ) : (
+              <>
+                <Table>
                 <TableHeader>
                   <TableRow>
                     <TableHead className="w-12"></TableHead>
@@ -570,8 +565,9 @@ export default function FeedbackManagement() {
                   </Button>
                 </div>
               </div>
-            </>
-          )}
+              </>
+            )}
+          </LoadingWrapper>
         </CardContent>
       </Card>
     </div>

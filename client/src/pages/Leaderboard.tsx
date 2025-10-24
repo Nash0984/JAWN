@@ -5,8 +5,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Skeleton } from "@/components/ui/skeleton";
 import { Trophy, Medal, Crown, TrendingUp, DollarSign, Target } from "lucide-react";
+import { LoadingWrapper } from "@/components/common";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { useTenant } from "@/contexts/TenantContext";
 
@@ -134,13 +134,7 @@ export default function Leaderboard() {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              {isLoading ? (
-                <div className="space-y-3">
-                  {[1, 2, 3, 4, 5].map((i) => (
-                    <Skeleton key={i} className="h-16 w-full" data-testid={`skeleton-row-${i}`} />
-                  ))}
-                </div>
-              ) : (
+              <LoadingWrapper isLoading={isLoading} skeletonType="list" skeletonCount={5}>
                 <Table>
                   <TableHeader>
                     <TableRow>
@@ -192,7 +186,7 @@ export default function Leaderboard() {
                     ))}
                   </TableBody>
                 </Table>
-              )}
+              </LoadingWrapper>
             </CardContent>
           </Card>
         </TabsContent>
@@ -231,14 +225,9 @@ export default function Leaderboard() {
                 <div className="text-center py-12 text-muted-foreground" data-testid="text-select-county-prompt">
                   Please select a county to view rankings
                 </div>
-              ) : isLoading ? (
-                <div className="space-y-3">
-                  {[1, 2, 3, 4, 5].map((i) => (
-                    <Skeleton key={i} className="h-16 w-full" data-testid={`skeleton-county-row-${i}`} />
-                  ))}
-                </div>
               ) : (
-                <Table>
+                <LoadingWrapper isLoading={isLoading} skeletonType="list" skeletonCount={5}>
+                  <Table>
                   <TableHeader>
                     <TableRow>
                       <TableHead className="w-[80px]" data-testid="header-county-rank">Rank</TableHead>
@@ -285,6 +274,7 @@ export default function Leaderboard() {
                     ))}
                   </TableBody>
                 </Table>
+                </LoadingWrapper>
               )}
             </CardContent>
           </Card>

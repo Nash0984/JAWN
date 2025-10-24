@@ -6,8 +6,8 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Skeleton } from "@/components/ui/skeleton";
 import { Bell, Search, Check, Trash2 } from "lucide-react";
+import { LoadingWrapper } from "@/components/common";
 import { formatDistanceToNow } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -193,22 +193,15 @@ export default function NotificationCenter() {
               </TabsList>
 
               <TabsContent value={filter} className="mt-6">
-                {isLoading ? (
-                  <div className="space-y-4">
-                    {[...Array(5)].map((_, i) => (
-                      <div key={i} className="flex gap-4">
-                        <Skeleton className="h-16 flex-1" />
-                      </div>
-                    ))}
-                  </div>
-                ) : filteredNotifications.length === 0 ? (
-                  <div className="text-center py-12 text-muted-foreground" data-testid="text-no-notifications">
-                    <Bell className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                    <p className="text-lg">No notifications found</p>
-                  </div>
-                ) : (
-                  <div className="space-y-3">
-                    {filteredNotifications.map((notification) => (
+                <LoadingWrapper isLoading={isLoading} skeletonType="list" skeletonCount={5}>
+                  {filteredNotifications.length === 0 ? (
+                    <div className="text-center py-12 text-muted-foreground" data-testid="text-no-notifications">
+                      <Bell className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                      <p className="text-lg">No notifications found</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {filteredNotifications.map((notification) => (
                       <Card
                         key={notification.id}
                         className={`${
@@ -272,9 +265,10 @@ export default function NotificationCenter() {
                           </div>
                         </CardContent>
                       </Card>
-                    ))}
-                  </div>
-                )}
+                      ))}
+                    </div>
+                  )}
+                </LoadingWrapper>
                 
                 {/* Pagination */}
                 {filteredNotifications.length > 0 && data && data.total > limit && (

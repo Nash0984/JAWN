@@ -8,6 +8,7 @@ import { db } from "./db";
 import { eq } from "drizzle-orm";
 import { benefitPrograms } from "@shared/schema";
 import { policySourceScraper } from "./services/policySourceScraper";
+import { programCacheService } from "./services/programCache.service";
 
 export async function seedDemoUsers() {
   try {
@@ -236,6 +237,10 @@ export async function seedMarylandBenefitPrograms() {
     if (updatedCount > 0) {
       logger.info(`✓ Updated ${updatedCount} benefit programs to match seed configuration`);
     }
+    
+    // Invalidate program cache after seeding/updating
+    programCacheService.invalidateCache();
+    logger.info('✓ Program cache invalidated after seeding');
   } catch (error) {
     logger.error('Error seeding benefit programs:', error);
     throw error;
