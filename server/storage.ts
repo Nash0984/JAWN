@@ -276,11 +276,28 @@ import {
   gdprBreachIncidents,
   type GdprBreachIncident,
   type InsertGdprBreachIncident,
+  stateTenants,
+  type StateTenant,
+  type InsertStateTenant,
+  offices,
+  type Office,
+  type InsertOffice,
+  officeRoles,
+  type OfficeRole,
+  type InsertOfficeRole,
+  routingRules,
+  type RoutingRule,
+  type InsertRoutingRule,
+  encryptionKeys,
+  type EncryptionKey,
+  type InsertEncryptionKey,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and, ilike, sql, or, isNull, lte, gte, inArray } from "drizzle-orm";
 import { createLogger } from "./services/logger.service";
 import { immutableAuditService } from "./services/immutableAudit.service";
+import { kmsService } from "./services/kms.service";
+import type { EncryptionResult } from "./services/encryption.service";
 
 const logger = createLogger("storage");
 
@@ -652,6 +669,56 @@ export interface IStorage {
   createTenantBranding(branding: InsertTenantBranding): Promise<TenantBranding>;
   updateTenantBranding(tenantId: string, updates: Partial<TenantBranding>): Promise<TenantBranding>;
   deleteTenantBranding(tenantId: string): Promise<void>;
+
+  // ============================================================================
+  // Multi-State Architecture (JAWN - Joint Access Welfare Network)
+  // State→Office Hierarchy for MD, PA, VA, UT, IN, MI
+  // ============================================================================
+  
+  // State Tenants - State-level tenant hierarchy
+  createStateTenant(stateTenant: InsertStateTenant): Promise<StateTenant>;
+  getStateTenant(id: string): Promise<StateTenant | undefined>;
+  getStateTenantByCode(stateCode: string): Promise<StateTenant | undefined>;
+  getStateTenants(filters?: { status?: string; isActive?: boolean }): Promise<StateTenant[]>;
+  updateStateTenant(id: string, updates: Partial<StateTenant>): Promise<StateTenant>;
+  deleteStateTenant(id: string): Promise<void>;
+
+  // Offices - LDSS offices with hub-and-spoke routing
+  createOffice(office: InsertOffice): Promise<Office>;
+  getOffice(id: string): Promise<Office | undefined>;
+  getOfficeByCode(officeCode: string, stateTenantId: string): Promise<Office | undefined>;
+  getOffices(filters?: { stateTenantId?: string; officeType?: string; isActive?: boolean; isHub?: boolean }): Promise<Office[]>;
+  getOfficesByState(stateCode: string): Promise<Office[]>;
+  updateOffice(id: string, updates: Partial<Office>): Promise<Office>;
+  deleteOffice(id: string): Promise<void>;
+
+  // Office Roles - User-office many-to-many assignments
+  assignUserToOffice(assignment: InsertOfficeRole): Promise<OfficeRole>;
+  getUserOffices(userId: string): Promise<OfficeRole[]>;
+  getOfficeUsers(officeId: string, role?: string): Promise<OfficeRole[]>;
+  getPrimaryOffice(userId: string): Promise<Office | undefined>;
+  removeUserFromOffice(id: string): Promise<void>;
+  updateOfficeRoleAssignment(id: string, updates: Partial<OfficeRole>): Promise<OfficeRole>;
+
+  // Routing Rules - Dynamic case routing configuration
+  createRoutingRule(rule: InsertRoutingRule): Promise<RoutingRule>;
+  getRoutingRule(id: string): Promise<RoutingRule | undefined>;
+  getRoutingRules(filters?: { stateTenantId?: string; ruleType?: string; isActive?: boolean }): Promise<RoutingRule[]>;
+  getActiveRoutingRules(stateTenantId: string, benefitProgramCode?: string): Promise<RoutingRule[]>;
+  updateRoutingRule(id: string, updates: Partial<RoutingRule>): Promise<RoutingRule>;
+  deleteRoutingRule(id: string): Promise<void>;
+
+  // Encryption Keys - KMS key hierarchy management
+  createEncryptionKey(key: InsertEncryptionKey): Promise<EncryptionKey>;
+  getEncryptionKey(id: string): Promise<EncryptionKey | undefined>;
+  getEncryptionKeys(filters?: { keyType?: string; stateTenantId?: string; status?: string }): Promise<EncryptionKey[]>;
+  getActiveKey(keyType: string, stateTenantId?: string, tableName?: string, fieldName?: string): Promise<EncryptionKey | undefined>;
+  updateEncryptionKey(id: string, updates: Partial<EncryptionKey>): Promise<EncryptionKey>;
+  getKeysNeedingRotation(): Promise<EncryptionKey[]>;
+
+  // Field-level encryption/decryption using KMS
+  encryptField(plaintext: string, stateTenantId: string, tableName: string, fieldName: string): Promise<EncryptionResult>;
+  decryptField(encryptedData: EncryptionResult, stateTenantId: string, tableName: string, fieldName: string): Promise<string>;
 
   // ============================================================================
   // Gamification & Navigator Performance
@@ -3482,6 +3549,425 @@ export class DatabaseStorage implements IStorage {
 
   async deleteTenantBranding(tenantId: string): Promise<void> {
     await db.delete(tenantBranding).where(eq(tenantBranding.tenantId, tenantId));
+  }
+
+  // ============================================================================
+  // Multi-State Architecture (JAWN - Joint Access Welfare Network)
+  // ============================================================================
+
+  // State Tenants
+  async createStateTenant(stateTenant: InsertStateTenant): Promise<StateTenant> {
+    const [created] = await db.insert(stateTenants).values(stateTenant).returning();
+    
+    // Initialize State Master Key via KMS for encryption hierarchy
+    try {
+      await kmsService.createStateMasterKey(created.id);
+      logger.info('Created State Master Key for new state tenant', {
+        stateTenantId: created.id,
+        stateCode: created.stateCode
+      });
+    } catch (error) {
+      logger.error('Failed to create State Master Key', {
+        stateTenantId: created.id,
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
+    }
+    
+    return created;
+  }
+
+  async getStateTenant(id: string): Promise<StateTenant | undefined> {
+    return await db.query.stateTenants.findFirst({
+      where: eq(stateTenants.id, id),
+    });
+  }
+
+  async getStateTenantByCode(stateCode: string): Promise<StateTenant | undefined> {
+    return await db.query.stateTenants.findFirst({
+      where: eq(stateTenants.stateCode, stateCode),
+    });
+  }
+
+  async getStateTenants(filters?: { status?: string; isActive?: boolean }): Promise<StateTenant[]> {
+    let query = db.select().from(stateTenants);
+    
+    const conditions = [];
+    if (filters?.status) {
+      conditions.push(eq(stateTenants.status, filters.status));
+    }
+    if (filters?.isActive !== undefined) {
+      conditions.push(eq(stateTenants.isActive, filters.isActive));
+    }
+    
+    if (conditions.length > 0) {
+      query = query.where(and(...conditions)) as any;
+    }
+    
+    return await query.orderBy(stateTenants.stateName);
+  }
+
+  async updateStateTenant(id: string, updates: Partial<StateTenant>): Promise<StateTenant> {
+    const [updated] = await db
+      .update(stateTenants)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(stateTenants.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteStateTenant(id: string): Promise<void> {
+    await db.delete(stateTenants).where(eq(stateTenants.id, id));
+  }
+
+  // Offices
+  async createOffice(office: InsertOffice): Promise<Office> {
+    const [created] = await db.insert(offices).values(office).returning();
+    return created;
+  }
+
+  async getOffice(id: string): Promise<Office | undefined> {
+    return await db.query.offices.findFirst({
+      where: eq(offices.id, id),
+    });
+  }
+
+  async getOfficeByCode(officeCode: string, stateTenantId: string): Promise<Office | undefined> {
+    return await db.query.offices.findFirst({
+      where: and(
+        eq(offices.officeCode, officeCode),
+        eq(offices.stateTenantId, stateTenantId)
+      ),
+    });
+  }
+
+  async getOffices(filters?: { 
+    stateTenantId?: string; 
+    officeType?: string; 
+    isActive?: boolean; 
+    isHub?: boolean 
+  }): Promise<Office[]> {
+    let query = db.select().from(offices);
+    
+    const conditions = [];
+    if (filters?.stateTenantId) {
+      conditions.push(eq(offices.stateTenantId, filters.stateTenantId));
+    }
+    if (filters?.officeType) {
+      conditions.push(eq(offices.officeType, filters.officeType));
+    }
+    if (filters?.isActive !== undefined) {
+      conditions.push(eq(offices.isActive, filters.isActive));
+    }
+    if (filters?.isHub !== undefined) {
+      conditions.push(eq(offices.isHub, filters.isHub));
+    }
+    
+    if (conditions.length > 0) {
+      query = query.where(and(...conditions)) as any;
+    }
+    
+    return await query.orderBy(offices.officeName);
+  }
+
+  async getOfficesByState(stateCode: string): Promise<Office[]> {
+    const stateTenant = await this.getStateTenantByCode(stateCode);
+    if (!stateTenant) {
+      return [];
+    }
+    return await this.getOffices({ stateTenantId: stateTenant.id, isActive: true });
+  }
+
+  async updateOffice(id: string, updates: Partial<Office>): Promise<Office> {
+    const [updated] = await db
+      .update(offices)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(offices.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteOffice(id: string): Promise<void> {
+    await db.delete(offices).where(eq(offices.id, id));
+  }
+
+  // Office Roles
+  async assignUserToOffice(assignment: InsertOfficeRole): Promise<OfficeRole> {
+    const [created] = await db.insert(officeRoles).values(assignment).returning();
+    
+    // Audit trail
+    await immutableAuditService.log({
+      action: 'USER_ASSIGNED_TO_OFFICE',
+      resource: 'office_roles',
+      resourceId: created.id,
+      userId: assignment.assignedBy || 'system',
+      metadata: {
+        officeId: assignment.officeId,
+        userId: assignment.userId,
+        role: assignment.role,
+        isPrimary: assignment.isPrimary,
+      },
+    });
+    
+    return created;
+  }
+
+  async getUserOffices(userId: string): Promise<OfficeRole[]> {
+    const assignments = await db
+      .select({
+        id: officeRoles.id,
+        officeId: officeRoles.officeId,
+        userId: officeRoles.userId,
+        role: officeRoles.role,
+        isPrimary: officeRoles.isPrimary,
+        accessLevel: officeRoles.accessLevel,
+        assignedAt: officeRoles.assignedAt,
+        assignedBy: officeRoles.assignedBy,
+        deactivatedAt: officeRoles.deactivatedAt,
+        createdAt: officeRoles.createdAt,
+        office: offices,
+      })
+      .from(officeRoles)
+      .leftJoin(offices, eq(officeRoles.officeId, offices.id))
+      .where(eq(officeRoles.userId, userId))
+      .orderBy(desc(officeRoles.isPrimary), desc(officeRoles.assignedAt));
+    
+    return assignments as any;
+  }
+
+  async getOfficeUsers(officeId: string, role?: string): Promise<OfficeRole[]> {
+    let query = db.select().from(officeRoles).where(eq(officeRoles.officeId, officeId));
+    
+    if (role) {
+      query = query.where(and(eq(officeRoles.officeId, officeId), eq(officeRoles.role, role))) as any;
+    }
+    
+    return await query.orderBy(desc(officeRoles.assignedAt));
+  }
+
+  async getPrimaryOffice(userId: string): Promise<Office | undefined> {
+    const primaryAssignment = await db.query.officeRoles.findFirst({
+      where: and(
+        eq(officeRoles.userId, userId),
+        eq(officeRoles.isPrimary, true),
+        isNull(officeRoles.deactivatedAt)
+      ),
+    });
+
+    if (!primaryAssignment) {
+      return undefined;
+    }
+
+    return await this.getOffice(primaryAssignment.officeId);
+  }
+
+  async removeUserFromOffice(id: string): Promise<void> {
+    await db.delete(officeRoles).where(eq(officeRoles.id, id));
+  }
+
+  async updateOfficeRoleAssignment(id: string, updates: Partial<OfficeRole>): Promise<OfficeRole> {
+    const [updated] = await db
+      .update(officeRoles)
+      .set(updates)
+      .where(eq(officeRoles.id, id))
+      .returning();
+    return updated;
+  }
+
+  // Routing Rules
+  async createRoutingRule(rule: InsertRoutingRule): Promise<RoutingRule> {
+    const [created] = await db.insert(routingRules).values(rule).returning();
+    
+    // Audit trail for routing rule creation
+    await immutableAuditService.log({
+      action: 'ROUTING_RULE_CREATED',
+      resource: 'routing_rules',
+      resourceId: created.id,
+      userId: rule.createdBy || 'system',
+      metadata: {
+        stateTenantId: rule.stateTenantId,
+        ruleType: rule.ruleType,
+        priority: rule.priority,
+        benefitProgramCode: rule.benefitProgramCode,
+      },
+    });
+    
+    return created;
+  }
+
+  async getRoutingRule(id: string): Promise<RoutingRule | undefined> {
+    return await db.query.routingRules.findFirst({
+      where: eq(routingRules.id, id),
+    });
+  }
+
+  async getRoutingRules(filters?: { 
+    stateTenantId?: string; 
+    ruleType?: string; 
+    isActive?: boolean 
+  }): Promise<RoutingRule[]> {
+    let query = db.select().from(routingRules);
+    
+    const conditions = [];
+    if (filters?.stateTenantId) {
+      conditions.push(eq(routingRules.stateTenantId, filters.stateTenantId));
+    }
+    if (filters?.ruleType) {
+      conditions.push(eq(routingRules.ruleType, filters.ruleType));
+    }
+    if (filters?.isActive !== undefined) {
+      conditions.push(eq(routingRules.isActive, filters.isActive));
+    }
+    
+    if (conditions.length > 0) {
+      query = query.where(and(...conditions)) as any;
+    }
+    
+    return await query.orderBy(desc(routingRules.priority), routingRules.createdAt);
+  }
+
+  async getActiveRoutingRules(
+    stateTenantId: string, 
+    benefitProgramCode?: string
+  ): Promise<RoutingRule[]> {
+    let query = db
+      .select()
+      .from(routingRules)
+      .where(
+        and(
+          eq(routingRules.stateTenantId, stateTenantId),
+          eq(routingRules.isActive, true)
+        )
+      );
+    
+    if (benefitProgramCode) {
+      query = query.where(
+        and(
+          eq(routingRules.stateTenantId, stateTenantId),
+          eq(routingRules.isActive, true),
+          eq(routingRules.benefitProgramCode, benefitProgramCode)
+        )
+      ) as any;
+    }
+    
+    return await query.orderBy(desc(routingRules.priority));
+  }
+
+  async updateRoutingRule(id: string, updates: Partial<RoutingRule>): Promise<RoutingRule> {
+    const [updated] = await db
+      .update(routingRules)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(routingRules.id, id))
+      .returning();
+    
+    // Audit trail for routing rule updates
+    await immutableAuditService.log({
+      action: 'ROUTING_RULE_UPDATED',
+      resource: 'routing_rules',
+      resourceId: id,
+      userId: 'system', // Should be passed from request context
+      metadata: updates,
+    });
+    
+    return updated;
+  }
+
+  async deleteRoutingRule(id: string): Promise<void> {
+    await db.delete(routingRules).where(eq(routingRules.id, id));
+  }
+
+  // Encryption Keys (KMS)
+  async createEncryptionKey(key: InsertEncryptionKey): Promise<EncryptionKey> {
+    const [created] = await db.insert(encryptionKeys).values(key).returning();
+    return created;
+  }
+
+  async getEncryptionKey(id: string): Promise<EncryptionKey | undefined> {
+    return await db.query.encryptionKeys.findFirst({
+      where: eq(encryptionKeys.id, id),
+    });
+  }
+
+  async getEncryptionKeys(filters?: { 
+    keyType?: string; 
+    stateTenantId?: string; 
+    status?: string 
+  }): Promise<EncryptionKey[]> {
+    let query = db.select().from(encryptionKeys);
+    
+    const conditions = [];
+    if (filters?.keyType) {
+      conditions.push(eq(encryptionKeys.keyType, filters.keyType));
+    }
+    if (filters?.stateTenantId) {
+      conditions.push(eq(encryptionKeys.stateTenantId, filters.stateTenantId));
+    }
+    if (filters?.status) {
+      conditions.push(eq(encryptionKeys.status, filters.status));
+    }
+    
+    if (conditions.length > 0) {
+      query = query.where(and(...conditions)) as any;
+    }
+    
+    return await query.orderBy(desc(encryptionKeys.activatedAt));
+  }
+
+  async getActiveKey(
+    keyType: string,
+    stateTenantId?: string,
+    tableName?: string,
+    fieldName?: string
+  ): Promise<EncryptionKey | undefined> {
+    const conditions = [
+      eq(encryptionKeys.keyType, keyType),
+      eq(encryptionKeys.status, 'active'),
+    ];
+    
+    if (stateTenantId) {
+      conditions.push(eq(encryptionKeys.stateTenantId, stateTenantId));
+    }
+    if (tableName) {
+      conditions.push(eq(encryptionKeys.tableName, tableName));
+    }
+    if (fieldName) {
+      conditions.push(eq(encryptionKeys.fieldName, fieldName));
+    }
+    
+    return await db.query.encryptionKeys.findFirst({
+      where: and(...conditions),
+    });
+  }
+
+  async updateEncryptionKey(id: string, updates: Partial<EncryptionKey>): Promise<EncryptionKey> {
+    const [updated] = await db
+      .update(encryptionKeys)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(encryptionKeys.id, id))
+      .returning();
+    return updated;
+  }
+
+  async getKeysNeedingRotation(): Promise<EncryptionKey[]> {
+    return await kmsService.getKeysNeedingRotation() as any;
+  }
+
+  // Field-level encryption/decryption using KMS
+  async encryptField(
+    plaintext: string,
+    stateTenantId: string,
+    tableName: string,
+    fieldName: string
+  ): Promise<EncryptionResult> {
+    return await kmsService.encryptField(plaintext, stateTenantId, tableName, fieldName);
+  }
+
+  async decryptField(
+    encryptedData: EncryptionResult,
+    stateTenantId: string,
+    tableName: string,
+    fieldName: string
+  ): Promise<string> {
+    return await kmsService.decryptField(encryptedData, stateTenantId, tableName, fieldName);
   }
 
   // ============================================================================
