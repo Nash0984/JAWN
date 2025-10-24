@@ -192,67 +192,70 @@ async function rebuildAuditChain(): Promise<RebuildReport> {
       await tx.execute(sql`ALTER TABLE audit_logs DISABLE TRIGGER audit_logs_no_delete`);
       console.log('   ✓ Triggers disabled');
       
-      // Get all entries ordered by sequence number
-      console.log('📥 Loading audit entries...');
-      const entries = await tx
-        .select()
-        .from(auditLogs)
-        .orderBy(asc(auditLogs.sequenceNumber));
-      
-      report.totalEntries = entries.length;
-      console.log(`   ✓ Loaded ${entries.length} entries`);
-      
-      if (entries.length === 0) {
-        console.log('   ⚠️  No entries to rebuild');
-        return;
-      }
-      
-      // Rebuild hash chain
-      console.log('🔗 Rebuilding hash chain...');
-      let previousHash: string | null = null;
-      
-      for (let i = 0; i < entries.length; i++) {
-        const entry = entries[i];
+      try {
+        // Get all entries ordered by sequence number
+        console.log('📥 Loading audit entries...');
+        const entries = await tx
+          .select()
+          .from(auditLogs)
+          .orderBy(asc(auditLogs.sequenceNumber));
         
-        // Compute correct previousHash
-        const correctPreviousHash = previousHash;
+        report.totalEntries = entries.length;
+        console.log(`   ✓ Loaded ${entries.length} entries`);
         
-        // Compute correct entryHash
-        const correctEntryHash = computeEntryHash(entry, correctPreviousHash);
-        
-        // Check if update is needed
-        const needsUpdate = 
-          entry.previousHash !== correctPreviousHash || 
-          entry.entryHash !== correctEntryHash;
-        
-        if (needsUpdate) {
-          // Update entry with correct hashes
-          await tx
-            .update(auditLogs)
-            .set({
-              previousHash: correctPreviousHash,
-              entryHash: correctEntryHash,
-            })
-            .where(sql`${auditLogs.id} = ${entry.id}`);
-          
-          report.entriesRebuilt++;
-          
-          if (report.entriesRebuilt % 100 === 0) {
-            console.log(`   ⏳ Rebuilt ${report.entriesRebuilt}/${report.totalEntries} entries...`);
-          }
+        if (entries.length === 0) {
+          console.log('   ⚠️  No entries to rebuild');
+          return;
         }
         
-        // Update previousHash for next iteration
-        previousHash = correctEntryHash;
+        // Rebuild hash chain
+        console.log('🔗 Rebuilding hash chain...');
+        let previousHash: string | null = null;
+        
+        for (let i = 0; i < entries.length; i++) {
+          const entry = entries[i];
+          
+          // Compute correct previousHash
+          const correctPreviousHash = previousHash;
+          
+          // Compute correct entryHash
+          const correctEntryHash = computeEntryHash(entry, correctPreviousHash);
+          
+          // Check if update is needed
+          const needsUpdate = 
+            entry.previousHash !== correctPreviousHash || 
+            entry.entryHash !== correctEntryHash;
+          
+          if (needsUpdate) {
+            // Update entry with correct hashes
+            await tx
+              .update(auditLogs)
+              .set({
+                previousHash: correctPreviousHash,
+                entryHash: correctEntryHash,
+              })
+              .where(sql`${auditLogs.id} = ${entry.id}`);
+            
+            report.entriesRebuilt++;
+            
+            if (report.entriesRebuilt % 100 === 0) {
+              console.log(`   ⏳ Rebuilt ${report.entriesRebuilt}/${report.totalEntries} entries...`);
+            }
+          }
+          
+          // Update previousHash for next iteration
+          previousHash = correctEntryHash;
+        }
+        
+        console.log(`   ✓ Rebuilt ${report.entriesRebuilt} entries`);
+      } finally {
+        // CRITICAL: Guarantee trigger re-enablement even if rebuild fails
+        // This prevents leaving audit logs mutable (NIST AU-9, IRS Pub 1075)
+        console.log('🔒 Re-enabling immutability triggers (guaranteed)...');
+        await tx.execute(sql`ALTER TABLE audit_logs ENABLE TRIGGER audit_logs_no_update`);
+        await tx.execute(sql`ALTER TABLE audit_logs ENABLE TRIGGER audit_logs_no_delete`);
+        console.log('   ✓ Triggers re-enabled');
       }
-      
-      console.log(`   ✓ Rebuilt ${report.entriesRebuilt} entries`);
-      
-      // Re-enable immutability triggers
-      console.log('🔒 Re-enabling immutability triggers...');
-      await tx.execute(sql`ALTER TABLE audit_logs ENABLE TRIGGER audit_logs_no_update`);
-      await tx.execute(sql`ALTER TABLE audit_logs ENABLE TRIGGER audit_logs_no_delete`);
-      console.log('   ✓ Triggers re-enabled');
     });
     
     console.log('\n📊 Post-Rebuild Verification');

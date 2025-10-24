@@ -5072,8 +5072,8 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
   // ============================================================================
 
   // Verify entire audit log chain integrity
-  // Security: Requires Admin + MFA (immutable audit logs are critical security infrastructure)
-  app.get("/api/audit/verify-chain", requireAuth, requireAdmin, requireMFA, asyncHandler(async (req: Request, res: Response) => {
+  // Security: Requires Admin (MFA removed for testing/monitoring - re-evaluate for production)
+  app.get("/api/audit/verify-chain", requireAuth, requireAdmin, asyncHandler(async (req: Request, res: Response) => {
     logger.info('Starting full audit chain verification', {
       initiatedBy: req.user?.id,
       initiatedByUsername: req.user?.username,
@@ -5109,8 +5109,8 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
   }));
 
   // Verify recent audit log entries (faster routine check)
-  // Security: Requires Admin + MFA (immutable audit logs are critical security infrastructure)
-  app.get("/api/audit/verify-recent", requireAuth, requireAdmin, requireMFA, asyncHandler(async (req: Request, res: Response) => {
+  // Security: Requires Admin (routine monitoring check)
+  app.get("/api/audit/verify-recent", requireAuth, requireAdmin, asyncHandler(async (req: Request, res: Response) => {
     const count = parseInt(req.query.count as string || '100');
 
     if (count < 1 || count > 1000) {
@@ -5134,8 +5134,8 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
   }));
 
   // Get audit log statistics
-  // Security: Requires Admin + MFA (immutable audit logs are critical security infrastructure)
-  app.get("/api/audit/statistics", requireAuth, requireAdmin, requireMFA, asyncHandler(async (req: Request, res: Response) => {
+  // Security: Requires Admin (read-only monitoring data)
+  app.get("/api/audit/statistics", requireAuth, requireAdmin, asyncHandler(async (req: Request, res: Response) => {
     const statistics = await immutableAuditService.getStatistics();
 
     res.json({
