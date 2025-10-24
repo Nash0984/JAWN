@@ -8,6 +8,24 @@ The platform supports six benefit programs (SNAP, Medicaid, TANF, OHEP, Tax Cred
 
 Preferred communication style: Simple, everyday language.
 
+## Terminology Standards
+
+**CRITICAL: Use precise terminology to avoid confusion with regulatory meanings:**
+
+1. **PolicyEngine Role:**
+   - ✅ CORRECT: "third-party verification" 
+   - ❌ INCORRECT: "verification", "QA", "QC", "quality control", "quality assurance"
+   - **Why:** QA/QC have specific regulatory meanings in benefits administration
+
+2. **Calculation Primary:**
+   - **JAWN Rules Engine** is PRIMARY for all eligibility determinations and benefit calculations
+   - **PolicyEngine** provides third-party verification to validate JAWN's results and build trust
+
+3. **Living Policy Manual:**
+   - Policy materials uploaded directly by state or via API/web scraping
+   - Rules engine automatically updates when policy changes are promulgated
+   - RAG system provides policy interpretation and explanations
+
 # System Architecture
 
 ## UI/UX
@@ -33,7 +51,7 @@ Data retention policies are 7 years for tax returns and benefit records, with pe
 The platform is designed for compliance with FedRAMP Rev. 5, NIST 800-53, IRS Pub 1075, and HIPAA, addressing data retention, encryption at rest, cryptographic protection, and audit capabilities.
 
 ## Feature Specifications
-Core features include a Navigator Workspace, Financial Opportunity Radar, Adaptive Intake Copilot, and PolicyEngine Integration for accurate benefit calculations. A comprehensive Tax Preparation System (integrating Gemini Vision, VITA upload, PolicyEngine tax calculation, and PDF generation) and an E-Filing Dashboard are provided. The system features a Cross-Enrollment Intelligence Engine, Google Calendar integration, Smart Scheduler, IRS Use & Disclosure Consent Form, and a Unified Monitoring & Analytics Platform.
+Core features include a Navigator Workspace, Financial Opportunity Radar, Adaptive Intake Copilot, and PolicyEngine Integration for third-party verification. A comprehensive Tax Preparation System (integrating Gemini Vision, VITA upload, PolicyEngine third-party verification for tax calculations, and PDF generation) and an E-Filing Dashboard are provided. The system features a Cross-Enrollment Intelligence Engine, Google Calendar integration, Smart Scheduler, IRS Use & Disclosure Consent Form, and a Unified Monitoring & Analytics Platform.
 
 **Express Lane Enrollment**: Production-ready SNAP→Medicaid auto-enrollment, creating pre-filled Medicaid applications for eligible households. Features include user consent validation, duplicate prevention, full audit trails, navigator notifications, and compliance with federal Express Lane Eligibility requirements.
 
@@ -49,7 +67,7 @@ A production-ready Immutable Audit Log System uses blockchain-style cryptographi
 -   **Audit Chain Architecture**: SHA-256 hash chaining, PostgreSQL triggers, advisory locks, automated verification, and a rebuild script.
 -   **Unified Household Profiler**: Single profile for all workflows.
 -   **Performance**: Server-side caching, extensive database indexing, non-blocking initialization, tenant-aware program cache, route-based code splitting, parallelized monitoring queries.
--   **Rules-as-Code**: Maryland rules engines are primary, PolicyEngine for verification.
+-   **Rules-as-Code**: Maryland rules engines are primary for all eligibility determinations and benefit calculations. PolicyEngine serves as third-party verification to validate JAWN's calculations and build trust.
 -   **Testing**: Vitest, @testing-library/react, supertest.
 -   **Caching**: Distributed caching with Redis/Upstash, including a tenant-aware program cache (1-hour TTL, stale-while-revalidate).
 -   **Scalability**: Neon Pooled Connections.
@@ -62,7 +80,7 @@ A production-ready Immutable Audit Log System uses blockchain-style cryptographi
 # External Dependencies
 
 -   **AI Services**: Google Gemini API, Google Gemini Vision API.
--   **Benefit Calculations**: PolicyEngine Household API.
+-   **Third-Party Verification**: PolicyEngine Household API (validates JAWN's Rules Engine calculations).
 -   **Database**: PostgreSQL (via Drizzle ORM) on Neon Database.
 -   **Object Storage**: Google Cloud Storage.
 -   **Document Processing**: Tesseract OCR engine, pdf-parse, ExcelJS.

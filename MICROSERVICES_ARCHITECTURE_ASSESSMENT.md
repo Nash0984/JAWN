@@ -5,6 +5,10 @@
 **Assessment Scope:** Service organization, scalability patterns, API design, efficiency  
 **Methodology:** Web research (2025 best practices) → Code inspection → Gap analysis
 
+**TERMINOLOGY NOTE:**  
+- **JAWN Rules Engine** is PRIMARY for all eligibility determinations and benefit calculations  
+- **PolicyEngine** provides third-party verification to validate JAWN's results (NOT quality control/QA)
+
 ---
 
 ## Executive Summary
@@ -61,7 +65,7 @@
 |--------|----------|-----|--------|
 | **AI & ML** | aiOrchestrator, aiService, gemini.service, aiIntakeAssistant, ragService, textGeneration, voiceAssistant, maive | ~8,000 | ✅ Well-bounded |
 | **Compliance** | gdpr.service, hipaa.service, compliance.service, kms.service, encryption.service, immutableAudit.service | ~6,500 | ✅ Well-bounded |
-| **Benefits Programs** | rulesEngine, rulesAsCodeService, policyEngine, cliffCalculator, crossEnrollmentEngine, benefitsNavigation | ~7,000 | ✅ Well-bounded |
+| **Benefits Programs** | rulesEngine, rulesAsCodeService, policyEngineVerification (third-party verification), cliffCalculator, crossEnrollmentEngine, benefitsNavigation | ~7,000 | ✅ Well-bounded |
 | **Data Management** | cacheService, cacheOrchestrator, programCache, dataRetention, databaseBackup | ~3,500 | ✅ Well-bounded |
 | **Document Processing** | UnifiedDocumentService, UnifiedIngestionService, UnifiedExportService, eFileQueue | ~4,000 | ✅ Well-bounded |
 | **Multi-State** | multiStateRules, officeRouting, stateConfiguration, CrossStateRulesEngine | ~4,500 | ✅ Well-bounded |
@@ -996,7 +1000,7 @@ CMD ["npm", "start"]
    - Effort: HIGH (1-2 weeks)
    - Benefit: Easier navigation, clearer separation
 
-3. **Add circuit breaker for external APIs** - PolicyEngine, Google Calendar
+3. **Add circuit breaker for external APIs** - PolicyEngine third-party verification, Google Calendar
    - Priority: MEDIUM
    - Effort: LOW (1-2 days)
    - Benefit: Graceful degradation on external service failures
