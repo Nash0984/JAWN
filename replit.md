@@ -24,9 +24,10 @@ The backend uses Express.js with TypeScript and PostgreSQL via Drizzle ORM on Ne
 -   **E-Filing Dashboard**: Production-ready e-filing management for federal (Form 1040) and Maryland (Form 502) tax returns with real-time WebSocket status updates.
 -   **Cross-Enrollment Intelligence Engine**: AI-powered recommendations for unclaimed benefits.
 -   **Google Calendar Appointments**: OAuth2-integrated scheduling.
--   **Smart Scheduler**: Automated policy document monitoring.
+-   **Smart Scheduler**: Automated policy document monitoring with weekly/monthly verification scheduling.
 -   **IRS Use & Disclosure Consent Form**: IRS Publication 4299 compliant consent form with electronic signature.
 -   **Unified Monitoring & Analytics Platform**: 7 observability domains, real-time WebSocket updates, and admin dashboard.
+-   **Immutable Audit Log System**: Production-ready blockchain-style audit chain with cryptographic hash chaining (SHA-256), automated integrity verification (weekly recent entries, monthly full chain per NIST AU-6), tamper detection, manual verification via admin dashboard, and automated corruption alerts. Includes repair/rebuild script with guaranteed trigger re-enablement. Compliance: NIST 800-53 AU-9, IRS Pub 1075 9.3.1, HIPAA § 164.312(b). Production readiness: ~95%.
 -   **Benefits Access Review (BAR)**: Autonomous case quality monitoring system with stratified sampling, AI quality assessment via Gemini, and a Supervisor Review Dashboard.
 -   **AI Document Intelligence Pipeline**: Gemini Vision API integration for OCR and smart field extraction.
 -   **Conversational AI Intake Assistant**: Natural language processing chat interface with multi-language support and voice capabilities.
@@ -39,7 +40,8 @@ The backend uses Express.js with TypeScript and PostgreSQL via Drizzle ORM on Ne
 -   **Authentication & Authorization**: Basic user authentication with roles, object-level security, and CSRF protection.
 -   **Production Security Hardening**: Field-level encryption (AES-256-GCM), secure file uploads, strong password enforcement, enhanced session security, CORS hardening, security headers, XSS sanitization, SQL injection protection, and a Security Monitoring Dashboard.
 -   **Enterprise Compliance Framework**: GDPR and HIPAA compliance.
--   **Production Readiness & Hardening**: Health check endpoints, role-based rate limiting, DoS protection, database connection pooling, and graceful shutdown.
+-   **Production Readiness & Hardening**: Health check endpoints, role-based rate limiting, DoS protection, database connection pooling, graceful shutdown, and immutable audit logging with automated integrity verification.
+-   **Immutable Audit Chain Architecture**: SHA-256 cryptographic hash chaining, PostgreSQL triggers preventing modification/deletion, advisory locks for write serialization, automated weekly/monthly verification via Smart Scheduler, admin dashboard for manual verification and chain statistics, rebuild script with transaction safety and guaranteed trigger re-enablement.
 -   **Unified Household Profiler**: Single profile for benefits and tax workflows.
 -   **Performance Optimization**: Server-side caching, extensive database indexing, and non-blocking initialization for the Smart Scheduler.
 -   **Maryland Rules-as-Code Architecture**: Maryland rules engines are the primary determination system, with PolicyEngine serving as a third-party verifier.
