@@ -14,7 +14,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Progress } from "@/components/ui/progress";
-import { Skeleton } from "@/components/ui/skeleton";
+import { LoadingWrapper } from "@/components/common";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { 
   CheckCircle2, 
@@ -358,17 +358,12 @@ export default function MAIVEDashboard() {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              {runsLoading ? (
-                <div className="space-y-2">
-                  <Skeleton className="h-12 w-full" />
-                  <Skeleton className="h-12 w-full" />
-                  <Skeleton className="h-12 w-full" />
-                </div>
-              ) : testRuns?.length === 0 ? (
-                <div className="text-center py-8 text-muted-foreground">
-                  No test runs yet. Click "Test PolicyEngine" or "Test Gemini" to start validation.
-                </div>
-              ) : (
+              <LoadingWrapper isLoading={runsLoading} skeletonType="table">
+                {testRuns?.length === 0 ? (
+                  <div className="text-center py-8 text-muted-foreground">
+                    No test runs yet. Click "Test PolicyEngine" or "Test Gemini" to start validation.
+                  </div>
+                ) : (
                 <Table>
                   <TableHeader>
                     <TableRow>
@@ -416,7 +411,8 @@ export default function MAIVEDashboard() {
                     ))}
                   </TableBody>
                 </Table>
-              )}
+                )}
+              </LoadingWrapper>
             </CardContent>
           </Card>
 
@@ -479,13 +475,12 @@ export default function MAIVEDashboard() {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              {testCasesLoading ? (
-                <div className="space-y-2">
-                  <Skeleton className="h-12 w-full" />
-                  <Skeleton className="h-12 w-full" />
-                  <Skeleton className="h-12 w-full" />
-                </div>
-              ) : (
+              <LoadingWrapper isLoading={testCasesLoading} skeletonType="list">
+                {testCases?.length === 0 ? (
+                  <div className="text-center py-8 text-muted-foreground">
+                    No test cases available.
+                  </div>
+                ) : (
                 <div className="space-y-4">
                   {testCases?.map((testCase) => (
                     <div key={testCase.id} className="border rounded-lg p-4">
@@ -509,7 +504,8 @@ export default function MAIVEDashboard() {
                     </div>
                   ))}
                 </div>
-              )}
+                )}
+              </LoadingWrapper>
             </CardContent>
           </Card>
         </TabsContent>
@@ -524,13 +520,12 @@ export default function MAIVEDashboard() {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              {trendsLoading ? (
-                <Skeleton className="h-64 w-full" />
-              ) : trends?.length === 0 ? (
-                <div className="text-center py-16 text-muted-foreground">
-                  No trend data available. Run tests to see accuracy trends.
-                </div>
-              ) : (
+              <LoadingWrapper isLoading={trendsLoading} skeletonType="card">
+                {trends?.length === 0 ? (
+                  <div className="text-center py-16 text-muted-foreground">
+                    No trend data available. Run tests to see accuracy trends.
+                  </div>
+                ) : (
                 <ResponsiveContainer width="100%" height={300}>
                   <LineChart data={trends}>
                     <CartesianGrid strokeDasharray="3 3" />
@@ -563,7 +558,8 @@ export default function MAIVEDashboard() {
                     />
                   </LineChart>
                 </ResponsiveContainer>
-              )}
+                )}
+              </LoadingWrapper>
             </CardContent>
           </Card>
 

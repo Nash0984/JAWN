@@ -1,43 +1,31 @@
+import { lazy, Suspense } from "react";
 import { Switch, Route, useLocation } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { HelmetProvider } from "react-helmet-async";
+import { LoadingWrapper } from "@/components/common";
+
+// Core/Auth pages - Always loaded (small, needed for initial render)
 import Home from "@/pages/Home";
 import Upload from "@/pages/Upload";
-import Admin from "@/pages/Admin";
-import Training from "@/pages/Training";
-import EligibilityChecker from "@/pages/EligibilityChecker";
-import PolicyManual from "@/pages/PolicyManual";
-import DocumentVerificationPage from "@/pages/DocumentVerificationPage";
-import NavigatorWorkspace from "@/pages/NavigatorWorkspace";
-import ConsentManagement from "@/pages/ConsentManagement";
-import RulesExtraction from "@/pages/RulesExtraction";
 import Login from "@/pages/Login";
 import Signup from "@/pages/Signup";
 import NotFound from "@/pages/not-found";
 import Navigation from "@/components/Navigation";
 import ProtectedRoute from "@/components/ProtectedRoute";
+
+// High-traffic pages - Eagerly loaded
 import ClientDashboard from "@/pages/ClientDashboard";
 import NavigatorDashboard from "@/pages/NavigatorDashboard";
 import CaseworkerDashboard from "@/pages/CaseworkerDashboard";
-import CaseworkerCockpit from "@/pages/CaseworkerCockpit";
-import SupervisorCockpit from "@/pages/SupervisorCockpit";
 import AdminDashboard from "@/pages/AdminDashboard";
-import PolicySources from "@/pages/PolicySources";
-import AIMonitoring from "@/pages/AIMonitoring";
-import SecurityMonitoring from "@/pages/SecurityMonitoring";
-import AuditLogs from "@/pages/AuditLogs";
-import MAIVEDashboard from "@/pages/MAIVEDashboard";
-import ApiDocs from "@/pages/ApiDocs";
-import Monitoring from "@/pages/admin/Monitoring";
-import EFileMonitoring from "@/pages/admin/EFileMonitoring";
-import DeveloperPortal from "@/pages/DeveloperPortal";
-import FeedbackManagement from "@/pages/FeedbackManagement";
 import NotificationCenter from "@/pages/NotificationCenter";
 import NotificationSettings from "@/pages/NotificationSettings";
 import { MFASettings } from "@/pages/MFASettings";
+
+// Public pages - Eagerly loaded (accessed by unauthenticated users)
 import DocumentChecklist from "@/pages/public/DocumentChecklist";
 import NoticeExplainer from "@/pages/public/NoticeExplainer";
 import SimplifiedSearch from "@/pages/public/SimplifiedSearch";
@@ -45,48 +33,79 @@ import BenefitScreener from "@/pages/public/BenefitScreener";
 import QuickScreener from "@/pages/public/QuickScreener";
 import FsaLanding from "@/pages/public/FsaLanding";
 import CliffCalculator from "@/pages/CliffCalculator";
-import { CommandPalette } from "@/components/CommandPalette";
-import { PolicyChanges } from "@/pages/PolicyChanges";
-import { ComplianceAdmin } from "@/pages/ComplianceAdmin";
-import { IntakeCopilot } from "@/pages/IntakeCopilot";
-import ScenarioWorkspace from "@/pages/ScenarioWorkspace";
-import LegalHub from "@/pages/legal/index";
-import PrivacyPolicy from "@/pages/legal/PrivacyPolicy";
-import TermsOfService from "@/pages/legal/TermsOfService";
-import AccessibilityStatement from "@/pages/legal/AccessibilityStatement";
-import DataSecurityPolicy from "@/pages/legal/DataSecurityPolicy";
-import BreachNotificationPolicy from "@/pages/legal/BreachNotificationPolicy";
-import Disclaimer from "@/pages/legal/Disclaimer";
-import License from "@/pages/legal/License";
-import AbawdVerificationAdmin from "@/pages/AbawdVerificationAdmin";
-import CrossEnrollmentAdmin from "@/pages/CrossEnrollmentAdmin";
-// COMMENTED OUT DURING SCHEMA ROLLBACK
-// import SmsConfig from "@/pages/admin/SmsConfig";
-import FNSStateOptionsManager from "@/pages/admin/FNSStateOptionsManager";
-import FederalLawTracker from "@/pages/admin/FederalLawTracker";
-import StateLawTracker from "@/pages/admin/StateLawTracker";
-import SmartScheduler from "@/pages/admin/SmartScheduler";
-import CountyTaxRates from "@/pages/admin/CountyTaxRates";
-import WebhookManagement from "@/pages/admin/WebhookManagement";
-import DocumentReviewQueue from "@/pages/DocumentReviewQueue";
-import TaxPreparation from "@/pages/TaxPreparation";
-import CountyManagement from "@/pages/CountyManagement";
-import NavigatorPerformance from "@/pages/NavigatorPerformance";
-import Leaderboard from "@/pages/Leaderboard";
-import CountyAnalytics from "@/pages/CountyAnalytics";
-import VitaKnowledgeBase from "@/pages/VitaKnowledgeBase";
-import EvaluationFramework from "@/pages/EvaluationFramework";
-import HouseholdProfiler from "@/pages/HouseholdProfiler";
-import VitaIntake from "@/pages/VitaIntake";
-import Analytics from "@/pages/Analytics";
-import VitaDocuments from "@/pages/VitaDocuments";
-import AppointmentsCalendar from "@/pages/AppointmentsCalendar";
-import { IntakeAssistant } from "@/pages/IntakeAssistant";
-import TaxpayerDashboard from "@/pages/TaxpayerDashboard";
-import TaxpayerDocumentRequests from "@/pages/TaxpayerDocumentRequests";
-import TaxpayerMessaging from "@/pages/TaxpayerMessaging";
-import TaxpayerSignature from "@/pages/TaxpayerSignature";
-import { TaxpayerLayout } from "@/components/TaxpayerLayout";
+
+// Legal pages - Lazy loaded (infrequently accessed)
+const LegalHub = lazy(() => import("@/pages/legal/index"));
+const PrivacyPolicy = lazy(() => import("@/pages/legal/PrivacyPolicy"));
+const TermsOfService = lazy(() => import("@/pages/legal/TermsOfService"));
+const AccessibilityStatement = lazy(() => import("@/pages/legal/AccessibilityStatement"));
+const DataSecurityPolicy = lazy(() => import("@/pages/legal/DataSecurityPolicy"));
+const BreachNotificationPolicy = lazy(() => import("@/pages/legal/BreachNotificationPolicy"));
+const Disclaimer = lazy(() => import("@/pages/legal/Disclaimer"));
+const License = lazy(() => import("@/pages/legal/License"));
+
+// Heavy admin/power user pages - Lazy loaded (large bundles, admin-only)
+const EFileDashboard = lazy(() => import("@/pages/EFileDashboard"));
+const VitaIntake = lazy(() => import("@/pages/VitaIntake"));
+const NavigatorWorkspace = lazy(() => import("@/pages/NavigatorWorkspace"));
+const EvaluationFramework = lazy(() => import("@/pages/EvaluationFramework"));
+const ComplianceAdmin = lazy(() => import("@/pages/ComplianceAdmin"));
+const AIMonitoring = lazy(() => import("@/pages/AIMonitoring"));
+const RulesExtraction = lazy(() => import("@/pages/RulesExtraction"));
+const TaxPreparation = lazy(() => import("@/pages/TaxPreparation"));
+const MAIVEDashboard = lazy(() => import("@/pages/MAIVEDashboard"));
+const Monitoring = lazy(() => import("@/pages/admin/Monitoring"));
+const DeveloperPortal = lazy(() => import("@/pages/DeveloperPortal"));
+const APIExplorer = lazy(() => import("@/pages/APIExplorer"));
+
+// Medium-traffic pages - Lazy loaded
+const Admin = lazy(() => import("@/pages/Admin"));
+const Training = lazy(() => import("@/pages/Training"));
+const EligibilityChecker = lazy(() => import("@/pages/EligibilityChecker"));
+const PolicyManual = lazy(() => import("@/pages/PolicyManual"));
+const DocumentVerificationPage = lazy(() => import("@/pages/DocumentVerificationPage"));
+const ConsentManagement = lazy(() => import("@/pages/ConsentManagement"));
+const CaseworkerCockpit = lazy(() => import("@/pages/CaseworkerCockpit"));
+const SupervisorCockpit = lazy(() => import("@/pages/SupervisorCockpit"));
+const PolicySources = lazy(() => import("@/pages/PolicySources"));
+const SecurityMonitoring = lazy(() => import("@/pages/SecurityMonitoring"));
+const AuditLogs = lazy(() => import("@/pages/AuditLogs"));
+const ApiDocs = lazy(() => import("@/pages/ApiDocs"));
+const EFileMonitoring = lazy(() => import("@/pages/admin/EFileMonitoring"));
+const FeedbackManagement = lazy(() => import("@/pages/FeedbackManagement"));
+const CommandPalette = lazy(() => import("@/components/CommandPalette").then(m => ({ default: m.CommandPalette })));
+const PolicyChanges = lazy(() => import("@/pages/PolicyChanges").then(m => ({ default: m.PolicyChanges })));
+const IntakeCopilot = lazy(() => import("@/pages/IntakeCopilot").then(m => ({ default: m.IntakeCopilot })));
+const ScenarioWorkspace = lazy(() => import("@/pages/ScenarioWorkspace"));
+const AbawdVerificationAdmin = lazy(() => import("@/pages/AbawdVerificationAdmin"));
+const CrossEnrollmentAdmin = lazy(() => import("@/pages/CrossEnrollmentAdmin"));
+const FNSStateOptionsManager = lazy(() => import("@/pages/admin/FNSStateOptionsManager"));
+const FederalLawTracker = lazy(() => import("@/pages/admin/FederalLawTracker"));
+const StateLawTracker = lazy(() => import("@/pages/admin/StateLawTracker"));
+const SmartScheduler = lazy(() => import("@/pages/admin/SmartScheduler"));
+const CountyTaxRates = lazy(() => import("@/pages/admin/CountyTaxRates"));
+const WebhookManagement = lazy(() => import("@/pages/admin/WebhookManagement"));
+const DocumentReviewQueue = lazy(() => import("@/pages/DocumentReviewQueue"));
+const CountyManagement = lazy(() => import("@/pages/CountyManagement"));
+const NavigatorPerformance = lazy(() => import("@/pages/NavigatorPerformance"));
+const Leaderboard = lazy(() => import("@/pages/Leaderboard"));
+const CountyAnalytics = lazy(() => import("@/pages/CountyAnalytics"));
+const VitaKnowledgeBase = lazy(() => import("@/pages/VitaKnowledgeBase"));
+const HouseholdProfiler = lazy(() => import("@/pages/HouseholdProfiler"));
+const Analytics = lazy(() => import("@/pages/Analytics"));
+const VitaDocuments = lazy(() => import("@/pages/VitaDocuments"));
+const AppointmentsCalendar = lazy(() => import("@/pages/AppointmentsCalendar"));
+const IntakeAssistant = lazy(() => import("@/pages/IntakeAssistant").then(m => ({ default: m.IntakeAssistant })));
+const TaxpayerDashboard = lazy(() => import("@/pages/TaxpayerDashboard"));
+const TaxpayerDocumentRequests = lazy(() => import("@/pages/TaxpayerDocumentRequests"));
+const TaxpayerMessaging = lazy(() => import("@/pages/TaxpayerMessaging"));
+const TaxpayerSignature = lazy(() => import("@/pages/TaxpayerSignature"));
+const TaxpayerLayout = lazy(() => import("@/components/TaxpayerLayout").then(m => ({ default: m.TaxpayerLayout })));
+const Demo = lazy(() => import("@/pages/Demo"));
+const Developers = lazy(() => import("@/pages/Developers"));
+const SupervisorReviewDashboard = lazy(() => import("@/pages/SupervisorReviewDashboard"));
+
+// Shared components
 import MobileBottomNav from "@/components/MobileBottomNav";
 import { BrandingProvider } from "@/contexts/BrandingContext";
 import { CountyHeader } from "@/components/CountyHeader";
@@ -95,13 +114,18 @@ import { InstallPrompt } from "@/components/InstallPrompt";
 import { TenantProvider } from "@/contexts/TenantContext";
 import { TenantThemeProvider } from "@/components/TenantThemeProvider";
 import Footer from "@/components/Footer";
-import Demo from "@/pages/Demo";
-import APIExplorer from "@/pages/APIExplorer";
-import Developers from "@/pages/Developers";
-import EFileDashboard from "@/pages/EFileDashboard";
-import SupervisorReviewDashboard from "@/pages/SupervisorReviewDashboard";
 // COMMENTED OUT DURING SCHEMA ROLLBACK
+// import SmsConfig from "@/pages/admin/SmsConfig";
 // import MobileScreening from "@/pages/MobileScreening";
+
+// Lazy loading fallback component
+function LazyLoadFallback() {
+  return (
+    <LoadingWrapper isLoading={true} skeletonType="card">
+      <div />
+    </LoadingWrapper>
+  );
+}
 
 function Router() {
   const [location] = useLocation();
@@ -112,8 +136,10 @@ function Router() {
       {/* PWA Install Prompt */}
       <InstallPrompt />
       
-      {/* Command Palette - Global Cmd+K navigation */}
-      <CommandPalette />
+      {/* Command Palette - Global Cmd+K navigation - Lazy loaded */}
+      <Suspense fallback={null}>
+        <CommandPalette />
+      </Suspense>
       
       {/* Skip link for accessibility (only on non-auth pages) */}
       {!isAuthPage && <a href="#main-content" className="skip-link">Skip to main content</a>}
@@ -134,13 +160,31 @@ function Router() {
           <Route path="/signup" component={Signup} />
           
           {/* Demo Dashboard - Public access (no login required) */}
-          <Route path="/demo" component={Demo} />
+          <Route path="/demo">
+            {() => (
+              <Suspense fallback={<LazyLoadFallback />}>
+                <Demo />
+              </Suspense>
+            )}
+          </Route>
           
           {/* API Explorer - Public access (no login required) */}
-          <Route path="/api-explorer" component={APIExplorer} />
+          <Route path="/api-explorer">
+            {() => (
+              <Suspense fallback={<LazyLoadFallback />}>
+                <APIExplorer />
+              </Suspense>
+            )}
+          </Route>
           
           {/* Developer Guide - Public access (no login required) */}
-          <Route path="/developers" component={Developers} />
+          <Route path="/developers">
+            {() => (
+              <Suspense fallback={<LazyLoadFallback />}>
+                <Developers />
+              </Suspense>
+            )}
+          </Route>
           
           {/* Public Portal - No login required */}
           <Route path="/public/documents" component={DocumentChecklist} />
@@ -152,7 +196,13 @@ function Router() {
           <Route path="/cliff-calculator" component={CliffCalculator} />
           
           {/* AI Intake Assistant - Public access (no login required for demo) */}
-          <Route path="/intake-assistant" component={IntakeAssistant} />
+          <Route path="/intake-assistant">
+            {() => (
+              <Suspense fallback={<LazyLoadFallback />}>
+                <IntakeAssistant />
+              </Suspense>
+            )}
+          </Route>
           
           {/* Mobile SMS Screening - No login required */}
           {/* COMMENTED OUT DURING SCHEMA ROLLBACK */}
@@ -160,14 +210,62 @@ function Router() {
           {/* <Route path="/s/:token" component={MobileScreening} /> */}
           
           {/* Legal Pages - Public access (no login required) */}
-          <Route path="/legal" component={LegalHub} />
-          <Route path="/legal/privacy" component={PrivacyPolicy} />
-          <Route path="/legal/terms" component={TermsOfService} />
-          <Route path="/legal/license" component={License} />
-          <Route path="/legal/accessibility" component={AccessibilityStatement} />
-          <Route path="/legal/security" component={DataSecurityPolicy} />
-          <Route path="/legal/breach-notification" component={BreachNotificationPolicy} />
-          <Route path="/legal/disclaimer" component={Disclaimer} />
+          <Route path="/legal">
+            {() => (
+              <Suspense fallback={<LazyLoadFallback />}>
+                <LegalHub />
+              </Suspense>
+            )}
+          </Route>
+          <Route path="/legal/privacy">
+            {() => (
+              <Suspense fallback={<LazyLoadFallback />}>
+                <PrivacyPolicy />
+              </Suspense>
+            )}
+          </Route>
+          <Route path="/legal/terms">
+            {() => (
+              <Suspense fallback={<LazyLoadFallback />}>
+                <TermsOfService />
+              </Suspense>
+            )}
+          </Route>
+          <Route path="/legal/license">
+            {() => (
+              <Suspense fallback={<LazyLoadFallback />}>
+                <License />
+              </Suspense>
+            )}
+          </Route>
+          <Route path="/legal/accessibility">
+            {() => (
+              <Suspense fallback={<LazyLoadFallback />}>
+                <AccessibilityStatement />
+              </Suspense>
+            )}
+          </Route>
+          <Route path="/legal/security">
+            {() => (
+              <Suspense fallback={<LazyLoadFallback />}>
+                <DataSecurityPolicy />
+              </Suspense>
+            )}
+          </Route>
+          <Route path="/legal/breach-notification">
+            {() => (
+              <Suspense fallback={<LazyLoadFallback />}>
+                <BreachNotificationPolicy />
+              </Suspense>
+            )}
+          </Route>
+          <Route path="/legal/disclaimer">
+            {() => (
+              <Suspense fallback={<LazyLoadFallback />}>
+                <Disclaimer />
+              </Suspense>
+            )}
+          </Route>
           
           {/* Role-specific dashboards */}
           <Route path="/dashboard/client">
@@ -186,16 +284,20 @@ function Router() {
           </Route>
           <Route path="/performance">
             {() => (
-              <ProtectedRoute requireStaff>
-                <NavigatorPerformance />
-              </ProtectedRoute>
+              <Suspense fallback={<LazyLoadFallback />}>
+                <ProtectedRoute requireStaff>
+                  <NavigatorPerformance />
+                </ProtectedRoute>
+              </Suspense>
             )}
           </Route>
           <Route path="/leaderboard">
             {() => (
-              <ProtectedRoute requireStaff>
-                <Leaderboard />
-              </ProtectedRoute>
+              <Suspense fallback={<LazyLoadFallback />}>
+                <ProtectedRoute requireStaff>
+                  <Leaderboard />
+                </ProtectedRoute>
+              </Suspense>
             )}
           </Route>
           <Route path="/dashboard/caseworker">
@@ -207,23 +309,29 @@ function Router() {
           </Route>
           <Route path="/caseworker/cockpit">
             {() => (
-              <ProtectedRoute requireStaff>
-                <CaseworkerCockpit />
-              </ProtectedRoute>
+              <Suspense fallback={<LazyLoadFallback />}>
+                <ProtectedRoute requireStaff>
+                  <CaseworkerCockpit />
+                </ProtectedRoute>
+              </Suspense>
             )}
           </Route>
           <Route path="/supervisor/cockpit">
             {() => (
-              <ProtectedRoute requireStaff>
-                <SupervisorCockpit />
-              </ProtectedRoute>
+              <Suspense fallback={<LazyLoadFallback />}>
+                <ProtectedRoute requireStaff>
+                  <SupervisorCockpit />
+                </ProtectedRoute>
+              </Suspense>
             )}
           </Route>
           <Route path="/supervisor/reviews">
             {() => (
-              <ProtectedRoute requireStaff>
-                <SupervisorReviewDashboard />
-              </ProtectedRoute>
+              <Suspense fallback={<LazyLoadFallback />}>
+                <ProtectedRoute requireStaff>
+                  <SupervisorReviewDashboard />
+                </ProtectedRoute>
+              </Suspense>
             )}
           </Route>
           <Route path="/dashboard/admin">
@@ -258,147 +366,185 @@ function Router() {
           </Route>
           <Route path="/eligibility">
             {() => (
-              <ProtectedRoute>
-                <EligibilityChecker />
-              </ProtectedRoute>
+              <Suspense fallback={<LazyLoadFallback />}>
+                <ProtectedRoute>
+                  <EligibilityChecker />
+                </ProtectedRoute>
+              </Suspense>
             )}
           </Route>
           <Route path="/manual">
             {() => (
-              <ProtectedRoute>
-                <PolicyManual />
-              </ProtectedRoute>
+              <Suspense fallback={<LazyLoadFallback />}>
+                <ProtectedRoute>
+                  <PolicyManual />
+                </ProtectedRoute>
+              </Suspense>
             )}
           </Route>
           <Route path="/intake">
             {() => (
-              <ProtectedRoute>
-                <IntakeCopilot />
-              </ProtectedRoute>
+              <Suspense fallback={<LazyLoadFallback />}>
+                <ProtectedRoute>
+                  <IntakeCopilot />
+                </ProtectedRoute>
+              </Suspense>
             )}
           </Route>
           <Route path="/scenarios">
             {() => (
-              <ProtectedRoute>
-                <ScenarioWorkspace />
-              </ProtectedRoute>
+              <Suspense fallback={<LazyLoadFallback />}>
+                <ProtectedRoute>
+                  <ScenarioWorkspace />
+                </ProtectedRoute>
+              </Suspense>
             )}
           </Route>
           <Route path="/tax">
             {() => (
-              <ProtectedRoute>
-                <TaxPreparation />
-              </ProtectedRoute>
+              <Suspense fallback={<LazyLoadFallback />}>
+                <ProtectedRoute>
+                  <TaxPreparation />
+                </ProtectedRoute>
+              </Suspense>
             )}
           </Route>
           <Route path="/efile">
             {() => (
-              <ProtectedRoute>
-                <EFileDashboard />
-              </ProtectedRoute>
+              <Suspense fallback={<LazyLoadFallback />}>
+                <ProtectedRoute>
+                  <EFileDashboard />
+                </ProtectedRoute>
+              </Suspense>
             )}
           </Route>
           <Route path="/vita">
             {() => (
-              <ProtectedRoute>
-                <VitaKnowledgeBase />
-              </ProtectedRoute>
+              <Suspense fallback={<LazyLoadFallback />}>
+                <ProtectedRoute>
+                  <VitaKnowledgeBase />
+                </ProtectedRoute>
+              </Suspense>
             )}
           </Route>
           <Route path="/vita-intake">
             {() => (
-              <ProtectedRoute>
-                <VitaIntake />
-              </ProtectedRoute>
+              <Suspense fallback={<LazyLoadFallback />}>
+                <ProtectedRoute>
+                  <VitaIntake />
+                </ProtectedRoute>
+              </Suspense>
             )}
           </Route>
           <Route path="/vita-documents/:sessionId">
             {() => (
-              <ProtectedRoute>
-                <VitaDocuments />
-              </ProtectedRoute>
+              <Suspense fallback={<LazyLoadFallback />}>
+                <ProtectedRoute>
+                  <VitaDocuments />
+                </ProtectedRoute>
+              </Suspense>
             )}
           </Route>
           <Route path="/appointments">
             {() => (
-              <ProtectedRoute requireStaff>
-                <AppointmentsCalendar />
-              </ProtectedRoute>
+              <Suspense fallback={<LazyLoadFallback />}>
+                <ProtectedRoute requireStaff>
+                  <AppointmentsCalendar />
+                </ProtectedRoute>
+              </Suspense>
             )}
           </Route>
           
           {/* Taxpayer Self-Service Portal - Protected routes for taxpayers */}
           <Route path="/taxpayer">
             {() => (
-              <ProtectedRoute>
-                <TaxpayerLayout>
-                  <TaxpayerDashboard />
-                </TaxpayerLayout>
-              </ProtectedRoute>
+              <Suspense fallback={<LazyLoadFallback />}>
+                <ProtectedRoute>
+                  <TaxpayerLayout>
+                    <TaxpayerDashboard />
+                  </TaxpayerLayout>
+                </ProtectedRoute>
+              </Suspense>
             )}
           </Route>
           <Route path="/taxpayer/documents">
             {() => (
-              <ProtectedRoute>
-                <TaxpayerLayout>
-                  <TaxpayerDocumentRequests />
-                </TaxpayerLayout>
-              </ProtectedRoute>
+              <Suspense fallback={<LazyLoadFallback />}>
+                <ProtectedRoute>
+                  <TaxpayerLayout>
+                    <TaxpayerDocumentRequests />
+                  </TaxpayerLayout>
+                </ProtectedRoute>
+              </Suspense>
             )}
           </Route>
           <Route path="/taxpayer/messages">
             {() => (
-              <ProtectedRoute>
-                <TaxpayerLayout>
-                  <TaxpayerMessaging />
-                </TaxpayerLayout>
-              </ProtectedRoute>
+              <Suspense fallback={<LazyLoadFallback />}>
+                <ProtectedRoute>
+                  <TaxpayerLayout>
+                    <TaxpayerMessaging />
+                  </TaxpayerLayout>
+                </ProtectedRoute>
+              </Suspense>
             )}
           </Route>
           <Route path="/taxpayer/signature">
             {() => (
-              <ProtectedRoute>
-                <TaxpayerLayout>
-                  <TaxpayerSignature />
-                </TaxpayerLayout>
-              </ProtectedRoute>
+              <Suspense fallback={<LazyLoadFallback />}>
+                <ProtectedRoute>
+                  <TaxpayerLayout>
+                    <TaxpayerSignature />
+                  </TaxpayerLayout>
+                </ProtectedRoute>
+              </Suspense>
             )}
           </Route>
           
           {/* Staff-only routes */}
           <Route path="/verify">
             {() => (
-              <ProtectedRoute requireStaff>
-                <DocumentVerificationPage />
-              </ProtectedRoute>
+              <Suspense fallback={<LazyLoadFallback />}>
+                <ProtectedRoute requireStaff>
+                  <DocumentVerificationPage />
+                </ProtectedRoute>
+              </Suspense>
             )}
           </Route>
           <Route path="/navigator">
             {() => (
-              <ProtectedRoute requireStaff>
-                <NavigatorWorkspace />
-              </ProtectedRoute>
+              <Suspense fallback={<LazyLoadFallback />}>
+                <ProtectedRoute requireStaff>
+                  <NavigatorWorkspace />
+                </ProtectedRoute>
+              </Suspense>
             )}
           </Route>
           <Route path="/consent">
             {() => (
-              <ProtectedRoute requireStaff>
-                <ConsentManagement />
-              </ProtectedRoute>
+              <Suspense fallback={<LazyLoadFallback />}>
+                <ProtectedRoute requireStaff>
+                  <ConsentManagement />
+                </ProtectedRoute>
+              </Suspense>
             )}
           </Route>
           <Route path="/household-profiler">
             {() => (
-              <ProtectedRoute requireStaff>
-                <HouseholdProfiler />
-              </ProtectedRoute>
+              <Suspense fallback={<LazyLoadFallback />}>
+                <ProtectedRoute requireStaff>
+                  <HouseholdProfiler />
+                </ProtectedRoute>
+              </Suspense>
             )}
           </Route>
           <Route path="/analytics">
             {() => (
-              <ProtectedRoute requireStaff>
-                <Analytics />
-              </ProtectedRoute>
+              <Suspense fallback={<LazyLoadFallback />}>
+                <ProtectedRoute requireStaff>
+                  <Analytics />
+                </ProtectedRoute>
+              </Suspense>
             )}
           </Route>
           
@@ -412,149 +558,191 @@ function Router() {
           </Route>
           <Route path="/admin">
             {() => (
-              <ProtectedRoute requireAdmin>
-                <Admin />
-              </ProtectedRoute>
+              <Suspense fallback={<LazyLoadFallback />}>
+                <ProtectedRoute requireAdmin>
+                  <Admin />
+                </ProtectedRoute>
+              </Suspense>
             )}
           </Route>
           <Route path="/admin/rules">
             {() => (
-              <ProtectedRoute requireAdmin>
-                <RulesExtraction />
-              </ProtectedRoute>
+              <Suspense fallback={<LazyLoadFallback />}>
+                <ProtectedRoute requireAdmin>
+                  <RulesExtraction />
+                </ProtectedRoute>
+              </Suspense>
             )}
           </Route>
           <Route path="/admin/sources">
             {() => (
-              <ProtectedRoute requireAdmin>
-                <PolicySources />
-              </ProtectedRoute>
+              <Suspense fallback={<LazyLoadFallback />}>
+                <ProtectedRoute requireAdmin>
+                  <PolicySources />
+                </ProtectedRoute>
+              </Suspense>
             )}
           </Route>
           <Route path="/admin/ai-monitoring">
             {() => (
-              <ProtectedRoute>
-                <AIMonitoring />
-              </ProtectedRoute>
+              <Suspense fallback={<LazyLoadFallback />}>
+                <ProtectedRoute>
+                  <AIMonitoring />
+                </ProtectedRoute>
+              </Suspense>
             )}
           </Route>
           <Route path="/admin/maive">
             {() => (
-              <ProtectedRoute requireAdmin>
-                <MAIVEDashboard />
-              </ProtectedRoute>
+              <Suspense fallback={<LazyLoadFallback />}>
+                <ProtectedRoute requireAdmin>
+                  <MAIVEDashboard />
+                </ProtectedRoute>
+              </Suspense>
             )}
           </Route>
           <Route path="/admin/monitoring">
             {() => (
-              <ProtectedRoute requireAdmin>
-                <Monitoring />
-              </ProtectedRoute>
+              <Suspense fallback={<LazyLoadFallback />}>
+                <ProtectedRoute requireAdmin>
+                  <Monitoring />
+                </ProtectedRoute>
+              </Suspense>
             )}
           </Route>
           <Route path="/admin/efile-monitoring">
             {() => (
-              <ProtectedRoute requireAdmin>
-                <EFileMonitoring />
-              </ProtectedRoute>
+              <Suspense fallback={<LazyLoadFallback />}>
+                <ProtectedRoute requireAdmin>
+                  <EFileMonitoring />
+                </ProtectedRoute>
+              </Suspense>
             )}
           </Route>
           <Route path="/admin/security-monitoring">
             {() => (
-              <ProtectedRoute requireAdmin>
-                <SecurityMonitoring />
-              </ProtectedRoute>
+              <Suspense fallback={<LazyLoadFallback />}>
+                <ProtectedRoute requireAdmin>
+                  <SecurityMonitoring />
+                </ProtectedRoute>
+              </Suspense>
             )}
           </Route>
           <Route path="/admin/audit-logs">
             {() => (
-              <ProtectedRoute requireAdmin>
-                <AuditLogs />
-              </ProtectedRoute>
+              <Suspense fallback={<LazyLoadFallback />}>
+                <ProtectedRoute requireAdmin>
+                  <AuditLogs />
+                </ProtectedRoute>
+              </Suspense>
             )}
           </Route>
           <Route path="/admin/policy-changes">
             {() => (
-              <ProtectedRoute>
-                <PolicyChanges />
-              </ProtectedRoute>
+              <Suspense fallback={<LazyLoadFallback />}>
+                <ProtectedRoute>
+                  <PolicyChanges />
+                </ProtectedRoute>
+              </Suspense>
             )}
           </Route>
           <Route path="/admin/compliance">
             {() => (
-              <ProtectedRoute requireAdmin>
-                <ComplianceAdmin />
-              </ProtectedRoute>
+              <Suspense fallback={<LazyLoadFallback />}>
+                <ProtectedRoute requireAdmin>
+                  <ComplianceAdmin />
+                </ProtectedRoute>
+              </Suspense>
             )}
           </Route>
           <Route path="/admin/api-docs">
             {() => (
-              <ProtectedRoute requireAdmin>
-                <ApiDocs />
-              </ProtectedRoute>
+              <Suspense fallback={<LazyLoadFallback />}>
+                <ProtectedRoute requireAdmin>
+                  <ApiDocs />
+                </ProtectedRoute>
+              </Suspense>
             )}
           </Route>
           <Route path="/developer">
             {() => (
-              <ProtectedRoute>
-                <DeveloperPortal />
-              </ProtectedRoute>
+              <Suspense fallback={<LazyLoadFallback />}>
+                <ProtectedRoute>
+                  <DeveloperPortal />
+                </ProtectedRoute>
+              </Suspense>
             )}
           </Route>
           <Route path="/admin/feedback">
             {() => (
-              <ProtectedRoute requireAdmin>
-                <FeedbackManagement />
-              </ProtectedRoute>
+              <Suspense fallback={<LazyLoadFallback />}>
+                <ProtectedRoute requireAdmin>
+                  <FeedbackManagement />
+                </ProtectedRoute>
+              </Suspense>
             )}
           </Route>
           <Route path="/admin/counties">
             {() => (
-              <ProtectedRoute requireAdmin>
-                <CountyManagement />
-              </ProtectedRoute>
+              <Suspense fallback={<LazyLoadFallback />}>
+                <ProtectedRoute requireAdmin>
+                  <CountyManagement />
+                </ProtectedRoute>
+              </Suspense>
             )}
           </Route>
           <Route path="/admin/county-analytics">
             {() => (
-              <ProtectedRoute requireAdmin>
-                <CountyAnalytics />
-              </ProtectedRoute>
+              <Suspense fallback={<LazyLoadFallback />}>
+                <ProtectedRoute requireAdmin>
+                  <CountyAnalytics />
+                </ProtectedRoute>
+              </Suspense>
             )}
           </Route>
           <Route path="/admin/abawd-verifications">
             {() => (
-              <ProtectedRoute requireStaff>
-                <AbawdVerificationAdmin />
-              </ProtectedRoute>
+              <Suspense fallback={<LazyLoadFallback />}>
+                <ProtectedRoute requireStaff>
+                  <AbawdVerificationAdmin />
+                </ProtectedRoute>
+              </Suspense>
             )}
           </Route>
           <Route path="/admin/cross-enrollment">
             {() => (
-              <ProtectedRoute requireStaff>
-                <CrossEnrollmentAdmin />
-              </ProtectedRoute>
+              <Suspense fallback={<LazyLoadFallback />}>
+                <ProtectedRoute requireStaff>
+                  <CrossEnrollmentAdmin />
+                </ProtectedRoute>
+              </Suspense>
             )}
           </Route>
           <Route path="/navigator/document-review">
             {() => (
-              <ProtectedRoute requireStaff>
-                <DocumentReviewQueue />
-              </ProtectedRoute>
+              <Suspense fallback={<LazyLoadFallback />}>
+                <ProtectedRoute requireStaff>
+                  <DocumentReviewQueue />
+                </ProtectedRoute>
+              </Suspense>
             )}
           </Route>
           <Route path="/training">
             {() => (
-              <ProtectedRoute requireAdmin>
-                <Training />
-              </ProtectedRoute>
+              <Suspense fallback={<LazyLoadFallback />}>
+                <ProtectedRoute requireAdmin>
+                  <Training />
+                </ProtectedRoute>
+              </Suspense>
             )}
           </Route>
           <Route path="/admin/evaluation">
             {() => (
-              <ProtectedRoute requireAdmin>
-                <EvaluationFramework />
-              </ProtectedRoute>
+              <Suspense fallback={<LazyLoadFallback />}>
+                <ProtectedRoute requireAdmin>
+                  <EvaluationFramework />
+                </ProtectedRoute>
+              </Suspense>
             )}
           </Route>
           {/* COMMENTED OUT DURING SCHEMA ROLLBACK */}
@@ -567,44 +755,56 @@ function Router() {
           </Route> */}
           <Route path="/admin/fns-state-options">
             {() => (
-              <ProtectedRoute requireAdmin>
-                <FNSStateOptionsManager />
-              </ProtectedRoute>
+              <Suspense fallback={<LazyLoadFallback />}>
+                <ProtectedRoute requireAdmin>
+                  <FNSStateOptionsManager />
+                </ProtectedRoute>
+              </Suspense>
             )}
           </Route>
           <Route path="/admin/federal-law-tracker">
             {() => (
-              <ProtectedRoute requireAdmin>
-                <FederalLawTracker />
-              </ProtectedRoute>
+              <Suspense fallback={<LazyLoadFallback />}>
+                <ProtectedRoute requireAdmin>
+                  <FederalLawTracker />
+                </ProtectedRoute>
+              </Suspense>
             )}
           </Route>
           <Route path="/admin/state-law-tracker">
             {() => (
-              <ProtectedRoute requireAdmin>
-                <StateLawTracker />
-              </ProtectedRoute>
+              <Suspense fallback={<LazyLoadFallback />}>
+                <ProtectedRoute requireAdmin>
+                  <StateLawTracker />
+                </ProtectedRoute>
+              </Suspense>
             )}
           </Route>
           <Route path="/admin/scheduler">
             {() => (
-              <ProtectedRoute requireAdmin>
-                <SmartScheduler />
-              </ProtectedRoute>
+              <Suspense fallback={<LazyLoadFallback />}>
+                <ProtectedRoute requireAdmin>
+                  <SmartScheduler />
+                </ProtectedRoute>
+              </Suspense>
             )}
           </Route>
           <Route path="/admin/county-tax-rates">
             {() => (
-              <ProtectedRoute requireAdmin>
-                <CountyTaxRates />
-              </ProtectedRoute>
+              <Suspense fallback={<LazyLoadFallback />}>
+                <ProtectedRoute requireAdmin>
+                  <CountyTaxRates />
+                </ProtectedRoute>
+              </Suspense>
             )}
           </Route>
           <Route path="/admin/webhooks">
             {() => (
-              <ProtectedRoute requireAdmin>
-                <WebhookManagement />
-              </ProtectedRoute>
+              <Suspense fallback={<LazyLoadFallback />}>
+                <ProtectedRoute requireAdmin>
+                  <WebhookManagement />
+                </ProtectedRoute>
+              </Suspense>
             )}
           </Route>
           

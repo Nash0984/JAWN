@@ -9,7 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
-import { Skeleton } from "@/components/ui/skeleton";
+import { LoadingWrapper } from "@/components/common";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
@@ -660,56 +660,54 @@ export default function TaxPreparation() {
                 <CardTitle>Uploaded Documents ({documents.length})</CardTitle>
               </CardHeader>
               <CardContent>
-                {loadingDocs ? (
-                  <div className="space-y-3">
-                    {[1, 2].map(i => <Skeleton key={i} className="h-16 w-full" />)}
-                  </div>
-                ) : documents.length === 0 ? (
-                  <div className="text-center py-8 text-muted-foreground">
-                    <FileText className="h-12 w-12 mx-auto mb-2 opacity-50" />
-                    <p>No documents uploaded yet</p>
-                  </div>
-                ) : (
-                  <div className="space-y-3">
-                    {documents.map((doc) => (
-                      <div 
-                        key={doc.id} 
-                        className="flex items-center justify-between p-4 border rounded-lg"
-                        data-testid={`document-item-${doc.id}`}
-                      >
-                        <div className="flex items-center space-x-4">
-                          <FileText className="h-8 w-8 text-primary" />
-                          <div>
-                            <p className="font-medium">{doc.documentType.toUpperCase()} - {doc.taxYear}</p>
-                            <p className="text-sm text-muted-foreground">
-                              Confidence: {(doc.geminiConfidence * 100).toFixed(0)}%
-                              {doc.requiresManualReview && (
-                                <Badge variant="outline" className="ml-2">Review Needed</Badge>
-                              )}
-                            </p>
+                <LoadingWrapper isLoading={loadingDocs} skeletonType="list">
+                  {documents.length === 0 ? (
+                    <div className="text-center py-8 text-muted-foreground">
+                      <FileText className="h-12 w-12 mx-auto mb-2 opacity-50" />
+                      <p>No documents uploaded yet</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {documents.map((doc) => (
+                        <div 
+                          key={doc.id} 
+                          className="flex items-center justify-between p-4 border rounded-lg"
+                          data-testid={`document-item-${doc.id}`}
+                        >
+                          <div className="flex items-center space-x-4">
+                            <FileText className="h-8 w-8 text-primary" />
+                            <div>
+                              <p className="font-medium">{doc.documentType.toUpperCase()} - {doc.taxYear}</p>
+                              <p className="text-sm text-muted-foreground">
+                                Confidence: {(doc.geminiConfidence * 100).toFixed(0)}%
+                                {doc.requiresManualReview && (
+                                  <Badge variant="outline" className="ml-2">Review Needed</Badge>
+                                )}
+                              </p>
+                            </div>
+                          </div>
+                          <div className="flex space-x-2">
+                            <Button 
+                              variant="outline" 
+                              size="sm"
+                              onClick={() => {
+                                setSelectedDoc(doc);
+                                setShowPreviewDialog(true);
+                              }}
+                              data-testid={`button-view-${doc.id}`}
+                            >
+                              <Eye className="h-4 w-4 mr-2" />
+                              View
+                            </Button>
+                            <Badge variant={doc.verificationStatus === 'verified' ? 'default' : 'secondary'}>
+                              {doc.verificationStatus}
+                            </Badge>
                           </div>
                         </div>
-                        <div className="flex space-x-2">
-                          <Button 
-                            variant="outline" 
-                            size="sm"
-                            onClick={() => {
-                              setSelectedDoc(doc);
-                              setShowPreviewDialog(true);
-                            }}
-                            data-testid={`button-view-${doc.id}`}
-                          >
-                            <Eye className="h-4 w-4 mr-2" />
-                            View
-                          </Button>
-                          <Badge variant={doc.verificationStatus === 'verified' ? 'default' : 'secondary'}>
-                            {doc.verificationStatus}
-                          </Badge>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
+                      ))}
+                    </div>
+                  )}
+                </LoadingWrapper>
               </CardContent>
             </Card>
           </TabsContent>

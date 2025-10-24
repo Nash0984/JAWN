@@ -5,7 +5,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
 import { TrendingUp, TrendingDown, DollarSign, FileCheck, Users, Clock } from "lucide-react";
-import { Skeleton } from "@/components/ui/skeleton";
+import { LoadingWrapper } from "@/components/common";
 import { useTenant } from "@/contexts/TenantContext";
 
 interface CountyComparison {
@@ -95,34 +95,18 @@ export default function CountyAnalytics() {
     </Card>
   );
 
-  if (isLoading) {
-    return (
-      <div className="container mx-auto p-6 space-y-6">
-        <Skeleton className="h-12 w-64" />
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-          {[1, 2, 3, 4].map((i) => (
-            <Skeleton key={i} className="h-32" />
-          ))}
-        </div>
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="container mx-auto p-6">
-        <div className="bg-destructive/10 border border-destructive/20 rounded-lg p-6 text-center">
-          <h2 className="text-lg font-semibold text-destructive mb-2">Failed to load analytics data</h2>
-          <p className="text-sm text-muted-foreground">
-            Unable to fetch county performance metrics. Please try again later.
-          </p>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="container mx-auto p-6 space-y-6">
+      <LoadingWrapper isLoading={isLoading} skeletonType="card">
+        {error ? (
+          <div className="bg-destructive/10 border border-destructive/20 rounded-lg p-6 text-center">
+            <h2 className="text-lg font-semibold text-destructive mb-2">Failed to load analytics data</h2>
+            <p className="text-sm text-muted-foreground">
+              Unable to fetch county performance metrics. Please try again later.
+            </p>
+          </div>
+        ) : (
+          <>
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold tracking-tight" data-testid="text-page-title">
@@ -296,6 +280,9 @@ export default function CountyAnalytics() {
           </Card>
         </TabsContent>
       </Tabs>
+          </>
+        )}
+      </LoadingWrapper>
     </div>
   );
 }

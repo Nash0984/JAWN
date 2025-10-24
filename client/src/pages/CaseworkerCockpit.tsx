@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Skeleton } from "@/components/ui/skeleton";
+import { LoadingWrapper } from "@/components/common";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { EmptyState } from "@/components/ui/empty-state";
 import { AlertTriangle, TrendingUp, TrendingDown, BookOpen, FileText, HelpCircle, Search, ChevronDown, ChevronUp, CheckCircle2 } from "lucide-react";
@@ -186,18 +186,13 @@ export default function CaseworkerCockpit() {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              {flaggedCasesLoading ? (
-                <div className="space-y-3">
-                  <Skeleton className="h-12 w-full" />
-                  <Skeleton className="h-12 w-full" />
-                  <Skeleton className="h-12 w-full" />
-                </div>
-              ) : flaggedCasesError ? (
-                <div className="text-center py-8 text-muted-foreground">
-                  <AlertTriangle className="h-12 w-12 mx-auto mb-2 text-red-500" />
-                  <p>Failed to load flagged cases</p>
-                </div>
-              ) : !flaggedCases || flaggedCases.length === 0 ? (
+              <LoadingWrapper isLoading={flaggedCasesLoading} skeletonType="table">
+                {flaggedCasesError ? (
+                  <div className="text-center py-8 text-muted-foreground">
+                    <AlertTriangle className="h-12 w-12 mx-auto mb-2 text-red-500" />
+                    <p>Failed to load flagged cases</p>
+                  </div>
+                ) : !flaggedCases || flaggedCases.length === 0 ? (
                 <EmptyState
                   icon={CheckCircle2}
                   iconColor="green"
@@ -274,7 +269,8 @@ export default function CaseworkerCockpit() {
                     </TableBody>
                   </Table>
                 </div>
-              )}
+                )}
+              </LoadingWrapper>
             </CardContent>
           </Card>
 
@@ -294,13 +290,12 @@ export default function CaseworkerCockpit() {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              {errorPatternsLoading ? (
-                <Skeleton className="h-64 w-full" />
-              ) : !errorPatterns || errorPatterns.length === 0 ? (
-                <div className="text-center py-8 text-muted-foreground">
-                  <p>No error trend data available</p>
-                </div>
-              ) : (
+              <LoadingWrapper isLoading={errorPatternsLoading} skeletonType="card">
+                {!errorPatterns || errorPatterns.length === 0 ? (
+                  <div className="text-center py-8 text-muted-foreground">
+                    <p>No error trend data available</p>
+                  </div>
+                ) : (
                 <div className="space-y-4">
                   <ResponsiveContainer width="100%" height={200}>
                     <LineChart data={errorTrendsData}>
@@ -344,7 +339,8 @@ export default function CaseworkerCockpit() {
                     </div>
                   )}
                 </div>
-              )}
+                )}
+              </LoadingWrapper>
             </CardContent>
           </Card>
 
@@ -360,12 +356,8 @@ export default function CaseworkerCockpit() {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              {trainingLoading ? (
-                <div className="space-y-3">
-                  <Skeleton className="h-24 w-full" />
-                  <Skeleton className="h-24 w-full" />
-                </div>
-              ) : !trainingInterventions || trainingInterventions.length === 0 ? (
+              <LoadingWrapper isLoading={trainingLoading} skeletonType="list">
+                {!trainingInterventions || trainingInterventions.length === 0 ? (
                 <EmptyState
                   icon={BookOpen}
                   iconColor="gray"
@@ -394,7 +386,8 @@ export default function CaseworkerCockpit() {
                     </div>
                   ))}
                 </div>
-              )}
+                )}
+              </LoadingWrapper>
             </CardContent>
           </Card>
 
@@ -439,13 +432,8 @@ export default function CaseworkerCockpit() {
                 </div>
 
                 {/* Job Aids List */}
-                {jobAidsLoading ? (
-                  <div className="space-y-2">
-                    <Skeleton className="h-16 w-full" />
-                    <Skeleton className="h-16 w-full" />
-                    <Skeleton className="h-16 w-full" />
-                  </div>
-                ) : filteredJobAids.length === 0 ? (
+                <LoadingWrapper isLoading={jobAidsLoading} skeletonType="list">
+                  {filteredJobAids.length === 0 ? (
                   <EmptyState
                     icon={FileText}
                     iconColor="gray"
@@ -490,7 +478,8 @@ export default function CaseworkerCockpit() {
                       </Dialog>
                     ))}
                   </div>
-                )}
+                  )}
+                </LoadingWrapper>
               </div>
             </CardContent>
           </Card>

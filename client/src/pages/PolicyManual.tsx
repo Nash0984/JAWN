@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
-import { Skeleton } from "@/components/ui/skeleton";
+import { LoadingWrapper } from "@/components/common";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { 
@@ -198,9 +198,8 @@ export default function PolicyManual() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            {statusLoading ? (
-              <Skeleton className="h-20 w-full" />
-            ) : status ? (
+            <LoadingWrapper isLoading={statusLoading} skeletonType="card">
+              {status ? (
               <div className="space-y-4">
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                   <div className="bg-muted p-4 rounded-lg">
@@ -302,6 +301,7 @@ export default function PolicyManual() {
                 </Button>
               </div>
             )}
+            </LoadingWrapper>
           </CardContent>
         </Card>
 

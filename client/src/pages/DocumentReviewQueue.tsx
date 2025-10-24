@@ -14,7 +14,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { CheckCircle2, XCircle, Clock, FileCheck, AlertCircle, FileText, Search, Download, FileDown } from "lucide-react";
-import { Skeleton } from "@/components/ui/skeleton";
+import { LoadingWrapper } from "@/components/common";
 import { format } from "date-fns";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -502,30 +502,19 @@ export default function DocumentReviewQueue() {
       )}
 
       {/* Documents List */}
-      <div className="space-y-4">
-        {isLoading ? (
-          Array.from({ length: 3 }).map((_, i) => (
-            <Card key={i}>
-              <CardContent className="p-6">
-                <div className="space-y-3">
-                  <Skeleton className="h-6 w-1/3" />
-                  <Skeleton className="h-4 w-2/3" />
-                  <Skeleton className="h-4 w-1/2" />
-                </div>
+      <LoadingWrapper isLoading={isLoading} skeletonType="list">
+        <div className="space-y-4">
+          {documents.length === 0 ? (
+            <Card>
+              <CardContent className="p-12 text-center">
+                <FileCheck className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
+                <p className="text-muted-foreground">
+                  No documents found matching your filters.
+                </p>
               </CardContent>
             </Card>
-          ))
-        ) : documents.length === 0 ? (
-          <Card>
-            <CardContent className="p-12 text-center">
-              <FileCheck className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
-              <p className="text-muted-foreground">
-                No documents found matching your filters.
-              </p>
-            </CardContent>
-          </Card>
-        ) : (
-          documents.map((doc) => (
+          ) : (
+            documents.map((doc) => (
             <Card key={doc.id} data-testid={`card-document-${doc.id}`}>
               <CardHeader>
                 <div className="flex items-start gap-4">
@@ -659,8 +648,9 @@ export default function DocumentReviewQueue() {
               </CardContent>
             </Card>
           ))
-        )}
-      </div>
+          )}
+        </div>
+      </LoadingWrapper>
 
       {/* Review Dialog */}
       <Dialog open={reviewDialogOpen} onOpenChange={setReviewDialogOpen}>
