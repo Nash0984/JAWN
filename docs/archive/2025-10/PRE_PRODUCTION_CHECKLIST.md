@@ -645,7 +645,7 @@ This checklist ensures all critical systems are configured, tested, and ready fo
 
 ### 13.2 Team Readiness
 - [ ] Staff trained on platform usage
-- [ ] Admin accounts created for all 24 LDSS offices
+- [ ] Admin accounts created for all office locations
 - [ ] Support ticketing system ready
 - [ ] On-call rotation established
 

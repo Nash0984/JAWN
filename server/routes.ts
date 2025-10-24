@@ -11956,6 +11956,12 @@ If the question cannot be answered with the available information, say so clearl
   registerStateConfigurationRoutes(app);
 
   // ============================================================================
+  // Mount Multi-State Office Routes - Office & Routing Management
+  // ============================================================================
+  const multiStateOfficeRouter = (await import('./routes/multiStateOffice.routes')).default;
+  app.use('/api/multi-state', multiStateOfficeRouter);
+
+  // ============================================================================
   // Mount Cross-State Rules Routes - Cross-State Rules Architecture
   // ============================================================================
   registerCrossStateRulesRoutes(app);

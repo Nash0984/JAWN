@@ -14,6 +14,8 @@ export const users = pgTable("users", {
   role: text("role").notNull().default("client"), // client, navigator, caseworker, admin, super_admin
   // Multi-tenant isolation
   tenantId: varchar("tenant_id"), // References tenant for data isolation - relation defined below
+  // Multi-state architecture: State-level tenant assignment (compliance boundary - NIST AC-4)
+  stateTenantId: varchar("state_tenant_id"), // References state tenant - nullable during migration, will be required post-migration
   // Maryland DHS staff fields
   dhsEmployeeId: text("dhs_employee_id"), // for navigators and caseworkers
   officeLocation: text("office_location"), // local DHS office location
@@ -4877,6 +4879,15 @@ export type StateOptionStatusHistory = typeof stateOptionStatusHistory.$inferSel
 
 // ============================================================================
 // MULTI-COUNTY DEPLOYMENT SYSTEM
+// 
+// DEPRECATION NOTICE (Multi-State Migration):
+// County-based tenant isolation is being replaced by State→Office hierarchy for white-label multi-state deployment.
+// - New Schema: See "MULTI-STATE ARCHITECTURE" section (lines ~8280+) for stateTenants, offices, officeRoles
+// - Migration: Task 3.9 will migrate county data to office-based structure with FK backfills
+// - Timeline: This section will be removed after Task 3.14 successfully completes production migration
+// 
+// Current Status: ACTIVE (still required for backward compatibility until migration completes)
+// Future: Will be replaced by flexible office routing supporting 1 office (centralized) to 100+ offices (decentralized)
 // ============================================================================
 
 // Counties/LDSSs - Maryland jurisdictions with customized experiences

@@ -1,10 +1,20 @@
 import { Request, Response, NextFunction } from "express";
 import { tenantService } from "../services/tenantService";
-import type { Tenant, TenantBranding } from "@shared/schema";
+import type { Tenant, TenantBranding, StateTenant, Office } from "@shared/schema";
+import { db } from "../db";
+import { stateTenants, offices, officeRoles } from "@shared/schema";
+import { eq, and } from "drizzle-orm";
+import { logger } from "../services/logger.service";
 
 /**
- * Tenant Middleware
- * Detects and enforces multi-tenant isolation
+ * Tenant Middleware - Multi-State Architecture
+ * 
+ * ARCHITECTURE:
+ * - State Tenant: Compliance boundary (NIST AC-4) - KMS keys, data residency, access control
+ * - Office: Operational metadata - routing, reporting, workload tracking (NOT access control)
+ * 
+ * Detects and enforces state-level tenant isolation while maintaining optional office context
+ * for routing and reporting purposes only.
  */
 
 declare global {
@@ -14,6 +24,8 @@ declare global {
         tenant: Tenant;
         branding?: TenantBranding;
       };
+      stateTenant?: StateTenant; // Multi-state architecture: State-level tenant isolation
+      office?: Office;           // Optional: Office context for routing/reporting only (NOT access control)
     }
   }
 }
@@ -197,6 +209,276 @@ export function enforceTenantIsolation(
   if (req.tenant && req.tenant.tenant.id !== req.user.tenantId) {
     return res.status(403).json({
       error: 'Access denied to this tenant',
+    });
+  }
+
+  next();
+}
+
+// ============================================================================
+// MULTI-STATE ARCHITECTURE MIDDLEWARE
+// ============================================================================
+
+/**
+ * Middleware to detect and load state tenant context
+ * 
+ * State Tenant = Compliance boundary (NIST AC-4)
+ * - Enforces data residency, KMS encryption keys, access control
+ * - For Maryland: Defaults to MD state tenant
+ * - For multi-state: Detects from subdomain/query param
+ */
+export async function detectStateTenantContext(
+  req: Request,
+  res: Response,
+  next: NextFunction
+) {
+  try {
+    const hostname = req.hostname || req.get('host') || 'localhost';
+    const queryStateCode = req.query.state as string | undefined;
+
+    let stateTenant: StateTenant | undefined;
+
+    // Try to detect state from query param first
+    if (queryStateCode) {
+      const [result] = await db
+        .select()
+        .from(stateTenants)
+        .where(eq(stateTenants.stateCode, queryStateCode.toUpperCase()))
+        .limit(1);
+      stateTenant = result;
+    }
+
+    // Try to detect from subdomain (e.g., md.jawn.gov, pa.jawn.gov)
+    if (!stateTenant) {
+      const subdomain = hostname.split('.')[0];
+      const stateCodeMap: Record<string, string> = {
+        'md': 'MD',
+        'maryland': 'MD',
+        'pa': 'PA',
+        'pennsylvania': 'PA',
+        'va': 'VA',
+        'virginia': 'VA',
+      };
+      
+      const stateCode = stateCodeMap[subdomain.toLowerCase()];
+      if (stateCode) {
+        const [result] = await db
+          .select()
+          .from(stateTenants)
+          .where(eq(stateTenants.stateCode, stateCode))
+          .limit(1);
+        stateTenant = result;
+      }
+    }
+
+    // MARYLAND SINGLE-INSTANCE: Default to Maryland state tenant
+    // This allows marylandbenefits.gov to work without subdomain routing
+    if (!stateTenant) {
+      const [result] = await db
+        .select()
+        .from(stateTenants)
+        .where(eq(stateTenants.stateCode, 'MD'))
+        .limit(1);
+      stateTenant = result;
+    }
+
+    // COMPLIANCE: Validate state tenant access against authenticated user
+    // If user is authenticated and has a stateTenantId, ensure it matches detected state tenant
+    if (stateTenant && req.user && req.user.stateTenantId) {
+      if (req.user.role !== 'super_admin' && stateTenant.id !== req.user.stateTenantId) {
+        // User is trying to access a different state tenant - reject
+        logger.warn("State tenant access violation attempt", {
+          service: "tenantMiddleware",
+          userId: req.user.id,
+          userStateTenantId: req.user.stateTenantId,
+          requestedStateTenantId: stateTenant.id,
+          action: "detectStateTenantContext",
+        });
+        
+        // Clear state tenant to prevent access
+        stateTenant = undefined;
+      }
+    }
+
+    // Attach to request
+    if (stateTenant) {
+      req.stateTenant = stateTenant;
+    }
+
+    next();
+  } catch (error) {
+    // Silently continue - state tenant detection errors shouldn't break requests
+    next();
+  }
+}
+
+/**
+ * Middleware to detect and load office context (optional)
+ * 
+ * Office = Operational metadata for routing/reporting ONLY
+ * - NOT used for access control (that's handled by state tenant)
+ * - Used for: routing rules, workload tracking, office-specific reporting
+ * 
+ * Detection priority:
+ * 1. Query param (?office=BALTIMORE_CITY)
+ * 2. User's primary office assignment (from officeRoles)
+ * 3. No office (null) - user has state-level access across all offices
+ */
+export async function detectOfficeContext(
+  req: Request,
+  res: Response,
+  next: NextFunction
+) {
+  try {
+    if (!req.stateTenant || !req.user) {
+      return next(); // No state tenant or user - skip office detection
+    }
+
+    let office: Office | undefined;
+
+    // Priority 1: Explicit office query param
+    const queryOfficeCode = req.query.office as string | undefined;
+    if (queryOfficeCode) {
+      const [result] = await db
+        .select()
+        .from(offices)
+        .where(
+          and(
+            eq(offices.stateTenantId, req.stateTenant.id),
+            eq(offices.code, queryOfficeCode.toUpperCase())
+          )
+        )
+        .limit(1);
+      office = result;
+    }
+
+    // Priority 2: User's primary office assignment
+    if (!office && req.user.id) {
+      const [primaryRole] = await db
+        .select()
+        .from(officeRoles)
+        .innerJoin(offices, eq(officeRoles.officeId, offices.id))
+        .where(
+          and(
+            eq(officeRoles.userId, req.user.id),
+            eq(officeRoles.isPrimary, true),
+            eq(offices.stateTenantId, req.stateTenant.id)
+          )
+        )
+        .limit(1);
+
+      if (primaryRole) {
+        office = primaryRole.offices;
+      }
+    }
+
+    // Attach to request (may be undefined - that's okay for state-level access)
+    if (office) {
+      req.office = office;
+    }
+
+    next();
+  } catch (error) {
+    // Silently continue - office detection errors shouldn't break requests
+    next();
+  }
+}
+
+/**
+ * Middleware to require state tenant context
+ * Returns 404 if no state tenant is found
+ */
+export function requireStateTenant(
+  req: Request,
+  res: Response,
+  next: NextFunction
+) {
+  if (!req.stateTenant) {
+    return res.status(404).json({
+      error: 'State tenant not found',
+      message: 'No state configuration found for this domain or state parameter',
+    });
+  }
+
+  next();
+}
+
+/**
+ * Middleware to enforce state-level tenant isolation (NIST AC-4)
+ * 
+ * Ensures users can only access data from their assigned state tenant
+ * State tenant = Compliance boundary (not office)
+ */
+export function enforceStateTenantIsolation(
+  req: Request,
+  res: Response,
+  next: NextFunction
+) {
+  if (!req.user) {
+    return res.status(401).json({
+      error: 'Authentication required',
+    });
+  }
+
+  // Super admins bypass state tenant isolation
+  if (req.user.role === 'super_admin') {
+    return next();
+  }
+
+  // Ensure user has a state tenant assigned
+  if (!req.user.stateTenantId) {
+    return res.status(403).json({
+      error: 'User not assigned to a state tenant',
+      message: 'Contact your administrator to assign you to a state',
+    });
+  }
+
+  // Ensure request state tenant matches user state tenant
+  if (req.stateTenant && req.stateTenant.id !== req.user.stateTenantId) {
+    return res.status(403).json({
+      error: 'Access denied to this state',
+      message: 'You do not have permission to access data from this state',
+    });
+  }
+
+  next();
+}
+
+/**
+ * Helper function to get state tenant ID from request
+ * Returns null if no state tenant context
+ */
+export function getStateTenantId(req: Request): string | null {
+  return req.stateTenant?.id || null;
+}
+
+/**
+ * Helper function to get office ID from request (if present)
+ * Returns null if no office context
+ */
+export function getOfficeId(req: Request): string | null {
+  return req.office?.id || null;
+}
+
+/**
+ * Middleware to require active state tenant status
+ */
+export function requireActiveStateTenant(
+  req: Request,
+  res: Response,
+  next: NextFunction
+) {
+  if (!req.stateTenant) {
+    return res.status(404).json({
+      error: 'State tenant not found',
+    });
+  }
+
+  if (req.stateTenant.status !== 'active') {
+    return res.status(403).json({
+      error: 'This state tenant is not currently active',
+      status: req.stateTenant.status,
+      message: 'State tenant must be active to access this resource',
     });
   }
 

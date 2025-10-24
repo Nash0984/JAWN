@@ -17,7 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **State Configuration System**: Dynamic state-specific rules engines, tax forms, and benefit calculations
 
 #### **State Support Added**
-- ✅ **Maryland** (Primary) - Complete implementation with 24 LDSS county offices
+- ✅ **Maryland** (Primary) - Complete implementation with hub-and-spoke routing model
 - 🔄 **Pennsylvania** (Priority #2) - Infrastructure ready, forms pending
 - 🔄 **Virginia** - Infrastructure ready, forms pending  
 - 🔄 **Utah** - Infrastructure ready, forms pending
@@ -96,7 +96,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Total Tables**: 179 (comprehensive schema for all features)
 - **stateConfigurations** table - Multi-state configuration storage
 - **tenantBranding** table - State/county-specific branding
-- County-level tenant data preserved for Maryland's 24 LDSS offices
+- Flexible office structure supports centralized or decentralized models per state
 - Benefit program tables for all 6 states (SNAP, Medicaid, TANF, OHEP, Tax Credits, SSI)
 
 ### 🐛 Bug Fixes

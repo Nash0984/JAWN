@@ -23,7 +23,7 @@ graph TB
         CORE[Core JAWN Platform<br/>Tenant-Aware Architecture]
         
         subgraph "Primary Deployment"
-            MD[Maryland - MD<br/>✅ Production<br/>24 LDSS Offices]
+            MD[Maryland - MD<br/>✅ Production<br/>Hub-and-Spoke Model]
         end
         
         subgraph "Priority States - Q4 2025"
@@ -58,7 +58,7 @@ graph TB
 
 | State | Status | Tax System | Medicaid | Programs | Launch |
 |-------|--------|------------|----------|----------|--------|
-| **Maryland** | ✅ Production | Progressive (24 counties) | Expanded | SNAP, Medicaid, TANF, OHEP, Tax Credits, SSI | Sept 2025 |
+| **Maryland** | ✅ Production | Progressive | Expanded | SNAP, Medicaid, TANF, OHEP, Tax Credits, SSI | Sept 2025 |
 | **Pennsylvania** | 🔄 Ready | Flat 3.07% | Expanded | Federal + Municipal (Philadelphia) | Q4 2025 |
 | **Indiana** | 🔄 Ready | Flat 3.15% | Expanded | SNAP, Medicaid, TANF, LIHEAP | Q4 2025 |
 | **Michigan** | 🔄 Ready | Flat 4.25% | Expanded | SNAP, Medicaid, TANF | Q4 2025 |
@@ -436,7 +436,7 @@ graph LR
 
 - State configuration system
 - Tenant-aware branding
-- County management (Maryland 24 LDSS offices)
+- Flexible office routing (centralized or decentralized models)
 - State-specific rules engines
 - Tax form routing
 - Benefit calculation routing

@@ -632,6 +632,15 @@ export interface IStorage {
 
   // ============================================================================
   // Multi-County Deployment
+  // 
+  // DEPRECATION NOTICE (Multi-State Migration):
+  // County-based tenant isolation is being replaced by State→Office hierarchy.
+  // - New: State Tenants (lines 678-725) + Offices (lines 727-749)
+  // - Migration: Task 3.9 will convert county data to office-based structure
+  // - Timeline: Remove after Task 3.10 migrates TenantContext to office-based isolation
+  // 
+  // Current Status: ACTIVE (still required for backward compatibility)
+  // Future: These methods will be removed after successful multi-state migration
   // ============================================================================
   
   // Counties

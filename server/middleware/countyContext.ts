@@ -5,6 +5,15 @@ import { logger } from "../services/logger.service";
 /**
  * County Context Middleware
  * Detects and enforces county-based tenant isolation
+ * 
+ * DEPRECATION NOTICE (Multi-State Migration):
+ * This middleware is being replaced by office-based tenant isolation in the multi-state architecture.
+ * - New: State tenant → Office → User hierarchy (see server/services/officeRouting.service.ts)
+ * - Migration: Task 3.9 will migrate county-based data to office-based structure
+ * - Timeline: Remove after Task 3.10 implements office-based TenantContext
+ * 
+ * Current Status: ACTIVE (still required for backward compatibility until migration completes)
+ * Future: Will be replaced by officeContext middleware with state-level isolation
  */
 
 declare global {
