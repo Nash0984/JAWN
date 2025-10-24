@@ -37,6 +37,14 @@ The backend uses Express.js with TypeScript and PostgreSQL via Drizzle ORM on Ne
 ## Multi-State Architecture
 JAWN employs a production-grade multi-tenant architecture supporting multiple states with flexible office routing, including a state→office hierarchy. It supports Centralized Hub-and-Spoke, Decentralized On-Site, and Hybrid processing models via configurable routing rules, managed by an Intelligent Office Routing Service (`server/services/officeRouting.service.ts`). All routing decisions are captured in an immutable audit log.
 
+### Hybrid Federal-State Naming Convention
+JAWN uses **federal program names in code infrastructure** (LIHEAP, SNAP, TANF) while displaying **state-specific agency names in user interfaces** (e.g., "Maryland Energy Assistance (OHEP)"). This hybrid approach ensures:
+- **Code scalability**: Infrastructure works consistently across states (liheapRulesEngine.ts, liheapIncomeLimits table)
+- **User familiarity**: Displays recognizable state-specific branding ("OHEP" in Maryland, "LIHEAP" in Pennsylvania)
+- **Cross-state collaboration**: Program jargon glossary (`programJargonGlossary` table) maps federal programs to state terminology, enabling navigator training and knowledge sharing across state lines
+
+Benefits: Prevents code duplication across states, maintains consistent data models, and respects local terminology preferences.
+
 ## 3-Tier Encryption Key Management (KMS)
 A NIST SP 800-57 compliant 3-tier KMS (`server/services/kms.service.ts`) ensures data security:
 -   **Tier 1: Root KEK** stored in cloud KMS, encrypts State Master Keys.
