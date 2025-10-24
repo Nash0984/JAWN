@@ -1,11 +1,33 @@
 # GDPR & HIPAA Compliance Audit
 ## Healthcare Privacy & Data Protection
 
-**Last Updated:** October 23, 2025  
-**Version:** 2.0.0  
+**Last Updated:** October 24, 2025  
+**Version:** 2.1.0  
 **System:** JAWN (Joint Access Welfare Network)  
 **Audit Scope:** GDPR (General Data Protection Regulation) & HIPAA (Health Insurance Portability and Accountability Act)  
 **Data Types:** PHI (Protected Health Information), PII (Personally Identifiable Information)
+
+---
+
+## ⚠️ REGULATORY UPDATE (October 24, 2025)
+
+**HIPAA Security Rule Notice of Proposed Rulemaking (NPRM):**
+
+On **January 6, 2025**, HHS Office for Civil Rights published a major proposed update to the HIPAA Security Rule—the first significant overhaul in over a decade. Comments due **March 7, 2025**.
+
+**Proposed Key Changes (If Finalized - 240 days compliance period):**
+1. **Multi-Factor Authentication (MFA) MANDATORY** for all ePHI access (no longer addressable)
+2. **Encryption MANDATORY** at rest and in transit (no longer addressable)
+3. **Vulnerability scanning REQUIRED every 6 months**
+4. **Penetration testing REQUIRED annually**
+5. **Real-time audit monitoring** of all ePHI access
+6. **Network segmentation** to isolate ePHI systems
+7. **Business Associate annual verification** (written analysis by cybersecurity expert)
+8. **All "addressable" safeguards now REQUIRED** (limited exceptions)
+
+**Current JAWN Status:** This audit reflects **current HIPAA Security Rule** requirements. If NPRM is finalized, several "Partial" or "Planned" items will become **mandatory** within 240 days, potentially affecting compliance rating.
+
+**Note:** Healthcare cybersecurity has bipartisan support; this NPRM is likely to be finalized in some form despite administration changes.
 
 ---
 

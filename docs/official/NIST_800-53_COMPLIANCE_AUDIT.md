@@ -1,10 +1,26 @@
 # NIST SP 800-53 Rev. 5 Compliance Audit
 
-**Last Updated:** October 23, 2025  
-**Version:** 2.0.0  
+**Last Updated:** October 24, 2025  
+**Version:** 2.1.0  
 **System:** JAWN (Joint Access Welfare Network)  
 **Audit Scope:** Comprehensive security control assessment  
+**Baseline:** NIST SP 800-53 Revision 5, Release 5.2.0 (August 27, 2025 - CURRENT)  
 **Auditor:** Platform Security Team
+
+---
+
+## ⚠️ STANDARDS UPDATE (October 24, 2025)
+
+**Latest NIST Release:** NIST SP 800-53 Rev. 5, **Release 5.2.0** published **August 27, 2025**.
+
+**New Controls Added in Release 5.2.0:**
+1. **SA-15(13)** - Software and System Resiliency by Design
+2. **SA-24** - Software Supply Chain Management
+3. **SI-02(07)** - Enhanced Software Update & Patch Deployment
+
+**Focus Areas:** Software supply chain security, update security, developer testing improvements (in response to Executive Order 14306).
+
+**Impact on JAWN:** These controls address modern software supply chain threats. While JAWN uses npm packages and external dependencies, formal supply chain risk management (SBOM, dependency scanning) is not yet implemented. This may affect future compliance assessments at higher assurance levels.
 
 ---
 

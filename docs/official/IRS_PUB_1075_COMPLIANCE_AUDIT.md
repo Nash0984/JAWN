@@ -1,11 +1,30 @@
 # IRS Publication 1075 Compliance Audit
 ## Tax Information Security Guidelines
 
-**Last Updated:** October 23, 2025  
-**Version:** 2.0.0  
+**Last Updated:** October 24, 2025  
+**Version:** 2.1.0  
 **System:** JAWN (Joint Access Welfare Network)  
 **Audit Scope:** Federal Tax Information (FTI) safeguards  
-**Compliance Standard:** IRS Publication 1075 (Rev. 2016)
+**Compliance Standard:** IRS Publication 1075 (January 2022 - CURRENT VERSION)  
+**Baseline:** NIST SP 800-53 Revision 5 (Updated from Rev 4 in 2022 edition)
+
+---
+
+## ⚠️ CRITICAL UPDATE (October 24, 2025)
+
+**Version Correction:** This audit has been updated to reference the **current IRS Publication 1075 (January 2022)**, effective June 10, 2022. Previous versions of this document incorrectly referenced the **obsolete November 2016 edition**.
+
+**Major Changes in 2022 Edition:**
+1. **Updated to NIST SP 800-53 Revision 5** (from Rev 4)
+2. **Multi-Factor Authentication (MFA) now REQUIRED for ALL accounts** (previously optional for non-privileged)
+3. **NIST SP 800-63 Digital Identity Guidelines** incorporated (AAL2 requirement)
+4. **Privacy controls fully integrated** (previously Appendix J)
+5. **Mandatory password complexity updated** (IA-5 controls)
+6. **Many "should" statements changed to "must"** (stricter enforcement)
+7. **New definitions:** Information Spillage, Inadvertent Access, Insider Threat
+8. **Security and Privacy Control Reference Table** added
+
+**Impact on Compliance Assessment:** The 2022 edition imposes stricter requirements, particularly around MFA and authentication. This audit now reflects these updated standards.
 
 ---
 
