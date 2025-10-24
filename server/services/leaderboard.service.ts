@@ -96,14 +96,9 @@ class LeaderboardService {
     const rankings: LeaderboardEntry[] = [];
 
     for (const user of relevantUsers) {
-      // Filter by county if scope is 'county'
-      if (scope === 'county' && countyId) {
-        const userCounties = await storage.getUserCounties(user.id);
-        if (!userCounties.some(uc => uc.countyId === countyId)) {
-          continue; // Skip if user not in this county
-        }
-      }
-
+      // Note: County-based filtering removed (bloat-2)
+      // Leaderboards now operate at state/office level via office-based roles
+      
       // Get latest KPI for this period
       const kpi = await storage.getLatestNavigatorKpi(user.id, periodType);
       

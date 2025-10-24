@@ -1914,10 +1914,10 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
     const userId = req.user!.id;
     const userRole = req.user!.role;
     
-    // Get user's primary county assignment (LDSS office)
-    const primaryCounty = await storage.getPrimaryCounty(userId);
+    // TODO: Migrate to office-based scoping (bloat-2 - county assignments removed)
+    // const primaryOffice = await storage.getUserPrimaryOffice(userId);
     
-    // Build query with proper joins for county filtering
+    // Build query with proper joins
     const query = db
       .select({
         review: benefitsAccessReviews,
@@ -1935,10 +1935,10 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
       conditions.push(eq(benefitsAccessReviews.supervisorId, userId));
     }
     
-    // Scope by county for non-super-admins
-    if (userRole !== 'super_admin' && primaryCounty) {
-      conditions.push(eq(clientCases.county, primaryCounty.code));
-    }
+    // Note: County scoping temporarily disabled pending office-based migration
+    // if (userRole !== 'super_admin' && primaryOffice) {
+    //   conditions.push(eq(clientCases.officeId, primaryOffice.id));
+    // }
     
     const results = await query
       .where(and(...conditions))
@@ -1959,8 +1959,8 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
     const userId = req.user!.id;
     const userRole = req.user!.role;
     
-    // Get user's primary county assignment (LDSS office)
-    const primaryCounty = await storage.getPrimaryCounty(userId);
+    // TODO: Migrate to office-based scoping (bloat-2 - county assignments removed)
+    // const primaryOffice = await storage.getUserPrimaryOffice(userId);
     
     // Build query filters
     const effectiveSupervisorId = userRole === 'admin' || userRole === 'super_admin' 
@@ -1971,8 +1971,8 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
     if (status === 'active') {
       reviews = await benefitsAccessReviewService.getActiveReviews(effectiveSupervisorId);
     } else {
-      // For LDSS office scoping: join with client_cases to filter by county
-      // Super admins see all reviews, staff see only their county's reviews
+      // For LDSS office scoping: join with client_cases to filter by office
+      // Super admins see all reviews, staff see only their office's reviews
       const query = db
         .select({
           review: benefitsAccessReviews,
@@ -1987,10 +1987,10 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
         conditions.push(eq(benefitsAccessReviews.supervisorId, effectiveSupervisorId));
       }
       
-      // Scope by county for non-super-admins
-      if (userRole !== 'super_admin' && primaryCounty) {
-        conditions.push(eq(clientCases.county, primaryCounty.code));
-      }
+      // Note: Office scoping temporarily disabled pending migration
+      // if (userRole !== 'super_admin' && primaryOffice) {
+      //   conditions.push(eq(clientCases.officeId, primaryOffice.id));
+      // }
       
       const results = conditions.length > 0
         ? await query.where(and(...conditions)).limit(100).orderBy(desc(benefitsAccessReviews.createdAt))
@@ -10413,74 +10413,6 @@ If the question cannot be answered with the available information, say so clearl
   app.delete("/api/counties/:id", requireAdmin, asyncHandler(async (req: Request, res: Response) => {
     await storage.deleteCounty(req.params.id);
     res.json({ message: "County deleted successfully" });
-  }));
-
-  // Assign user to county (admin only)
-  app.post("/api/counties/:id/users", requireAdmin, asyncHandler(async (req: Request, res: Response) => {
-    const { userId, role } = req.body;
-    
-    if (!userId) {
-      throw validationError("userId is required");
-    }
-    
-    const countyUser = await storage.assignUserToCounty({
-      countyId: req.params.id,
-      userId,
-      role: role || 'navigator',
-      isActive: true
-    });
-    
-    res.status(201).json(countyUser);
-  }));
-
-  // Get county users
-  app.get("/api/counties/:id/users", asyncHandler(async (req: Request, res: Response) => {
-    const users = await storage.getCountyUsers(req.params.id);
-    res.json(users);
-  }));
-
-  // Get user's counties
-  app.get("/api/users/:userId/counties", asyncHandler(async (req: Request, res: Response) => {
-    const counties = await storage.getUserCounties(req.params.userId);
-    res.json(counties);
-  }));
-
-  // Get current user's county assignments (for LDSS office info)
-  app.get("/api/users/me/county-assignments", requireAuth, asyncHandler(async (req: Request, res: Response) => {
-    if (!req.user) {
-      return res.status(401).json({ error: "Authentication required" });
-    }
-    
-    const counties = await storage.getUserCounties(req.user.id);
-    res.json(counties);
-  }));
-
-  // Remove user from county (admin only)
-  app.delete("/api/county-users/:id", requireAdmin, asyncHandler(async (req: Request, res: Response) => {
-    await storage.removeUserFromCounty(req.params.id);
-    res.json({ message: "User removed from county successfully" });
-  }));
-
-  // Get current user's county branding
-  app.get("/api/branding/current", requireAuth, asyncHandler(async (req: Request, res: Response) => {
-    if (!req.user) {
-      return res.json(null);
-    }
-
-    const primaryCounty = await storage.getPrimaryCounty(req.user.id);
-    
-    if (!primaryCounty) {
-      return res.json(null);
-    }
-
-    res.json({
-      countyId: primaryCounty.id,
-      countyName: primaryCounty.name,
-      countyCode: primaryCounty.code,
-      brandingConfig: primaryCounty.brandingConfig,
-      welcomeMessage: primaryCounty.welcomeMessage,
-      contactInfo: primaryCounty.contactInfo
-    });
   }));
 
   // ===========================

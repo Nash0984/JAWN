@@ -159,48 +159,9 @@ export async function seedCountiesAndGamification() {
     }
   }
 
-  // Assign demo navigator to Baltimore City
-  const demoNavigator = await storage.getUserByUsername('demo.navigator');
-  if (demoNavigator && createdCounties[0]) {
-    const existingAssignments = await storage.getUserCounties(demoNavigator.id);
-    if (existingAssignments.length === 0) {
-      await storage.assignUserToCounty({
-        countyId: createdCounties[0].id,
-        userId: demoNavigator.id,
-        role: 'navigator',
-        isPrimary: true,
-        assignedBy: null,
-      });
-      logger.info(`  ✓ Assigned demo.navigator to ${createdCounties[0].name}`, {
-        service: "seedCountiesAndGamification",
-        action: "assignUser",
-        username: "demo.navigator",
-        county: createdCounties[0].name
-      });
-    }
-  }
-
-  // Assign demo caseworker to Montgomery County
-  const demoCaseworker = await storage.getUserByUsername('demo.caseworker');
-  if (demoCaseworker && createdCounties[2]) {
-    const existingAssignments = await storage.getUserCounties(demoCaseworker.id);
-    if (existingAssignments.length === 0) {
-      await storage.assignUserToCounty({
-        countyId: createdCounties[2].id,
-        userId: demoCaseworker.id,
-        role: 'caseworker',
-        isPrimary: true,
-        assignedBy: null,
-      });
-      logger.info(`  ✓ Assigned demo.caseworker to ${createdCounties[2].name}`, {
-        service: "seedCountiesAndGamification",
-        action: "assignUser",
-        username: "demo.caseworker",
-        county: createdCounties[2].name
-      });
-    }
-  }
-
+  // Note: County-user assignments removed (bloat-2)
+  // Demo users now managed via office-based role system
+  
   // Seed default achievements
   await achievementSystemService.seedDefaultAchievements();
 

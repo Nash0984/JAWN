@@ -5209,6 +5209,7 @@ export const auditLogs = pgTable("audit_logs", {
   
   // Metadata
   countyId: varchar("county_id").references(() => counties.id), // Legacy multi-tenant context (deprecated, use officeId)
+  stateTenantId: varchar("state_tenant_id"), // Multi-state: Which state tenant this audit belongs to (FK pending multi-state migration)
   officeId: varchar("office_id").references(() => offices.id), // Multi-state: Which office the action occurred in
   
   // Data retention tracking (CRIT-002: IRS/HIPAA 7-year retention, GDPR storage limitation)
@@ -5233,6 +5234,7 @@ export const auditLogs = pgTable("audit_logs", {
   actionIdx: index("audit_logs_action_idx").on(table.action),
   sensitiveIdx: index("audit_logs_sensitive_idx").on(table.sensitiveDataAccessed, table.createdAt),
   createdAtIdx: index("audit_logs_created_at_idx").on(table.createdAt),
+  stateTenantIdx: index("audit_logs_state_tenant_idx").on(table.stateTenantId),
   officeIdIdx: index("audit_logs_office_idx").on(table.officeId),
   retentionUntilIdx: index("audit_logs_retention_until_idx").on(table.retentionUntil),
   scheduledDeletionIdx: index("audit_logs_scheduled_deletion_idx").on(table.scheduledForDeletion),
