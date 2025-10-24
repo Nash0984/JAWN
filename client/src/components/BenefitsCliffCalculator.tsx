@@ -98,10 +98,7 @@ export function BenefitsCliffCalculator() {
     setResult(null);
 
     try {
-      const response = await apiRequest("/api/benefits/cliff-calculator", {
-        method: "POST",
-        body: JSON.stringify(data),
-      });
+      const response = await apiRequest("POST", "/api/benefits/cliff-calculator", data);
 
       const comparison = await response.json();
       setResult(comparison);

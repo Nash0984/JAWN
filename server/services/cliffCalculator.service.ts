@@ -166,7 +166,30 @@ class CliffCalculatorService {
       monthlyOHEP;
     
     // Net income = wages + benefits - taxes
-    const netAnnualIncome = benefits.householdNetIncome;
+    // Defensive: If PolicyEngine returns NaN/undefined, fall back to manual calculation
+    let netAnnualIncome = benefits.householdNetIncome;
+    if (!Number.isFinite(netAnnualIncome)) {
+      // Manual fallback: income + annual benefits - annual tax
+      // Ensure all benefit values are finite numbers (default to 0 if invalid)
+      const snap = Number.isFinite(benefits.snap) ? benefits.snap : 0;
+      const ssi = Number.isFinite(benefits.ssi) ? benefits.ssi : 0;
+      const tanf = Number.isFinite(benefits.tanf) ? benefits.tanf : 0;
+      const eitc = Number.isFinite(benefits.eitc) ? benefits.eitc : 0;
+      const ctc = Number.isFinite(benefits.childTaxCredit) ? benefits.childTaxCredit : 0;
+      const ohep = Number.isFinite(benefits.ohep) ? benefits.ohep : 0;
+      const tax = Number.isFinite(benefits.householdTax) ? benefits.householdTax : 0;
+      
+      const annualBenefits = (snap + ssi + tanf) * 12 + eitc + ctc + ohep;
+      netAnnualIncome = annualIncome + annualBenefits - tax;
+      
+      logger.warn('PolicyEngine returned invalid householdNetIncome, using manual calculation', {
+        service: 'CliffCalculator',
+        rawValue: benefits.householdNetIncome,
+        manualCalculation: netAnnualIncome,
+        benefitsUsed: { snap, ssi, tanf, eitc, ctc, ohep, tax }
+      });
+    }
+    
     const netMonthlyIncome = netAnnualIncome / 12;
 
     return {
