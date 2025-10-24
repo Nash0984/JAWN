@@ -43,7 +43,7 @@ import {
 } from "@shared/schema";
 import { eq, and, isNull, sql } from "drizzle-orm";
 import { logger } from "../services/logger.service";
-import { KMSService } from "../services/kms.service";
+import { kmsService } from "../services/kms.service";
 
 /**
  * REMOVED: MARYLAND_LDSS_OFFICES hardcoded array

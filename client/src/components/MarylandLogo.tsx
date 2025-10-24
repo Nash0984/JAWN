@@ -47,7 +47,7 @@ export const MarylandLogo = ({
         <text 
           x="50" 
           y="60" 
-          fontFamily="Montserrat, sans-serif" 
+          fontFamily="Inter, sans-serif" 
           fontSize="40" 
           fontWeight="600" 
           fill="hsl(351, 84%, 43%)" 
@@ -71,7 +71,7 @@ export const MarylandLogo = ({
       <text 
         x="50" 
         y="60" 
-        fontFamily="Montserrat, sans-serif" 
+        fontFamily="Inter, sans-serif" 
         fontSize="40" 
         fontWeight="600" 
         fill="hsl(43, 100%, 61%)" 

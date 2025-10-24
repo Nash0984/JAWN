@@ -18,8 +18,8 @@ import { stateTenants, offices, routingRules, officeRoles } from "@shared/schema
 import { eq, and, desc, sql } from "drizzle-orm";
 import { requireAuth, requireRole } from "../middleware/auth";
 import { detectStateTenantContext, enforceStateTenantIsolation } from "../middleware/tenantMiddleware";
-import { KMSService } from "../services/kms.service";
-import { OfficeRoutingService } from "../services/officeRouting.service";
+import { kmsService } from "../services/kms.service";
+import { officeRoutingService } from "../services/officeRouting.service";
 import { logger } from "../services/logger.service";
 
 const router = Router();

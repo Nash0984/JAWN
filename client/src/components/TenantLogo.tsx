@@ -91,7 +91,7 @@ export const TenantLogo = ({
         <text 
           x="50" 
           y="62" 
-          fontFamily="Montserrat, sans-serif" 
+          fontFamily="Inter, sans-serif" 
           fontSize={abbreviation.length > 2 ? "28" : "40"} 
           fontWeight="700" 
           fill={primaryColor} 
@@ -123,7 +123,7 @@ export const TenantLogo = ({
       <text 
         x="50" 
         y="62" 
-        fontFamily="Montserrat, sans-serif" 
+        fontFamily="Inter, sans-serif" 
         fontSize={abbreviation.length > 2 ? "28" : "40"} 
         fontWeight="700" 
         fill={secondaryColor} 
