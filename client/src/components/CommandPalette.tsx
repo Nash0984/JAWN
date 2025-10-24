@@ -26,6 +26,7 @@ import {
   Search,
   Calculator,
   FileStack,
+  TrendingUp,
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 
@@ -70,6 +71,7 @@ const navigationItems: NavItem[] = [
   { title: "Document Checklist", path: "/public/documents", icon: ClipboardList, group: "Public Tools" },
   { title: "Notice Explainer", path: "/public/notices", icon: FileText, group: "Public Tools" },
   { title: "Simplified Search", path: "/public/search", icon: Search, group: "Public Tools" },
+  { title: "Benefits Cliff Calculator", path: "/cliff-calculator", icon: TrendingUp, group: "Public Tools" },
 ];
 
 export function CommandPalette() {

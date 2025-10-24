@@ -44,6 +44,7 @@ import SimplifiedSearch from "@/pages/public/SimplifiedSearch";
 import BenefitScreener from "@/pages/public/BenefitScreener";
 import QuickScreener from "@/pages/public/QuickScreener";
 import FsaLanding from "@/pages/public/FsaLanding";
+import CliffCalculator from "@/pages/CliffCalculator";
 import { CommandPalette } from "@/components/CommandPalette";
 import { PolicyChanges } from "@/pages/PolicyChanges";
 import { ComplianceAdmin } from "@/pages/ComplianceAdmin";
@@ -148,6 +149,7 @@ function Router() {
           <Route path="/screener" component={BenefitScreener} />
           <Route path="/public/quick-screener" component={QuickScreener} />
           <Route path="/public/fsa" component={FsaLanding} />
+          <Route path="/cliff-calculator" component={CliffCalculator} />
           
           {/* AI Intake Assistant - Public access (no login required for demo) */}
           <Route path="/intake-assistant" component={IntakeAssistant} />
