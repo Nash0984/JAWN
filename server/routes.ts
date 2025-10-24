@@ -3001,6 +3001,64 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
     res.json(response);
   }));
 
+  // Benefits Cliff Calculator - Compare income scenarios to detect benefit cliffs
+  app.post("/api/benefits/cliff-calculator", asyncHandler(async (req: Request, res: Response) => {
+    const inputSchema = z.object({
+      currentIncome: z.number().nonnegative(),
+      proposedIncome: z.number().nonnegative(),
+      householdSize: z.number().int().positive(),
+      adultCount: z.number().int().positive().optional().default(1),
+      stateCode: z.string().optional().default('MD'),
+      // Additional household details
+      unearnedIncome: z.number().nonnegative().optional(),
+      householdAssets: z.number().nonnegative().optional(),
+      rentOrMortgage: z.number().nonnegative().optional(),
+      utilityCosts: z.number().nonnegative().optional(),
+      medicalExpenses: z.number().nonnegative().optional(),
+      childcareExpenses: z.number().nonnegative().optional(),
+      elderlyOrDisabled: z.boolean().optional(),
+    });
+
+    const validated = inputSchema.parse(req.body);
+    
+    const { cliffCalculatorService } = await import("./services/cliffCalculator.service");
+    
+    // Calculate proper adult/child split
+    const adults = validated.adultCount;
+    const children = Math.max(0, validated.householdSize - adults);
+    
+    // Build household profile (excluding employmentIncome which varies by scenario)
+    const household = {
+      adults,
+      children,
+      stateCode: validated.stateCode,
+      unearnedIncome: validated.unearnedIncome,
+      householdAssets: validated.householdAssets,
+      rentOrMortgage: validated.rentOrMortgage,
+      utilityCosts: validated.utilityCosts,
+      medicalExpenses: validated.medicalExpenses,
+      childcareExpenses: validated.childcareExpenses,
+      elderlyOrDisabled: validated.elderlyOrDisabled,
+    };
+    
+    // Calculate cliff impact
+    const comparison = await cliffCalculatorService.calculateCliffImpact(
+      validated.currentIncome,
+      validated.proposedIncome,
+      household
+    );
+    
+    logger.info('Cliff calculator request processed', {
+      currentIncome: validated.currentIncome,
+      proposedIncome: validated.proposedIncome,
+      isCliff: comparison.isCliff,
+      cliffSeverity: comparison.cliffSeverity,
+      netIncomeChange: comparison.netIncomeChange
+    });
+    
+    res.json(comparison);
+  }));
+
   // Get active SNAP income limits
   app.get("/api/rules/income-limits", requireAuth, async (req: Request, res: Response) => {
     try {
