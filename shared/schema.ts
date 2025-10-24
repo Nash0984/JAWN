@@ -994,12 +994,21 @@ export const clientCases = pgTable("client_cases", {
   notes: text("notes"),
   tags: jsonb("tags"), // For categorization/filtering
   createdBy: varchar("created_by").references(() => users.id).notNull(),
+  // Dual-location tracking (Hub-and-Spoke support)
+  residentialOfficeId: varchar("residential_office_id").references(() => offices.id), // Where client submitted application
+  processingOfficeId: varchar("processing_office_id").references(() => offices.id), // Where case determination happens
+  routingRuleId: varchar("routing_rule_id").references(() => routingRules.id), // Which routing rule was applied
+  routedAt: timestamp("routed_at"), // When routing decision was made
+  routedBy: varchar("routed_by").references(() => users.id), // Who made routing decision
+  routingMethod: text("routing_method"), // "automatic", "manual", "default"
+  routingNotes: text("routing_notes"), // Admin notes about routing (for manual routing)
   // Data retention tracking (CRIT-002: IRS/HIPAA 7-year retention, GDPR storage limitation)
   retentionCategory: text("retention_category"), // tax_7yr, benefit_7yr, audit_log_7yr, phi_7yr, user_account_90d, reference_data_permanent
   retentionUntil: timestamp("retention_until"), // Calculated expiration date
   scheduledForDeletion: boolean("scheduled_for_deletion").default(false).notNull(), // Soft delete flag
   deletionApprovedBy: varchar("deletion_approved_by"), // Admin who approved deletion
   deletionApprovedAt: timestamp("deletion_approved_at"), // When deletion was approved
+  deletionScheduledDate: date("deletion_scheduled_date"), // Specific date when deletion will occur (30-90 days after approval per GDPR)
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 }, (table) => ({
@@ -1007,6 +1016,11 @@ export const clientCases = pgTable("client_cases", {
   navigatorStatusIdx: index("client_cases_assigned_navigator_status_idx").on(table.assignedNavigator, table.status),
   tenantStateIdx: index("client_cases_tenant_state_idx").on(table.tenantId, table.stateCode),
   createdAtIdx: index("client_cases_created_at_idx").on(table.createdAt),
+  residentialOfficeIdx: index("client_cases_residential_office_idx").on(table.residentialOfficeId),
+  processingOfficeIdx: index("client_cases_processing_office_idx").on(table.processingOfficeId),
+  routingRuleIdx: index("client_cases_routing_rule_idx").on(table.routingRuleId),
+  retentionUntilIdx: index("client_cases_retention_until_idx").on(table.retentionUntil),
+  scheduledDeletionIdx: index("client_cases_scheduled_deletion_idx").on(table.scheduledForDeletion),
 }));
 
 // Cross-Enrollment Intelligence Tables
@@ -1539,6 +1553,7 @@ export const clientInteractionSessions = pgTable("client_interaction_sessions", 
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   clientCaseId: varchar("client_case_id").references(() => clientCases.id),
   navigatorId: varchar("navigator_id").references(() => users.id).notNull(),
+  officeId: varchar("office_id").references(() => offices.id), // Multi-state: Which office conducted this interaction
   sessionType: text("session_type").notNull(), // screening, application_assist, recert_assist, documentation, follow_up
   interactionDate: timestamp("interaction_date").defaultNow().notNull(),
   durationMinutes: integer("duration_minutes"),
@@ -1559,9 +1574,24 @@ export const clientInteractionSessions = pgTable("client_interaction_sessions", 
   exportedToEE: boolean("exported_to_ee").default(false).notNull(),
   exportedAt: timestamp("exported_at"),
   exportBatchId: varchar("export_batch_id"),
+  
+  // Data retention tracking (CRIT-002: 7-year retention for benefit/service records)
+  retentionCategory: text("retention_category").default("benefit_7yr"), // Benefit service interaction records
+  retentionUntil: timestamp("retention_until"), // Calculated: Interaction year + 7 years
+  scheduledForDeletion: boolean("scheduled_for_deletion").default(false).notNull(),
+  deletionApprovedBy: varchar("deletion_approved_by"),
+  deletionApprovedAt: timestamp("deletion_approved_at"),
+  deletionScheduledDate: date("deletion_scheduled_date"), // Scheduled deletion date
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
-});
+}, (table) => ({
+  clientCaseIdIdx: index("client_interaction_sessions_case_idx").on(table.clientCaseId),
+  navigatorIdIdx: index("client_interaction_sessions_navigator_idx").on(table.navigatorId),
+  officeIdIdx: index("client_interaction_sessions_office_idx").on(table.officeId),
+  interactionDateIdx: index("client_interaction_sessions_date_idx").on(table.interactionDate),
+  retentionUntilIdx: index("client_interaction_sessions_retention_until_idx").on(table.retentionUntil),
+  scheduledDeletionIdx: index("client_interaction_sessions_scheduled_deletion_idx").on(table.scheduledForDeletion),
+}));
 
 export const eeExportBatches = pgTable("ee_export_batches", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -2864,11 +2894,15 @@ export const householdProfiles = pgTable("household_profiles", {
   tags: text("tags").array(),
   isActive: boolean("is_active").notNull().default(true),
   // Data retention tracking (CRIT-002: IRS/HIPAA 7-year retention, GDPR storage limitation)
-  retentionCategory: text("retention_category"), // tax_7yr, benefit_7yr, audit_log_7yr, phi_7yr, user_account_90d, reference_data_permanent
+  retentionCategory: text("retention_category"), // tax_7yr, benefit_7yr, combined_7yr
   retentionUntil: timestamp("retention_until"), // Calculated expiration date
   scheduledForDeletion: boolean("scheduled_for_deletion").default(false).notNull(), // Soft delete flag
   deletionApprovedBy: varchar("deletion_approved_by"), // Admin who approved deletion
   deletionApprovedAt: timestamp("deletion_approved_at"), // When deletion was approved
+  deletionScheduledDate: date("deletion_scheduled_date"), // Exact date when cryptographic shredding will occur
+  lastUsedAt: timestamp("last_used_at"), // Track when profile was last accessed/modified
+  lastTaxYear: integer("last_tax_year"), // For tax profiles: Last tax year this profile was used
+  lastBenefitYear: integer("last_benefit_year"), // For benefit profiles: Last year benefits were calculated
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 }, (table) => ({
@@ -2877,6 +2911,10 @@ export const householdProfiles = pgTable("household_profiles", {
   stateCodeIdx: index("household_profiles_state_code_idx").on(table.stateCode),
   profileModeIdx: index("household_profiles_mode_idx").on(table.profileMode),
   isActiveIdx: index("household_profiles_active_idx").on(table.isActive),
+  retentionCategoryIdx: index("household_profiles_retention_category_idx").on(table.retentionCategory),
+  retentionUntilIdx: index("household_profiles_retention_until_idx").on(table.retentionUntil),
+  scheduledDeletionIdx: index("household_profiles_scheduled_deletion_idx").on(table.scheduledForDeletion),
+  deletionScheduledDateIdx: index("household_profiles_deletion_date_idx").on(table.deletionScheduledDate),
 }));
 
 export type HouseholdProfile = typeof householdProfiles.$inferSelect;
@@ -3097,12 +3135,14 @@ export const vitaIntakeSessions = pgTable("vita_intake_sessions", {
   // Timestamps
   completedAt: timestamp("completed_at"),
   filedAt: timestamp("filed_at"),
-  // Data retention tracking (CRIT-002: IRS/HIPAA 7-year retention, GDPR storage limitation)
-  retentionCategory: text("retention_category"), // tax_7yr, benefit_7yr, audit_log_7yr, phi_7yr, user_account_90d, reference_data_permanent
-  retentionUntil: timestamp("retention_until"), // Calculated expiration date
+  // Data retention tracking (CRIT-002: IRS 7-year retention requirement)
+  retentionCategory: text("retention_category").default("tax_7yr"), // IRS 7-year requirement
+  retentionUntil: timestamp("retention_until"), // Calculated: Tax year + 7 years
   scheduledForDeletion: boolean("scheduled_for_deletion").default(false).notNull(), // Soft delete flag
   deletionApprovedBy: varchar("deletion_approved_by"), // Admin who approved deletion
   deletionApprovedAt: timestamp("deletion_approved_at"), // When deletion was approved
+  deletionScheduledDate: date("deletion_scheduled_date"), // Scheduled deletion date (30-90 days after approval)
+  taxYear: integer("tax_year"), // Tax year for this intake session (for retention calculation)
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 }, (table) => ({
@@ -3111,6 +3151,9 @@ export const vitaIntakeSessions = pgTable("vita_intake_sessions", {
   statusIdx: index("vita_intake_status_idx").on(table.status),
   reviewStatusIdx: index("vita_intake_review_idx").on(table.reviewStatus),
   createdAtIdx: index("vita_intake_created_idx").on(table.createdAt),
+  retentionUntilIdx: index("vita_intake_retention_until_idx").on(table.retentionUntil),
+  scheduledDeletionIdx: index("vita_intake_scheduled_deletion_idx").on(table.scheduledForDeletion),
+  taxYearIdx: index("vita_intake_tax_year_idx").on(table.taxYear),
 }));
 
 export type VitaIntakeSession = typeof vitaIntakeSessions.$inferSelect;
@@ -3844,12 +3887,13 @@ export const federalTaxReturns = pgTable("federal_tax_returns", {
   
   // Audit trail
   notes: text("notes"),
-  // Data retention tracking (CRIT-002: IRS/HIPAA 7-year retention, GDPR storage limitation)
-  retentionCategory: text("retention_category"), // tax_7yr, benefit_7yr, audit_log_7yr, phi_7yr, user_account_90d, reference_data_permanent
-  retentionUntil: timestamp("retention_until"), // Calculated expiration date
+  // Data retention tracking (CRIT-002: IRS 7-year retention requirement)
+  retentionCategory: text("retention_category").default("tax_7yr"), // IRS 7-year requirement
+  retentionUntil: timestamp("retention_until"), // Calculated: Tax year + 7 years
   scheduledForDeletion: boolean("scheduled_for_deletion").default(false).notNull(), // Soft delete flag
   deletionApprovedBy: varchar("deletion_approved_by"), // Admin who approved deletion
   deletionApprovedAt: timestamp("deletion_approved_at"), // When deletion was approved
+  deletionScheduledDate: date("deletion_scheduled_date"), // Scheduled deletion date (30-90 days after approval)
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 }, (table) => ({
@@ -3857,6 +3901,8 @@ export const federalTaxReturns = pgTable("federal_tax_returns", {
   preparerIdIdx: index("federal_tax_returns_preparer_idx").on(table.preparerId),
   taxYearIdx: index("federal_tax_returns_tax_year_idx").on(table.taxYear),
   efileStatusIdx: index("federal_tax_returns_efile_status_idx").on(table.efileStatus),
+  retentionUntilIdx: index("federal_tax_returns_retention_until_idx").on(table.retentionUntil),
+  scheduledDeletionIdx: index("federal_tax_returns_scheduled_deletion_idx").on(table.scheduledForDeletion),
 }));
 
 export const marylandTaxReturns = pgTable("maryland_tax_returns", {
@@ -5170,13 +5216,16 @@ export const auditLogs = pgTable("audit_logs", {
   errorMessage: text("error_message"), // If action failed
   
   // Metadata
-  countyId: varchar("county_id").references(() => counties.id), // Multi-tenant context
+  countyId: varchar("county_id").references(() => counties.id), // Legacy multi-tenant context (deprecated, use officeId)
+  officeId: varchar("office_id").references(() => offices.id), // Multi-state: Which office the action occurred in
+  
   // Data retention tracking (CRIT-002: IRS/HIPAA 7-year retention, GDPR storage limitation)
-  retentionCategory: text("retention_category"), // tax_7yr, benefit_7yr, audit_log_7yr, phi_7yr, user_account_90d, reference_data_permanent
+  retentionCategory: text("retention_category").default("audit_log_7yr"), // 7-year retention for audit logs
   retentionUntil: timestamp("retention_until"), // Calculated expiration date
   scheduledForDeletion: boolean("scheduled_for_deletion").default(false).notNull(), // Soft delete flag
   deletionApprovedBy: varchar("deletion_approved_by"), // Admin who approved deletion
   deletionApprovedAt: timestamp("deletion_approved_at"), // When deletion was approved
+  deletionScheduledDate: date("deletion_scheduled_date"), // Scheduled deletion date (30-90 days after approval)
   
   // Cryptographic Chain-of-Custody (Task 2: Immutable Audit Logs)
   // NIST 800-53 AU-9: Protection of audit information
@@ -5192,6 +5241,9 @@ export const auditLogs = pgTable("audit_logs", {
   actionIdx: index("audit_logs_action_idx").on(table.action),
   sensitiveIdx: index("audit_logs_sensitive_idx").on(table.sensitiveDataAccessed, table.createdAt),
   createdAtIdx: index("audit_logs_created_at_idx").on(table.createdAt),
+  officeIdIdx: index("audit_logs_office_idx").on(table.officeId),
+  retentionUntilIdx: index("audit_logs_retention_until_idx").on(table.retentionUntil),
+  scheduledDeletionIdx: index("audit_logs_scheduled_deletion_idx").on(table.scheduledForDeletion),
 }));
 
 // Audit log insert/select types
@@ -8175,6 +8227,320 @@ export const insertDataDisposalLogSchema = createInsertSchema(dataDisposalLogs).
 // Types for data disposal logs
 export type DataDisposalLog = typeof dataDisposalLogs.$inferSelect;
 export type InsertDataDisposalLog = z.infer<typeof insertDataDisposalLogSchema>;
+
+// ============================================================================
+// MULTI-STATE ARCHITECTURE - State Tenants and Office Management
+// ============================================================================
+
+// State Tenants - State-level tenant management for multi-state expansion
+export const stateTenants = pgTable("state_tenants", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  
+  // Identification
+  stateCode: text("state_code").notNull().unique(), // "MD", "PA", "VA", "UT", "IN", "MI"
+  stateName: text("state_name").notNull(), // "Maryland", "Pennsylvania", etc.
+  slug: text("slug").notNull().unique(), // URL-friendly: "maryland", "pennsylvania"
+  
+  // Admin Structure
+  adminModel: text("admin_model").notNull(), // "centralized_hub_spoke", "decentralized_on_site", "hybrid"
+  routingEnabled: boolean("routing_enabled").default(false).notNull(), // Enable dynamic routing
+  
+  // Status
+  status: text("status").notNull().default("active"), // active, pilot, inactive, suspended
+  launchDate: timestamp("launch_date"),
+  targetLaunchDate: timestamp("target_launch_date"), // For states in planning (PA Q1 2026)
+  
+  // Configuration
+  config: jsonb("config"), // State-specific settings, feature flags
+  enabledPrograms: text("enabled_programs").array(), // ["SNAP", "MEDICAID", "TANF", "OHEP", "TAX", "SSI"]
+  
+  // KMS Integration
+  masterKeyId: varchar("master_key_id"), // References encryptionKeys.id - set after key creation
+  
+  // Branding
+  brandingConfig: jsonb("branding_config"), // Primary color, logo, etc.
+  
+  // Compliance
+  certifications: jsonb("certifications"), // [{type: "NIST_800-53", status: "certified", date: "2025-01-01"}]
+  complianceLevel: text("compliance_level"), // "production", "pilot", "development"
+  
+  // Contact
+  contactEmail: text("contact_email"),
+  contactPhone: text("contact_phone"),
+  
+  // Metadata
+  createdBy: varchar("created_by").references(() => users.id),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  stateCodeIdx: index("state_tenants_state_code_idx").on(table.stateCode),
+  slugIdx: index("state_tenants_slug_idx").on(table.slug),
+  statusIdx: index("state_tenants_status_idx").on(table.status),
+}));
+
+// Offices - Replaces 'counties' with proper state hierarchy (LDSS offices)
+export const offices = pgTable("offices", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  
+  // Hierarchy
+  stateTenantId: varchar("state_tenant_id").references(() => stateTenants.id, { onDelete: "cascade" }).notNull(),
+  
+  // Identification
+  name: text("name").notNull(), // "Baltimore City LDSS", "Montgomery County LDSS"
+  code: text("code").notNull(), // "BALTIMORE_CITY", "MONTGOMERY"
+  displayName: text("display_name"), // Optional override for public display
+  
+  // Office Type
+  officeType: text("office_type").notNull().default("processing"), // "hub", "spoke", "processing", "intake_only"
+  
+  // Hub-and-Spoke Configuration
+  isHub: boolean("is_hub").default(false).notNull(), // True if hub office
+  hubOfficeId: varchar("hub_office_id"), // If spoke, references hub - self-referential
+  canProcessOwnCases: boolean("can_process_own_cases").default(true).notNull(),
+  canProcessSpokesCases: boolean("can_process_spokes_cases").default(false).notNull(), // True for hubs
+  
+  // Geographic Info
+  region: text("region"), // "central", "southern", "western", "eastern"
+  county: text("county"), // County name (for sub-state tracking)
+  serviceArea: jsonb("service_area"), // ZIP codes, municipalities served
+  
+  // Contact & Location
+  physicalAddress: text("physical_address"),
+  mailingAddress: text("mailing_address"),
+  phone: text("phone"),
+  email: text("email"),
+  hours: jsonb("hours"), // Operating hours
+  
+  // Capacity & Workload
+  maxCaseload: integer("max_caseload"), // Maximum cases this office can handle
+  currentCaseload: integer("current_caseload").default(0),
+  staffCount: integer("staff_count").default(0),
+  
+  // Specializations
+  specializations: jsonb("specializations"), // ["elderly", "disability", "multilingual_spanish"]
+  languages: text("languages").array(), // ["en", "es", "am", "zh"]
+  
+  // Configuration
+  enabledPrograms: text("enabled_programs").array(), // Can be subset of state's programs
+  features: jsonb("features"), // Office-specific feature flags
+  
+  // Branding (Optional Override)
+  brandingConfig: jsonb("branding_config"), // Override state branding if needed
+  
+  // Status
+  isActive: boolean("is_active").default(true).notNull(),
+  isPilot: boolean("is_pilot").default(false).notNull(),
+  launchDate: timestamp("launch_date"),
+  
+  // Metadata
+  createdBy: varchar("created_by").references(() => users.id),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  stateTenantIdx: index("offices_state_tenant_idx").on(table.stateTenantId),
+  codeIdx: index("offices_code_idx").on(table.code),
+  hubOfficeIdx: index("offices_hub_office_idx").on(table.hubOfficeId),
+  isActiveIdx: index("offices_is_active_idx").on(table.isActive),
+  stateCodeCompositeIdx: index("offices_state_code_idx").on(table.stateTenantId, table.code),
+}));
+
+// Office Roles - Many-to-many user-office assignments
+export const officeRoles = pgTable("office_roles", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  
+  // Relationships
+  userId: varchar("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+  officeId: varchar("office_id").references(() => offices.id, { onDelete: "cascade" }).notNull(),
+  
+  // Role Information
+  role: text("role").notNull(), // "navigator", "caseworker", "supervisor", "manager", "admin"
+  isPrimary: boolean("is_primary").default(false).notNull(), // User's primary office
+  
+  // Permissions
+  permissions: jsonb("permissions"), // Office-specific permissions
+  canRouteCases: boolean("can_route_cases").default(false).notNull(), // Can route to other offices
+  canApproveApplications: boolean("can_approve_applications").default(false).notNull(),
+  
+  // Specializations
+  specializations: text("specializations").array(), // Areas of expertise
+  
+  // Status
+  isActive: boolean("is_active").default(true).notNull(),
+  startDate: timestamp("start_date").defaultNow().notNull(),
+  endDate: timestamp("end_date"),
+  
+  // Metadata
+  assignedBy: varchar("assigned_by").references(() => users.id),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  userOfficeIdx: uniqueIndex("office_roles_user_office_unique_idx").on(table.userId, table.officeId),
+  userIdx: index("office_roles_user_idx").on(table.userId),
+  officeIdx: index("office_roles_office_idx").on(table.officeId),
+  primaryIdx: index("office_roles_primary_idx").on(table.userId, table.isPrimary),
+}));
+
+// Routing Rules - Dynamic case routing configuration
+export const routingRules = pgTable("routing_rules", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  
+  // Scope
+  stateTenantId: varchar("state_tenant_id").references(() => stateTenants.id, { onDelete: "cascade" }).notNull(),
+  
+  // Rule Definition
+  ruleName: text("rule_name").notNull(), // "Hub-and-Spoke Baltimore", "Workload Balancing"
+  ruleType: text("rule_type").notNull(), // "geographic", "workload", "specialization", "custom"
+  priority: integer("priority").default(0).notNull(), // Higher = evaluated first
+  
+  // Conditions
+  conditions: jsonb("conditions").notNull(), // {type: "geographic", counties: ["BALTIMORE_CITY"], programs: ["SNAP"]}
+  
+  // Routing Logic
+  routingStrategy: text("routing_strategy").notNull(), // "hub_spoke", "round_robin", "least_loaded", "specialty_match"
+  
+  // Target Offices
+  sourceOfficeId: varchar("source_office_id").references(() => offices.id), // Residential office (if specific)
+  targetOfficeId: varchar("target_office_id").references(() => offices.id), // Processing office
+  targetOfficeIds: jsonb("target_office_ids"), // Multiple targets for load balancing
+  
+  // Configuration
+  config: jsonb("config"), // Strategy-specific config: {max_distance_miles: 50, workload_threshold: 100}
+  
+  // Constraints
+  requiresClientConsent: boolean("requires_client_consent").default(false).notNull(),
+  allowOverride: boolean("allow_override").default(true).notNull(), // Can admin override?
+  
+  // Status
+  isActive: boolean("is_active").default(true).notNull(),
+  effectiveDate: timestamp("effective_date").defaultNow().notNull(),
+  expirationDate: timestamp("expiration_date"),
+  
+  // Audit
+  createdBy: varchar("created_by").references(() => users.id).notNull(),
+  approvedBy: varchar("approved_by").references(() => users.id),
+  approvedAt: timestamp("approved_at"),
+  lastModifiedBy: varchar("last_modified_by").references(() => users.id),
+  
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  stateTenantIdx: index("routing_rules_state_tenant_idx").on(table.stateTenantId),
+  priorityIdx: index("routing_rules_priority_idx").on(table.priority),
+  activeIdx: index("routing_rules_active_idx").on(table.isActive),
+  ruleTypeIdx: index("routing_rules_type_idx").on(table.ruleType),
+}));
+
+// ============================================================================
+// KMS - KEY MANAGEMENT SYSTEM (Cryptographic Shredding)
+// ============================================================================
+
+// Encryption Keys - KMS key hierarchy for cryptographic shredding
+export const encryptionKeys = pgTable("encryption_keys", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  
+  // Key Hierarchy
+  keyLevel: text("key_level").notNull(), // "state_master", "table_key", "field_key"
+  stateTenantId: varchar("state_tenant_id").references(() => stateTenants.id, { onDelete: "restrict" }).notNull(),
+  parentKeyId: varchar("parent_key_id"), // For key hierarchy - self-referential
+  
+  // Key Information
+  keyName: text("key_name").notNull(), // "MD-MASTER-2025", "MD-HOUSEHOLD-PROFILES-SSN"
+  keyPurpose: text("key_purpose").notNull(), // "master", "data_encryption", "field_encryption"
+  
+  // Scope
+  tableName: text("table_name"), // For table-level keys: "household_profiles"
+  columnName: text("column_name"), // For field-level keys: "taxpayer_ssn"
+  
+  // Key Material (ENCRYPTED)
+  encryptedKeyMaterial: text("encrypted_key_material").notNull(), // Encrypted with KMS or parent key
+  keyVersion: integer("key_version").default(1).notNull(),
+  algorithm: text("algorithm").notNull().default("AES-256-GCM"), // Encryption algorithm
+  
+  // KMS Integration
+  kmsProvider: text("kms_provider"), // "google_cloud_kms", "local_secret", "aws_kms"
+  kmsKeyId: text("kms_key_id"), // External KMS key reference
+  kmsKeyArn: text("kms_key_arn"), // Full ARN/path to KMS key
+  
+  // Rotation
+  currentlyActive: boolean("currently_active").default(true).notNull(),
+  rotationSchedule: text("rotation_schedule"), // "quarterly", "annually", "on_demand"
+  lastRotatedAt: timestamp("last_rotated_at"),
+  nextRotationDue: timestamp("next_rotation_due"),
+  rotationCount: integer("rotation_count").default(0).notNull(),
+  
+  // Usage Tracking
+  encryptionCount: integer("encryption_count").default(0).notNull(), // How many times used
+  lastUsedAt: timestamp("last_used_at"),
+  
+  // Security
+  status: text("status").notNull().default("active"), // active, rotated, compromised, destroyed
+  destroyedAt: timestamp("destroyed_at"), // For cryptographic shredding
+  destroyMethod: text("destroy_method"), // "crypto_shred", "secure_delete", "key_rotation"
+  
+  // Compliance
+  complianceLevel: text("compliance_level").notNull(), // "NIST_800-53", "IRS_1075", "FIPS_140-2"
+  auditRequired: boolean("audit_required").default(true).notNull(),
+  
+  // Metadata
+  createdBy: varchar("created_by").references(() => users.id).notNull(),
+  approvedBy: varchar("approved_by").references(() => users.id),
+  approvedAt: timestamp("approved_at"),
+  
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  stateTenantKeyLevelIdx: index("encryption_keys_state_level_idx").on(table.stateTenantId, table.keyLevel),
+  activeIdx: index("encryption_keys_active_idx").on(table.currentlyActive),
+  tableColumnIdx: index("encryption_keys_table_column_idx").on(table.tableName, table.columnName),
+  statusIdx: index("encryption_keys_status_idx").on(table.status),
+  rotationDueIdx: index("encryption_keys_rotation_due_idx").on(table.nextRotationDue),
+}));
+
+// Add self-referential relation for offices.hubOfficeId
+// Note: Drizzle supports self-referential FKs but we handle at table level
+
+// Insert Schemas for Multi-State Architecture
+export const insertStateTenantSchema = createInsertSchema(stateTenants).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertOfficeSchema = createInsertSchema(offices).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertOfficeRoleSchema = createInsertSchema(officeRoles).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertRoutingRuleSchema = createInsertSchema(routingRules).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertEncryptionKeySchema = createInsertSchema(encryptionKeys).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+// Types for Multi-State Architecture
+export type StateTenant = typeof stateTenants.$inferSelect;
+export type InsertStateTenant = z.infer<typeof insertStateTenantSchema>;
+export type Office = typeof offices.$inferSelect;
+export type InsertOffice = z.infer<typeof insertOfficeSchema>;
+export type OfficeRole = typeof officeRoles.$inferSelect;
+export type InsertOfficeRole = z.infer<typeof insertOfficeRoleSchema>;
+export type RoutingRule = typeof routingRules.$inferSelect;
+export type InsertRoutingRule = z.infer<typeof insertRoutingRuleSchema>;
+export type EncryptionKey = typeof encryptionKeys.$inferSelect;
+export type InsertEncryptionKey = z.infer<typeof insertEncryptionKeySchema>;
 
 // Export tax return tables from taxReturnSchema
 // COMMENTED OUT DURING SCHEMA ROLLBACK - taxReturnSchema.ts moved to backup
