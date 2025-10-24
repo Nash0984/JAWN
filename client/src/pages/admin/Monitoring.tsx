@@ -34,7 +34,7 @@ import {
   Legend 
 } from 'recharts';
 import { useWebSocket } from "@/hooks/useWebSocket";
-import { useState, useEffect } from "react";
+import { useState, useEffect, Component, ErrorInfo } from "react";
 import { KPICard } from "@/components/monitoring/KPICard";
 import { TrendChart } from "@/components/monitoring/TrendChart";
 import { exportToCSV, exportToJSON } from "@/lib/exportUtils";
@@ -42,19 +42,62 @@ import type { MonitoringDashboardMetrics } from "@shared/monitoring";
 
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884D8'];
 
-export default function Monitoring() {
+// Error boundary for the monitoring page
+class MonitoringErrorBoundary extends Component<
+  { children: React.ReactNode },
+  { hasError: boolean; error?: Error }
+> {
+  constructor(props: { children: React.ReactNode }) {
+    super(props);
+    this.state = { hasError: false };
+  }
+
+  static getDerivedStateFromError(error: Error) {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error: Error, errorInfo: ErrorInfo) {
+    console.error('Monitoring page error:', error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="container mx-auto p-6">
+          <Alert variant="destructive">
+            <AlertTriangle className="h-4 w-4" />
+            <AlertDescription>
+              Failed to load monitoring dashboard. Please refresh the page or contact support.
+              {this.state.error && <div className="mt-2 text-sm">{this.state.error.message}</div>}
+            </AlertDescription>
+          </Alert>
+        </div>
+      );
+    }
+
+    return this.props.children;
+  }
+}
+
+function MonitoringContent() {
   const [metrics, setMetrics] = useState<MonitoringDashboardMetrics | null>(null);
   const { subscribe, isConnected, send } = useWebSocket();
 
   // WebSocket subscription for realtime updates
   useEffect(() => {
+    if (!subscribe) return;
+    
     const unsubscribe = subscribe('metrics_update', (data) => {
       setMetrics(data);
     });
 
     // Send subscription message when connected
-    if (isConnected) {
-      send({ type: 'subscribe_metrics' });
+    if (isConnected && send) {
+      try {
+        send({ type: 'subscribe_metrics' });
+      } catch (error) {
+        console.warn('Failed to send WebSocket subscription:', error);
+      }
     }
 
     return unsubscribe;
@@ -65,6 +108,8 @@ export default function Monitoring() {
     queryKey: ['/api/admin/metrics/realtime'],
     enabled: !isConnected,
     refetchInterval: 30000, // 30 seconds
+    retry: 3,
+    retryDelay: 1000,
   });
 
   const displayMetrics = metrics || polledMetrics?.data;
@@ -364,7 +409,7 @@ export default function Monitoring() {
                       fill="#8884d8"
                       dataKey="count"
                     >
-                      {displayMetrics.security.eventsByType.map((entry, index) => (
+                      {(Array.isArray(displayMetrics.security?.eventsByType) ? displayMetrics.security.eventsByType : []).map((entry, index) => (
                         <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                       ))}
                     </Pie>
@@ -479,7 +524,7 @@ export default function Monitoring() {
                       fill="#8884d8"
                       dataKey="count"
                     >
-                      {displayMetrics.eFiling.byStatus.map((entry, index) => (
+                      {(Array.isArray(displayMetrics.eFiling?.byStatus) ? displayMetrics.eFiling.byStatus : []).map((entry, index) => (
                         <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                       ))}
                     </Pie>
@@ -581,7 +626,7 @@ export default function Monitoring() {
                       fill="#8884d8"
                       dataKey="tokens"
                     >
-                      {displayMetrics.ai.tokensByModel.map((entry, index) => (
+                      {(Array.isArray(displayMetrics.ai?.tokensByModel) ? displayMetrics.ai.tokensByModel : []).map((entry, index) => (
                         <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                       ))}
                     </Pie>
@@ -675,7 +720,7 @@ export default function Monitoring() {
             </Button>
           </div>
           <div className="grid gap-6 md:grid-cols-3">
-            {displayMetrics.health.components.map((component, index) => (
+            {(Array.isArray(displayMetrics.health?.components) ? displayMetrics.health.components : []).map((component, index) => (
               <KPICard
                 key={index}
                 title={component.name}
@@ -908,5 +953,14 @@ function AuditLogsTabContent() {
         </Button>
       </div>
     </div>
+  );
+}
+
+// Wrap with error boundary and export
+export default function Monitoring() {
+  return (
+    <MonitoringErrorBoundary>
+      <MonitoringContent />
+    </MonitoringErrorBoundary>
   );
 }
