@@ -1,11 +1,16 @@
 import { createHash } from 'crypto';
 import NodeCache from 'node-cache';
+import { redisCache, tieredCacheGet } from './redisCache';
 
 /**
  * RAG Query Cache Service
  * 
  * Caches RAG search results to reduce Gemini API calls for repeated queries.
  * Particularly effective for public FAQ and common policy questions.
+ * 
+ * Now supports L1 (NodeCache) + L2 (Redis) tiered caching:
+ * - L1: Process-local for immediate re-queries
+ * - L2: Distributed for cross-navigator sharing
  * 
  * Cost Savings: 50-70% reduction in RAG generation calls
  * TTL: 15 minutes (balance freshness vs caching)
@@ -60,17 +65,30 @@ class RAGCacheService {
   
   /**
    * Get cached RAG result or return null
+   * Now checks L1 → L2 → null
    */
-  get(query: string, programId?: string): RAGCacheEntry | null {
+  async get(query: string, programId?: string): Promise<RAGCacheEntry | null> {
     this.metrics.totalRequests++;
     
-    const key = this.generateKey(query, programId);
-    const cached = this.cache.get<RAGCacheEntry>(key);
+    const baseKey = this.generateKey(query, programId);
+    const key = `rag:${baseKey}`;
     
-    if (cached) {
+    // Check L1 (NodeCache)
+    const l1Cached = this.cache.get<RAGCacheEntry>(key);
+    if (l1Cached) {
       this.metrics.hits++;
       this.metrics.estimatedCostSavings += this.COST_PER_QUERY;
-      return cached;
+      return l1Cached;
+    }
+    
+    // Check L2 (Redis)
+    const l2Cached = await redisCache.get<RAGCacheEntry>(key);
+    if (l2Cached) {
+      this.metrics.hits++;
+      this.metrics.estimatedCostSavings += this.COST_PER_QUERY;
+      // Write-through to L1
+      this.cache.set(key, l2Cached);
+      return l2Cached;
     }
     
     this.metrics.misses++;
@@ -79,11 +97,15 @@ class RAGCacheService {
   
   /**
    * Store RAG result in cache
+   * Now writes to both L1 and L2
    * 
    * FIXED: Now stores complete SearchResult including citations and queryAnalysis
    */
-  set(query: string, result: { answer: string; sources: any[]; citations?: any[]; relevanceScore?: number; queryAnalysis?: any }, programId?: string): void {
-    const key = this.generateKey(query, programId);
+  async set(query: string, result: { answer: string; sources: any[]; citations?: any[]; relevanceScore?: number; queryAnalysis?: any }, programId?: string): Promise<void> {
+    const baseKey = this.generateKey(query, programId);
+    const key = `rag:${baseKey}`;
+    const ttl = 15 * 60; // 15 minutes
+    
     const entry: RAGCacheEntry = {
       answer: result.answer,
       sources: result.sources,
@@ -93,7 +115,28 @@ class RAGCacheService {
       programId,
       timestamp: Date.now()
     };
-    this.cache.set(key, entry);
+    
+    // Write to L1 (NodeCache)
+    this.cache.set(key, entry, ttl);
+    
+    // Write to L2 (Redis)
+    await redisCache.set(key, entry, ttl);
+  }
+  
+  /**
+   * Get cached RAG result with automatic generation if not found
+   * Uses tiered cache with automatic population
+   */
+  async getOrGenerate(
+    query: string,
+    generateFn: () => Promise<RAGCacheEntry>,
+    programId?: string
+  ): Promise<RAGCacheEntry> {
+    const baseKey = this.generateKey(query, programId);
+    const key = `rag:${baseKey}`;
+    const ttl = 15 * 60; // 15 minutes
+    
+    return tieredCacheGet(key, generateFn, ttl);
   }
   
   /**

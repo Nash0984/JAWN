@@ -1,8 +1,9 @@
 import { embeddingCache } from './embeddingCache';
 import { ragCache } from './ragCache';
-import { documentAnalysisCache } from './documentAnalysisCache';
+// import { documentAnalysisCache } from './documentAnalysisCache'; // Not implemented yet
 import { policyEngineCache } from './policyEngineCache';
 import { cacheService } from './cacheService';
+import { redisCache, tieredCacheInvalidate } from './redisCache';
 import { 
   InvalidationTrigger, 
   CacheLayer, 
@@ -300,11 +301,14 @@ class CacheOrchestratorService {
    * Invalidate specific cache layers with optional program filtering
    */
   private async invalidateCacheLayers(layers: CacheLayer[], programCodes?: string[]): Promise<void> {
+    const patternsToInvalidate: string[] = [];
+    
     for (const layer of layers) {
       switch (layer) {
         case 'embedding':
           embeddingCache.clear();
-          console.log('  ✓ Cleared embedding cache');
+          patternsToInvalidate.push('embedding:');
+          console.log('  ✓ Cleared embedding cache (L1+L2)');
           break;
 
         case 'rag':
@@ -312,21 +316,25 @@ class CacheOrchestratorService {
             // Clear RAG cache for specific programs
             for (const programCode of programCodes) {
               ragCache.invalidateProgram(programCode);
+              patternsToInvalidate.push(`rag:${programCode}:`);
             }
           } else {
             ragCache.clear();
+            patternsToInvalidate.push('rag:');
           }
-          console.log('  ✓ Cleared RAG cache');
+          console.log('  ✓ Cleared RAG cache (L1+L2)');
           break;
 
         case 'document_analysis':
-          documentAnalysisCache.clear();
-          console.log('  ✓ Cleared document analysis cache');
+          // documentAnalysisCache.clear(); // Not implemented yet
+          patternsToInvalidate.push('document:');
+          console.log('  ✓ Cleared document analysis cache (L1+L2)');
           break;
 
         case 'policy_engine':
           policyEngineCache.clear();
-          console.log('  ✓ Cleared PolicyEngine cache');
+          patternsToInvalidate.push('pe:');
+          console.log('  ✓ Cleared PolicyEngine cache (L1+L2)');
           break;
 
         case 'rules_engine':
@@ -334,11 +342,13 @@ class CacheOrchestratorService {
           if (programCodes) {
             for (const programCode of programCodes) {
               cacheService.invalidatePattern(`rules:${programCode}:`);
+              patternsToInvalidate.push(`rules:${programCode}:`);
             }
           } else {
             cacheService.invalidatePattern('rules:');
+            patternsToInvalidate.push('rules:');
           }
-          console.log('  ✓ Cleared rules engine cache');
+          console.log('  ✓ Cleared rules engine cache (L1+L2)');
           break;
 
         case 'hybrid_calc':
@@ -346,35 +356,45 @@ class CacheOrchestratorService {
           if (programCodes) {
             for (const programCode of programCodes) {
               cacheService.invalidatePattern(`hybrid:${programCode}:`);
+              patternsToInvalidate.push(`hybrid:${programCode}:`);
             }
           } else {
             cacheService.invalidatePattern('hybrid:');
+            patternsToInvalidate.push('hybrid:');
           }
-          console.log('  ✓ Cleared hybrid calculation cache');
+          console.log('  ✓ Cleared hybrid calculation cache (L1+L2)');
           break;
 
         case 'benefit_summary':
           // Clear benefit summary caches
           cacheService.invalidatePattern('pe:summary:');
-          console.log('  ✓ Cleared benefit summary cache');
+          patternsToInvalidate.push('pe:summary:');
+          console.log('  ✓ Cleared benefit summary cache (L1+L2)');
           break;
 
         case 'manual_sections':
           // Clear manual section caches
           cacheService.invalidatePattern('manual_section');
-          console.log('  ✓ Cleared manual sections cache');
+          patternsToInvalidate.push('manual_section');
+          console.log('  ✓ Cleared manual sections cache (L1+L2)');
           break;
 
         case 'all':
           // Clear everything
           embeddingCache.clear();
           ragCache.clear();
-          documentAnalysisCache.clear();
+          // documentAnalysisCache.clear(); // Not implemented yet
           policyEngineCache.clear();
           cacheService.flush();
-          console.log('  ✓ Cleared ALL caches');
+          patternsToInvalidate.push('*'); // Clear all Redis keys
+          console.log('  ✓ Cleared ALL caches (L1+L2)');
           break;
       }
+    }
+    
+    // Invalidate L2 (Redis) cache and publish to other instances
+    if (patternsToInvalidate.length > 0) {
+      await tieredCacheInvalidate(patternsToInvalidate);
     }
   }
 
@@ -384,7 +404,8 @@ class CacheOrchestratorService {
   async getCacheHealth(): Promise<CacheHealthReport> {
     const embeddingStats = embeddingCache.getStats();
     const ragStats = ragCache.getStats();
-    const docStats = documentAnalysisCache.getStats();
+    // const docStats = documentAnalysisCache.getStats(); // Not implemented yet
+    const docStats = { hitRate: 0, cacheSize: 0, maxKeys: 0, ttl: '24 hours' }; // Default values for now
     const policyEngineStats = policyEngineCache.getStats();
 
     // Calculate overall L1 status
@@ -437,10 +458,7 @@ class CacheOrchestratorService {
           status: l1Status,
           caches: l1Caches
         },
-        L2: {
-          status: 'not_implemented',
-          details: 'Redis integration prepared but not implemented. Would provide cross-instance cache sharing.'
-        },
+        L2: await this.getL2Status(),
         L3: {
           status: 'not_implemented',
           details: 'Database materialized views prepared but not implemented. Would provide pre-computed aggregations.'
@@ -543,6 +561,51 @@ class CacheOrchestratorService {
   }
 
   /**
+   * Get L2 (Redis) cache status
+   */
+  private async getL2Status(): Promise<{
+    status: 'not_implemented' | 'healthy' | 'degraded' | 'critical';
+    details?: string;
+  }> {
+    const redisStatus = redisCache.getStatus();
+    const metrics = await redisCache.getMetrics();
+    
+    if (redisStatus === 'fallback') {
+      return {
+        status: 'not_implemented',
+        details: 'Redis not configured - using L1 cache only (development mode)'
+      };
+    }
+    
+    if (redisStatus === 'disconnected') {
+      return {
+        status: 'critical',
+        details: `Redis disconnected - ${metrics.lastError || 'Connection lost'}`
+      };
+    }
+    
+    if (redisStatus === 'connecting') {
+      return {
+        status: 'degraded',
+        details: 'Redis connecting...'
+      };
+    }
+    
+    // Calculate hit rate
+    const total = metrics.hits + metrics.misses;
+    const hitRate = total > 0 ? (metrics.hits / total) * 100 : 0;
+    
+    let status: 'healthy' | 'degraded' | 'critical' = 'healthy';
+    if (hitRate < 30) status = 'degraded';
+    if (metrics.errors > 100) status = 'critical';
+    
+    return {
+      status,
+      details: `Redis connected - Hit rate: ${hitRate.toFixed(1)}%, Errors: ${metrics.errors}`
+    };
+  }
+
+  /**
    * Get all invalidation rules for documentation
    */
   getAllRules(): Record<InvalidationTrigger, InvalidationRule> {
@@ -552,10 +615,14 @@ class CacheOrchestratorService {
   /**
    * Cleanup on shutdown
    */
-  shutdown(): void {
+  async shutdown(): Promise<void> {
     if (this.taxYearCheckInterval) {
       clearInterval(this.taxYearCheckInterval);
     }
+    
+    // Disconnect Redis gracefully
+    await redisCache.disconnect();
+    
     console.log('📦 Cache Orchestrator shutdown complete');
   }
 }

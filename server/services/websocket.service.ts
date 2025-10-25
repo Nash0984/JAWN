@@ -152,13 +152,24 @@ export class WebSocketService {
   private startHeartbeat() {
     // Send ping every 30 seconds to keep connections alive
     this.heartbeatInterval = setInterval(() => {
+      let activeConnections = 0;
+      let deadConnections = 0;
+      
       this.wss.clients.forEach((ws: AuthenticatedWebSocket) => {
         if (ws.isAlive === false) {
+          deadConnections++;
+          console.warn(`🔌 WebSocket: Terminating dead connection for user ${ws.userId || 'unknown'}`);
           return ws.terminate();
         }
+        
         ws.isAlive = false;
         ws.ping();
+        activeConnections++;
       });
+      
+      if (deadConnections > 0) {
+        console.log(`💓 WebSocket Heartbeat: ${activeConnections} active, ${deadConnections} terminated`);
+      }
     }, 30000);
   }
 
@@ -312,6 +323,31 @@ export class WebSocketService {
    */
   public getTotalConnectionCount(): number {
     return this.wss.clients.size;
+  }
+  
+  /**
+   * Get connection health status
+   */
+  public getConnectionHealth(): {
+    totalConnections: number;
+    activeConnections: number;
+    uniqueUsers: number;
+    metricsSubscribers: number;
+  } {
+    let activeConnections = 0;
+    
+    this.wss.clients.forEach((ws: AuthenticatedWebSocket) => {
+      if (ws.isAlive !== false && ws.readyState === WebSocket.OPEN) {
+        activeConnections++;
+      }
+    });
+    
+    return {
+      totalConnections: this.wss.clients.size,
+      activeConnections,
+      uniqueUsers: this.clients.size,
+      metricsSubscribers: this.metricsSubscribers.size,
+    };
   }
 
   /**

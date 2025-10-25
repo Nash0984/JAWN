@@ -1,11 +1,16 @@
 import { createHash } from 'crypto';
 import NodeCache from 'node-cache';
+import { redisCache, tieredCacheGet } from './redisCache';
 
 /**
  * Embedding Cache Service
  * 
  * Optimizes Gemini API costs by caching text embeddings.
  * Embeddings are deterministic - same text always produces same embedding.
+ * 
+ * Now supports L1 (NodeCache) + L2 (Redis) tiered caching:
+ * - L1: Process-local, ultra-fast access
+ * - L2: Distributed, shared across instances
  * 
  * Cost Savings: 60-80% reduction in embedding generation calls
  * TTL: 24 hours (embeddings don't change)
@@ -48,17 +53,29 @@ class EmbeddingCacheService {
   
   /**
    * Get cached embedding or return null
+   * Now checks L1 → L2 → null
    */
-  get(text: string): number[] | null {
+  async get(text: string): Promise<number[] | null> {
     this.metrics.totalRequests++;
     
-    const key = this.generateKey(text);
-    const cached = this.cache.get<number[]>(key);
+    const key = `embedding:${this.generateKey(text)}`;
     
-    if (cached) {
+    // Check L1 (NodeCache)
+    const l1Cached = this.cache.get<number[]>(key);
+    if (l1Cached) {
       this.metrics.hits++;
       this.metrics.estimatedCostSavings += this.COST_PER_EMBEDDING;
-      return cached;
+      return l1Cached;
+    }
+    
+    // Check L2 (Redis)
+    const l2Cached = await redisCache.get<number[]>(key);
+    if (l2Cached) {
+      this.metrics.hits++;
+      this.metrics.estimatedCostSavings += this.COST_PER_EMBEDDING;
+      // Write-through to L1
+      this.cache.set(key, l2Cached);
+      return l2Cached;
     }
     
     this.metrics.misses++;
@@ -67,10 +84,31 @@ class EmbeddingCacheService {
   
   /**
    * Store embedding in cache
+   * Now writes to both L1 and L2
    */
-  set(text: string, embedding: number[]): void {
-    const key = this.generateKey(text);
-    this.cache.set(key, embedding);
+  async set(text: string, embedding: number[]): Promise<void> {
+    const key = `embedding:${this.generateKey(text)}`;
+    const ttl = 24 * 60 * 60; // 24 hours
+    
+    // Write to L1 (NodeCache)
+    this.cache.set(key, embedding, ttl);
+    
+    // Write to L2 (Redis)
+    await redisCache.set(key, embedding, ttl);
+  }
+  
+  /**
+   * Get cached embedding with automatic fetch if not found
+   * Uses tiered cache with automatic population
+   */
+  async getOrGenerate(
+    text: string, 
+    generateFn: () => Promise<number[]>
+  ): Promise<number[]> {
+    const key = `embedding:${this.generateKey(text)}`;
+    const ttl = 24 * 60 * 60; // 24 hours
+    
+    return tieredCacheGet(key, generateFn, ttl);
   }
   
   /**

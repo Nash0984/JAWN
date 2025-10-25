@@ -10,6 +10,18 @@
 
 import rateLimit, { RateLimitRequestHandler } from 'express-rate-limit';
 import { Request } from 'express';
+import crypto from 'crypto';
+
+/**
+ * Create a safe key from IP address using hash
+ * This prevents IPv6 validation warnings by converting any IP to a fixed-length hash
+ */
+function createSafeIpKey(ip: string | undefined): string {
+  if (!ip) return 'unknown';
+  
+  // Create a short hash of the IP address (no colons, no special characters)
+  return crypto.createHash('md5').update(ip).digest('hex').substring(0, 16);
+}
 
 /**
  * Rate limit tiers by user role
@@ -75,10 +87,10 @@ export const standardRateLimiter: RateLimitRequestHandler = rateLimit({
   },
   standardHeaders: true, // Return rate limit info in RateLimit-* headers
   legacyHeaders: false, // Disable X-RateLimit-* headers
-  // Use user ID or IP for rate limiting
+  // Use user ID or IP hash for rate limiting
   keyGenerator: (req: Request) => {
     const user = (req as any).user;
-    return user ? `user:${user.id}` : `ip:${req.ip}`;
+    return user ? `user:${user.id}` : `ip:${createSafeIpKey(req.ip)}`;
   },
   // Skip successful requests from counting (optional)
   skip: (req: Request) => {
@@ -113,7 +125,7 @@ export const authRateLimiter: RateLimitRequestHandler = rateLimit({
     message: 'Too many login attempts. Please try again later.',
     retryAfter: 900 // 15 minutes in seconds
   },
-  keyGenerator: (req: Request) => `auth:${req.ip}`,
+  keyGenerator: (req: Request) => `auth:${createSafeIpKey(req.ip)}`,
   handler: (req, res) => {
     console.warn(`⚠️  Auth rate limit exceeded from IP: ${req.ip}`);
     
@@ -144,7 +156,7 @@ export const aiRateLimiter: RateLimitRequestHandler = rateLimit({
   },
   keyGenerator: (req: Request) => {
     const user = (req as any).user;
-    return user ? `ai:user:${user.id}` : `ai:ip:${req.ip}`;
+    return user ? `ai:user:${user.id}` : `ai:ip:${createSafeIpKey(req.ip)}`;
   }
 });
 
@@ -167,7 +179,7 @@ export const uploadRateLimiter: RateLimitRequestHandler = rateLimit({
   },
   keyGenerator: (req: Request) => {
     const user = (req as any).user;
-    return user ? `upload:user:${user.id}` : `upload:ip:${req.ip}`;
+    return user ? `upload:user:${user.id}` : `upload:ip:${createSafeIpKey(req.ip)}`;
   }
 });
 
@@ -193,6 +205,57 @@ export function createCustomRateLimiter(
 }
 
 /**
+ * Public endpoint rate limiter - More permissive for accessibility
+ * Designed for /screener and /public/* endpoints
+ */
+export const publicRateLimiter: RateLimitRequestHandler = rateLimit({
+  windowMs: 1 * 60 * 1000, // 1 minute
+  max: 100, // 100 requests per minute
+  message: {
+    error: 'Rate Limit Exceeded',
+    message: 'Too many requests to public endpoints. Please wait a moment before trying again.',
+    retryAfter: 60
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req: Request) => `public:${createSafeIpKey(req.ip)}`,
+  handler: (req, res) => {
+    console.warn(`⚠️  Public endpoint rate limit exceeded: ${req.method} ${req.path} from ${req.ip}`);
+    
+    res.status(429).json({
+      error: 'Rate Limit Exceeded',
+      message: 'Too many requests. Please wait a moment before trying again.',
+      retryAfter: 60
+    });
+  }
+});
+
+/**
+ * Aggressive rate limiter for abuse prevention
+ * Applied to IPs that exceed limits repeatedly
+ */
+export const aggressiveRateLimiter: RateLimitRequestHandler = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 10, // Only 10 requests per 15 minutes
+  skipSuccessfulRequests: false,
+  message: {
+    error: 'IP Blocked - Rate Limit Abuse',
+    message: 'Your IP has been temporarily blocked due to excessive requests. Please contact support if this is an error.',
+    retryAfter: 900
+  },
+  keyGenerator: (req: Request) => `blocked:${createSafeIpKey(req.ip)}`,
+  handler: (req, res) => {
+    console.error(`🚨 IP BLOCKED due to rate limit abuse: ${req.ip} - ${req.method} ${req.path}`);
+    
+    res.status(429).json({
+      error: 'IP Temporarily Blocked',
+      message: 'Your IP has been temporarily blocked due to excessive requests. This block will expire in 15 minutes.',
+      retryAfter: 900
+    });
+  }
+});
+
+/**
  * Export endpoint-specific limiters
  */
 export const rateLimiters = {
@@ -200,5 +263,7 @@ export const rateLimiters = {
   auth: authRateLimiter,
   ai: aiRateLimiter,
   upload: uploadRateLimiter,
+  public: publicRateLimiter,
+  aggressive: aggressiveRateLimiter,
   custom: createCustomRateLimiter
 };

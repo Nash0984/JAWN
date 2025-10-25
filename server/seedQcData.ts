@@ -1,13 +1,7 @@
 import { db } from "./db";
-import { users, qcErrorPatterns, flaggedCases, jobAids, trainingInterventions } from "@shared/schema";
+import { users } from "@shared/schema";
 import { nanoid } from "nanoid";
 import bcrypt from "bcryptjs";
-import { 
-  generateQCErrorPatterns, 
-  generateFlaggedCases, 
-  generateJobAids, 
-  generateTrainingInterventions 
-} from "./services/qcSyntheticData";
 
 /**
  * Seed QC Analytics data for Maryland SNAP
@@ -125,43 +119,9 @@ async function seedQCData() {
 
     console.log("✅ Demo users verified/created");
 
-    // Generate and insert QC Error Patterns
-    const errorPatterns = generateQCErrorPatterns();
-    for (const pattern of errorPatterns) {
-      await db.insert(qcErrorPatterns).values(pattern).onConflictDoNothing();
-    }
-    console.log(`✅ Created ${errorPatterns.length} QC error patterns`);
-
-    // Generate and insert Flagged Cases
-    const flaggedCases1 = generateFlaggedCases(demoCaseworker1!.id, 12);
-    const flaggedCases2 = generateFlaggedCases(demoCaseworker2!.id, 8);
-    const flaggedCasesNavigator = generateFlaggedCases(demoNavigator!.id, 6);
-
-    for (const flaggedCase of [...flaggedCases1, ...flaggedCases2, ...flaggedCasesNavigator]) {
-      await db.insert(flaggedCases).values(flaggedCase).onConflictDoNothing();
-    }
-    console.log(`✅ Created ${flaggedCases1.length + flaggedCases2.length + flaggedCasesNavigator.length} flagged cases`);
-
-    // Generate and insert Job Aids
-    const jobAidsList = generateJobAids();
-    for (const jobAid of jobAidsList) {
-      await db.insert(jobAids).values(jobAid).onConflictDoNothing();
-    }
-    console.log(`✅ Created ${jobAidsList.length} job aids`);
-
-    // Generate and insert Training Interventions
-    const allUserIds = [demoCaseworker1!.id, demoCaseworker2!.id, demoNavigator!.id, demoSupervisor!.id];
-    const interventions = generateTrainingInterventions(allUserIds);
-    for (const intervention of interventions) {
-      await db.insert(trainingInterventions).values(intervention).onConflictDoNothing();
-    }
-    console.log(`✅ Created ${interventions.length} training interventions`);
-
     console.log("\n📈 QC Analytics Summary:");
-    console.log("   • Error Patterns: Showing 500% spike in Shelter & Utility errors (Q4 2024)");
-    console.log("   • Flagged Cases: High-risk cases ready for supervisor review");
-    console.log("   • Job Aids: Comprehensive training materials for caseworkers");
-    console.log("   • Training Impact: Demonstrating measurable error rate improvements");
+    console.log("   • Demo users created for testing QC Analytics features");
+    console.log("   • Use the QC Analytics service to analyze real client cases");
     
     console.log("\n🎉 QC Analytics seeding completed successfully!");
   } catch (error) {

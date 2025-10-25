@@ -29,6 +29,7 @@ import PolicySources from "@/pages/PolicySources";
 import AIMonitoring from "@/pages/AIMonitoring";
 import SecurityMonitoring from "@/pages/SecurityMonitoring";
 import AuditLogs from "@/pages/AuditLogs";
+import MAIVEDashboard from "@/pages/MAIVEDashboard";
 import ApiDocs from "@/pages/ApiDocs";
 import Monitoring from "@/pages/admin/Monitoring";
 import EFileMonitoring from "@/pages/admin/EFileMonitoring";
@@ -57,7 +58,8 @@ import Disclaimer from "@/pages/legal/Disclaimer";
 import License from "@/pages/legal/License";
 import AbawdVerificationAdmin from "@/pages/AbawdVerificationAdmin";
 import CrossEnrollmentAdmin from "@/pages/CrossEnrollmentAdmin";
-import SmsConfig from "@/pages/admin/SmsConfig";
+// COMMENTED OUT DURING SCHEMA ROLLBACK
+// import SmsConfig from "@/pages/admin/SmsConfig";
 import FNSStateOptionsManager from "@/pages/admin/FNSStateOptionsManager";
 import FederalLawTracker from "@/pages/admin/FederalLawTracker";
 import MarylandStateLawTracker from "@/pages/admin/MarylandStateLawTracker";
@@ -70,7 +72,6 @@ import CountyManagement from "@/pages/CountyManagement";
 import NavigatorPerformance from "@/pages/NavigatorPerformance";
 import Leaderboard from "@/pages/Leaderboard";
 import CountyAnalytics from "@/pages/CountyAnalytics";
-import ProductivityDashboard from "@/pages/ProductivityDashboard";
 import VitaKnowledgeBase from "@/pages/VitaKnowledgeBase";
 import EvaluationFramework from "@/pages/EvaluationFramework";
 import HouseholdProfiler from "@/pages/HouseholdProfiler";
@@ -92,6 +93,11 @@ import { TenantThemeProvider } from "@/components/TenantThemeProvider";
 import Footer from "@/components/Footer";
 import Demo from "@/pages/Demo";
 import APIExplorer from "@/pages/APIExplorer";
+import Developers from "@/pages/Developers";
+import EFileDashboard from "@/pages/EFileDashboard";
+import SupervisorReviewDashboard from "@/pages/SupervisorReviewDashboard";
+// COMMENTED OUT DURING SCHEMA ROLLBACK
+// import MobileScreening from "@/pages/MobileScreening";
 
 function Router() {
   const [location] = useLocation();
@@ -129,6 +135,9 @@ function Router() {
           {/* API Explorer - Public access (no login required) */}
           <Route path="/api-explorer" component={APIExplorer} />
           
+          {/* Developer Guide - Public access (no login required) */}
+          <Route path="/developers" component={Developers} />
+          
           {/* Public Portal - No login required */}
           <Route path="/public/documents" component={DocumentChecklist} />
           <Route path="/public/notices" component={NoticeExplainer} />
@@ -136,6 +145,11 @@ function Router() {
           <Route path="/screener" component={BenefitScreener} />
           <Route path="/public/quick-screener" component={QuickScreener} />
           <Route path="/public/fsa" component={FsaLanding} />
+          
+          {/* Mobile SMS Screening - No login required */}
+          {/* COMMENTED OUT DURING SCHEMA ROLLBACK */}
+          {/* <Route path="/screening/:token" component={MobileScreening} /> */}
+          {/* <Route path="/s/:token" component={MobileScreening} /> */}
           
           {/* Legal Pages - Public access (no login required) */}
           <Route path="/legal" component={LegalHub} />
@@ -176,13 +190,6 @@ function Router() {
               </ProtectedRoute>
             )}
           </Route>
-          <Route path="/productivity">
-            {() => (
-              <ProtectedRoute requireStaff>
-                <ProductivityDashboard />
-              </ProtectedRoute>
-            )}
-          </Route>
           <Route path="/dashboard/caseworker">
             {() => (
               <ProtectedRoute requireStaff>
@@ -201,6 +208,13 @@ function Router() {
             {() => (
               <ProtectedRoute requireStaff>
                 <SupervisorCockpit />
+              </ProtectedRoute>
+            )}
+          </Route>
+          <Route path="/supervisor/reviews">
+            {() => (
+              <ProtectedRoute requireStaff>
+                <SupervisorReviewDashboard />
               </ProtectedRoute>
             )}
           </Route>
@@ -259,6 +273,13 @@ function Router() {
             {() => (
               <ProtectedRoute>
                 <TaxPreparation />
+              </ProtectedRoute>
+            )}
+          </Route>
+          <Route path="/efile">
+            {() => (
+              <ProtectedRoute>
+                <EFileDashboard />
               </ProtectedRoute>
             )}
           </Route>
@@ -395,6 +416,13 @@ function Router() {
               </ProtectedRoute>
             )}
           </Route>
+          <Route path="/admin/maive">
+            {() => (
+              <ProtectedRoute requireAdmin>
+                <MAIVEDashboard />
+              </ProtectedRoute>
+            )}
+          </Route>
           <Route path="/admin/monitoring">
             {() => (
               <ProtectedRoute requireAdmin>
@@ -507,13 +535,14 @@ function Router() {
               </ProtectedRoute>
             )}
           </Route>
-          <Route path="/admin/sms-config">
+          {/* COMMENTED OUT DURING SCHEMA ROLLBACK */}
+          {/* <Route path="/admin/sms-config">
             {() => (
               <ProtectedRoute requireAdmin>
                 <SmsConfig />
               </ProtectedRoute>
             )}
-          </Route>
+          </Route> */}
           <Route path="/admin/fns-state-options">
             {() => (
               <ProtectedRoute requireAdmin>

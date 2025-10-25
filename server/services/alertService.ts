@@ -11,7 +11,8 @@ import { eq, and, or, inArray } from "drizzle-orm";
 import { metricsService } from "./metricsService";
 import { notificationService } from "./notification.service";
 import { emailService } from "./email.service";
-import { sendSMS } from "./smsService";
+// COMMENTED OUT DURING SCHEMA ROLLBACK
+// import { sendSMS } from "./smsService";
 
 export class AlertService {
   /**
@@ -152,18 +153,18 @@ export class AlertService {
           }
         }
 
-        // SMS notification
-        if (channels.includes('sms') && user.phone && rule.tenantId) {
-          try {
-            await sendSMS(
-              user.phone,
-              `ALERT: ${rule.name} - ${rule.metricType} is ${metricValue.toFixed(2)}`,
-              rule.tenantId
-            );
-          } catch (error) {
-            console.error(`Failed to send SMS to ${user.phone}:`, error);
-          }
-        }
+        // SMS notification - COMMENTED OUT DURING SCHEMA ROLLBACK
+        // if (channels.includes('sms') && user.phone && rule.tenantId) {
+        //   try {
+        //     await sendSMS(
+        //       user.phone,
+        //       `ALERT: ${rule.name} - ${rule.metricType} is ${metricValue.toFixed(2)}`,
+        //       rule.tenantId
+        //     );
+        //   } catch (error) {
+        //     console.error(`Failed to send SMS to ${user.phone}:`, error);
+        //   }
+        // }
       }
     } catch (error) {
       console.error('Error sending notifications:', error);

@@ -111,13 +111,19 @@ app.use(dosProtection({
 // ============================================================================
 import { rateLimiters } from "./middleware/enhancedRateLimiting";
 
-// Apply role-based rate limiters
-app.use("/api/", rateLimiters.standard); // General limit based on user role
-app.use("/api/auth/login", rateLimiters.auth); // Strict limit for login
-app.use("/api/auth/signup", rateLimiters.auth); // Strict limit for signup
-app.use("/api/chat/ask", rateLimiters.ai); // AI chat endpoint
-app.use("/api/search", rateLimiters.ai); // AI search endpoint
-app.use("/api/documents/upload", rateLimiters.upload); // Document upload endpoints
+// Apply permissive public rate limiter first (more specific routes go first)
+app.use("/api/public/", rateLimiters.public); // Public endpoints: 100 req/min
+app.use("/api/screener/", rateLimiters.public); // Screener endpoints: 100 req/min
+
+// Apply strict rate limiters for auth and AI endpoints
+app.use("/api/auth/login", rateLimiters.auth); // Strict limit for login (5 attempts/15min)
+app.use("/api/auth/signup", rateLimiters.auth); // Strict limit for signup (5 attempts/15min)
+app.use("/api/chat/ask", rateLimiters.ai); // AI chat endpoint (2-30 req/min based on role)
+app.use("/api/search", rateLimiters.ai); // AI search endpoint (2-30 req/min based on role)
+app.use("/api/documents/upload", rateLimiters.upload); // Document upload endpoints (5-200 req/hour)
+
+// Apply role-based standard limiter to remaining API routes
+app.use("/api/", rateLimiters.standard); // General limit based on user role (20-1000 req/15min)
 
 // Add timing headers and performance monitoring
 app.use(timingHeadersMiddleware());
@@ -176,8 +182,10 @@ const csrfProtection = doubleCsrf({
 });
 
 // ============================================================================
-// HEALTH CHECK ENDPOINT - Database connectivity and system status
+// HEALTH CHECK ENDPOINTS - Database connectivity and system status
 // ============================================================================
+
+// Basic health check (fast, minimal overhead)
 app.get("/api/health", async (req, res) => {
   try {
     // Check database connectivity
@@ -197,6 +205,27 @@ app.get("/api/health", async (req, res) => {
       timestamp: new Date().toISOString(),
       database: "disconnected",
       error: "Database connection failed",
+    });
+  }
+});
+
+// Detailed health check (comprehensive service and dependency status)
+app.get("/api/health/detailed", async (req, res) => {
+  try {
+    const { healthCheckService } = await import("./services/healthCheckService");
+    const healthStatus = await healthCheckService.checkAll();
+    
+    // Return appropriate status code based on health
+    const statusCode = healthStatus.status === 'unhealthy' ? 503 : 200;
+    
+    res.status(statusCode).json(healthStatus);
+  } catch (error) {
+    console.error("❌ Detailed health check failed:", error);
+    res.status(500).json({
+      status: "unhealthy",
+      timestamp: new Date().toISOString(),
+      error: "Health check service failed",
+      message: error instanceof Error ? error.message : "Unknown error",
     });
   }
 });
@@ -245,6 +274,12 @@ app.use("/api/", (req, res, next) => {
   // Apply CSRF protection
   csrfProtection.doubleCsrfProtection(req, res, next);
 });
+
+// ============================================================================
+// API VERSIONING - Version detection and compatibility management
+// ============================================================================
+import { apiVersionMiddleware } from "./middleware/apiVersioning";
+app.use("/api/", apiVersionMiddleware);
 
 (async () => {
   // ============================================================================

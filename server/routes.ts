@@ -3,24 +3,57 @@ import { createServer, type Server } from "http";
 import { initializeWebSocketService } from "./services/websocket.service";
 import { storage } from "./storage";
 import { ragService } from "./services/ragService";
-import { documentProcessor } from "./services/documentProcessor";
-import { documentIngestionService } from "./services/documentIngestion";
-import { automatedIngestionService } from "./services/automatedIngestion";
+// Unified Services
+import { unifiedDocumentService } from "./services/unified/UnifiedDocumentService";
+import { unifiedExportService } from "./services/unified/UnifiedExportService";
+import { unifiedIngestionService } from "./services/unified/UnifiedIngestionService";
+// Cross-State Rules
+import { registerCrossStateRulesRoutes } from "./api/crossStateRules.routes";
+// SMS Screening Service - COMMENTED OUT DURING SCHEMA ROLLBACK
+// import { 
+//   generateScreeningLink, 
+//   validateScreeningLink, 
+//   saveScreeningProgress,
+//   completeScreening, 
+//   getScreeningStatus,
+//   hashPhoneNumber,
+//   getScreeningLinkAnalytics
+// } from "./services/smsScreeningService";
+// SMS Rate Limiting - COMMENTED OUT DURING SCHEMA ROLLBACK
+// import { 
+//   smsScreeningRateLimit, 
+//   smsGeneralRateLimit,
+//   ipRateLimit,
+//   getRateLimitStatus
+// } from "./middleware/smsRateLimiter";
+
+// Legacy services (to be gradually migrated)
+const documentProcessor = unifiedDocumentService; // Alias for backward compatibility
+const documentIngestionService = unifiedIngestionService; // Alias for backward compatibility
+const automatedIngestionService = unifiedIngestionService; // Alias for backward compatibility  
+const manualIngestionService = unifiedIngestionService; // Alias for backward compatibility
+const documentVerificationService = unifiedDocumentService; // Alias for backward compatibility
+const taxDocExtractor = unifiedDocumentService; // Alias for backward compatibility
+
+// Export aliases for backward compatibility
+const exportToPDF = (returnId: string) => unifiedExportService.exportTaxSlayerReturn(returnId, { format: 'pdf', type: 'taxslayer_worksheet' });
+const exportToCSV = (returnId: string) => unifiedExportService.exportTaxSlayerReturn(returnId, { format: 'csv', type: 'taxslayer_worksheet' });
+const exportChecklist = exportToPDF; // Use same PDF export for now
+const exportVarianceReport = exportToPDF; // Use same PDF export for now
+const exportFieldGuide = exportToPDF; // Use same PDF export for now
+
+// Other services
 import { ObjectStorageService, objectStorageClient, parseObjectPath } from "./objectStorage";
 import { rulesEngine } from "./services/rulesEngine";
 import { rulesAsCodeService } from "./services/rulesAsCodeService";
 import { hybridService } from "./services/hybridService";
-import { manualIngestionService } from "./services/manualIngestion";
 import { auditService } from "./services/auditService";
-import { documentVerificationService } from "./services/documentVerificationService";
 import { textGenerationService } from "./services/textGenerationService";
 import { notificationService } from "./services/notification.service";
 import { cacheService, CACHE_KEYS, invalidateRulesCache, generateHouseholdHash } from "./services/cacheService";
 import { kpiTrackingService } from "./services/kpiTracking.service";
 import { achievementSystemService } from "./services/achievementSystem.service";
 import { leaderboardService } from "./services/leaderboard.service";
-import { taxDocExtractor } from "./services/taxDocumentExtraction";
-import { exportToPDF, exportToCSV, exportChecklist, exportVarianceReport, exportFieldGuide } from "./services/taxslayerExport";
 import { GoogleGenAI } from "@google/genai";
 import { asyncHandler, validationError, notFoundError, externalServiceError, authorizationError } from "./middleware/errorHandler";
 import { requireAuth, requireStaff, requireAdmin } from "./middleware/auth";
@@ -56,6 +89,7 @@ import {
   insertTaxpayerMessageSchema,
   insertTaxpayerMessageAttachmentSchema,
   insertESignatureSchema,
+  insertReviewerFeedbackSchema,
   searchQueries,
   auditLogs,
   ruleChangeLogs,
@@ -75,7 +109,10 @@ import {
   alertHistory,
   consentForms,
   clientConsents,
-  appointments
+  appointments,
+  benefitsAccessReviews,
+  reviewerFeedback,
+  caseLifecycleEvents
 } from "@shared/schema";
 import { z } from "zod";
 import bcrypt from "bcryptjs";
@@ -185,6 +222,29 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
   
   // Startup probe (has service completed startup?)
   app.get("/startup", startupCheck);
+  
+  // Database backup monitoring endpoints
+  const { databaseBackupService } = await import("./services/databaseBackup.service");
+  
+  app.get("/api/backup/status", asyncHandler(async (req: Request, res: Response) => {
+    const status = await databaseBackupService.getBackupStatus();
+    res.json(status);
+  }));
+  
+  app.get("/api/backup/metrics", asyncHandler(async (req: Request, res: Response) => {
+    const metrics = await databaseBackupService.getBackupMetrics();
+    res.json(metrics);
+  }));
+  
+  app.get("/api/backup/verify", asyncHandler(async (req: Request, res: Response) => {
+    const verification = await databaseBackupService.verifyBackupRestoration();
+    res.json(verification);
+  }));
+  
+  app.get("/api/backup/recommendations", asyncHandler(async (req: Request, res: Response) => {
+    const recommendations = await databaseBackupService.getBackupRecommendations();
+    res.json({ recommendations });
+  }));
   
   // Legacy comprehensive health check endpoint (kept for backwards compatibility)
   app.get("/api/health", asyncHandler(async (req: Request, res: Response) => {
@@ -835,66 +895,6 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
     }
   });
 
-  // Get document quality analysis
-  app.get("/api/documents/:id/quality", requireAdmin, async (req: Request, res: Response) => {
-    try {
-      const document = await storage.getDocument(req.params.id);
-      if (!document) {
-        return res.status(404).json({ error: "Document not found" });
-      }
-
-      const history = await storage.getDocumentQualityHistory(req.params.id);
-
-      res.json({
-        score: document.qualityScore,
-        metrics: document.qualityMetrics,
-        issues: document.qualityFlags,
-        suggestions: document.qualitySuggestions,
-        analyzedAt: document.analyzedAt,
-        history,
-      });
-    } catch (error) {
-      console.error("Error fetching document quality:", error);
-      res.status(500).json({ error: "Failed to fetch document quality" });
-    }
-  });
-
-  // Trigger document quality re-analysis
-  app.post("/api/documents/:id/reanalyze", requireAdmin, async (req: Request, res: Response) => {
-    try {
-      const document = await storage.getDocument(req.params.id);
-      if (!document) {
-        return res.status(404).json({ error: "Document not found" });
-      }
-
-      const { DocumentQualityAnalyzerService } = await import("./services/documentQualityAnalyzerService");
-      const qualityAnalyzer = new DocumentQualityAnalyzerService();
-      
-      const result = await qualityAnalyzer.analyzeDocument(req.params.id);
-
-      await storage.updateDocumentQuality(req.params.id, {
-        qualityScore: result.overallScore,
-        qualityMetrics: result.metrics,
-        qualityFlags: result.issues,
-        qualitySuggestions: result.suggestions,
-        analyzedAt: new Date(),
-      });
-
-      await storage.createDocumentQualityEvent({
-        documentId: req.params.id,
-        qualityScore: result.overallScore,
-        metrics: result.metrics,
-        issues: result.issues,
-        analyzedAt: new Date(),
-      });
-
-      res.json(result);
-    } catch (error) {
-      console.error("Error reanalyzing document quality:", error);
-      res.status(500).json({ error: "Failed to reanalyze document quality" });
-    }
-  });
-
   // Policy Sources Management
   app.get("/api/policy-sources", requireAdmin, async (req: Request, res: Response) => {
     try {
@@ -1408,6 +1408,18 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
       message: `Successfully cleared ${type} cache`,
     });
   }));
+  
+  // Cache Management - Get hierarchical L1/L2/L3 cache metrics with Redis status
+  app.get("/api/admin/cache/hierarchical", requireAdmin, asyncHandler(async (req: Request, res: Response) => {
+    const { cacheMetrics } = await import("./services/cacheMetrics");
+    
+    const hierarchicalMetrics = await cacheMetrics.getHierarchicalMetrics();
+    
+    res.json({
+      success: true,
+      ...hierarchicalMetrics,
+    });
+  }));
 
   // ============================================================================
   // MONITORING & OBSERVABILITY - Sentry integration and metrics
@@ -1666,6 +1678,124 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
   }));
 
   // ============================================================================
+  // BENEFITS ACCESS REVIEW (BAR) - Case quality monitoring and supervisor reviews
+  // ============================================================================
+
+  // GET /api/bar/reviews - List reviews for supervisor dashboard
+  app.get('/api/bar/reviews', requireAuth, requireStaff, asyncHandler(async (req: Request, res: Response) => {
+    const { benefitsAccessReviewService } = await import("./services/benefitsAccessReview.service");
+    const { status, supervisorId } = req.query;
+    
+    // If user is not admin, only show their own reviews
+    const userId = req.user!.id;
+    const userRole = req.user!.role;
+    const effectiveSupervisorId = userRole === 'admin' || userRole === 'super_admin' 
+      ? (supervisorId as string | undefined) 
+      : userId;
+    
+    let reviews;
+    if (status === 'active') {
+      reviews = await benefitsAccessReviewService.getActiveReviews(effectiveSupervisorId);
+    } else {
+      // Get all reviews (optionally filtered by supervisor)
+      const query = db.select().from(benefitsAccessReviews);
+      reviews = effectiveSupervisorId
+        ? await query.where(eq(benefitsAccessReviews.supervisorId, effectiveSupervisorId))
+        : await query.limit(100).orderBy(desc(benefitsAccessReviews.createdAt));
+    }
+    
+    res.json({ success: true, data: reviews });
+  }));
+
+  // POST /api/bar/reviews/:id/feedback - Submit supervisor feedback
+  app.post('/api/bar/reviews/:id/feedback', requireAuth, requireStaff, asyncHandler(async (req: Request, res: Response) => {
+    const { benefitsAccessReviewService } = await import("./services/benefitsAccessReview.service");
+    const { id: reviewId } = req.params;
+    const userId = req.user!.id;
+    
+    // Verify this user is the assigned supervisor for this review
+    const [review] = await db.select()
+      .from(benefitsAccessReviews)
+      .where(eq(benefitsAccessReviews.id, reviewId));
+    
+    if (!review) {
+      return res.status(404).json({ success: false, error: 'Review not found' });
+    }
+    
+    if (review.supervisorId !== userId && req.user!.role !== 'admin' && req.user!.role !== 'super_admin') {
+      return res.status(403).json({ success: false, error: 'Not authorized to review this case' });
+    }
+    
+    // Validate and create feedback
+    const validatedData = insertReviewerFeedbackSchema.parse({
+      reviewId,
+      reviewerId: userId,
+      ...req.body
+    });
+    
+    const [feedback] = await db.insert(reviewerFeedback)
+      .values(validatedData)
+      .returning();
+    
+    // Update review status to completed
+    await db.update(benefitsAccessReviews)
+      .set({ 
+        reviewStatus: 'completed',
+        supervisorFeedbackId: feedback.id,
+        completedAt: new Date(),
+        updatedAt: new Date()
+      })
+      .where(eq(benefitsAccessReviews.id, reviewId));
+    
+    res.json({ success: true, data: feedback });
+  }));
+
+  // GET /api/bar/checkpoints/upcoming - Get upcoming checkpoints for dashboard
+  app.get('/api/bar/checkpoints/upcoming', requireAuth, requireStaff, asyncHandler(async (req: Request, res: Response) => {
+    const { daysAhead = '7' } = req.query;
+    const days = parseInt(daysAhead as string);
+    
+    const now = new Date();
+    const futureDate = new Date();
+    futureDate.setDate(futureDate.getDate() + days);
+    
+    const upcomingCheckpoints = await db.select()
+      .from(caseLifecycleEvents)
+      .where(
+        and(
+          eq(caseLifecycleEvents.status, 'pending'),
+          gte(caseLifecycleEvents.expectedDate, now),
+          lte(caseLifecycleEvents.expectedDate, futureDate)
+        )
+      )
+      .orderBy(caseLifecycleEvents.expectedDate)
+      .limit(50);
+    
+    res.json({ success: true, data: upcomingCheckpoints });
+  }));
+
+  // PATCH /api/bar/checkpoints/:id - Update checkpoint status
+  app.patch('/api/bar/checkpoints/:id', requireAuth, requireStaff, asyncHandler(async (req: Request, res: Response) => {
+    const { checkpointService } = await import("./services/benefitsAccessReview.service");
+    const { id } = req.params;
+    const { actualDate, notes } = req.body;
+    const userId = req.user!.id;
+    
+    if (!actualDate) {
+      return res.status(400).json({ success: false, error: 'actualDate is required' });
+    }
+    
+    const updated = await checkpointService.updateCheckpoint(
+      id,
+      new Date(actualDate),
+      userId,
+      notes
+    );
+    
+    res.json({ success: true, data: updated });
+  }));
+
+  // ============================================================================
   // E-FILE MONITORING - Track e-file submissions and statuses
   // ============================================================================
 
@@ -1761,87 +1891,6 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
       success: true,
       message: "E-file submission reset to ready status for retry",
       submissionId: id,
-    });
-  }));
-
-  // ============================================================================
-  // RESILIENCE MONITORING - Circuit Breaker and Retry Metrics
-  // ============================================================================
-
-  // GET /api/admin/resilience/metrics - View circuit breaker states and retry stats
-  app.get('/api/admin/resilience/metrics', requireAdmin, asyncHandler(async (req: Request, res: Response) => {
-    const { resilienceMetricsService } = await import('./services/resilience/resilienceMetrics');
-    const { getAllCircuitBreakers } = await import('./services/resilience/resilientRequest');
-    
-    const { endpoint } = req.query;
-    
-    // Get metrics from metrics service
-    const metrics = resilienceMetricsService.getMetrics(endpoint as string | undefined);
-    
-    // Enhance with current circuit breaker states
-    const circuitBreakers = getAllCircuitBreakers();
-    const enhancedMetrics = metrics.map(m => {
-      const cb = circuitBreakers.get(m.endpointName);
-      return {
-        ...m,
-        circuitBreakerMetrics: cb?.getMetrics()
-      };
-    });
-    
-    res.json({
-      success: true,
-      metrics: enhancedMetrics,
-      summary: resilienceMetricsService.getSummary()
-    });
-  }));
-
-  // POST /api/admin/resilience/:endpoint/reset - Reset circuit breaker
-  app.post('/api/admin/resilience/:endpoint/reset', requireAdmin, asyncHandler(async (req: Request, res: Response) => {
-    const { resetCircuitBreaker } = await import('./services/resilience/resilientRequest');
-    const { endpoint } = req.params;
-    
-    const wasReset = resetCircuitBreaker(endpoint);
-    
-    if (!wasReset) {
-      return res.status(404).json({
-        success: false,
-        error: 'Circuit breaker not found',
-        message: `No circuit breaker found for endpoint: ${endpoint}`
-      });
-    }
-    
-    // Log audit event
-    await auditService.logAction({
-      userId: req.user!.id,
-      action: 'circuit_breaker_reset',
-      resource: 'resilience',
-      resourceId: endpoint,
-      details: {
-        endpoint,
-        timestamp: new Date()
-      }
-    });
-    
-    res.json({
-      success: true,
-      message: `Circuit breaker reset for endpoint: ${endpoint}`
-    });
-  }));
-
-  // GET /api/admin/resilience/circuit-states - Get all circuit breaker states
-  app.get('/api/admin/resilience/circuit-states', requireAdmin, asyncHandler(async (req: Request, res: Response) => {
-    const { getAllCircuitBreakers } = await import('./services/resilience/resilientRequest');
-    
-    const circuitBreakers = getAllCircuitBreakers();
-    const states = Array.from(circuitBreakers.entries()).map(([name, cb]) => ({
-      endpointName: name,
-      state: cb.getState(),
-      metrics: cb.getMetrics()
-    }));
-    
-    res.json({
-      success: true,
-      circuitBreakers: states
     });
   }));
 
@@ -9819,6 +9868,134 @@ If the question cannot be answered with the available information, say so clearl
   }));
 
   // ===========================
+  // SMS SCREENING LINK ROUTES
+  // COMMENTED OUT DURING SCHEMA ROLLBACK
+  // ===========================
+  
+  // Generate screening link (with rate limiting)
+  /*
+  app.post("/api/sms/screening/generate", requireAuth, smsScreeningRateLimit, asyncHandler(async (req: Request, res: Response) => {
+    const schema = z.object({
+      phoneNumber: z.string(),
+      metadata: z.any().optional()
+    });
+    
+    const validated = schema.parse(req.body);
+    
+    const result = await generateScreeningLink(
+      validated.phoneNumber,
+      req.user!.tenantId || 'default',
+      undefined,
+      validated.metadata
+    );
+    
+    if (!result.success) {
+      throw validationError(result.error || 'Failed to generate screening link');
+    }
+    
+    res.json({
+      success: true,
+      token: result.token,
+      fullUrl: result.fullUrl,
+      shortUrl: result.shortUrl,
+      expiresAt: result.expiresAt
+    });
+  }));
+  
+  // Validate screening link (with IP rate limiting for public access)
+  app.get("/api/sms/screening/validate/:token", ipRateLimit, asyncHandler(async (req: Request, res: Response) => {
+    const ipAddress = req.ip;
+    
+    const result = await validateScreeningLink(req.params.token, ipAddress);
+    
+    if (!result.valid) {
+      return res.status(400).json({
+        valid: false,
+        error: result.error
+      });
+    }
+    
+    res.json({
+      valid: true,
+      link: {
+        token: result.link.token,
+        expiresAt: result.link.expiresAt,
+        captchaRequired: result.link.captchaRequired,
+        screeningData: result.link.screeningData
+      }
+    });
+  }));
+  
+  // Save screening progress
+  app.post("/api/sms/screening/progress/:token", asyncHandler(async (req: Request, res: Response) => {
+    const schema = z.object({
+      screeningData: z.any()
+    });
+    
+    const validated = schema.parse(req.body);
+    
+    const result = await saveScreeningProgress(
+      req.params.token,
+      validated.screeningData
+    );
+    
+    if (!result.success) {
+      throw validationError(result.error || 'Failed to save progress');
+    }
+    
+    res.json({ success: true });
+  }));
+  
+  // Complete screening
+  app.post("/api/sms/screening/complete", asyncHandler(async (req: Request, res: Response) => {
+    const schema = z.object({
+      token: z.string(),
+      completionData: z.any()
+    });
+    
+    const validated = schema.parse(req.body);
+    
+    const result = await completeScreening(
+      validated.token,
+      validated.completionData
+    );
+    
+    if (!result.success) {
+      throw validationError(result.error || 'Failed to complete screening');
+    }
+    
+    res.json({ 
+      success: true,
+      message: 'Screening completed successfully. A navigator will contact you within 48 hours.'
+    });
+  }));
+  
+  // Get screening status by phone
+  app.get("/api/sms/screening/status/:phoneNumber", requireAuth, asyncHandler(async (req: Request, res: Response) => {
+    // Only allow staff to check status by phone number
+    if (!['navigator', 'caseworker', 'admin', 'super_admin'].includes(req.user!.role)) {
+      throw authorizationError('Access denied');
+    }
+    
+    const status = await getScreeningStatus(req.params.phoneNumber);
+    
+    res.json(status);
+  }));
+  
+  // Get screening link analytics
+  app.get("/api/sms/screening/analytics", requireStaff, asyncHandler(async (req: Request, res: Response) => {
+    const days = parseInt(req.query.days as string) || 30;
+    
+    const analytics = await getScreeningLinkAnalytics(
+      req.user!.tenantId || 'default',
+      days
+    );
+    
+    res.json(analytics);
+  }));
+  */
+
+  // ===========================
   // GAMIFICATION ROUTES - Navigator KPIs
   // ===========================
 
@@ -9924,178 +10101,6 @@ If the question cannot be answered with the available information, say so clearl
     });
     
     res.json({ message: "Cross-enrollment tracked successfully" });
-  }));
-
-  // ===========================
-  // ANALYTICS ROUTES - Productivity Dashboard
-  // ===========================
-
-  // Get productivity metrics for navigators
-  app.get("/api/analytics/productivity", requireStaff, asyncHandler(async (req: Request, res: Response) => {
-    const { periodType, navigatorId } = req.query;
-    
-    if (!periodType) {
-      throw validationError("periodType query parameter is required");
-    }
-    
-    const validPeriodTypes = ['daily', 'weekly', 'monthly', 'all_time'];
-    if (!validPeriodTypes.includes(periodType as string)) {
-      throw validationError("periodType must be one of: daily, weekly, monthly, all_time");
-    }
-    
-    let navigatorIds: string[] = [];
-    
-    if (!navigatorId || navigatorId === 'all') {
-      const allUsers = await storage.getUsers();
-      navigatorIds = allUsers
-        .filter(u => u.role === 'caseworker' || u.role === 'navigator')
-        .map(u => u.id);
-    } else {
-      navigatorIds = [navigatorId as string];
-    }
-    
-    const productivityMetrics = [];
-    
-    for (const navId of navigatorIds) {
-      const user = await storage.getUser(navId);
-      if (!user) continue;
-      
-      const kpi = await storage.getLatestNavigatorKpi(navId, periodType as string);
-      
-      if (kpi) {
-        productivityMetrics.push({
-          navigatorId: kpi.navigatorId,
-          navigatorName: user.username,
-          periodType: kpi.periodType,
-          periodStart: kpi.periodStart,
-          periodEnd: kpi.periodEnd,
-          casesClosed: kpi.casesClosed || 0,
-          casesApproved: kpi.casesApproved || 0,
-          casesDenied: kpi.casesDenied || 0,
-          successRate: kpi.successRate || 0,
-          totalBenefitsSecured: kpi.totalBenefitsSecured || 0,
-          avgBenefitPerCase: kpi.avgBenefitPerCase || 0,
-          highValueCases: kpi.highValueCases || 0,
-          avgResponseTime: kpi.avgResponseTime || 0,
-          avgCaseCompletionTime: kpi.avgCaseCompletionTime || 0,
-          documentsProcessed: kpi.documentsProcessed || 0,
-          documentsVerified: kpi.documentsVerified || 0,
-          avgDocumentQuality: (kpi.avgDocumentQuality || 0) * 100,
-          crossEnrollmentsIdentified: kpi.crossEnrollmentsIdentified || 0,
-          aiRecommendationsAccepted: kpi.aiRecommendationsAccepted || 0,
-          performanceScore: kpi.performanceScore || 0,
-        });
-      }
-    }
-    
-    res.json(productivityMetrics);
-  }));
-
-  // Get team-wide analytics metrics
-  app.get("/api/analytics/team-metrics", requireStaff, asyncHandler(async (req: Request, res: Response) => {
-    const allUsers = await storage.getUsers();
-    const navigators = allUsers.filter(u => u.role === 'caseworker' || u.role === 'navigator');
-    
-    const monthlyKpis = [];
-    for (const navigator of navigators) {
-      const kpi = await storage.getLatestNavigatorKpi(navigator.id, 'monthly');
-      if (kpi) {
-        monthlyKpis.push(kpi);
-      }
-    }
-    
-    const totalCasesThisMonth = monthlyKpis.reduce((sum, kpi) => sum + (kpi.casesClosed || 0), 0);
-    const totalBenefitsThisMonth = monthlyKpis.reduce((sum, kpi) => sum + (kpi.totalBenefitsSecured || 0), 0);
-    const avgSuccessRate = monthlyKpis.length > 0
-      ? monthlyKpis.reduce((sum, kpi) => sum + (kpi.successRate || 0), 0) / monthlyKpis.length
-      : 0;
-    
-    const allTimeKpis = [];
-    for (const navigator of navigators) {
-      const user = await storage.getUser(navigator.id);
-      const kpi = await storage.getLatestNavigatorKpi(navigator.id, 'all_time');
-      if (kpi && user) {
-        allTimeKpis.push({
-          navigatorId: kpi.navigatorId,
-          navigatorName: user.username,
-          periodType: kpi.periodType,
-          periodStart: kpi.periodStart,
-          periodEnd: kpi.periodEnd,
-          casesClosed: kpi.casesClosed || 0,
-          casesApproved: kpi.casesApproved || 0,
-          casesDenied: kpi.casesDenied || 0,
-          successRate: kpi.successRate || 0,
-          totalBenefitsSecured: kpi.totalBenefitsSecured || 0,
-          avgBenefitPerCase: kpi.avgBenefitPerCase || 0,
-          highValueCases: kpi.highValueCases || 0,
-          avgResponseTime: kpi.avgResponseTime || 0,
-          avgCaseCompletionTime: kpi.avgCaseCompletionTime || 0,
-          documentsProcessed: kpi.documentsProcessed || 0,
-          documentsVerified: kpi.documentsVerified || 0,
-          avgDocumentQuality: (kpi.avgDocumentQuality || 0) * 100,
-          crossEnrollmentsIdentified: kpi.crossEnrollmentsIdentified || 0,
-          aiRecommendationsAccepted: kpi.aiRecommendationsAccepted || 0,
-          performanceScore: kpi.performanceScore || 0,
-        });
-      }
-    }
-    
-    const topPerformers = allTimeKpis
-      .sort((a, b) => (b.performanceScore || 0) - (a.performanceScore || 0))
-      .slice(0, 5);
-    
-    const trends = [];
-    for (let i = 11; i >= 0; i--) {
-      const date = new Date();
-      date.setMonth(date.getMonth() - i);
-      const periodLabel = date.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
-      
-      let periodCases = 0;
-      let periodBenefits = 0;
-      let periodSuccessRates = [];
-      
-      for (const navigator of navigators) {
-        const kpis = await storage.getNavigatorKpis(navigator.id, 'monthly', 12);
-        const relevantKpi = kpis.find(k => {
-          const kpiDate = new Date(k.periodStart);
-          return kpiDate.getMonth() === date.getMonth() && kpiDate.getFullYear() === date.getFullYear();
-        });
-        
-        if (relevantKpi) {
-          periodCases += relevantKpi.casesClosed || 0;
-          periodBenefits += relevantKpi.totalBenefitsSecured || 0;
-          if (relevantKpi.successRate) {
-            periodSuccessRates.push(relevantKpi.successRate);
-          }
-        }
-      }
-      
-      const avgPeriodSuccessRate = periodSuccessRates.length > 0
-        ? periodSuccessRates.reduce((sum, rate) => sum + rate, 0) / periodSuccessRates.length
-        : 0;
-      
-      trends.push({
-        period: periodLabel,
-        cases: periodCases,
-        benefits: periodBenefits,
-        successRate: avgPeriodSuccessRate,
-      });
-    }
-    
-    const activeCasesResult = await db.execute(
-      sql`SELECT COUNT(*) as count FROM client_cases WHERE status IN ('active', 'in_progress', 'pending')`
-    );
-    const activeCases = Number((activeCasesResult.rows[0] as any)?.count || 0);
-    
-    res.json({
-      totalNavigators: navigators.length,
-      activeCases,
-      totalCasesThisMonth,
-      totalBenefitsThisMonth,
-      avgSuccessRate,
-      topPerformers,
-      trends,
-    });
   }));
 
   // ===========================
@@ -10518,8 +10523,10 @@ If the question cannot be answered with the available information, say so clearl
   
   // ============================================================================
   // SMS/TWILIO - Text-based benefit screening and intake
+  // COMMENTED OUT DURING SCHEMA ROLLBACK
   // ============================================================================
   
+  /*
   // Admin API endpoints for SMS management
   const { getTwilioConfig } = await import("./services/twilioConfig");
   const { getConversationStats, isSmsEnabledForTenant } = await import("./services/smsService");
@@ -10568,6 +10575,7 @@ If the question cannot be answered with the available information, say so clearl
   // Twilio webhook routes
   const twilioWebhooksRouter = (await import("./routes/twilioWebhooks")).default;
   app.use("/api/sms", twilioWebhooksRouter);
+  */
   
   // ============================================================================
   // API DOCUMENTATION - OpenAPI/Swagger endpoints
@@ -10844,94 +10852,6 @@ If the question cannot be answered with the available information, say so clearl
   }));
 
   // ============================================================================
-  // CROSS-VALIDATION ENDPOINTS - Document Consistency Checking
-  // ============================================================================
-
-  // Get validation results and discrepancies for a VITA session
-  app.get('/api/vita-sessions/:id/validation', requireAuth, asyncHandler(async (req: Request, res: Response) => {
-    const { id } = req.params;
-    
-    // Get the latest validation result for this VITA session
-    const validationResult = await storage.getDocumentValidationResultByVitaSession(id);
-    
-    if (!validationResult) {
-      return res.json({
-        status: 'not_validated',
-        message: 'No validation has been performed for this VITA session yet'
-      });
-    }
-    
-    // Get all discrepancies for this validation result
-    const discrepancies = await storage.getDocumentDiscrepanciesByValidation(validationResult.id);
-    
-    res.json({
-      validationResult,
-      discrepancies,
-      summary: {
-        overallStatus: validationResult.overallStatus,
-        totalChecks: validationResult.totalChecks,
-        errorsFound: validationResult.errorsFound,
-        warningsFound: validationResult.warningsFound,
-        validatedAt: validationResult.validatedAt,
-        discrepancyCount: discrepancies.length
-      }
-    });
-  }));
-
-  // Trigger re-validation for a VITA session
-  app.post('/api/vita-sessions/:id/revalidate', requireAuth, asyncHandler(async (req: Request, res: Response) => {
-    const { id } = req.params;
-    
-    // Verify the VITA session exists
-    const vitaSession = await storage.getVitaIntakeSession(id);
-    if (!vitaSession) {
-      throw notFoundError('VITA intake session not found');
-    }
-    
-    // Import and trigger cross-validation service
-    const { crossValidationService } = await import('./services/crossValidationService');
-    
-    console.log(`[API] Manual re-validation triggered for VITA session ${id}`);
-    
-    // Run validation synchronously to return results immediately
-    const result = await crossValidationService.validateVitaSession(id);
-    
-    if (result.status === 'skipped') {
-      return res.json({
-        status: 'skipped',
-        message: result.reason || 'Validation was skipped',
-        details: result
-      });
-    }
-    
-    if (result.status === 'failed') {
-      return res.status(500).json({
-        status: 'failed',
-        message: 'Validation failed',
-        error: result.error
-      });
-    }
-    
-    // Fetch the complete validation results
-    const validationResult = await storage.getDocumentValidationResultByVitaSession(id);
-    const discrepancies = validationResult 
-      ? await storage.getDocumentDiscrepanciesByValidation(validationResult.id)
-      : [];
-    
-    res.json({
-      status: 'completed',
-      validationResult,
-      discrepancies,
-      summary: {
-        overallStatus: result.overallStatus,
-        errorsFound: result.errorsFound,
-        warningsFound: result.warningsFound,
-        totalDiscrepancies: discrepancies.length
-      }
-    });
-  }));
-
-  // ============================================================================
   // DEMO DATA ENDPOINTS - For Maryland Universal Benefits-Tax Navigator Showcase
   // ============================================================================
 
@@ -11036,6 +10956,86 @@ If the question cannot be answered with the available information, say so clearl
     const metrics = demoDataService.getMetrics();
     res.json(metrics);
   }));
+
+  // ============================================================================
+  // Mount MAIVE Routes
+  // ============================================================================
+  const maiveRouter = (await import('./api/maive.routes')).default;
+  app.use('/api/maive', (req: any, res, next) => {
+    req.storage = storage; // Attach storage to request
+    next();
+  }, maiveRouter);
+
+  // ============================================================================
+  // Mount QC Analytics Routes
+  // ============================================================================
+  const qcAnalyticsRouter = (await import('./api/qcAnalytics.routes')).default;
+  app.use('/api/qc-analytics', qcAnalyticsRouter);
+
+  // ============================================================================
+  // Mount Benefits Navigation Routes
+  // ============================================================================
+  const benefitsNavigationRouter = (await import('./api/benefitsNavigation.routes')).default;
+  app.use('/api/benefits-navigation', benefitsNavigationRouter);
+
+  // ============================================================================
+  // Mount Decision Points Routes
+  // ============================================================================
+  const decisionPointsRouter = (await import('./api/decisionPoints.routes')).default;
+  app.use('/api/decision-points', decisionPointsRouter);
+
+  // ============================================================================
+  // Mount Info Cost Reduction Routes
+  // ============================================================================
+  const infoCostReductionRouter = (await import('./api/infoCostReduction.routes')).default;
+  app.use('/api/info-cost-reduction', infoCostReductionRouter);
+
+  // ============================================================================
+  // Mount Multi-State Rules Routes
+  // ============================================================================
+  const multiStateRulesRouter = (await import('./api/multiStateRules.routes')).default;
+  app.use('/api/multi-state-rules', multiStateRulesRouter);
+
+  // ============================================================================
+  // Mount Cross-Enrollment Intelligence Routes
+  // ============================================================================
+  const crossEnrollmentRouter = (await import('./api/crossEnrollment.routes')).default;
+  app.use('/api/cross-enrollment', crossEnrollmentRouter);
+
+  // ============================================================================
+  // Mount State Configuration Routes - Multi-State White-Labeling
+  // ============================================================================
+  const { registerStateConfigurationRoutes } = await import('./routes/stateConfiguration.routes');
+  registerStateConfigurationRoutes(app);
+
+  // ============================================================================
+  // Mount Cross-State Rules Routes - Cross-State Rules Architecture
+  // ============================================================================
+  registerCrossStateRulesRoutes(app);
+
+  // ============================================================================
+  // Mount E-File Routes - IRS Electronic Filing Infrastructure
+  // ============================================================================
+  const { registerEFileRoutes } = await import('./api/efile.routes');
+  registerEFileRoutes(app);
+  
+  // ============================================================================
+  // Mount Maryland E-File Routes - Maryland iFile Infrastructure
+  // ============================================================================
+  const marylandEFileRouter = (await import('./api/marylandEfile.routes')).default;
+  app.use('/api/maryland/efile', marylandEFileRouter);
+
+  // ============================================================================
+  // Mount GDPR Compliance Routes - Data Subject Rights & Privacy
+  // ============================================================================
+  const gdprRouter = (await import('./routes/gdpr.routes')).default;
+  app.use('/api/gdpr', gdprRouter);
+
+  // ============================================================================
+  // Mount HIPAA Compliance Routes - Healthcare Data Protection & PHI Security
+  // ============================================================================
+  const hipaaRouter = (await import('./routes/hipaa.routes')).default;
+  app.use('/api/hipaa', hipaaRouter);
 
   const httpServer = createServer(app);
   

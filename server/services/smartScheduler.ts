@@ -33,6 +33,7 @@ export interface ScheduleConfig {
 
 export class SmartScheduler {
   private intervals: Map<string, NodeJS.Timeout> = new Map();
+  private initialCheckTimers: Map<string, NodeJS.Timeout> = new Map();
   private readonly DEFAULT_CONGRESS = 119;
   private configsCache: ScheduleConfig[] | null = null;
   
@@ -145,6 +146,28 @@ export class SmartScheduler {
             }
           } catch (error) {
             log(`❌ FNS State Options check failed: ${error}`);
+          }
+        },
+      },
+      {
+        name: 'bar_checkpoint_check',
+        cronExpression: '0 0 * * *', // Daily at 9 AM (uses 0 0 for midnight, will run daily)
+        description: 'BAR checkpoint monitoring (daily at 9 AM - upcoming and overdue checkpoints)',
+        enabled: true,
+        checkFunction: async () => {
+          log('📅 Smart Scheduler: Running BAR checkpoint check...');
+          try {
+            const { barNotificationService } = await import('./barNotification.service');
+            
+            log('📋 BAR: Checking upcoming checkpoints...');
+            const upcomingCount = await barNotificationService.checkUpcomingCheckpoints();
+            log(`✅ BAR: Sent ${upcomingCount} upcoming checkpoint reminders`);
+            
+            log('⚠️  BAR: Checking overdue checkpoints...');
+            const overdueCount = await barNotificationService.checkOverdueCheckpoints();
+            log(`📨 BAR: Sent ${overdueCount} overdue checkpoint alerts`);
+          } catch (error) {
+            log(`❌ BAR checkpoint check failed: ${error}`);
           }
         },
       },
@@ -280,11 +303,21 @@ export class SmartScheduler {
         log(displayText);
         log(`   ${config.description}`);
         
-        // Run initial check immediately for non-session-aware sources
-        // Session-aware sources check their own status
-        if (!config.sessionAware) {
-          await config.checkFunction();
-        }
+        // OPTIMIZATION: Defer initial checks to background (run after 5 seconds)
+        // This prevents blocking server startup with long-running downloads/API calls
+        // Session-aware sources check their own status before running
+        const initialCheckTimer = setTimeout(async () => {
+          try {
+            await config.checkFunction();
+          } catch (error) {
+            log(`❌ Initial background check failed for ${config.name}: ${error}`);
+          }
+          // Remove timer from tracking map after execution
+          this.initialCheckTimers.delete(config.name);
+        }, 5000); // Run first check 5 seconds after startup
+        
+        // Track timer for cleanup on shutdown
+        this.initialCheckTimers.set(config.name, initialCheckTimer);
         
         // Schedule periodic checks
         const interval = setInterval(async () => {
@@ -315,11 +348,20 @@ export class SmartScheduler {
    */
   stopAll(): void {
     log('⏹️  Stopping Smart Scheduler...');
+    
+    // Clear recurring intervals
     Array.from(this.intervals.entries()).forEach(([name, interval]) => {
       clearInterval(interval);
       log(`   Stopped: ${name}`);
     });
     this.intervals.clear();
+    
+    // Clear pending initial check timers (shutdown hygiene)
+    Array.from(this.initialCheckTimers.entries()).forEach(([name, timer]) => {
+      clearTimeout(timer);
+      log(`   Canceled pending initial check: ${name}`);
+    });
+    this.initialCheckTimers.clear();
   }
 
   /**

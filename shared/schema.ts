@@ -97,18 +97,9 @@ export const documents = pgTable("documents", {
   tenantId: varchar("tenant_id").references((): any => tenants.id), // Multi-tenant isolation
   status: text("status").notNull().default("uploaded"), // uploaded, processing, processed, failed
   processingStatus: jsonb("processing_status"), // detailed processing info
-  qualityScore: real("quality_score"), // 0-1 overall weighted quality score
+  qualityScore: real("quality_score"), // 0-1 quality assessment
   ocrAccuracy: real("ocr_accuracy"), // 0-1 OCR accuracy
-  qualityMetrics: jsonb("quality_metrics"), // per-page blur, OCR confidence, completeness, format scores
-  qualityFlags: jsonb("quality_flags"), // array of issue objects with severity (error/warning/info)
-  qualitySuggestions: jsonb("quality_suggestions"), // actionable correction messages for users
-  analyzedAt: timestamp("analyzed_at"), // when quality analysis was performed
   metadata: jsonb("metadata"), // extracted metadata
-  // Auto-Enhancement Pipeline fields
-  enhancementStatus: varchar("enhancement_status"), // 'pending', 'completed', 'failed', 'skipped'
-  enhancedObjectPath: varchar("enhanced_object_path"), // GCS path to enhanced version
-  enhancementMetadata: jsonb("enhancement_metadata"), // { appliedSteps, params, qualityDelta, errors }
-  qualityImprovement: real("quality_improvement"), // delta between original and enhanced quality scores
   // Audit trail fields for golden source documents
   sourceUrl: text("source_url"), // original URL where document was downloaded from
   downloadedAt: timestamp("downloaded_at"), // when document was ingested from source
@@ -184,21 +175,6 @@ export const documentVersions = pgTable("document_versions", {
   isActive: boolean("is_active").default(true).notNull(), // Current active version
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
-
-// Document Quality Events - Historical tracking of quality analysis
-export const documentQualityEvents = pgTable("document_quality_events", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  documentId: varchar("document_id").references(() => documents.id, { onDelete: "cascade" }).notNull(),
-  qualityScore: real("quality_score").notNull(), // 0-1 overall weighted score
-  metrics: jsonb("metrics").notNull(), // { blur: 0.8, ocrConfidence: 0.9, completeness: true, format: true }
-  issues: jsonb("issues"), // severity-tiered issue objects: [{ severity: 'error', type: 'blur', message: '...', page: 1 }]
-  suggestions: jsonb("suggestions"), // actionable correction messages: ['Retake photo with better lighting']
-  analyzedAt: timestamp("analyzed_at").defaultNow().notNull(),
-}, (table) => ({
-  documentIdIdx: index("quality_events_document_id_idx").on(table.documentId),
-  analyzedAtIdx: index("quality_events_analyzed_at_idx").on(table.analyzedAt),
-  qualityScoreIdx: index("quality_events_quality_score_idx").on(table.qualityScore),
-}));
 
 // RAG search results for transparency and caching
 export const searchResults = pgTable("search_results", {
@@ -302,13 +278,6 @@ export const trainingJobsRelations = relations(trainingJobs, ({ one }) => ({
 export const documentVersionsRelations = relations(documentVersions, ({ one }) => ({
   document: one(documents, {
     fields: [documentVersions.documentId],
-    references: [documents.id],
-  }),
-}));
-
-export const documentQualityEventsRelations = relations(documentQualityEvents, ({ one }) => ({
-  document: one(documents, {
-    fields: [documentQualityEvents.documentId],
     references: [documents.id],
   }),
 }));
@@ -835,6 +804,8 @@ export const eligibilityCalculations = pgTable("eligibility_calculations", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   userId: varchar("user_id").references(() => users.id),
   benefitProgramId: varchar("benefit_program_id").references(() => benefitPrograms.id).notNull(),
+  tenantId: varchar("tenant_id").references((): any => tenants.id), // Multi-tenant isolation
+  stateCode: text("state_code"), // Jurisdiction state code (MD, PA, etc.)
   householdSize: integer("household_size").notNull(),
   grossMonthlyIncome: integer("gross_monthly_income").notNull(), // in cents
   netMonthlyIncome: integer("net_monthly_income").notNull(), // in cents
@@ -995,6 +966,8 @@ export const clientCases = pgTable("client_cases", {
   benefitProgramId: varchar("benefit_program_id").references(() => benefitPrograms.id).notNull(),
   assignedNavigator: varchar("assigned_navigator").references(() => users.id),
   tenantId: varchar("tenant_id").references((): any => tenants.id), // Multi-tenant isolation
+  stateCode: text("state_code"), // Jurisdiction state code (MD, PA, etc.)
+  countyCode: text("county_code"), // County/locality code for sub-jurisdictions
   status: text("status").notNull().default("screening"), // screening, documents_pending, submitted, approved, denied
   householdSize: integer("household_size"),
   estimatedIncome: integer("estimated_income"), // in cents
@@ -1009,6 +982,7 @@ export const clientCases = pgTable("client_cases", {
 }, (table) => ({
   benefitProgramStatusIdx: index("client_cases_benefit_program_status_idx").on(table.benefitProgramId, table.status),
   navigatorStatusIdx: index("client_cases_assigned_navigator_status_idx").on(table.assignedNavigator, table.status),
+  tenantStateIdx: index("client_cases_tenant_state_idx").on(table.tenantId, table.stateCode),
   createdAtIdx: index("client_cases_created_at_idx").on(table.createdAt),
 }));
 
@@ -1750,70 +1724,10 @@ export const insertDocumentVersionSchema = createInsertSchema(documentVersions).
   createdAt: true,
 });
 
-export const insertDocumentQualityEventSchema = createInsertSchema(documentQualityEvents).omit({
-  id: true,
-  analyzedAt: true,
-});
-
 export const insertSearchResultSchema = createInsertSchema(searchResults).omit({
   id: true,
   createdAt: true,
 });
-
-// Enhancement-related Zod schemas
-export const EnhancementStepSchema = z.object({
-  type: z.enum(['rotation', 'noise_reduction', 'contrast', 'sharpen', 'binarization']),
-  params: z.record(z.any()),
-});
-
-export const EnhancementMetadataSchema = z.object({
-  appliedSteps: z.array(EnhancementStepSchema).optional(),
-  params: z.array(EnhancementStepSchema).optional(),
-  qualityDelta: z.number().optional(),
-  errors: z.array(z.string()).optional(),
-  reason: z.string().optional(),
-  originalScore: z.number().optional(),
-  enhancedScore: z.number().optional(),
-  timestamp: z.date().optional(),
-});
-
-export const QualityMetricsSchema = z.object({
-  pageCount: z.number().optional(),
-  perPageMetrics: z.array(z.any()).optional(),
-  blur: z.number().optional(),
-  blurScore: z.number().optional(),
-  ocrConfidence: z.number().optional(),
-  completeness: z.boolean().optional(),
-  format: z.boolean().optional(),
-  contrastScore: z.number().optional(),
-  noiseScore: z.number().optional(),
-  skewAngle: z.number().optional(),
-  overallScore: z.number().optional(),
-});
-
-export const QualityIssueSchema = z.object({
-  severity: z.enum(['error', 'warning', 'info']),
-  type: z.string(),
-  message: z.string(),
-  details: z.record(z.any()).optional(),
-  page: z.number().optional(),
-});
-
-export const QualityAnalysisResultSchema = z.object({
-  documentId: z.string(),
-  qualityScore: z.number(),
-  overallScore: z.number().optional(),
-  metrics: QualityMetricsSchema,
-  issues: z.array(QualityIssueSchema).optional(),
-  suggestions: z.array(z.string()).optional(),
-  analyzedAt: z.date(),
-});
-
-export type EnhancementStep = z.infer<typeof EnhancementStepSchema>;
-export type EnhancementMetadata = z.infer<typeof EnhancementMetadataSchema>;
-export type QualityMetrics = z.infer<typeof QualityMetricsSchema>;
-export type QualityIssue = z.infer<typeof QualityIssueSchema>;
-export type QualityAnalysisResult = z.infer<typeof QualityAnalysisResultSchema>;
 
 // Types
 export type InsertUser = z.infer<typeof insertUserSchema>;
@@ -1842,9 +1756,6 @@ export type TrainingJob = typeof trainingJobs.$inferSelect;
 
 export type InsertDocumentVersion = z.infer<typeof insertDocumentVersionSchema>;
 export type DocumentVersion = typeof documentVersions.$inferSelect;
-
-export type InsertDocumentQualityEvent = z.infer<typeof insertDocumentQualityEventSchema>;
-export type DocumentQualityEvent = typeof documentQualityEvents.$inferSelect;
 
 export type InsertSearchResult = z.infer<typeof insertSearchResultSchema>;
 export type SearchResult = typeof searchResults.$inferSelect;
@@ -5471,6 +5382,296 @@ export type InsertTenantBranding = z.infer<typeof insertTenantBrandingSchema>;
 export type TenantBranding = typeof tenantBranding.$inferSelect;
 
 // ============================================================================
+// PHONE SYSTEM TABLES - Voice Call Infrastructure
+// ============================================================================
+
+// Phone System Configuration for Multi-tenant Setup
+export const phoneSystemConfigs = pgTable("phone_system_configs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").references((): any => tenants.id).notNull(),
+  systemType: text("system_type").notNull(), // twilio, asterisk, freepbx, cisco, custom_sip
+  systemName: text("system_name").notNull(),
+  
+  // SIP/PBX Configuration
+  sipHost: text("sip_host"), // SIP server hostname/IP
+  sipPort: integer("sip_port").default(5060),
+  sipUsername: text("sip_username"),
+  sipPassword: text("sip_password"), // encrypted
+  sipDomain: text("sip_domain"),
+  sipTransport: text("sip_transport").default("udp"), // udp, tcp, tls
+  
+  // Twilio Configuration
+  twilioAccountSid: text("twilio_account_sid"),
+  twilioAuthToken: text("twilio_auth_token"), // encrypted
+  twilioPhoneNumber: text("twilio_phone_number"),
+  twilioApiKey: text("twilio_api_key"),
+  twilioApiSecret: text("twilio_api_secret"), // encrypted
+  
+  // WebRTC Configuration
+  stunServers: jsonb("stun_servers"), // Array of STUN server URLs
+  turnServers: jsonb("turn_servers"), // Array of TURN server configs
+  
+  // Features
+  supportsRecording: boolean("supports_recording").default(true),
+  supportsTranscription: boolean("supports_transcription").default(false),
+  supportsWhisper: boolean("supports_whisper").default(false),
+  supportsDTMF: boolean("supports_dtmf").default(true),
+  
+  priority: integer("priority").default(0), // Higher priority systems tried first
+  isActive: boolean("is_active").default(true).notNull(),
+  isDefault: boolean("is_default").default(false), // Default system for tenant
+  
+  metadata: jsonb("metadata"), // Additional system-specific config
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  tenantIdIdx: index("phone_system_configs_tenant_id_idx").on(table.tenantId),
+  tenantActiveIdx: index("phone_system_configs_tenant_active_idx").on(table.tenantId, table.isActive),
+}));
+
+// Phone Call Records - Main call tracking table
+export const phoneCallRecords = pgTable("phone_call_records", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").references((): any => tenants.id).notNull(),
+  systemConfigId: varchar("system_config_id").references(() => phoneSystemConfigs.id),
+  
+  // Call identifiers
+  callId: text("call_id").notNull().unique(), // Unique call identifier (SID for Twilio, UUID for others)
+  parentCallId: text("parent_call_id"), // For transfers/conferences
+  sessionId: text("session_id"), // WebRTC session ID if applicable
+  
+  // Call parties
+  fromNumber: text("from_number").notNull(),
+  toNumber: text("to_number").notNull(),
+  agentId: varchar("agent_id").references(() => users.id),
+  clientId: varchar("client_id").references(() => users.id),
+  
+  // Call details
+  direction: text("direction").notNull(), // inbound, outbound
+  status: text("status").notNull(), // queued, ringing, in-progress, completed, failed, busy, no-answer
+  disposition: text("disposition"), // answered, voicemail, abandoned, transferred
+  
+  // Timestamps
+  queuedAt: timestamp("queued_at"),
+  startTime: timestamp("start_time"),
+  answerTime: timestamp("answer_time"),
+  endTime: timestamp("end_time"),
+  duration: integer("duration"), // seconds
+  talkTime: integer("talk_time"), // actual talk time in seconds
+  holdTime: integer("hold_time"), // total hold time in seconds
+  
+  // Recording & Transcription
+  recordingUrl: text("recording_url"),
+  recordingDuration: integer("recording_duration"),
+  transcriptionText: text("transcription_text"),
+  transcriptionUrl: text("transcription_url"),
+  consentGiven: boolean("consent_given").default(false),
+  consentTimestamp: timestamp("consent_timestamp"),
+  
+  // IVR Navigation
+  ivrPath: jsonb("ivr_path"), // Array of IVR menu selections
+  ivrCompletedAt: timestamp("ivr_completed_at"),
+  dtmfInputs: jsonb("dtmf_inputs"), // DTMF tones pressed
+  
+  // Quality & Analytics
+  qualityScore: real("quality_score"), // 0-1 call quality score
+  sentimentScore: real("sentiment_score"), // -1 to 1 sentiment analysis
+  audioQualityMetrics: jsonb("audio_quality_metrics"), // jitter, packet loss, etc.
+  
+  // Cost tracking
+  cost: integer("cost"), // in cents
+  billingDuration: integer("billing_duration"), // billable duration in seconds
+  
+  notes: text("notes"),
+  metadata: jsonb("metadata"), // Additional call-specific data
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  callIdIdx: index("phone_call_records_call_id_idx").on(table.callId),
+  tenantIdIdx: index("phone_call_records_tenant_id_idx").on(table.tenantId),
+  agentIdIdx: index("phone_call_records_agent_id_idx").on(table.agentId),
+  clientIdIdx: index("phone_call_records_client_id_idx").on(table.clientId),
+  statusIdx: index("phone_call_records_status_idx").on(table.status),
+  startTimeIdx: index("phone_call_records_start_time_idx").on(table.startTime),
+}));
+
+// IVR Menu Configuration
+export const ivrMenus = pgTable("ivr_menus", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").references((): any => tenants.id).notNull(),
+  menuId: text("menu_id").notNull(), // Unique menu identifier
+  parentMenuId: text("parent_menu_id"), // For nested menus
+  
+  // Menu properties
+  name: text("name").notNull(),
+  description: text("description"),
+  greetingText: text("greeting_text").notNull(), // Text to be spoken
+  greetingAudioUrl: text("greeting_audio_url"), // Pre-recorded audio
+  
+  // Language support
+  language: text("language").default("en").notNull(), // en, es, etc.
+  voiceGender: text("voice_gender").default("female"), // male, female
+  voiceName: text("voice_name"), // Specific TTS voice name
+  
+  // Input handling
+  inputType: text("input_type").default("dtmf").notNull(), // dtmf, voice, both
+  maxDigits: integer("max_digits").default(1),
+  timeout: integer("timeout").default(5), // seconds to wait for input
+  maxRetries: integer("max_retries").default(3),
+  
+  // Natural language understanding (for voice input)
+  speechModel: text("speech_model"), // Speech recognition model
+  intentKeywords: jsonb("intent_keywords"), // Keywords for voice recognition
+  
+  isActive: boolean("is_active").default(true).notNull(),
+  priority: integer("priority").default(0), // Menu ordering
+  metadata: jsonb("metadata"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  tenantMenuIdx: index("ivr_menus_tenant_menu_idx").on(table.tenantId, table.menuId),
+  parentMenuIdx: index("ivr_menus_parent_menu_idx").on(table.parentMenuId),
+}));
+
+// IVR Menu Options
+export const ivrMenuOptions = pgTable("ivr_menu_options", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  menuId: varchar("menu_id").references(() => ivrMenus.id, { onDelete: "cascade" }).notNull(),
+  
+  // Option trigger
+  dtmfKey: text("dtmf_key"), // "1", "2", "#", "*", etc.
+  voiceKeyword: text("voice_keyword"), // "benefits", "status", etc.
+  
+  // Option details
+  label: text("label").notNull(), // "Benefit Screening"
+  promptText: text("prompt_text").notNull(), // "Press 1 for benefit screening"
+  
+  // Action
+  actionType: text("action_type").notNull(), // menu, transfer, callback, hangup, record
+  actionTarget: text("action_target"), // Menu ID, phone number, queue name
+  actionMetadata: jsonb("action_metadata"), // Additional action-specific data
+  
+  priority: integer("priority").default(0),
+  isActive: boolean("is_active").default(true).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+  menuIdIdx: index("ivr_menu_options_menu_id_idx").on(table.menuId),
+  dtmfKeyIdx: index("ivr_menu_options_dtmf_key_idx").on(table.menuId, table.dtmfKey),
+}));
+
+// Call Queue Management
+export const callQueues = pgTable("call_queues", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").references((): any => tenants.id).notNull(),
+  
+  queueName: text("queue_name").notNull(),
+  description: text("description"),
+  
+  // Queue configuration
+  maxWaitTime: integer("max_wait_time").default(1800), // seconds (30 min default)
+  maxQueueSize: integer("max_queue_size").default(100),
+  priorityEnabled: boolean("priority_enabled").default(false),
+  
+  // Music/Messages
+  holdMusicUrl: text("hold_music_url"),
+  positionAnnouncementInterval: integer("position_announcement_interval").default(60), // seconds
+  waitTimeAnnouncementInterval: integer("wait_time_announcement_interval").default(120), // seconds
+  
+  // Routing
+  routingStrategy: text("routing_strategy").default("round_robin"), // round_robin, least_recent, skills_based
+  overflowQueueId: varchar("overflow_queue_id"), // Transfer to another queue if full
+  
+  // Operating hours
+  operatingHours: jsonb("operating_hours"), // Schedule by day of week
+  afterHoursAction: text("after_hours_action"), // voicemail, transfer, message
+  afterHoursTarget: text("after_hours_target"),
+  
+  isActive: boolean("is_active").default(true).notNull(),
+  metadata: jsonb("metadata"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  tenantQueueIdx: index("call_queues_tenant_queue_idx").on(table.tenantId, table.queueName),
+}));
+
+// Call Queue Entries - Active calls in queue
+export const callQueueEntries = pgTable("call_queue_entries", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  queueId: varchar("queue_id").references(() => callQueues.id, { onDelete: "cascade" }).notNull(),
+  callRecordId: varchar("call_record_id").references(() => phoneCallRecords.id).notNull(),
+  
+  position: integer("position").notNull(),
+  priority: integer("priority").default(0), // Higher priority served first
+  
+  joinedAt: timestamp("joined_at").defaultNow().notNull(),
+  abandonedAt: timestamp("abandoned_at"),
+  answeredAt: timestamp("answered_at"),
+  
+  estimatedWaitTime: integer("estimated_wait_time"), // seconds
+  actualWaitTime: integer("actual_wait_time"), // seconds
+  
+  status: text("status").notNull(), // waiting, abandoned, answered
+  metadata: jsonb("metadata"),
+}, (table) => ({
+  queueIdIdx: index("call_queue_entries_queue_id_idx").on(table.queueId),
+  statusIdx: index("call_queue_entries_status_idx").on(table.status),
+  positionIdx: index("call_queue_entries_position_idx").on(table.queueId, table.position),
+}));
+
+// Call Recording Consent Tracking
+export const callRecordingConsents = pgTable("call_recording_consents", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  callRecordId: varchar("call_record_id").references(() => phoneCallRecords.id).notNull(),
+  
+  consentType: text("consent_type").notNull(), // verbal, dtmf, written
+  consentGiven: boolean("consent_given").notNull(),
+  consentTimestamp: timestamp("consent_timestamp").defaultNow().notNull(),
+  
+  // Consent details
+  consentMethod: text("consent_method"), // How consent was obtained
+  consentText: text("consent_text"), // What was said/shown
+  dtmfResponse: text("dtmf_response"), // DTMF key pressed for consent
+  
+  // Legal compliance
+  stateCode: text("state_code"), // State where call originated
+  requiresTwoPartyConsent: boolean("requires_two_party_consent"),
+  
+  metadata: jsonb("metadata"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+  callRecordIdx: index("call_recording_consents_call_record_idx").on(table.callRecordId),
+}));
+
+// Agent Call Status - Real-time agent availability
+export const agentCallStatus = pgTable("agent_call_status", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  agentId: varchar("agent_id").references(() => users.id).notNull().unique(),
+  
+  status: text("status").notNull(), // available, busy, on_call, after_call_work, break, offline
+  currentCallId: varchar("current_call_id").references(() => phoneCallRecords.id),
+  
+  // Statistics
+  callsHandledToday: integer("calls_handled_today").default(0),
+  totalTalkTimeToday: integer("total_talk_time_today").default(0), // seconds
+  averageHandleTime: integer("average_handle_time"), // seconds
+  
+  // Availability
+  availableSince: timestamp("available_since"),
+  lastCallEndedAt: timestamp("last_call_ended_at"),
+  nextAvailableAt: timestamp("next_available_at"),
+  
+  // Queue assignments
+  assignedQueues: jsonb("assigned_queues"), // Array of queue IDs
+  skills: jsonb("skills"), // Array of skill tags for routing
+  
+  metadata: jsonb("metadata"),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  statusIdx: index("agent_call_status_status_idx").on(table.status),
+  agentIdIdx: index("agent_call_status_agent_id_idx").on(table.agentId),
+}));
+
+// ============================================================================
 // MONITORING METRICS - Error tracking and performance monitoring
 // ============================================================================
 
@@ -6158,508 +6359,1362 @@ export type InsertAppointment = z.infer<typeof insertAppointmentSchema>;
 export type Appointment = typeof appointments.$inferSelect;
 
 // ============================================================================
-// DOCUMENT CROSS-VALIDATION ENGINE
+// MAIVE - AI Validation Engine Tables
 // ============================================================================
 
-// Document Validation Results - Overall validation status for a VITA session
-export const documentValidationResults = pgTable("document_validation_results", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  vitaIntakeSessionId: varchar("vita_intake_session_id").references(() => vitaIntakeSessions.id, { onDelete: "cascade" }).notNull(),
-  validatedAt: timestamp("validated_at").defaultNow().notNull(),
-  overallStatus: varchar("overall_status").notNull(), // 'passed', 'warnings', 'errors'
-  totalChecks: integer("total_checks").notNull().default(0),
-  errorsFound: integer("errors_found").notNull().default(0),
-  warningsFound: integer("warnings_found").notNull().default(0),
-  summary: jsonb("summary"), // High-level validation summary: { ruleTypes: string[] }
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-}, (table) => ({
-  vitaSessionIdx: index("validation_results_vita_session_idx").on(table.vitaIntakeSessionId),
-  overallStatusIdx: index("validation_results_status_idx").on(table.overallStatus),
-  validatedAtIdx: index("validation_results_validated_at_idx").on(table.validatedAt),
-}));
-
-// Document Discrepancies - Individual cross-validation issues
-export const documentDiscrepancies = pgTable("document_discrepancies", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  validationResultId: varchar("validation_result_id").references(() => documentValidationResults.id, { onDelete: "cascade" }).notNull(),
-  documentId1: varchar("document_id_1").references(() => documents.id), // First document in comparison
-  documentId2: varchar("document_id_2").references(() => documents.id), // Second document (if applicable)
-  taxDocumentId1: varchar("tax_document_id_1").references(() => taxDocuments.id), // For tax-specific documents
-  taxDocumentId2: varchar("tax_document_id_2").references(() => taxDocuments.id), // For tax-specific documents
-  fieldKey: varchar("field_key").notNull(), // e.g., 'employer_name', 'ssn', 'total_wages'
-  expectedValue: text("expected_value"),
-  actualValue: text("actual_value"),
-  severity: varchar("severity").notNull(), // 'error', 'warning', 'info'
-  rationale: text("rationale"), // Explanation of why this is a discrepancy
-  ruleType: varchar("rule_type"), // e.g., 'W2_PAYSTUB_WAGES', 'W2_SSN_CONSISTENCY'
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-}, (table) => ({
-  validationResultIdx: index("discrepancies_validation_result_idx").on(table.validationResultId),
-  severityIdx: index("discrepancies_severity_idx").on(table.severity),
-  ruleTypeIdx: index("discrepancies_rule_type_idx").on(table.ruleType),
-  documentId1Idx: index("discrepancies_document_id1_idx").on(table.documentId1),
-}));
-
-// Relations
-export const documentValidationResultsRelations = relations(documentValidationResults, ({ one, many }) => ({
-  vitaIntakeSession: one(vitaIntakeSessions, {
-    fields: [documentValidationResults.vitaIntakeSessionId],
-    references: [vitaIntakeSessions.id],
-  }),
-  discrepancies: many(documentDiscrepancies),
-}));
-
-export const documentDiscrepanciesRelations = relations(documentDiscrepancies, ({ one }) => ({
-  validationResult: one(documentValidationResults, {
-    fields: [documentDiscrepancies.validationResultId],
-    references: [documentValidationResults.id],
-  }),
-  document1: one(documents, {
-    fields: [documentDiscrepancies.documentId1],
-    references: [documents.id],
-  }),
-  document2: one(documents, {
-    fields: [documentDiscrepancies.documentId2],
-    references: [documents.id],
-  }),
-  taxDocument1: one(taxDocuments, {
-    fields: [documentDiscrepancies.taxDocumentId1],
-    references: [taxDocuments.id],
-  }),
-  taxDocument2: one(taxDocuments, {
-    fields: [documentDiscrepancies.taxDocumentId2],
-    references: [taxDocuments.id],
-  }),
-}));
-
-// Types
-export type DocumentValidationResult = typeof documentValidationResults.$inferSelect;
-export type InsertDocumentValidationResult = typeof documentValidationResults.$inferInsert;
-export type DocumentDiscrepancy = typeof documentDiscrepancies.$inferSelect;
-export type InsertDocumentDiscrepancy = typeof documentDiscrepancies.$inferInsert;
-
-// Insert schemas
-export const insertDocumentValidationResultSchema = createInsertSchema(documentValidationResults).omit({
-  id: true,
-  createdAt: true,
-  validatedAt: true,
-});
-
-export const insertDocumentDiscrepancySchema = createInsertSchema(documentDiscrepancies).omit({
-  id: true,
-  createdAt: true,
-});
-
-// Zod schemas for cross-validation results
-export const discrepancySchema = z.object({
-  fieldKey: z.string(),
-  expectedValue: z.string().optional(),
-  actualValue: z.string().optional(),
-  severity: z.enum(['error', 'warning', 'info']),
-  rationale: z.string(),
-  ruleType: z.string(),
-  documentId1: z.string().optional(),
-  documentId2: z.string().optional(),
-  taxDocumentId1: z.string().optional(),
-  taxDocumentId2: z.string().optional(),
-});
-
-export const crossValidationResultSchema = z.object({
-  status: z.enum(['completed', 'skipped', 'failed']),
-  validationResultId: z.string().optional(),
-  errorsFound: z.number().optional(),
-  warningsFound: z.number().optional(),
-  overallStatus: z.enum(['passed', 'warnings', 'errors']).optional(),
-  reason: z.string().optional(),
-  error: z.string().optional(),
-});
-
-export type Discrepancy = z.infer<typeof discrepancySchema>;
-export type CrossValidationResult = z.infer<typeof crossValidationResultSchema>;
-
-// ============================================================================
-// DOCUMENT QUALITY ANALYZER SCHEMAS
-// ============================================================================
-
-export const qualityIssueSchema = z.object({
-  severity: z.enum(['error', 'warning', 'info']),
-  type: z.enum(['blur', 'ocr_confidence', 'completeness', 'format', 'other']),
-  message: z.string(),
-  page: z.number().optional(),
-  details: z.any().optional(),
-});
-
-export const qualityMetricsSchema = z.object({
-  blur: z.number().min(0).max(1).optional(), // 0-1 score (higher = sharper)
-  ocrConfidence: z.number().min(0).max(1).optional(), // 0-1 score (higher = more confident)
-  completeness: z.boolean().optional(), // all required pages present
-  format: z.boolean().optional(), // file is readable
-  pageCount: z.number().optional(),
-  perPageMetrics: z.array(z.object({
-    page: z.number(),
-    blur: z.number().min(0).max(1).optional(),
-    ocrConfidence: z.number().min(0).max(1).optional(),
-  })).optional(),
-});
-
-export const qualityAnalysisResultSchema = z.object({
-  documentId: z.string(),
-  qualityScore: z.number().min(0).max(1), // 0-1 overall weighted score
-  metrics: qualityMetricsSchema,
-  issues: z.array(qualityIssueSchema),
-  suggestions: z.array(z.string()),
-  analyzedAt: z.date(),
-});
-
-export type QualityIssue = z.infer<typeof qualityIssueSchema>;
-export type QualityMetrics = z.infer<typeof qualityMetricsSchema>;
-export type QualityAnalysisResult = z.infer<typeof qualityAnalysisResultSchema>;
-
-// ============================================================================
-// TRANSLATION MANAGEMENT SYSTEM
-// ============================================================================
-
-// Translation Locales - Language metadata table
-export const translationLocales = pgTable("translation_locales", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  code: text("code").notNull().unique(),
+// MAIVE Test Cases - Define test scenarios for validation
+export const maiveTestCases = pgTable("maive_test_cases", {
+  id: varchar("id").primaryKey(),
   name: text("name").notNull(),
-  nativeName: text("native_name"),
-  isActive: boolean("is_active").default(true).notNull(),
-  isDefault: boolean("is_default").default(false).notNull(),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-}, (table) => ({
-  codeIdx: uniqueIndex("translation_locales_code_idx").on(table.code),
-}));
-
-// Translation Keys - Normalized translation keys (source of truth)
-export const translationKeys = pgTable("translation_keys", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  namespace: text("namespace").notNull(),
-  key: text("key").notNull(),
-  defaultText: text("default_text").notNull(),
-  context: text("context"),
-  usageNotes: text("usage_notes"),
-  characterLimit: integer("character_limit"),
+  category: text("category").notNull(), // benefit_calculation, policy_interpretation, document_extraction, eligibility_determination, work_requirements
+  scenario: text("scenario").notNull(), // Description of what we're testing
+  inputs: jsonb("inputs").notNull(), // Test input data
+  expectedOutput: jsonb("expected_output").notNull(), // Ground truth expected output
+  accuracyThreshold: real("accuracy_threshold").default(0.95).notNull(), // Required accuracy (0-1)
+  stateSpecific: varchar("state_specific"), // State code if state-specific (e.g., "MD", "CA")
+  tags: text("tags").array(), // Tags for categorization
   isActive: boolean("is_active").default(true).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 }, (table) => ({
-  namespaceKeyIdx: uniqueIndex("translation_keys_namespace_key_idx").on(table.namespace, table.key),
-  namespaceIdx: index("translation_keys_namespace_idx").on(table.namespace),
+  categoryIdx: index("maive_test_cases_category_idx").on(table.category),
+  stateIdx: index("maive_test_cases_state_idx").on(table.stateSpecific),
+  activeIdx: index("maive_test_cases_active_idx").on(table.isActive),
 }));
 
-// Translation Versions - Versioned translations with workflow metadata
-export const translationVersions = pgTable("translation_versions", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  keyId: varchar("key_id").notNull().references(() => translationKeys.id),
-  sourceLocaleId: varchar("source_locale_id").notNull().references(() => translationLocales.id),
-  targetLocaleId: varchar("target_locale_id").notNull().references(() => translationLocales.id),
-  versionNumber: integer("version_number").notNull(),
-  translatedText: text("translated_text").notNull(),
-  status: text("status").notNull().default("draft"),
-  qualityScore: real("quality_score"),
-  translatorId: varchar("translator_id").references(() => users.id),
-  reviewerId: varchar("reviewer_id").references(() => users.id),
-  reviewerNotes: text("reviewer_notes"),
-  reviewedAt: timestamp("reviewed_at"),
-  supersedesVersionId: varchar("supersedes_version_id").references((): any => translationVersions.id),
-  promotedSuggestionId: varchar("promoted_suggestion_id").references((): any => translationSuggestions.id),
-  isCurrentVersion: boolean("is_current_version").default(false).notNull(),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-  updatedAt: timestamp("updated_at").defaultNow().notNull(),
-}, (table) => ({
-  keyLocaleIdx: index("translation_versions_key_locale_idx").on(table.keyId, table.targetLocaleId),
-  statusIdx: index("translation_versions_status_idx").on(table.status),
-  currentIdx: index("translation_versions_current_idx").on(table.isCurrentVersion),
-  translatorIdx: index("translation_versions_translator_idx").on(table.translatorId),
-  reviewerIdx: index("translation_versions_reviewer_idx").on(table.reviewerId),
-  // Enforce unique version numbers per key+locale
-  uniqueVersionNumberIdx: uniqueIndex("translation_versions_version_number_unique_idx")
-    .on(table.keyId, table.targetLocaleId, table.versionNumber),
-  // Enforce only one current version per key+locale
-  uniqueCurrentVersionIdx: uniqueIndex("translation_versions_current_unique_idx")
-    .on(table.keyId, table.targetLocaleId)
-    .where(sql`${table.isCurrentVersion} = true`),
-}));
-
-// Translation Suggestions - Community-proposed translation improvements
-export const translationSuggestions = pgTable("translation_suggestions", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  keyId: varchar("key_id").notNull().references(() => translationKeys.id),
-  targetLocaleId: varchar("target_locale_id").notNull().references(() => translationLocales.id),
-  suggestedText: text("suggested_text").notNull(),
-  rationale: text("rationale"),
-  status: text("status").notNull().default("pending"),
-  qualityScore: real("quality_score"),
-  upvotes: integer("upvotes").default(0).notNull(),
-  downvotes: integer("downvotes").default(0).notNull(),
-  suggestedBy: varchar("suggested_by").references(() => users.id),
-  anonymousSessionHash: text("anonymous_session_hash"),
-  reviewerId: varchar("reviewer_id").references(() => users.id),
-  reviewerNotes: text("reviewer_notes"),
-  reviewedAt: timestamp("reviewed_at"),
-  promotedToVersionId: varchar("promoted_to_version_id").references(() => translationVersions.id),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-  updatedAt: timestamp("updated_at").defaultNow().notNull(),
-}, (table) => ({
-  keyLocaleIdx: index("translation_suggestions_key_locale_idx").on(table.keyId, table.targetLocaleId),
-  statusIdx: index("translation_suggestions_status_idx").on(table.status),
-  suggestedByIdx: index("translation_suggestions_suggested_by_idx").on(table.suggestedBy),
-}));
-
-// Suggestion Votes - Individual votes on community suggestions
-export const suggestionVotes = pgTable("suggestion_votes", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  suggestionId: varchar("suggestion_id").notNull().references(() => translationSuggestions.id),
-  voterId: varchar("voter_id").references(() => users.id),
-  anonymousSessionHash: text("anonymous_session_hash"),
-  voteValue: integer("vote_value").notNull(),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-}, (table) => ({
-  suggestionIdx: index("suggestion_votes_suggestion_idx").on(table.suggestionId),
-  voterIdx: index("suggestion_votes_voter_idx").on(table.voterId),
-  // Prevent duplicate votes from authenticated users (voter_id IS NOT NULL)
-  uniqueAuthenticatedVoteIdx: uniqueIndex("suggestion_votes_authenticated_unique_idx")
-    .on(table.suggestionId, table.voterId)
-    .where(sql`${table.voterId} IS NOT NULL`),
-  // Prevent duplicate votes from anonymous users (anonymous_session_hash IS NOT NULL)
-  uniqueAnonymousVoteIdx: uniqueIndex("suggestion_votes_anonymous_unique_idx")
-    .on(table.suggestionId, table.anonymousSessionHash)
-    .where(sql`${table.anonymousSessionHash} IS NOT NULL`),
-}));
-
-// Translation Variant Experiments - A/B testing experiments
-export const translationVariantExperiments = pgTable("translation_variant_experiments", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+// MAIVE Test Runs - Track test suite executions
+export const maiveTestRuns = pgTable("maive_test_runs", {
+  id: varchar("id").primaryKey(),
   name: text("name").notNull(),
-  description: text("description"),
-  keyId: varchar("key_id").notNull().references(() => translationKeys.id),
-  targetLocaleId: varchar("target_locale_id").notNull().references(() => translationLocales.id),
-  status: text("status").notNull().default("draft"),
-  startDate: timestamp("start_date"),
-  endDate: timestamp("end_date"),
-  createdBy: varchar("created_by").references(() => users.id),
+  totalTests: integer("total_tests").notNull(),
+  passedTests: integer("passed_tests").notNull(),
+  failedTests: integer("failed_tests").notNull(),
+  overallAccuracy: real("overall_accuracy").notNull(), // Average accuracy across all tests
+  status: text("status").notNull(), // running, passed, failed
+  state: varchar("state"), // State being tested (if state-specific)
+  startedAt: timestamp("started_at").notNull(),
+  completedAt: timestamp("completed_at"),
+}, (table) => ({
+  statusIdx: index("maive_test_runs_status_idx").on(table.status),
+  stateIdx: index("maive_test_runs_state_idx").on(table.state),
+  startedAtIdx: index("maive_test_runs_started_idx").on(table.startedAt),
+}));
+
+// MAIVE Evaluations - Individual test case evaluation results
+export const maiveEvaluations = pgTable("maive_evaluations", {
+  id: varchar("id").primaryKey(),
+  testCaseId: varchar("test_case_id").references(() => maiveTestCases.id).notNull(),
+  testRunId: varchar("test_run_id").references(() => maiveTestRuns.id).notNull(),
+  actualOutput: jsonb("actual_output").notNull(),
+  expectedOutput: jsonb("expected_output").notNull(),
+  accuracy: real("accuracy").notNull(), // 0-100 accuracy score
+  passed: boolean("passed").notNull(),
+  reasoning: text("reasoning").notNull(), // LLM's reasoning for the score
+  deviations: text("deviations").array(), // List of critical deviations
+  executionTime: integer("execution_time").notNull(), // in milliseconds
+  llmJudgment: text("llm_judgment").notNull(), // PASS, FAIL, or NEEDS_REVIEW
+  evaluatedAt: timestamp("evaluated_at").notNull(),
+}, (table) => ({
+  testCaseIdx: index("maive_evaluations_test_case_idx").on(table.testCaseId),
+  testRunIdx: index("maive_evaluations_test_run_idx").on(table.testRunId),
+  passedIdx: index("maive_evaluations_passed_idx").on(table.passed),
+  evaluatedAtIdx: index("maive_evaluations_evaluated_idx").on(table.evaluatedAt),
+}));
+
+// Insert schemas for MAIVE
+export const insertMaiveTestCaseSchema = createInsertSchema(maiveTestCases).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertMaiveTestRunSchema = createInsertSchema(maiveTestRuns).omit({
+  id: true,
+});
+
+export const insertMaiveEvaluationSchema = createInsertSchema(maiveEvaluations).omit({
+  id: true,
+});
+
+// Types for MAIVE
+export type InsertMaiveTestCase = z.infer<typeof insertMaiveTestCaseSchema>;
+export type MaiveTestCase = typeof maiveTestCases.$inferSelect;
+export type InsertMaiveTestRun = z.infer<typeof insertMaiveTestRunSchema>;
+export type MaiveTestRun = typeof maiveTestRuns.$inferSelect;
+export type InsertMaiveEvaluation = z.infer<typeof insertMaiveEvaluationSchema>;
+export type MaiveEvaluation = typeof maiveEvaluations.$inferSelect;
+
+// ============================================================================
+// STATE CONFIGURATION SYSTEM - Multi-State White-Labeling Foundation
+// ============================================================================
+
+// State Configurations - Core state/jurisdiction settings
+export const stateConfigurations = pgTable("state_configurations", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").references(() => tenants.id, { onDelete: "cascade" }).notNull().unique(),
+  
+  // Basic Information
+  stateName: text("state_name").notNull(), // "Maryland", "Pennsylvania", etc.
+  stateCode: text("state_code").notNull().unique(), // "MD", "PA", etc.
+  abbreviation: text("abbreviation").notNull(), // Display abbreviation
+  timezone: text("timezone").notNull().default("America/New_York"), // Timezone identifier
+  region: text("region").notNull(), // "Mid-Atlantic", "Northeast", etc.
+  
+  // Agency Information
+  agencyName: text("agency_name").notNull(), // "Maryland Department of Human Services"
+  agencyAcronym: text("agency_acronym"), // "MD DHS"
+  agencyWebsite: text("agency_website"),
+  agencyAddress: text("agency_address"),
+  agencyPhone: text("agency_phone"),
+  agencyEmail: text("agency_email"),
+  
+  // Contact Information
+  mainContactName: text("main_contact_name"),
+  mainContactTitle: text("main_contact_title"),
+  mainContactPhone: text("main_contact_phone"),
+  mainContactEmail: text("main_contact_email"),
+  
+  // Emergency/After-Hours Contact
+  emergencyContactPhone: text("emergency_contact_phone"),
+  emergencyContactEmail: text("emergency_contact_email"),
+  
+  // Support Channels
+  supportPhone: text("support_phone"),
+  supportEmail: text("support_email"),
+  supportHours: text("support_hours"), // "Mon-Fri 8AM-5PM EST"
+  supportLanguages: text("support_languages").array().default(sql`'{en}'::text[]`), // ["en", "es", "zh", etc.]
+  
+  // Policy Configuration
+  policyManualUrl: text("policy_manual_url"),
+  regulationsUrl: text("regulations_url"),
+  legislativeUrl: text("legislative_url"),
+  
+  // Feature Flags
+  features: jsonb("features").default('{}'), // { "enableVita": true, "enableSms": false, etc. }
+  
+  // Metadata
+  isActive: boolean("is_active").default(true).notNull(),
+  launchDate: timestamp("launch_date"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 }, (table) => ({
-  keyLocaleIdx: index("translation_experiments_key_locale_idx").on(table.keyId, table.targetLocaleId),
-  statusIdx: index("translation_experiments_status_idx").on(table.status),
+  stateCodeIdx: index("state_configs_state_code_idx").on(table.stateCode),
+  tenantIdx: index("state_configs_tenant_idx").on(table.tenantId),
+  activeIdx: index("state_configs_active_idx").on(table.isActive),
 }));
 
-// Translation Variants - Individual variants within an A/B experiment
-export const translationVariants = pgTable("translation_variants", {
+// State Benefit Programs - Programs available in each state
+export const stateBenefitPrograms = pgTable("state_benefit_programs", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  experimentId: varchar("experiment_id").notNull().references(() => translationVariantExperiments.id),
-  versionId: varchar("version_id").notNull().references(() => translationVersions.id),
-  variantLabel: text("variant_label").notNull(),
-  trafficSplit: real("traffic_split").notNull(),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-}, (table) => ({
-  experimentIdx: index("translation_variants_experiment_idx").on(table.experimentId),
-  uniqueVariantIdx: uniqueIndex("translation_variants_unique_idx").on(table.experimentId, table.variantLabel),
-}));
-
-// Translation Variant Metrics - Performance metrics for A/B testing
-export const translationVariantMetrics = pgTable("translation_variant_metrics", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  variantId: varchar("variant_id").notNull().references(() => translationVariants.id),
-  metricType: text("metric_type").notNull(),
-  metricValue: real("metric_value").notNull(),
-  sessionCount: integer("session_count").default(0).notNull(),
-  recordedAt: timestamp("recorded_at").defaultNow().notNull(),
-}, (table) => ({
-  variantMetricIdx: index("translation_variant_metrics_variant_idx").on(table.variantId, table.metricType),
-}));
-
-// Translation Audit Log - Comprehensive audit trail
-export const translationAuditLog = pgTable("translation_audit_log", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  action: text("action").notNull(),
-  actorId: varchar("actor_id").references(() => users.id),
-  versionId: varchar("version_id").references(() => translationVersions.id),
-  suggestionId: varchar("suggestion_id").references(() => translationSuggestions.id),
-  details: jsonb("details"),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-}, (table) => ({
-  actionIdx: index("translation_audit_log_action_idx").on(table.action),
-  actorIdx: index("translation_audit_log_actor_idx").on(table.actorId),
-  versionIdx: index("translation_audit_log_version_idx").on(table.versionId),
-}));
-
-// Translation Assignments - Per-role responsibilities for translation keys
-export const translationAssignments = pgTable("translation_assignments", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  keyId: varchar("key_id").notNull().references(() => translationKeys.id),
-  targetLocaleId: varchar("target_locale_id").notNull().references(() => translationLocales.id),
-  userId: varchar("user_id").notNull().references(() => users.id),
-  role: text("role").notNull(),
-  assignedBy: varchar("assigned_by").references(() => users.id),
-  status: text("status").notNull().default("active"),
+  stateConfigId: varchar("state_config_id").references(() => stateConfigurations.id, { onDelete: "cascade" }).notNull(),
+  benefitProgramId: varchar("benefit_program_id").references(() => benefitPrograms.id).notNull(),
+  
+  // State-specific program details
+  stateProgramName: text("state_program_name"), // State's name for the program
+  stateProgramCode: text("state_program_code"), // State's internal code
+  stateProgramUrl: text("state_program_url"), // State-specific program website
+  
+  // Eligibility variations
+  eligibilityOverrides: jsonb("eligibility_overrides"), // State-specific eligibility rules
+  incomeLimitMultiplier: real("income_limit_multiplier").default(1.0), // Adjust federal poverty level
+  assetLimitOverride: integer("asset_limit_override"), // State-specific asset limit
+  
+  // Application process
+  applicationUrl: text("application_url"),
+  applicationPhone: text("application_phone"),
+  applicationMethods: text("application_methods").array(), // ["online", "phone", "in-person", "mail"]
+  averageProcessingTime: integer("average_processing_time"), // in days
+  
+  // Required documents
+  requiredDocuments: jsonb("required_documents"), // State-specific document requirements
+  
+  // Feature flags
+  isActive: boolean("is_active").default(true).notNull(),
+  allowsOnlineApplication: boolean("allows_online_application").default(true),
+  requiresInterview: boolean("requires_interview").default(false),
+  
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 }, (table) => ({
-  keyLocaleUserIdx: uniqueIndex("translation_assignments_key_locale_user_idx").on(table.keyId, table.targetLocaleId, table.userId, table.role),
-  userIdx: index("translation_assignments_user_idx").on(table.userId),
-  statusIdx: index("translation_assignments_status_idx").on(table.status),
+  stateConfigProgramIdx: uniqueIndex("state_benefit_programs_unique_idx").on(table.stateConfigId, table.benefitProgramId),
+  activeIdx: index("state_benefit_programs_active_idx").on(table.isActive),
+}));
+
+// State Forms - State-specific forms and documents
+export const stateForms = pgTable("state_forms", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  stateConfigId: varchar("state_config_id").references(() => stateConfigurations.id, { onDelete: "cascade" }).notNull(),
+  
+  // Form identification
+  formNumber: text("form_number").notNull(), // "DHS-9780", "PA-600", etc.
+  formName: text("form_name").notNull(),
+  formType: text("form_type").notNull(), // "application", "renewal", "change_report", etc.
+  
+  // Program association
+  benefitProgramId: varchar("benefit_program_id").references(() => benefitPrograms.id),
+  
+  // Language support
+  language: text("language").notNull().default("en"),
+  languageName: text("language_name").notNull().default("English"),
+  
+  // Version control
+  version: text("version").notNull(),
+  effectiveDate: timestamp("effective_date"),
+  expirationDate: timestamp("expiration_date"),
+  
+  // Storage
+  objectPath: text("object_path"), // Path in object storage
+  sourceUrl: text("source_url"), // Original state URL
+  
+  // Metadata
+  isFillable: boolean("is_fillable").default(false),
+  isRequired: boolean("is_required").default(false),
+  isActive: boolean("is_active").default(true).notNull(),
+  
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  stateFormNumberIdx: index("state_forms_state_number_idx").on(table.stateConfigId, table.formNumber),
+  formTypeIdx: index("state_forms_type_idx").on(table.formType),
+  languageIdx: index("state_forms_language_idx").on(table.language),
+}));
+
+// State Policy Rules - Jurisdiction-specific rules and criteria
+export const statePolicyRules = pgTable("state_policy_rules", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  stateConfigId: varchar("state_config_id").references(() => stateConfigurations.id, { onDelete: "cascade" }).notNull(),
+  
+  // Rule identification
+  ruleName: text("rule_name").notNull(),
+  ruleCode: text("rule_code").notNull(),
+  ruleCategory: text("rule_category").notNull(), // "eligibility", "benefit_calculation", "documentation", etc.
+  
+  // Program association
+  benefitProgramId: varchar("benefit_program_id").references(() => benefitPrograms.id),
+  
+  // Rule definition
+  ruleType: text("rule_type").notNull(), // "income_limit", "asset_test", "categorical", etc.
+  ruleLogic: jsonb("rule_logic").notNull(), // Structured rule definition
+  
+  // Priority and conflicts
+  priority: integer("priority").default(0), // Higher priority rules apply first
+  overridesFederalRule: boolean("overrides_federal_rule").default(false),
+  
+  // Effective dates
+  effectiveDate: timestamp("effective_date"),
+  expirationDate: timestamp("expiration_date"),
+  
+  // Source and compliance
+  sourceRegulation: text("source_regulation"), // Citation/reference
+  sourceUrl: text("source_url"),
+  lastVerifiedDate: timestamp("last_verified_date"),
+  
+  // Status
+  isActive: boolean("is_active").default(true).notNull(),
+  isTemporary: boolean("is_temporary").default(false), // Emergency/temporary rules
+  
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  stateRuleCodeIdx: uniqueIndex("state_policy_rules_unique_idx").on(table.stateConfigId, table.ruleCode),
+  categoryIdx: index("state_policy_rules_category_idx").on(table.ruleCategory),
+  programIdx: index("state_policy_rules_program_idx").on(table.benefitProgramId),
 }));
 
 // ============================================================================
-// TRANSLATION MANAGEMENT RELATIONS
+// CROSS-STATE RULES ARCHITECTURE
 // ============================================================================
 
-export const translationLocalesRelations = relations(translationLocales, ({ many }) => ({
-  translationVersions: many(translationVersions),
-  translationSuggestions: many(translationSuggestions),
+// Cross-State Rules - Track rule conflicts and resolutions across jurisdictions
+export const crossStateRules = pgTable("cross_state_rules", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  
+  // Rule identification
+  ruleName: text("rule_name").notNull(),
+  ruleCode: text("rule_code").notNull().unique(),
+  ruleDescription: text("rule_description").notNull(),
+  
+  // States involved
+  primaryState: text("primary_state").notNull(), // Main state being evaluated
+  secondaryState: text("secondary_state"), // Comparison or conflict state
+  affectedStates: text("affected_states").array(), // All states impacted
+  
+  // Rule type and category
+  ruleType: text("rule_type").notNull(), // conflict_resolution, reciprocity, portability, border_worker
+  conflictType: text("conflict_type"), // income_threshold, asset_limit, work_requirement, eligibility_criteria
+  
+  // Resolution strategy
+  resolutionStrategy: text("resolution_strategy").notNull(), // primary_residence, work_state, most_favorable, federal_override
+  resolutionLogic: jsonb("resolution_logic").notNull(), // Detailed logic for resolution
+  
+  // Program association
+  benefitProgramId: varchar("benefit_program_id").references(() => benefitPrograms.id),
+  
+  // Priority and precedence
+  priority: integer("priority").default(0), // Higher priority rules apply first
+  overridesStandardRules: boolean("overrides_standard_rules").default(false),
+  
+  // Effective dates
+  effectiveDate: timestamp("effective_date"),
+  expirationDate: timestamp("expiration_date"),
+  
+  // Compliance and source
+  federalRegulation: text("federal_regulation"), // Federal law/reg that governs
+  stateRegulations: jsonb("state_regulations"), // State-specific regulations
+  
+  // Status
+  isActive: boolean("is_active").default(true).notNull(),
+  isTemporary: boolean("is_temporary").default(false),
+  
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  ruleTypeIdx: index("cross_state_rules_type_idx").on(table.ruleType),
+  primaryStateIdx: index("cross_state_rules_primary_state_idx").on(table.primaryState),
+  programIdx: index("cross_state_rules_program_idx").on(table.benefitProgramId),
+  activeIdx: index("cross_state_rules_active_idx").on(table.isActive),
 }));
 
-export const translationKeysRelations = relations(translationKeys, ({ many }) => ({
-  versions: many(translationVersions),
-  suggestions: many(translationSuggestions),
-  assignments: many(translationAssignments),
+// Jurisdiction Hierarchies - Define precedence rules for overlapping jurisdictions
+export const jurisdictionHierarchies = pgTable("jurisdiction_hierarchies", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  
+  // Jurisdiction levels
+  jurisdictionType: text("jurisdiction_type").notNull(), // federal, state, county, city, special_district
+  jurisdictionCode: text("jurisdiction_code").notNull(), // US, MD, NYC, DC-FED
+  jurisdictionName: text("jurisdiction_name").notNull(),
+  
+  // Parent jurisdiction
+  parentJurisdictionId: varchar("parent_jurisdiction_id").references((): any => jurisdictionHierarchies.id),
+  
+  // Hierarchy level (0 = federal, 1 = state, 2 = county, etc.)
+  hierarchyLevel: integer("hierarchy_level").notNull(),
+  
+  // Special flags
+  isFederalTerritory: boolean("is_federal_territory").default(false), // DC, territories
+  hasSpecialStatus: boolean("has_special_status").default(false), // NYC, DC federal employees
+  specialStatusDetails: jsonb("special_status_details"),
+  
+  // Override rules
+  canOverrideParent: boolean("can_override_parent").default(false),
+  overrideCategories: text("override_categories").array(), // Which rules can be overridden
+  
+  // Geographic bounds (for mapping)
+  geoBounds: jsonb("geo_bounds"), // GeoJSON or boundary data
+  
+  // Status
+  isActive: boolean("is_active").default(true).notNull(),
+  
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  typeIdx: index("jurisdiction_hierarchies_type_idx").on(table.jurisdictionType),
+  codeIdx: uniqueIndex("jurisdiction_hierarchies_code_idx").on(table.jurisdictionCode),
+  levelIdx: index("jurisdiction_hierarchies_level_idx").on(table.hierarchyLevel),
+  parentIdx: index("jurisdiction_hierarchies_parent_idx").on(table.parentJurisdictionId),
 }));
 
-export const translationVersionsRelations = relations(translationVersions, ({ one, many }) => ({
-  key: one(translationKeys, { fields: [translationVersions.keyId], references: [translationKeys.id] }),
-  sourceLocale: one(translationLocales, { fields: [translationVersions.sourceLocaleId], references: [translationLocales.id] }),
-  targetLocale: one(translationLocales, { fields: [translationVersions.targetLocaleId], references: [translationLocales.id] }),
-  translator: one(users, { fields: [translationVersions.translatorId], references: [users.id] }),
-  reviewer: one(users, { fields: [translationVersions.reviewerId], references: [users.id] }),
-  promotedSuggestion: one(translationSuggestions, { fields: [translationVersions.promotedSuggestionId], references: [translationSuggestions.id] }),
-  variants: many(translationVariants),
+// State Reciprocity Agreements - Track inter-state benefit agreements
+export const stateReciprocityAgreements = pgTable("state_reciprocity_agreements", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  
+  // States in agreement
+  stateA: text("state_a").notNull(),
+  stateB: text("state_b").notNull(),
+  additionalStates: text("additional_states").array(), // For multi-state compacts
+  
+  // Agreement details
+  agreementName: text("agreement_name").notNull(),
+  agreementType: text("agreement_type").notNull(), // mutual_recognition, portability, work_credit, tax_reciprocity
+  agreementScope: text("agreement_scope").array(), // Which benefits are covered
+  
+  // Program coverage
+  coveredPrograms: text("covered_programs").array(), // SNAP, TANF, Medicaid, etc.
+  excludedPrograms: text("excluded_programs").array(),
+  
+  // Specific terms
+  terms: jsonb("terms").notNull(), // Detailed agreement terms
+  specialConditions: jsonb("special_conditions"), // Any special conditions or exceptions
+  
+  // Portability rules
+  benefitPortability: boolean("benefit_portability").default(false),
+  waitingPeriodDays: integer("waiting_period_days"), // Days before benefits transfer
+  documentationRequired: jsonb("documentation_required"),
+  
+  // Effective dates
+  effectiveDate: timestamp("effective_date").notNull(),
+  expirationDate: timestamp("expiration_date"),
+  renewalDate: timestamp("renewal_date"),
+  
+  // Legal references
+  legalAuthority: text("legal_authority"), // Law or regulation establishing agreement
+  agreementDocumentUrl: text("agreement_document_url"),
+  
+  // Status
+  status: text("status").notNull().default("active"), // active, pending, expired, terminated
+  isActive: boolean("is_active").default(true).notNull(),
+  
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  statesIdx: uniqueIndex("reciprocity_states_idx").on(table.stateA, table.stateB),
+  typeIdx: index("reciprocity_type_idx").on(table.agreementType),
+  statusIdx: index("reciprocity_status_idx").on(table.status),
 }));
 
-export const translationSuggestionsRelations = relations(translationSuggestions, ({ one, many }) => ({
-  key: one(translationKeys, { fields: [translationSuggestions.keyId], references: [translationKeys.id] }),
-  targetLocale: one(translationLocales, { fields: [translationSuggestions.targetLocaleId], references: [translationLocales.id] }),
-  suggestedBy: one(users, { fields: [translationSuggestions.suggestedBy], references: [users.id] }),
-  reviewer: one(users, { fields: [translationSuggestions.reviewerId], references: [users.id] }),
-  promotedToVersion: one(translationVersions, { fields: [translationSuggestions.promotedToVersionId], references: [translationVersions.id] }),
-  votes: many(suggestionVotes),
+// Multi-State Households - Track households with members in different states
+export const multiStateHouseholds = pgTable("multi_state_households", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  
+  // Household reference
+  householdId: varchar("household_id").references(() => householdProfiles.id).notNull(),
+  clientCaseId: varchar("client_case_id").references(() => clientCases.id),
+  
+  // Primary residence
+  primaryResidenceState: text("primary_residence_state").notNull(),
+  primaryResidenceCounty: text("primary_residence_county"),
+  primaryResidenceZip: text("primary_residence_zip"),
+  
+  // Work location (if different)
+  workState: text("work_state"),
+  workCounty: text("work_county"),
+  workZip: text("work_zip"),
+  
+  // Member locations
+  memberStates: jsonb("member_states").notNull(), // {memberId: state} mapping
+  outOfStateMembers: integer("out_of_state_members").default(0),
+  
+  // Scenarios
+  scenario: text("scenario").notNull(), // border_worker, college_student, military, shared_custody, relocation
+  scenarioDetails: jsonb("scenario_details"),
+  
+  // Federal employment
+  hasFederalEmployee: boolean("has_federal_employee").default(false),
+  federalEmployeeDetails: jsonb("federal_employee_details"),
+  
+  // Military status
+  hasMilitaryMember: boolean("has_military_member").default(false),
+  homeOfRecord: text("home_of_record"), // Military home of record state
+  militaryDetails: jsonb("military_details"),
+  
+  // Resolution applied
+  appliedResolutionStrategy: text("applied_resolution_strategy"),
+  resolutionDate: timestamp("resolution_date"),
+  resolutionNotes: text("resolution_notes"),
+  
+  // Benefit implications
+  benefitImplications: jsonb("benefit_implications"), // How benefits are affected
+  requiredDocumentation: jsonb("required_documentation"),
+  
+  // Status
+  status: text("status").notNull().default("pending"), // pending, resolved, requires_review
+  reviewRequired: boolean("review_required").default(false),
+  lastReviewedBy: varchar("last_reviewed_by").references(() => users.id),
+  lastReviewedAt: timestamp("last_reviewed_at"),
+  
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  householdIdx: index("multi_state_households_household_idx").on(table.householdId),
+  caseIdx: index("multi_state_households_case_idx").on(table.clientCaseId),
+  scenarioIdx: index("multi_state_households_scenario_idx").on(table.scenario),
+  statusIdx: index("multi_state_households_status_idx").on(table.status),
 }));
 
-export const suggestionVotesRelations = relations(suggestionVotes, ({ one }) => ({
-  suggestion: one(translationSuggestions, { fields: [suggestionVotes.suggestionId], references: [translationSuggestions.id] }),
-  voter: one(users, { fields: [suggestionVotes.voterId], references: [users.id] }),
+// Cross-State Rule Applications - Track when cross-state rules are applied to cases
+export const crossStateRuleApplications = pgTable("cross_state_rule_applications", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  
+  // Case reference
+  clientCaseId: varchar("client_case_id").references(() => clientCases.id).notNull(),
+  householdId: varchar("household_id").references(() => householdProfiles.id),
+  multiStateHouseholdId: varchar("multi_state_household_id").references(() => multiStateHouseholds.id),
+  
+  // Rule applied
+  crossStateRuleId: varchar("cross_state_rule_id").references(() => crossStateRules.id).notNull(),
+  
+  // States involved
+  fromState: text("from_state").notNull(),
+  toState: text("to_state"),
+  affectedStates: text("affected_states").array(),
+  
+  // Application details
+  applicationReason: text("application_reason").notNull(),
+  conflictsDetected: jsonb("conflicts_detected"),
+  resolutionApplied: jsonb("resolution_applied"),
+  
+  // Outcome
+  outcome: text("outcome").notNull(), // approved, denied, partial, pending_review
+  benefitAmount: integer("benefit_amount"),
+  effectiveDate: timestamp("effective_date"),
+  
+  // Review and approval
+  requiresReview: boolean("requires_review").default(false),
+  reviewedBy: varchar("reviewed_by").references(() => users.id),
+  reviewedAt: timestamp("reviewed_at"),
+  reviewNotes: text("review_notes"),
+  
+  // Audit trail
+  appliedBy: varchar("applied_by").references(() => users.id),
+  appliedAt: timestamp("applied_at").defaultNow().notNull(),
+  
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  caseIdx: index("cross_state_applications_case_idx").on(table.clientCaseId),
+  ruleIdx: index("cross_state_applications_rule_idx").on(table.crossStateRuleId),
+  outcomeIdx: index("cross_state_applications_outcome_idx").on(table.outcome),
 }));
 
-export const translationVariantExperimentsRelations = relations(translationVariantExperiments, ({ one, many }) => ({
-  key: one(translationKeys, { fields: [translationVariantExperiments.keyId], references: [translationKeys.id] }),
-  targetLocale: one(translationLocales, { fields: [translationVariantExperiments.targetLocaleId], references: [translationLocales.id] }),
-  createdBy: one(users, { fields: [translationVariantExperiments.createdBy], references: [users.id] }),
-  variants: many(translationVariants),
-}));
 
-export const translationVariantsRelations = relations(translationVariants, ({ one, many }) => ({
-  experiment: one(translationVariantExperiments, { fields: [translationVariants.experimentId], references: [translationVariantExperiments.id] }),
-  version: one(translationVersions, { fields: [translationVariants.versionId], references: [translationVersions.id] }),
-  metrics: many(translationVariantMetrics),
-}));
-
-export const translationVariantMetricsRelations = relations(translationVariantMetrics, ({ one }) => ({
-  variant: one(translationVariants, { fields: [translationVariantMetrics.variantId], references: [translationVariants.id] }),
-}));
-
-export const translationAuditLogRelations = relations(translationAuditLog, ({ one }) => ({
-  actor: one(users, { fields: [translationAuditLog.actorId], references: [users.id] }),
-  version: one(translationVersions, { fields: [translationAuditLog.versionId], references: [translationVersions.id] }),
-  suggestion: one(translationSuggestions, { fields: [translationAuditLog.suggestionId], references: [translationSuggestions.id] }),
-}));
-
-export const translationAssignmentsRelations = relations(translationAssignments, ({ one }) => ({
-  key: one(translationKeys, { fields: [translationAssignments.keyId], references: [translationKeys.id] }),
-  targetLocale: one(translationLocales, { fields: [translationAssignments.targetLocaleId], references: [translationLocales.id] }),
-  user: one(users, { fields: [translationAssignments.userId], references: [users.id] }),
-  assignedBy: one(users, { fields: [translationAssignments.assignedBy], references: [users.id] }),
+// SMS Screening Links - Secure, time-limited screening URLs
+export const smsScreeningLinks = pgTable("sms_screening_links", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  token: text("token").notNull().unique(), // Unique nanoid token for URL
+  phoneHash: text("phone_hash").notNull(), // SHA-256 hash of phone number
+  tenantId: varchar("tenant_id").references((): any => tenants.id).notNull(),
+  conversationId: varchar("conversation_id").references(() => smsConversations.id),
+  
+  // Link properties
+  shortUrl: text("short_url"), // Optional custom short URL
+  fullUrl: text("full_url").notNull(), // Full screening URL with token
+  
+  // Usage tracking
+  usageCount: integer("usage_count").default(0).notNull(),
+  maxUsage: integer("max_usage").default(1).notNull(), // Default one-time use
+  lastAccessedAt: timestamp("last_accessed_at"),
+  lastAccessIp: text("last_access_ip"),
+  
+  // Validity
+  expiresAt: timestamp("expires_at").notNull(),
+  status: text("status").notNull().default("pending"), // pending, accessed, used, expired, revoked
+  
+  // Screening data
+  screeningData: jsonb("screening_data"), // Saved progress data
+  completedAt: timestamp("completed_at"),
+  completionData: jsonb("completion_data"), // Final screening results
+  
+  // Rate limiting
+  dailyLinkCount: integer("daily_link_count").default(1), // Links generated today for this phone
+  lastGeneratedDate: date("last_generated_date"), // Date of last link generation
+  
+  // Security
+  ipRestriction: text("ip_restriction"), // Optional IP whitelist
+  captchaRequired: boolean("captcha_required").default(true).notNull(),
+  captchaCompleted: boolean("captcha_completed").default(false),
+  
+  // Analytics
+  source: text("source"), // Where link was requested from
+  campaign: text("campaign"), // Marketing campaign identifier
+  metadata: jsonb("metadata"), // Additional tracking data
+  
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  tokenIdx: uniqueIndex("sms_screening_links_token_idx").on(table.token),
+  phoneHashIdx: index("sms_screening_links_phone_hash_idx").on(table.phoneHash),
+  tenantIdIdx: index("sms_screening_links_tenant_id_idx").on(table.tenantId),
+  statusIdx: index("sms_screening_links_status_idx").on(table.status),
+  expiresAtIdx: index("sms_screening_links_expires_at_idx").on(table.expiresAt),
+  createdAtIdx: index("sms_screening_links_created_at_idx").on(table.createdAt),
 }));
 
 // ============================================================================
-// TRANSLATION MANAGEMENT ZOD SCHEMAS
+// GDPR COMPLIANCE TABLES - Data Protection and Privacy Management
 // ============================================================================
 
-// Insert schemas
-export const insertTranslationLocaleSchema = createInsertSchema(translationLocales).omit({
-  id: true,
-  createdAt: true,
-});
+// GDPR Consents - Track user consent for data processing purposes
+export const gdprConsents = pgTable("gdpr_consents", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+  purpose: text("purpose").notNull(), // marketing, analytics, service, research
+  consentGiven: boolean("consent_given").notNull(),
+  consentDate: timestamp("consent_date").notNull().defaultNow(),
+  expiresAt: timestamp("expires_at"), // Consent expiration date
+  ipAddress: text("ip_address"), // IP address at time of consent
+  userAgent: text("user_agent"), // Browser/device info for audit trail
+  consentMethod: text("consent_method").notNull(), // web_form, api, verbal, written
+  consentText: text("consent_text"), // Exact text user consented to
+  withdrawnAt: timestamp("withdrawn_at"), // When consent was withdrawn
+  withdrawalReason: text("withdrawal_reason"),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  userIdIdx: index("gdpr_consents_user_id_idx").on(table.userId),
+  purposeIdx: index("gdpr_consents_purpose_idx").on(table.purpose),
+  activeConsentIdx: index("gdpr_consents_active_idx").on(table.userId, table.purpose, table.consentGiven),
+}));
 
-export const insertTranslationKeySchema = createInsertSchema(translationKeys).omit({
+// GDPR Data Subject Requests - Track GDPR right requests
+export const gdprDataSubjectRequests = pgTable("gdpr_data_subject_requests", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+  requestType: text("request_type").notNull(), // access, erasure, portability, rectification, restriction, objection
+  status: text("status").notNull().default("pending"), // pending, in_progress, completed, denied, cancelled
+  requestDate: timestamp("request_date").notNull().defaultNow(),
+  completedDate: timestamp("completed_date"),
+  dueDate: timestamp("due_date").notNull(), // 30-day deadline
+  requestedBy: varchar("requested_by").references(() => users.id), // User who made the request (could be different from subject)
+  handledBy: varchar("handled_by").references(() => users.id), // Staff member handling the request
+  verificationToken: text("verification_token"), // Token for identity verification
+  verificationCompleted: boolean("verification_completed").default(false),
+  verificationDate: timestamp("verification_date"),
+  requestDetails: jsonb("request_details"), // Specific details about the request
+  responseData: jsonb("response_data"), // Generated export data or response
+  denialReason: text("denial_reason"), // Reason if denied
+  notes: text("notes"),
+  remindersSent: integer("reminders_sent").default(0), // Track deadline reminders
+  lastReminderAt: timestamp("last_reminder_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  userIdIdx: index("gdpr_dsr_user_id_idx").on(table.userId),
+  statusIdx: index("gdpr_dsr_status_idx").on(table.status),
+  dueDateIdx: index("gdpr_dsr_due_date_idx").on(table.dueDate),
+  requestTypeIdx: index("gdpr_dsr_request_type_idx").on(table.requestType),
+}));
+
+// GDPR Data Processing Activities - Record of processing activities register
+export const gdprDataProcessingActivities = pgTable("gdpr_data_processing_activities", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  activityName: text("activity_name").notNull(),
+  activityCode: text("activity_code").notNull().unique(), // Unique identifier
+  purpose: text("purpose").notNull(), // Purpose of processing
+  dataCategories: text("data_categories").array().notNull(), // Types of personal data processed
+  dataSubjectCategories: text("data_subject_categories").array(), // Categories of individuals
+  legalBasis: text("legal_basis").notNull(), // consent, contract, legal_obligation, vital_interests, public_task, legitimate_interests
+  legalBasisDetails: text("legal_basis_details"),
+  retentionPeriod: text("retention_period").notNull(), // How long data is kept
+  retentionJustification: text("retention_justification"),
+  recipients: text("recipients").array(), // Who receives the data
+  recipientCategories: text("recipient_categories").array(), // Categories of recipients
+  crossBorderTransfer: boolean("cross_border_transfer").default(false),
+  transferCountries: text("transfer_countries").array(), // Countries data is transferred to
+  transferSafeguards: text("transfer_safeguards"), // Safeguards for cross-border transfers
+  dataMinimization: boolean("data_minimization").default(true),
+  securityMeasures: jsonb("security_measures"), // Technical and organizational measures
+  automatedDecisionMaking: boolean("automated_decision_making").default(false),
+  profilingUsed: boolean("profiling_used").default(false),
+  dpiaRequired: boolean("dpia_required").default(false), // Data Protection Impact Assessment required
+  dpiaId: varchar("dpia_id").references((): any => gdprPrivacyImpactAssessments.id),
+  responsiblePerson: varchar("responsible_person").references(() => users.id),
+  dataProtectionOfficer: varchar("data_protection_officer").references(() => users.id),
+  isActive: boolean("is_active").default(true).notNull(),
+  lastReviewDate: timestamp("last_review_date"),
+  nextReviewDate: timestamp("next_review_date"),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  activityCodeIdx: uniqueIndex("gdpr_dpa_activity_code_idx").on(table.activityCode),
+  legalBasisIdx: index("gdpr_dpa_legal_basis_idx").on(table.legalBasis),
+  activeIdx: index("gdpr_dpa_active_idx").on(table.isActive),
+  reviewDateIdx: index("gdpr_dpa_review_date_idx").on(table.nextReviewDate),
+}));
+
+// GDPR Privacy Impact Assessments - Track PIAs for high-risk processing
+export const gdprPrivacyImpactAssessments = pgTable("gdpr_privacy_impact_assessments", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  assessmentName: text("assessment_name").notNull(),
+  assessmentCode: text("assessment_code").notNull().unique(),
+  processingActivity: text("processing_activity").notNull(),
+  processingActivityId: varchar("processing_activity_id").references((): any => gdprDataProcessingActivities.id),
+  description: text("description").notNull(),
+  necessity: text("necessity").notNull(), // Why the processing is necessary
+  proportionality: text("proportionality").notNull(), // Is it proportionate to the purpose
+  riskLevel: text("risk_level").notNull(), // low, medium, high, critical
+  riskDescription: text("risk_description").notNull(),
+  risksIdentified: jsonb("risks_identified").notNull(), // Array of identified risks
+  impactOnRights: text("impact_on_rights").notNull(), // Impact on data subject rights
+  mitigations: jsonb("mitigations").notNull(), // Mitigation measures
+  residualRisk: text("residual_risk"), // Risk after mitigations
+  consultationRequired: boolean("consultation_required").default(false),
+  consultationDetails: text("consultation_details"),
+  assessmentDate: timestamp("assessment_date").notNull(),
+  reviewDate: timestamp("review_date"), // When to review again
+  nextReviewDue: timestamp("next_review_due"),
+  assessorId: varchar("assessor_id").references(() => users.id).notNull(),
+  approvedBy: varchar("approved_by").references(() => users.id),
+  approvalDate: timestamp("approval_date"),
+  status: text("status").notNull().default("draft"), // draft, in_review, approved, rejected, archived
+  dpoReviewed: boolean("dpo_reviewed").default(false),
+  dpoComments: text("dpo_comments"),
+  implementationStatus: text("implementation_status"), // not_started, in_progress, completed
+  isActive: boolean("is_active").default(true).notNull(),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  assessmentCodeIdx: uniqueIndex("gdpr_pia_assessment_code_idx").on(table.assessmentCode),
+  riskLevelIdx: index("gdpr_pia_risk_level_idx").on(table.riskLevel),
+  statusIdx: index("gdpr_pia_status_idx").on(table.status),
+  reviewDateIdx: index("gdpr_pia_review_date_idx").on(table.nextReviewDue),
+}));
+
+// GDPR Breach Incidents - Data breach tracking and notification
+export const gdprBreachIncidents = pgTable("gdpr_breach_incidents", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  incidentNumber: text("incident_number").notNull().unique(), // Unique incident ID
+  incidentDate: timestamp("incident_date").notNull(), // When breach occurred
+  discoveryDate: timestamp("discovery_date").notNull(), // When breach was discovered
+  reportedDate: timestamp("reported_date"), // When it was reported internally
+  description: text("description").notNull(),
+  natureOfBreach: text("nature_of_breach").notNull(), // unauthorized_access, loss, alteration, disclosure, etc.
+  causeOfBreach: text("cause_of_breach"), // human_error, malicious_attack, system_failure, etc.
+  affectedUsers: integer("affected_users").default(0), // Number of affected users
+  affectedUserIds: text("affected_user_ids").array(), // IDs of affected users
+  dataTypes: text("data_types").array().notNull(), // Types of data compromised
+  dataVolume: text("data_volume"), // Volume of data affected
+  severity: text("severity").notNull(), // low, medium, high, critical
+  riskAssessment: text("risk_assessment").notNull(), // Assessment of risk to individuals
+  likelyConsequences: text("likely_consequences"), // Likely impact on individuals
+  containmentActions: jsonb("containment_actions").notNull(), // Actions taken to contain breach
+  containmentDate: timestamp("containment_date"), // When breach was contained
+  mitigationMeasures: jsonb("mitigation_measures"), // Measures to mitigate effects
+  notificationsSent: boolean("notifications_sent").default(false),
+  userNotificationDate: timestamp("user_notification_date"), // When users were notified
+  userNotificationMethod: text("user_notification_method"), // email, letter, phone, etc.
+  reportedToAuthority: boolean("reported_to_authority").default(false),
+  reportedToAuthorityDate: timestamp("reported_to_authority_date"), // When DPA was notified
+  authorityName: text("authority_name"), // Which authority was notified
+  authorityReferenceNumber: text("authority_reference_number"),
+  reportWithin72Hours: boolean("report_within_72_hours"), // Met 72-hour requirement
+  delayJustification: text("delay_justification"), // If reported after 72 hours
+  externalPartiesNotified: boolean("external_parties_notified").default(false),
+  externalPartiesDetails: jsonb("external_parties_details"), // Law enforcement, etc.
+  mediaInvolvement: boolean("media_involvement").default(false),
+  status: text("status").notNull().default("open"), // open, contained, resolved, closed
+  incidentOwner: varchar("incident_owner").references(() => users.id).notNull(),
+  investigatedBy: varchar("investigated_by").references(() => users.id),
+  closedBy: varchar("closed_by").references(() => users.id),
+  closedDate: timestamp("closed_date"),
+  lessonsLearned: text("lessons_learned"),
+  preventiveMeasures: jsonb("preventive_measures"), // Measures to prevent recurrence
+  documents: jsonb("documents"), // Links to related documents
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  incidentNumberIdx: uniqueIndex("gdpr_breach_incident_number_idx").on(table.incidentNumber),
+  severityIdx: index("gdpr_breach_severity_idx").on(table.severity),
+  statusIdx: index("gdpr_breach_status_idx").on(table.status),
+  discoveryDateIdx: index("gdpr_breach_discovery_date_idx").on(table.discoveryDate),
+  reportedToAuthorityIdx: index("gdpr_breach_reported_authority_idx").on(table.reportedToAuthority),
+}));
+
+// Insert schemas for State Configuration
+export const insertStateConfigurationSchema = createInsertSchema(stateConfigurations).omit({
   id: true,
   createdAt: true,
   updatedAt: true,
 });
 
-export const insertTranslationVersionSchema = createInsertSchema(translationVersions).omit({
+export const insertStateBenefitProgramSchema = createInsertSchema(stateBenefitPrograms).omit({
   id: true,
   createdAt: true,
   updatedAt: true,
 });
 
-export const insertTranslationSuggestionSchema = createInsertSchema(translationSuggestions).omit({
+export const insertStateFormSchema = createInsertSchema(stateForms).omit({
   id: true,
   createdAt: true,
   updatedAt: true,
 });
 
-export const insertSuggestionVoteSchema = createInsertSchema(suggestionVotes).omit({
-  id: true,
-  createdAt: true,
-});
-
-export const insertTranslationVariantExperimentSchema = createInsertSchema(translationVariantExperiments).omit({
+export const insertStatePolicyRuleSchema = createInsertSchema(statePolicyRules).omit({
   id: true,
   createdAt: true,
   updatedAt: true,
 });
 
-export const insertTranslationVariantSchema = createInsertSchema(translationVariants).omit({
-  id: true,
-  createdAt: true,
-});
-
-export const insertTranslationVariantMetricSchema = createInsertSchema(translationVariantMetrics).omit({
-  id: true,
-  recordedAt: true,
-});
-
-export const insertTranslationAuditLogSchema = createInsertSchema(translationAuditLog).omit({
-  id: true,
-  createdAt: true,
-});
-
-export const insertTranslationAssignmentSchema = createInsertSchema(translationAssignments).omit({
+// Insert schemas for Cross-State Rules
+export const insertCrossStateRuleSchema = createInsertSchema(crossStateRules).omit({
   id: true,
   createdAt: true,
   updatedAt: true,
 });
 
-// Types
-export type InsertTranslationLocale = z.infer<typeof insertTranslationLocaleSchema>;
-export type TranslationLocale = typeof translationLocales.$inferSelect;
+export const insertJurisdictionHierarchySchema = createInsertSchema(jurisdictionHierarchies).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
 
-export type InsertTranslationKey = z.infer<typeof insertTranslationKeySchema>;
-export type TranslationKey = typeof translationKeys.$inferSelect;
+export const insertStateReciprocityAgreementSchema = createInsertSchema(stateReciprocityAgreements).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
 
-export type InsertTranslationVersion = z.infer<typeof insertTranslationVersionSchema>;
-export type TranslationVersion = typeof translationVersions.$inferSelect;
+export const insertMultiStateHouseholdSchema = createInsertSchema(multiStateHouseholds).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
 
-export type InsertTranslationSuggestion = z.infer<typeof insertTranslationSuggestionSchema>;
-export type TranslationSuggestion = typeof translationSuggestions.$inferSelect;
+export const insertCrossStateRuleApplicationSchema = createInsertSchema(crossStateRuleApplications).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
 
-export type InsertSuggestionVote = z.infer<typeof insertSuggestionVoteSchema>;
-export type SuggestionVote = typeof suggestionVotes.$inferSelect;
+// Insert schemas for GDPR Compliance
+export const insertGdprConsentSchema = createInsertSchema(gdprConsents).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
 
-export type InsertTranslationVariantExperiment = z.infer<typeof insertTranslationVariantExperimentSchema>;
-export type TranslationVariantExperiment = typeof translationVariantExperiments.$inferSelect;
+export const insertGdprDataSubjectRequestSchema = createInsertSchema(gdprDataSubjectRequests).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
 
-export type InsertTranslationVariant = z.infer<typeof insertTranslationVariantSchema>;
-export type TranslationVariant = typeof translationVariants.$inferSelect;
+export const insertGdprDataProcessingActivitySchema = createInsertSchema(gdprDataProcessingActivities).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
 
-export type InsertTranslationVariantMetric = z.infer<typeof insertTranslationVariantMetricSchema>;
-export type TranslationVariantMetric = typeof translationVariantMetrics.$inferSelect;
+export const insertGdprPrivacyImpactAssessmentSchema = createInsertSchema(gdprPrivacyImpactAssessments).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
 
-export type InsertTranslationAuditLog = z.infer<typeof insertTranslationAuditLogSchema>;
-export type TranslationAuditLog = typeof translationAuditLog.$inferSelect;
+export const insertGdprBreachIncidentSchema = createInsertSchema(gdprBreachIncidents).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
 
-export type InsertTranslationAssignment = z.infer<typeof insertTranslationAssignmentSchema>;
-export type TranslationAssignment = typeof translationAssignments.$inferSelect;
+// Types for State Configuration
+export type StateConfiguration = typeof stateConfigurations.$inferSelect;
+export type InsertStateConfiguration = z.infer<typeof insertStateConfigurationSchema>;
+export type StateBenefitProgram = typeof stateBenefitPrograms.$inferSelect;
+export type InsertStateBenefitProgram = z.infer<typeof insertStateBenefitProgramSchema>;
+export type StateForm = typeof stateForms.$inferSelect;
+export type InsertStateForm = z.infer<typeof insertStateFormSchema>;
+export type StatePolicyRule = typeof statePolicyRules.$inferSelect;
+export type InsertStatePolicyRule = z.infer<typeof insertStatePolicyRuleSchema>;
+
+// Types for Cross-State Rules
+export type CrossStateRule = typeof crossStateRules.$inferSelect;
+export type InsertCrossStateRule = z.infer<typeof insertCrossStateRuleSchema>;
+export type JurisdictionHierarchy = typeof jurisdictionHierarchies.$inferSelect;
+export type InsertJurisdictionHierarchy = z.infer<typeof insertJurisdictionHierarchySchema>;
+export type StateReciprocityAgreement = typeof stateReciprocityAgreements.$inferSelect;
+export type InsertStateReciprocityAgreement = z.infer<typeof insertStateReciprocityAgreementSchema>;
+export type MultiStateHousehold = typeof multiStateHouseholds.$inferSelect;
+export type InsertMultiStateHousehold = z.infer<typeof insertMultiStateHouseholdSchema>;
+export type CrossStateRuleApplication = typeof crossStateRuleApplications.$inferSelect;
+export type InsertCrossStateRuleApplication = z.infer<typeof insertCrossStateRuleApplicationSchema>;
+
+// Types for GDPR Compliance
+export type GdprConsent = typeof gdprConsents.$inferSelect;
+export type InsertGdprConsent = z.infer<typeof insertGdprConsentSchema>;
+export type GdprDataSubjectRequest = typeof gdprDataSubjectRequests.$inferSelect;
+export type InsertGdprDataSubjectRequest = z.infer<typeof insertGdprDataSubjectRequestSchema>;
+export type GdprDataProcessingActivity = typeof gdprDataProcessingActivities.$inferSelect;
+export type InsertGdprDataProcessingActivity = z.infer<typeof insertGdprDataProcessingActivitySchema>;
+export type GdprPrivacyImpactAssessment = typeof gdprPrivacyImpactAssessments.$inferSelect;
+export type InsertGdprPrivacyImpactAssessment = z.infer<typeof insertGdprPrivacyImpactAssessmentSchema>;
+export type GdprBreachIncident = typeof gdprBreachIncidents.$inferSelect;
+export type InsertGdprBreachIncident = z.infer<typeof insertGdprBreachIncidentSchema>;
+
+// ============================================================================
+// HIPAA COMPLIANCE - Healthcare Data Protection & PHI Security
+// ============================================================================
+
+// HIPAA PHI Access Logs - Track all Protected Health Information access
+export const hipaaPhiAccessLogs = pgTable("hipaa_phi_access_logs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id).notNull(),
+  patientId: varchar("patient_id").references(() => users.id), // Patient whose PHI was accessed
+  accessType: text("access_type").notNull(), // view, create, update, delete, export, print
+  resourceType: text("resource_type").notNull(), // patient_record, document, household_profile, tax_return, etc.
+  resourceId: varchar("resource_id").notNull(), // ID of the accessed resource
+  dataElements: text("data_elements").array(), // Specific PHI fields accessed
+  purpose: text("purpose").notNull(), // treatment, payment, operations, research, etc.
+  minimumNecessary: boolean("minimum_necessary").default(true).notNull(), // Met minimum necessary standard
+  justification: text("justification"), // Why access was needed
+  ipAddress: text("ip_address"),
+  userAgent: text("user_agent"),
+  location: text("location"), // Geographic location
+  sessionId: varchar("session_id"),
+  requestMethod: text("request_method"), // GET, POST, PUT, DELETE
+  requestUrl: text("request_url"),
+  responseStatus: integer("response_status"),
+  accessDuration: integer("access_duration"), // Duration in milliseconds
+  emergencyAccess: boolean("emergency_access").default(false), // Break-glass access
+  delegatedAccess: boolean("delegated_access").default(false), // Access on behalf of another user
+  delegatedBy: varchar("delegated_by").references(() => users.id),
+  auditReviewed: boolean("audit_reviewed").default(false),
+  reviewedBy: varchar("reviewed_by").references(() => users.id),
+  reviewedAt: timestamp("reviewed_at"),
+  flaggedForReview: boolean("flagged_for_review").default(false),
+  flagReason: text("flag_reason"),
+  accessedAt: timestamp("accessed_at").defaultNow().notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+  userIdIdx: index("hipaa_phi_access_user_id_idx").on(table.userId),
+  patientIdIdx: index("hipaa_phi_access_patient_id_idx").on(table.patientId),
+  resourceIdx: index("hipaa_phi_access_resource_idx").on(table.resourceType, table.resourceId),
+  accessTypeIdx: index("hipaa_phi_access_type_idx").on(table.accessType),
+  accessedAtIdx: index("hipaa_phi_access_accessed_at_idx").on(table.accessedAt),
+  flaggedIdx: index("hipaa_phi_access_flagged_idx").on(table.flaggedForReview),
+}));
+
+// HIPAA Business Associate Agreements - Track BAAs and covered entities
+export const hipaaBusinessAssociateAgreements = pgTable("hipaa_business_associate_agreements", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  agreementNumber: text("agreement_number").notNull().unique(),
+  businessAssociateName: text("business_associate_name").notNull(),
+  businessAssociateType: text("business_associate_type").notNull(), // vendor, subcontractor, cloud_provider, etc.
+  contactPerson: text("contact_person").notNull(),
+  contactEmail: text("contact_email").notNull(),
+  contactPhone: text("contact_phone"),
+  servicesProvided: text("services_provided").array().notNull(),
+  phiCategories: text("phi_categories").array().notNull(), // Types of PHI they can access
+  permittedUses: text("permitted_uses").array().notNull(), // What they're allowed to do with PHI
+  permittedDisclosures: text("permitted_disclosures").array(),
+  subcontractorsAllowed: boolean("subcontractors_allowed").default(false),
+  subcontractorsList: jsonb("subcontractors_list"), // List of approved subcontractors
+  signedDate: timestamp("signed_date").notNull(),
+  effectiveDate: timestamp("effective_date").notNull(),
+  expirationDate: timestamp("expiration_date"),
+  autoRenewal: boolean("auto_renewal").default(false),
+  renewalTerms: text("renewal_terms"),
+  terminationDate: timestamp("termination_date"),
+  terminationReason: text("termination_reason"),
+  status: text("status").notNull().default("active"), // active, expired, terminated, under_review
+  securityRequirements: jsonb("security_requirements").notNull(), // Required security controls
+  breachNotificationRequired: boolean("breach_notification_required").default(true).notNull(),
+  breachNotificationTimeframe: text("breach_notification_timeframe").default("60 days"),
+  auditRights: boolean("audit_rights").default(true).notNull(),
+  lastAuditDate: timestamp("last_audit_date"),
+  nextAuditDue: timestamp("next_audit_due"),
+  auditFindings: text("audit_findings"),
+  complianceStatus: text("compliance_status").default("compliant"), // compliant, non_compliant, under_review
+  attestationProvided: boolean("attestation_provided").default(false),
+  attestationDate: timestamp("attestation_date"),
+  insuranceRequired: boolean("insurance_required").default(false),
+  insuranceCoverage: text("insurance_coverage"),
+  insuranceExpirationDate: timestamp("insurance_expiration_date"),
+  documentUrl: text("document_url"), // Link to signed BAA document
+  notes: text("notes"),
+  createdBy: varchar("created_by").references(() => users.id).notNull(),
+  updatedBy: varchar("updated_by").references(() => users.id),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  agreementNumberIdx: uniqueIndex("hipaa_baa_agreement_number_idx").on(table.agreementNumber),
+  statusIdx: index("hipaa_baa_status_idx").on(table.status),
+  expirationDateIdx: index("hipaa_baa_expiration_date_idx").on(table.expirationDate),
+  nextAuditIdx: index("hipaa_baa_next_audit_idx").on(table.nextAuditDue),
+}));
+
+// HIPAA Risk Assessments - Security Risk Analysis (SRA) tracking
+export const hipaaRiskAssessments = pgTable("hipaa_risk_assessments", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  assessmentNumber: text("assessment_number").notNull().unique(),
+  assessmentType: text("assessment_type").notNull(), // annual, incident_driven, change_driven, vendor_assessment
+  scope: text("scope").notNull(), // Full scope description
+  assessmentDate: timestamp("assessment_date").notNull(),
+  assessor: varchar("assessor").references(() => users.id).notNull(),
+  assessorQualifications: text("assessor_qualifications"),
+  methodology: text("methodology").notNull(), // NIST, OCTAVE, custom, etc.
+  physicalSafeguards: jsonb("physical_safeguards").notNull(), // Assessment of physical controls
+  technicalSafeguards: jsonb("technical_safeguards").notNull(), // Assessment of technical controls
+  administrativeSafeguards: jsonb("administrative_safeguards").notNull(), // Assessment of admin controls
+  threatsIdentified: jsonb("threats_identified").notNull(), // List of threats
+  vulnerabilitiesIdentified: jsonb("vulnerabilities_identified").notNull(), // List of vulnerabilities
+  riskLevel: text("risk_level").notNull(), // low, medium, high, critical
+  impactAnalysis: jsonb("impact_analysis").notNull(), // Analysis of potential impact
+  likelihoodAnalysis: jsonb("likelihood_analysis").notNull(), // Analysis of likelihood
+  currentControls: jsonb("current_controls").notNull(), // Existing security controls
+  controlEffectiveness: text("control_effectiveness").notNull(), // effective, partially_effective, ineffective
+  gaps: jsonb("gaps").notNull(), // Identified gaps in security
+  recommendations: jsonb("recommendations").notNull(), // Recommended actions
+  remediationPlan: jsonb("remediation_plan"), // Plan to address risks
+  remediationDeadline: timestamp("remediation_deadline"),
+  remediationStatus: text("remediation_status").default("pending"), // pending, in_progress, completed, deferred
+  residualRisk: text("residual_risk"), // Risk level after remediation
+  acceptedRisks: jsonb("accepted_risks"), // Risks accepted by management
+  riskAcceptanceJustification: text("risk_acceptance_justification"),
+  acceptedBy: varchar("accepted_by").references(() => users.id),
+  acceptedDate: timestamp("accepted_date"),
+  reviewDate: timestamp("review_date"),
+  nextReviewDue: timestamp("next_review_due").notNull(),
+  status: text("status").notNull().default("draft"), // draft, in_review, approved, implemented
+  approvedBy: varchar("approved_by").references(() => users.id),
+  approvalDate: timestamp("approval_date"),
+  documentUrl: text("document_url"),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  assessmentNumberIdx: uniqueIndex("hipaa_ra_assessment_number_idx").on(table.assessmentNumber),
+  assessmentTypeIdx: index("hipaa_ra_assessment_type_idx").on(table.assessmentType),
+  riskLevelIdx: index("hipaa_ra_risk_level_idx").on(table.riskLevel),
+  statusIdx: index("hipaa_ra_status_idx").on(table.status),
+  nextReviewIdx: index("hipaa_ra_next_review_idx").on(table.nextReviewDue),
+}));
+
+// HIPAA Security Incidents - Track security incidents and breaches
+export const hipaaSecurityIncidents = pgTable("hipaa_security_incidents", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  incidentNumber: text("incident_number").notNull().unique(),
+  incidentType: text("incident_type").notNull(), // breach, unauthorized_access, lost_device, ransomware, phishing, etc.
+  incidentDate: timestamp("incident_date").notNull(),
+  discoveryDate: timestamp("discovery_date").notNull(),
+  reportedDate: timestamp("reported_date"),
+  reportedBy: varchar("reported_by").references(() => users.id).notNull(),
+  description: text("description").notNull(),
+  affectedSystems: text("affected_systems").array(),
+  phiInvolved: boolean("phi_involved").default(false).notNull(),
+  phiTypes: text("phi_types").array(), // Types of PHI affected
+  numberOfRecords: integer("number_of_records").default(0),
+  affectedPatients: integer("affected_patients").default(0),
+  affectedPatientIds: text("affected_patient_ids").array(),
+  breachThresholdMet: boolean("breach_threshold_met").default(false), // > 500 individuals
+  hhs_notification_required: boolean("hhs_notification_required").default(false),
+  media_notification_required: boolean("media_notification_required").default(false),
+  severity: text("severity").notNull(), // low, medium, high, critical
+  riskAnalysis: text("risk_analysis").notNull(), // Risk to affected individuals
+  probabilityOfCompromise: text("probability_of_compromise"), // low, medium, high
+  containmentActions: jsonb("containment_actions").notNull(),
+  containmentDate: timestamp("containment_date"),
+  investigationFindings: text("investigation_findings"),
+  investigatedBy: varchar("investigated_by").references(() => users.id),
+  investigationCompletedDate: timestamp("investigation_completed_date"),
+  rootCause: text("root_cause"),
+  contributingFactors: text("contributing_factors").array(),
+  correctiveActions: jsonb("corrective_actions").notNull(),
+  preventiveMeasures: jsonb("preventive_measures"),
+  individualsNotified: boolean("individuals_notified").default(false),
+  individualNotificationDate: timestamp("individual_notification_date"),
+  individualNotificationMethod: text("individual_notification_method"), // mail, email, phone, substitute_notice
+  hhsNotified: boolean("hhs_notified").default(false),
+  hhsNotificationDate: timestamp("hhs_notification_date"),
+  hhsNotificationMethod: text("hhs_notification_method"), // web_portal, written
+  mediaNotified: boolean("media_notified").default(false),
+  mediaNotificationDate: timestamp("media_notification_date"),
+  lawEnforcementNotified: boolean("law_enforcement_notified").default(false),
+  lawEnforcementDetails: jsonb("law_enforcement_details"),
+  insuranceClaimFiled: boolean("insurance_claim_filed").default(false),
+  insuranceClaimNumber: text("insurance_claim_number"),
+  status: text("status").notNull().default("open"), // open, investigating, contained, resolved, closed
+  incidentOwner: varchar("incident_owner").references(() => users.id).notNull(),
+  closedDate: timestamp("closed_date"),
+  closedBy: varchar("closed_by").references(() => users.id),
+  lessonsLearned: text("lessons_learned"),
+  policyUpdatesNeeded: boolean("policy_updates_needed").default(false),
+  trainingNeeded: boolean("training_needed").default(false),
+  documentUrl: text("document_url"),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  incidentNumberIdx: uniqueIndex("hipaa_incident_number_idx").on(table.incidentNumber),
+  incidentTypeIdx: index("hipaa_incident_type_idx").on(table.incidentType),
+  severityIdx: index("hipaa_incident_severity_idx").on(table.severity),
+  statusIdx: index("hipaa_incident_status_idx").on(table.status),
+  discoveryDateIdx: index("hipaa_incident_discovery_date_idx").on(table.discoveryDate),
+  breachIdx: index("hipaa_incident_breach_idx").on(table.breachThresholdMet),
+}));
+
+// HIPAA Audit Logs - Comprehensive audit trail for all system activities
+export const hipaaAuditLogs = pgTable("hipaa_audit_logs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  timestamp: timestamp("timestamp").defaultNow().notNull(),
+  userId: varchar("user_id").references(() => users.id),
+  userName: text("user_name"),
+  userRole: text("user_role"),
+  action: text("action").notNull(), // login, logout, create, read, update, delete, export, etc.
+  actionCategory: text("action_category").notNull(), // authentication, data_access, configuration, system, etc.
+  resourceType: text("resource_type"), // user, patient, document, household_profile, etc.
+  resourceId: varchar("resource_id"),
+  resourceName: text("resource_name"),
+  changesMade: jsonb("changes_made"), // Before/after values
+  outcome: text("outcome").notNull(), // success, failure, partial
+  failureReason: text("failure_reason"),
+  ipAddress: text("ip_address"),
+  userAgent: text("user_agent"),
+  sessionId: varchar("session_id"),
+  requestMethod: text("request_method"),
+  requestUrl: text("request_url"),
+  responseStatus: integer("response_status"),
+  responseTime: integer("response_time"), // milliseconds
+  phiAccessed: boolean("phi_accessed").default(false),
+  securityRelevant: boolean("security_relevant").default(false), // Flag for security-relevant events
+  complianceRelevant: boolean("compliance_relevant").default(false), // Flag for compliance audits
+  retentionPeriod: integer("retention_period").default(2555).notNull(), // Days to retain (default 7 years)
+  archived: boolean("archived").default(false),
+  archivedDate: timestamp("archived_date"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+  timestampIdx: index("hipaa_audit_timestamp_idx").on(table.timestamp),
+  userIdIdx: index("hipaa_audit_user_id_idx").on(table.userId),
+  actionIdx: index("hipaa_audit_action_idx").on(table.action),
+  actionCategoryIdx: index("hipaa_audit_action_category_idx").on(table.actionCategory),
+  resourceIdx: index("hipaa_audit_resource_idx").on(table.resourceType, table.resourceId),
+  phiAccessedIdx: index("hipaa_audit_phi_accessed_idx").on(table.phiAccessed),
+  securityRelevantIdx: index("hipaa_audit_security_relevant_idx").on(table.securityRelevant),
+}));
+
+// Insert schemas for HIPAA Compliance
+export const insertHipaaPhiAccessLogSchema = createInsertSchema(hipaaPhiAccessLogs).omit({
+  id: true,
+  accessedAt: true,
+  createdAt: true,
+});
+
+export const insertHipaaBusinessAssociateAgreementSchema = createInsertSchema(hipaaBusinessAssociateAgreements).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertHipaaRiskAssessmentSchema = createInsertSchema(hipaaRiskAssessments).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertHipaaSecurityIncidentSchema = createInsertSchema(hipaaSecurityIncidents).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertHipaaAuditLogSchema = createInsertSchema(hipaaAuditLogs).omit({
+  id: true,
+  timestamp: true,
+  createdAt: true,
+});
+
+// Types for HIPAA Compliance
+export type HipaaPhiAccessLog = typeof hipaaPhiAccessLogs.$inferSelect;
+export type InsertHipaaPhiAccessLog = z.infer<typeof insertHipaaPhiAccessLogSchema>;
+export type HipaaBusinessAssociateAgreement = typeof hipaaBusinessAssociateAgreements.$inferSelect;
+export type InsertHipaaBusinessAssociateAgreement = z.infer<typeof insertHipaaBusinessAssociateAgreementSchema>;
+export type HipaaRiskAssessment = typeof hipaaRiskAssessments.$inferSelect;
+export type InsertHipaaRiskAssessment = z.infer<typeof insertHipaaRiskAssessmentSchema>;
+export type HipaaSecurityIncident = typeof hipaaSecurityIncidents.$inferSelect;
+export type InsertHipaaSecurityIncident = z.infer<typeof insertHipaaSecurityIncidentSchema>;
+export type HipaaAuditLog = typeof hipaaAuditLogs.$inferSelect;
+export type InsertHipaaAuditLog = z.infer<typeof insertHipaaAuditLogSchema>;
+
+// ============================================================================
+// BENEFITS ACCESS REVIEW MODULE - Autonomous case monitoring system
+// ============================================================================
+
+// Benefits Access Reviews - Main table for tracking case lifecycle
+export const benefitsAccessReviews = pgTable("benefits_access_reviews", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  caseId: varchar("case_id").references(() => clientCases.id, { onDelete: "cascade" }).notNull(),
+  caseworkerId: varchar("caseworker_id").references(() => users.id).notNull(),
+  supervisorId: varchar("supervisor_id").references(() => users.id), // Assigned supervisor
+  
+  // Review period tracking (30-60 days)
+  reviewPeriodStart: timestamp("review_period_start").notNull(),
+  reviewPeriodEnd: timestamp("review_period_end").notNull(),
+  reviewDuration: integer("review_duration").notNull(), // days (30-60)
+  
+  // Sampling metadata
+  samplingMethod: text("sampling_method").notNull(), // stratified, random, targeted
+  samplingCriteria: jsonb("sampling_criteria"), // demographic, program, county stratification
+  selectedForReview: boolean("selected_for_review").default(false).notNull(),
+  selectionWeight: real("selection_weight"), // probability weight used in sampling
+  
+  // Review status
+  reviewStatus: text("review_status").notNull().default("pending"), // pending, in_progress, completed, escalated
+  reviewPriority: text("review_priority").default("normal"), // low, normal, high, urgent
+  
+  // Anonymization for blind review
+  anonymizedCaseId: text("anonymized_case_id"), // hashed ID for blind review
+  anonymizedWorkerId: text("anonymized_worker_id"), // hashed worker ID for blind review
+  blindReviewMode: boolean("blind_review_mode").default(true).notNull(),
+  
+  // AI assessment
+  aiAssessmentScore: real("ai_assessment_score"), // 0-1 quality score from Gemini
+  aiAssessmentSummary: text("ai_assessment_summary"), // AI-generated summary
+  aiAssessmentDetails: jsonb("ai_assessment_details"), // detailed AI analysis
+  aiAssessmentDate: timestamp("ai_assessment_date"),
+  
+  // Supervisor feedback
+  supervisorFeedbackId: varchar("supervisor_feedback_id").references((): any => reviewerFeedback.id),
+  supervisorReviewDate: timestamp("supervisor_review_date"),
+  supervisorScore: real("supervisor_score"), // 0-100 score
+  
+  // Lifecycle checkpoints
+  checkpointsCompleted: integer("checkpoints_completed").default(0),
+  totalCheckpoints: integer("total_checkpoints").default(0),
+  checkpointStatus: jsonb("checkpoint_status"), // status of each checkpoint
+  
+  // Metadata
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  caseIdIdx: index("bar_case_id_idx").on(table.caseId),
+  caseworkerIdIdx: index("bar_caseworker_id_idx").on(table.caseworkerId),
+  supervisorIdIdx: index("bar_supervisor_id_idx").on(table.supervisorId),
+  reviewStatusIdx: index("bar_review_status_idx").on(table.reviewStatus),
+  selectedForReviewIdx: index("bar_selected_for_review_idx").on(table.selectedForReview),
+  reviewPeriodIdx: index("bar_review_period_idx").on(table.reviewPeriodStart, table.reviewPeriodEnd),
+}));
+
+// Review Samples - Statistical sampling records
+export const reviewSamples = pgTable("review_samples", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  samplingPeriod: text("sampling_period").notNull(), // e.g., "2025-W42" for week 42 of 2025
+  samplingDate: timestamp("sampling_date").defaultNow().notNull(),
+  
+  // Sampling parameters
+  totalCases: integer("total_cases").notNull(), // total cases in the pool
+  selectedCases: integer("selected_cases").notNull(), // number of cases selected
+  samplingRate: real("sampling_rate").notNull(), // selected / total
+  
+  // Stratification metadata
+  stratificationDimensions: jsonb("stratification_dimensions"), // dimensions used (program, county, etc.)
+  stratificationDistribution: jsonb("stratification_distribution"), // actual distribution of selected cases
+  
+  // Sample quality metrics
+  diversityScore: real("diversity_score"), // 0-1 measure of sample diversity
+  representativenessScore: real("representativeness_score"), // 0-1 measure of population representation
+  
+  // Worker allocation (2 cases per worker target)
+  workersIncluded: integer("workers_included").notNull(),
+  casesPerWorker: jsonb("cases_per_worker"), // distribution of cases per worker
+  
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+  samplingPeriodIdx: index("rs_sampling_period_idx").on(table.samplingPeriod),
+  samplingDateIdx: index("rs_sampling_date_idx").on(table.samplingDate),
+}));
+
+// Reviewer Feedback - Structured feedback from supervisors
+export const reviewerFeedback = pgTable("reviewer_feedback", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  reviewId: varchar("review_id").references(() => benefitsAccessReviews.id, { onDelete: "cascade" }).notNull(),
+  reviewerId: varchar("reviewer_id").references(() => users.id).notNull(),
+  
+  // Feedback dimensions
+  accuracyScore: real("accuracy_score"), // 0-100 accuracy of determination
+  timelinessScore: real("timeliness_score"), // 0-100 processing timeliness
+  documentationScore: real("documentation_score"), // 0-100 documentation quality
+  customerServiceScore: real("customer_service_score"), // 0-100 customer interaction quality
+  overallScore: real("overall_score"), // 0-100 overall performance
+  
+  // Structured feedback
+  strengths: text("strengths").array(), // array of strength categories
+  areasForImprovement: text("areas_for_improvement").array(), // array of improvement areas
+  criticalIssues: text("critical_issues").array(), // array of critical issues found
+  
+  // Detailed feedback
+  feedbackNotes: text("feedback_notes"), // detailed written feedback
+  recommendations: text("recommendations"), // specific recommendations for improvement
+  
+  // Follow-up actions
+  requiresFollowUp: boolean("requires_follow_up").default(false),
+  followUpActions: jsonb("follow_up_actions"), // specific actions to take
+  escalationRequired: boolean("escalation_required").default(false),
+  escalationReason: text("escalation_reason"),
+  
+  // Metadata
+  reviewDate: timestamp("review_date").defaultNow().notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  reviewIdIdx: index("rf_review_id_idx").on(table.reviewId),
+  reviewerIdIdx: index("rf_reviewer_id_idx").on(table.reviewerId),
+  reviewDateIdx: index("rf_review_date_idx").on(table.reviewDate),
+  escalationIdx: index("rf_escalation_idx").on(table.escalationRequired),
+}));
+
+// Case Lifecycle Events - Checkpoint tracking (30-60 day lifecycle)
+export const caseLifecycleEvents = pgTable("case_lifecycle_events", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  reviewId: varchar("review_id").references(() => benefitsAccessReviews.id, { onDelete: "cascade" }).notNull(),
+  caseId: varchar("case_id").references(() => clientCases.id, { onDelete: "cascade" }).notNull(),
+  
+  // Checkpoint tracking
+  checkpointType: text("checkpoint_type").notNull(), // intake, verification, determination, notification, followup
+  checkpointName: text("checkpoint_name").notNull(), // descriptive name
+  checkpointDescription: text("checkpoint_description"),
+  
+  // Timing
+  expectedDate: timestamp("expected_date"), // when checkpoint should occur
+  actualDate: timestamp("actual_date"), // when checkpoint actually occurred
+  daysFromStart: integer("days_from_start"), // days since case started
+  isOnTime: boolean("is_on_time"), // true if met within expected timeframe
+  delayDays: integer("delay_days"), // days delayed (if applicable)
+  
+  // Status
+  status: text("status").notNull().default("pending"), // pending, completed, overdue, skipped
+  completedBy: varchar("completed_by").references(() => users.id),
+  
+  // Details
+  eventDetails: jsonb("event_details"), // checkpoint-specific details
+  notes: text("notes"), // additional notes
+  
+  // AI monitoring
+  aiAlerted: boolean("ai_alerted").default(false), // true if AI flagged this event
+  aiAlertReason: text("ai_alert_reason"), // why AI flagged this
+  
+  // Notification tracking (BAR)
+  notificationSentAt: timestamp("notification_sent_at"), // when last notification was sent
+  reminderSentDays: integer("reminder_sent_days").array(), // which day-before reminders were sent (e.g., [3, 1])
+  overdueAlertSentAt: timestamp("overdue_alert_sent_at"), // when overdue alert was sent
+  
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  reviewIdIdx: index("cle_review_id_idx").on(table.reviewId),
+  caseIdIdx: index("cle_case_id_idx").on(table.caseId),
+  checkpointTypeIdx: index("cle_checkpoint_type_idx").on(table.checkpointType),
+  statusIdx: index("cle_status_idx").on(table.status),
+  expectedDateIdx: index("cle_expected_date_idx").on(table.expectedDate),
+  aiAlertedIdx: index("cle_ai_alerted_idx").on(table.aiAlerted),
+}));
+
+// Insert schemas for Benefits Access Review
+export const insertBenefitsAccessReviewSchema = createInsertSchema(benefitsAccessReviews).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertReviewSampleSchema = createInsertSchema(reviewSamples).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertReviewerFeedbackSchema = createInsertSchema(reviewerFeedback).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertCaseLifecycleEventSchema = createInsertSchema(caseLifecycleEvents).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+// Types for Benefits Access Review
+export type BenefitsAccessReview = typeof benefitsAccessReviews.$inferSelect;
+export type InsertBenefitsAccessReview = z.infer<typeof insertBenefitsAccessReviewSchema>;
+export type ReviewSample = typeof reviewSamples.$inferSelect;
+export type InsertReviewSample = z.infer<typeof insertReviewSampleSchema>;
+export type ReviewerFeedback = typeof reviewerFeedback.$inferSelect;
+export type InsertReviewerFeedback = z.infer<typeof insertReviewerFeedbackSchema>;
+export type CaseLifecycleEvent = typeof caseLifecycleEvents.$inferSelect;
+export type InsertCaseLifecycleEvent = z.infer<typeof insertCaseLifecycleEventSchema>;
+
+// Export tax return tables from taxReturnSchema
+// COMMENTED OUT DURING SCHEMA ROLLBACK - taxReturnSchema.ts moved to backup
+// export * from './taxReturnSchema';
