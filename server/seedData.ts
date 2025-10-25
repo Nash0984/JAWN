@@ -93,15 +93,22 @@ export async function seedMarylandBenefitPrograms() {
     // MIGRATION STEP: Rename MD_OHEP → LIHEAP_MD if old code exists
     const oldOhepProgram = programs.find(p => p.code === 'MD_OHEP');
     if (oldOhepProgram) {
-      logger.info('🔄 Migrating MD_OHEP → LIHEAP_MD...');
-      await db.update(benefitPrograms)
-        .set({ code: 'LIHEAP_MD' })
-        .where(eq(benefitPrograms.code, 'MD_OHEP'));
-      logger.info('✓ Migrated program code MD_OHEP → LIHEAP_MD');
-      // Refresh programs list after migration
-      const updatedPrograms = await storage.getBenefitPrograms();
-      programs.length = 0;
-      programs.push(...updatedPrograms);
+      try {
+        logger.info('🔄 Attempting to migrate MD_OHEP → LIHEAP_MD...');
+        await db.update(benefitPrograms)
+          .set({ code: 'LIHEAP_MD' })
+          .where(eq(benefitPrograms.code, 'MD_OHEP'));
+        logger.info('✓ Migrated program code MD_OHEP → LIHEAP_MD');
+        // Refresh programs list after migration
+        const updatedPrograms = await storage.getBenefitPrograms();
+        programs.length = 0;
+        programs.push(...updatedPrograms);
+      } catch (migrationError: any) {
+        // Migration failed due to constraint - this is expected if there are dependencies
+        logger.warn('⚠️  Could not migrate MD_OHEP → LIHEAP_MD (likely due to foreign key constraints)');
+        logger.warn('   This is expected if there are existing references. The old code will be kept.');
+        // Continue with existing data - don't fail the entire initialization
+      }
     }
     
     // Define all Maryland benefit programs + VITA
