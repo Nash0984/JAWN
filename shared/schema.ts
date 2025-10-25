@@ -1994,7 +1994,7 @@ export const insertUserSchema = createInsertSchema(users).omit({
   createdAt: true,
   updatedAt: true,
 }).extend({
-  role: z.enum(["client", "navigator", "caseworker", "admin"]).default("client"),
+  role: z.enum(["client", "navigator", "caseworker", "supervisor", "admin", "super_admin"]).default("client"),
   email: z.string().email().optional(),
 });
 

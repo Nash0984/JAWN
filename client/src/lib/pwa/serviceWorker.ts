@@ -103,12 +103,22 @@ sw.addEventListener('fetch', (event: any) => {
     return;
   }
   
-  // Static assets - Cache-first
-  if (
-    url.pathname.match(/\.(js|css|png|jpg|jpeg|svg|woff|woff2)$/) ||
-    STATIC_ASSETS.includes(url.pathname)
-  ) {
+  // Static assets - Cache strategy based on file type and environment
+  // Development: Network-first for JS to prevent stale modules
+  // Production: Cache-first for all static assets
+  const isDevelopment = sw.location.hostname === 'localhost' || 
+                        sw.location.hostname.includes('replit.dev');
+  
+  if (url.pathname.match(/\.(png|jpg|jpeg|svg|woff|woff2)$/) ||
+      STATIC_ASSETS.includes(url.pathname)) {
+    // Images and fonts always cache-first
     event.respondWith(cacheFirst(request));
+    return;
+  }
+  
+  if (url.pathname.match(/\.(js|css)$/)) {
+    // JS and CSS: Network-first in development, cache-first in production
+    event.respondWith(isDevelopment ? networkFirst(request) : cacheFirst(request));
     return;
   }
   
