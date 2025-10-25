@@ -4,7 +4,6 @@ import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { HelmetProvider } from "react-helmet-async";
 import { LoadingWrapper } from "@/components/common";
 
 // Core/Auth pages - Always loaded (small, needed for initial render)
@@ -824,9 +823,8 @@ function Router() {
 
 function App() {
   return (
-    <HelmetProvider>
-      <QueryClientProvider client={queryClient}>
-        <TenantProvider>
+    <QueryClientProvider client={queryClient}>
+      <TenantProvider>
           <TenantThemeProvider>
             <BrandingProvider>
               <SessionExpiryProvider>
@@ -838,8 +836,7 @@ function App() {
             </BrandingProvider>
           </TenantThemeProvider>
         </TenantProvider>
-      </QueryClientProvider>
-    </HelmetProvider>
+    </QueryClientProvider>
   );
 }
 
