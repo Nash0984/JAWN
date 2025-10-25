@@ -31,7 +31,6 @@ import {
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2 } from "lucide-react";
-import { Helmet } from "react-helmet-async";
 import { useTenant } from "@/contexts/TenantContext";
 import { TenantLogo } from "@/components/TenantLogo";
 
@@ -106,10 +105,6 @@ export default function Signup() {
 
   return (
     <>
-      <Helmet>
-        <title>Sign Up - {stateName} Benefits Navigator</title>
-        <meta name="description" content={`Create a ${stateName} benefits account to access assistance programs and services`} />
-      </Helmet>
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background to-muted/20 px-4 py-8">
       <Card className="w-full max-w-md card-elevated" data-testid="card-signup">
         <CardHeader className="space-y-1 text-center">

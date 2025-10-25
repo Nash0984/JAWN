@@ -1,5 +1,4 @@
 import { useState, Fragment } from "react";
-import { Helmet } from "react-helmet-async";
 import { useQuery } from "@tanstack/react-query";
 import { useTenant } from "@/contexts/TenantContext";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -157,9 +156,6 @@ export default function CaseworkerCockpit() {
 
   return (
     <>
-      <Helmet>
-        <title>Caseworker Cockpit - {stateName} Benefits Navigator</title>
-      </Helmet>
       <TooltipProvider>
         <div className="container mx-auto p-6 space-y-6">
         {/* Header */}

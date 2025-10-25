@@ -1,5 +1,4 @@
 import { Link } from "wouter";
-import { Helmet } from "react-helmet-async";
 import { useAuth } from "@/hooks/useAuth";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -69,9 +68,6 @@ export default function NavigatorDashboard() {
 
   return (
     <>
-      <Helmet>
-        <title>Navigator Dashboard - {stateName} Benefits Navigator</title>
-      </Helmet>
       <div className="container mx-auto px-4 py-8 max-w-6xl">
       {/* Welcome Header */}
       <div className="mb-8">

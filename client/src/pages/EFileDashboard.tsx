@@ -27,7 +27,6 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { format } from "date-fns";
 import { Link } from "wouter";
-import { Helmet } from "react-helmet-async";
 import { useTenant } from "@/contexts/TenantContext";
 
 interface TaxReturn {
@@ -294,10 +293,6 @@ export default function EFileDashboard() {
 
   return (
     <>
-      <Helmet>
-        <title>E-Filing Dashboard - {stateName} Benefits Navigator</title>
-        <meta name="description" content={`Submit and track federal and ${stateName} tax return e-filing status`} />
-      </Helmet>
 
       <div className="container mx-auto px-4 py-6 max-w-7xl">
         {/* Header */}

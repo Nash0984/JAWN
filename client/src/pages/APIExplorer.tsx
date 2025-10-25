@@ -7,7 +7,6 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Code, Search, Lock, Zap, BookOpen, Filter, Copy, Check } from 'lucide-react';
-import { Helmet } from 'react-helmet-async';
 import { useToast } from '@/hooks/use-toast';
 import { generateCodeSnippets } from '@/lib/codeSnippets';
 import { useTenant } from '@/contexts/TenantContext';
@@ -79,10 +78,6 @@ export default function APIExplorer() {
 
   return (
     <>
-      <Helmet>
-        <title>API Explorer - {stateName} Universal Benefits-Tax Navigator</title>
-        <meta name="description" content="Interactive API documentation with 218 endpoints covering benefits, tax, AI, and more" />
-      </Helmet>
 
       <div className="container mx-auto p-6 space-y-8">
         {/* Header */}

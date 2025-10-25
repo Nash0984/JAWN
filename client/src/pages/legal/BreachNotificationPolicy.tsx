@@ -1,4 +1,3 @@
-import { Helmet } from "react-helmet-async";
 import LegalLayout from "@/components/LegalLayout";
 import { useTenant } from "@/contexts/TenantContext";
 
@@ -8,13 +7,6 @@ export default function BreachNotificationPolicy() {
   
   return (
     <>
-      <Helmet>
-        <title>Breach Notification Policy - {stateName} Benefits Platform</title>
-        <meta 
-          name="description" 
-          content={`${stateName} Benefits Platform's breach notification procedures, HIPAA compliance, incident response timeline, and user notification process.`}
-        />
-      </Helmet>
       
       <LegalLayout title="Breach Notification Policy" lastReviewed="October 16, 2025">
         <section data-testid="section-breach-overview">

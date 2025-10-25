@@ -1,4 +1,3 @@
-import { Helmet } from "react-helmet-async";
 import { useState, useRef, useEffect } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -172,9 +171,6 @@ export default function TaxpayerSignature() {
   if (signatureSubmitted) {
     return (
       <>
-        <Helmet>
-          <title>E-Signature - Success | {stateName} Benefits</title>
-        </Helmet>
 
         <div className="container mx-auto px-4 py-8 max-w-4xl">
           <Card className="bg-card dark:bg-card border-border dark:border-border" data-testid="success-card">
@@ -200,10 +196,6 @@ export default function TaxpayerSignature() {
 
   return (
     <>
-      <Helmet>
-        <title>E-Signature | {stateName} Benefits</title>
-        <meta name="description" content="Electronically sign your tax forms with legal compliance." />
-      </Helmet>
 
       <div className="container mx-auto px-4 py-8 max-w-4xl">
         <div className="mb-8">

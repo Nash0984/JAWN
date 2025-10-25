@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { Helmet } from "react-helmet-async";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useTenant } from "@/contexts/TenantContext";
 import { Calendar } from "@/components/ui/calendar";
@@ -189,9 +188,6 @@ export default function AppointmentsCalendar() {
 
   return (
     <>
-      <Helmet>
-        <title>Appointments - {stateName} Benefits Navigator</title>
-      </Helmet>
       <div className="container mx-auto p-6 space-y-6">
       <div className="flex justify-between items-center">
         <div>

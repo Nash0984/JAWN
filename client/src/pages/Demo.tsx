@@ -1,6 +1,5 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Helmet } from "react-helmet-async";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -64,13 +63,6 @@ export default function Demo() {
 
   return (
     <>
-      <Helmet>
-        <title>Demo Dashboard - Universal Benefits-Tax Navigator</title>
-        <meta
-          name="description"
-          content="Interactive showcase of 99 features across the Universal Benefits-Tax Navigator platform. Explore AI capabilities, system architecture, and real-time performance metrics."
-        />
-      </Helmet>
 
       <div className="container mx-auto px-4 py-8 space-y-12">
         {/* Hero Section */}

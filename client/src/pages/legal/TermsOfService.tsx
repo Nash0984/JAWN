@@ -1,4 +1,3 @@
-import { Helmet } from "react-helmet-async";
 import LegalLayout from "@/components/LegalLayout";
 import { useTenant } from "@/contexts/TenantContext";
 
@@ -9,13 +8,6 @@ export default function TermsOfService() {
   
   return (
     <>
-      <Helmet>
-        <title>Terms of Service - {stateName} Benefits Platform</title>
-        <meta 
-          name="description" 
-          content={`Read the Terms of Service for ${stateName} Benefits Platform. Understand your rights, responsibilities, and our commitment to helping you access benefits.`}
-        />
-      </Helmet>
       
       <LegalLayout title="Terms of Service" lastReviewed="October 16, 2025">
         <section data-testid="section-terms-acceptance">

@@ -1,5 +1,4 @@
 import { Link } from "wouter";
-import { Helmet } from "react-helmet-async";
 import { useAuth } from "@/hooks/useAuth";
 import { useTenant } from "@/contexts/TenantContext";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -142,9 +141,6 @@ export default function AdminDashboard() {
 
   return (
     <>
-      <Helmet>
-        <title>Admin Dashboard - {stateName} Benefits Navigator</title>
-      </Helmet>
       <div className="container mx-auto px-4 py-8 max-w-6xl">
       {/* Welcome Header */}
       <div className="mb-6">

@@ -1,4 +1,3 @@
-import { Helmet } from "react-helmet-async";
 import LegalLayout from "@/components/LegalLayout";
 import { useTenant } from "@/contexts/TenantContext";
 
@@ -9,13 +8,6 @@ export default function PrivacyPolicy() {
   
   return (
     <>
-      <Helmet>
-        <title>Privacy Policy - {stateName} Benefits Platform</title>
-        <meta 
-          name="description" 
-          content={`Learn how ${stateName} Benefits Platform protects your personal and health information with HIPAA-compliant privacy practices and AES-256-GCM encryption.`}
-        />
-      </Helmet>
       
       <LegalLayout title="Privacy Policy" lastReviewed="October 16, 2025">
         <section data-testid="section-privacy-overview">

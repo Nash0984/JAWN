@@ -1,4 +1,3 @@
-import { Helmet } from "react-helmet-async";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -41,16 +40,6 @@ export default function FsaLanding() {
 
   return (
     <>
-      <Helmet>
-        <title>TaxSlayer FSA - Free Self-Assisted Tax Prep | {stateName} VITA</title>
-        <meta 
-          name="description" 
-          content={`Prepare your own taxes for free with TaxSlayer FSA. ${stateName} VITA program offers free self-assisted tax preparation with expert navigator support when you need it.`}
-        />
-        <meta property="og:title" content={`TaxSlayer FSA - Free Self-Assisted Tax Prep | ${stateName} VITA`} />
-        <meta property="og:description" content="Prepare your own taxes for free with TaxSlayer FSA. Expert support available when you need it." />
-        <meta property="og:type" content="website" />
-      </Helmet>
 
       <div className="min-h-screen bg-gradient-to-b from-blue-50 to-white dark:from-gray-900 dark:to-gray-800">
         <div className="container mx-auto px-4 py-12 max-w-6xl">

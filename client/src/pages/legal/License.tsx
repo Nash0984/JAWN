@@ -1,4 +1,3 @@
-import { Helmet } from "react-helmet-async";
 import LegalLayout from "@/components/LegalLayout";
 import { Scale, CheckCircle, Users, Code } from "lucide-react";
 import { useTenant } from "@/contexts/TenantContext";
@@ -9,13 +8,6 @@ export default function License() {
   
   return (
     <>
-      <Helmet>
-        <title>License & Copyright - {stateName} Benefits Platform</title>
-        <meta 
-          name="description" 
-          content={`${stateName} Benefits Platform is open source software licensed under the MIT License. Learn about your rights to use, modify, and distribute this software.`}
-        />
-      </Helmet>
       
       <LegalLayout title="License & Copyright" lastReviewed="October 16, 2025">
         <section data-testid="section-license-overview">

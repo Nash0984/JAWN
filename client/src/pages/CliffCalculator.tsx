@@ -1,17 +1,9 @@
-import { Helmet } from "react-helmet-async";
 import { BenefitsCliffCalculator } from "@/components/BenefitsCliffCalculator";
 import { TrendingUp } from "lucide-react";
 
 export default function CliffCalculator() {
   return (
     <>
-      <Helmet>
-        <title>Benefits Cliff Calculator | JAWN</title>
-        <meta
-          name="description"
-          content="Calculate how wage increases affect your total resources. See if earning more will result in lower net income due to benefit reductions."
-        />
-      </Helmet>
 
       <div className="container mx-auto px-4 py-8 max-w-5xl">
         <div className="mb-8">

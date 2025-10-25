@@ -18,7 +18,6 @@ import {
   AlertCircle,
   Shield
 } from 'lucide-react';
-import { Helmet } from 'react-helmet-async';
 import { useToast } from '@/hooks/use-toast';
 import { Link } from 'wouter';
 
@@ -48,10 +47,6 @@ export default function Developers() {
 
   return (
     <>
-      <Helmet>
-        <title>Developer Guide - Universal Benefits-Tax Navigator</title>
-        <meta name="description" content="Complete developer guide for integrating with the JAWN API platform" />
-      </Helmet>
 
       <div className="container mx-auto p-6 space-y-8 max-w-7xl">
         {/* Hero Section */}

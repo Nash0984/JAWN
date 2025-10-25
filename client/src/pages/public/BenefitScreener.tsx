@@ -17,7 +17,6 @@ import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { CheckCircle2, DollarSign, Heart, Baby, Home, Users, Calculator, Info, ArrowRight, Save, Zap } from "lucide-react";
 import { PolicyEngineVerificationBadge } from "@/components/PolicyEngineVerificationBadge";
-import { Helmet } from "react-helmet-async";
 import { useTenant } from "@/contexts/TenantContext";
 
 const screenerSchema = z.object({
@@ -185,9 +184,6 @@ export default function BenefitScreener() {
 
   return (
     <>
-      <Helmet>
-        <title>Benefit Screener - {stateName} Benefits Navigator</title>
-      </Helmet>
       <div className="min-h-screen bg-gradient-to-b from-blue-50 to-white dark:from-gray-900 dark:to-gray-800">
       <div className="container mx-auto px-4 py-8 max-w-6xl">
         {/* Header */}

@@ -14,7 +14,6 @@ import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { CheckCircle2, ArrowRight, Info, Users, DollarSign, PiggyBank, Heart, Loader2 } from "lucide-react";
 import { PolicyEngineVerificationBadge } from "@/components/PolicyEngineVerificationBadge";
-import { Helmet } from "react-helmet-async";
 import { useTenant } from "@/contexts/TenantContext";
 
 // Ultra-minimal screener schema - only 5-7 questions
@@ -127,9 +126,6 @@ export default function QuickScreener() {
 
   return (
     <>
-      <Helmet>
-        <title>Quick Screener - {stateName} Benefits Navigator</title>
-      </Helmet>
       <div className="min-h-screen bg-gradient-to-b from-blue-50 to-white dark:from-gray-900 dark:to-gray-800">
       <div className="container mx-auto px-4 py-8 max-w-2xl">
         {/* Header */}

@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { Helmet } from "react-helmet-async";
 import { useQuery } from "@tanstack/react-query";
 import { useTenant } from "@/contexts/TenantContext";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -121,9 +120,6 @@ export default function SupervisorReviewDashboard() {
 
   return (
     <>
-      <Helmet>
-        <title>Case Review Dashboard - {stateName} Benefits Navigator</title>
-      </Helmet>
       <div className="container mx-auto p-6 space-y-6">
         {/* Header Section */}
         <div className="space-y-2">

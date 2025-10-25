@@ -1,4 +1,3 @@
-import { Helmet } from "react-helmet-async";
 import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -157,10 +156,6 @@ export default function TaxpayerMessaging() {
 
   return (
     <>
-      <Helmet>
-        <title>Messages | {stateName} Benefits</title>
-        <meta name="description" content="Secure messaging with your tax navigator." />
-      </Helmet>
 
       <div className="container mx-auto px-4 py-8 max-w-4xl h-[calc(100vh-8rem)]">
         <div className="mb-6">

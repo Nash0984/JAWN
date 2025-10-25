@@ -1,4 +1,3 @@
-import { Helmet } from "react-helmet-async";
 import LegalLayout from "@/components/LegalLayout";
 import { useTenant } from "@/contexts/TenantContext";
 
@@ -9,13 +8,6 @@ export default function Disclaimer() {
   
   return (
     <>
-      <Helmet>
-        <title>Disclaimer - {stateName} Benefits Platform</title>
-        <meta 
-          name="description" 
-          content={`Important disclaimers for ${stateName} Benefits Platform users. Not affiliated with State of ${stateName}. For informational purposes only.`}
-        />
-      </Helmet>
       
       <LegalLayout title="Disclaimer" lastReviewed="October 16, 2025">
         <section data-testid="section-disclaimer-overview">

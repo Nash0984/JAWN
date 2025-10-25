@@ -1,5 +1,4 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { Helmet } from "react-helmet-async";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useTenant } from "@/contexts/TenantContext";
 import { useForm } from "react-hook-form";
@@ -1316,9 +1315,6 @@ export default function VitaIntake() {
 
   return (
     <>
-    <Helmet>
-      <title>VITA Intake - {stateName} Benefits Navigator</title>
-    </Helmet>
     <div className="min-h-screen bg-background p-4 md:p-8">
       <div className="max-w-7xl mx-auto">
         {/* Header */}

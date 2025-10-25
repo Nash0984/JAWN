@@ -1,4 +1,3 @@
-import { Helmet } from "react-helmet-async";
 import { Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -71,10 +70,6 @@ export default function TaxpayerDashboard() {
 
   return (
     <>
-      <Helmet>
-        <title>My Tax Portal - Dashboard | {stateName} Benefits</title>
-        <meta name="description" content="Access your tax preparation documents, messages, and forms in one secure portal." />
-      </Helmet>
 
       <div className="container mx-auto px-4 py-8 max-w-6xl">
         {/* Welcome Header */}

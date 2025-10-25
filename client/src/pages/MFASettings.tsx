@@ -10,7 +10,6 @@ import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { useToast } from '@/hooks/use-toast';
 import { Shield, ShieldCheck, ShieldAlert, Copy, RefreshCw, X } from 'lucide-react';
-import { Helmet } from 'react-helmet-async';
 
 interface MFAStatus {
   mfaEnabled: boolean;
@@ -167,9 +166,6 @@ export function MFASettings() {
 
   return (
     <>
-      <Helmet>
-        <title>Two-Factor Authentication - Security Settings</title>
-      </Helmet>
 
       <div className="container mx-auto py-8 max-w-3xl">
         <Card>

@@ -1,4 +1,3 @@
-import { Helmet } from "react-helmet-async";
 import LegalLayout from "@/components/LegalLayout";
 import { useTenant } from "@/contexts/TenantContext";
 
@@ -8,13 +7,6 @@ export default function AccessibilityStatement() {
   
   return (
     <>
-      <Helmet>
-        <title>Accessibility Statement - {stateName} Benefits Platform</title>
-        <meta 
-          name="description" 
-          content={`${stateName} Benefits Platform's commitment to WCAG 2.1 AA accessibility, inclusive design, and ensuring equal access for all users.`} 
-        />
-      </Helmet>
       
       <LegalLayout title="Accessibility Statement" lastReviewed="October 16, 2025">
         <section data-testid="section-accessibility-commitment">

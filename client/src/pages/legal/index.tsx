@@ -1,4 +1,3 @@
-import { Helmet } from "react-helmet-async";
 import { Link } from "wouter";
 import { 
   Shield, 
@@ -86,13 +85,6 @@ export default function LegalHub() {
   
   return (
     <>
-      <Helmet>
-        <title>Legal & Policy Documentation - {stateName} Benefits Platform</title>
-        <meta 
-          name="description" 
-          content={`Access all legal and policy documentation for ${stateName} Benefits Platform including Privacy Policy, Terms of Service, Accessibility Statement, and Security policies.`}
-        />
-      </Helmet>
       
       <div className="min-h-screen bg-background">
         <div className="container mx-auto px-4 py-12 max-w-7xl">

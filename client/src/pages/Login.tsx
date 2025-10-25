@@ -29,7 +29,6 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
-import { Helmet } from "react-helmet-async";
 import { useTenant } from "@/contexts/TenantContext";
 import { TenantLogo } from "@/components/TenantLogo";
 import { MFAVerification } from "@/components/MFAVerification";
@@ -194,9 +193,6 @@ export default function Login() {
   if (mfaRequired && mfaUserId && mfaUsername) {
     return (
       <>
-        <Helmet>
-          <title>Two-Factor Authentication - {stateName} Benefits Navigator</title>
-        </Helmet>
         <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background to-muted/20 px-4">
           <MFAVerification
             username={mfaUsername}
@@ -211,10 +207,6 @@ export default function Login() {
 
   return (
     <>
-      <Helmet>
-        <title>Login - {stateName} Benefits Navigator</title>
-        <meta name="description" content={`Access your ${stateName} benefits account and manage your applications`} />
-      </Helmet>
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background to-muted/20 px-4">
       <Card className="w-full max-w-md card-elevated" data-testid="card-login">
         <CardHeader className="space-y-1 text-center">
