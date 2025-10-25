@@ -37,8 +37,9 @@ docs/
 
 ### For Compliance Officers
 - [NIST Compliance Framework](official/compliance/NIST_COMPLIANCE_FRAMEWORK.md) - SP 800-218 + 800-218A
-- [NIST 800-53 Audit](official/compliance/NIST_800-53_COMPLIANCE_AUDIT.md) - Security controls
-- [IRS Pub 1075 Audit](official/compliance/IRS_PUB_1075_COMPLIANCE_AUDIT.md) - Tax data protection
+- [NIST 800-53 Implementation](official/compliance/NIST_800-53_IMPLEMENTATION.md) - Security controls (code-verified)
+- [IRS Pub 1075 Implementation](official/compliance/IRS_PUB_1075_IMPLEMENTATION.md) - Tax data protection (code-verified)
+- [HIPAA Implementation](official/compliance/HIPAA_IMPLEMENTATION.md) - PHI safeguards (code-verified)
 
 ### For Product Managers
 - [Benefits Programs](official/features/BENEFITS_PROGRAMS.md) - SNAP, Medicaid, TANF, LIHEAP
