@@ -69,6 +69,44 @@ Purpose: Historical record of documentation evolution
 - **STRATEGIC_ROADMAP.md** - Business strategy
 - **TECHNICAL_DOCUMENTATION.md** - Technical overview
 
+### /pre-clean-break-20251025_092824/ - Pre-Clean Break Compliance Docs
+**Status**: Archived - Contained unverified compliance claims  
+**Key Context**: Clean break documentation methodology implementation  
+**Archive Date**: October 25, 2025 09:28:24 UTC
+
+**Reason for Archival**:
+These compliance documents were archived because they contained unverified claims not traceable to actual code implementation. The "clean break" methodology was implemented to generate new compliance documentation purely from code inspection with mandatory file:line citations.
+
+**Archived Files**:
+- **NIST_800-53_COMPLIANCE_AUDIT.md** - Replaced by NIST_800-53_IMPLEMENTATION.md (code-verified with 50 citations)
+- **IRS_PUB_1075_COMPLIANCE_AUDIT.md** - Replaced by IRS_PUB_1075_IMPLEMENTATION.md (code-verified with 51 citations)
+- **HIPAA_COMPLIANCE.md** - Replaced by HIPAA_IMPLEMENTATION.md (code-verified with 43 citations)
+- **SOC2_COMPLIANCE.md** - Not yet replaced (pending code inspection)
+- **GDPR_COMPLIANCE.md** - Not yet replaced (pending code inspection)
+- **FEDRAMP_COMPLIANCE.md** - Not yet replaced (pending code inspection)
+- **DATA_RETENTION.md** - Not yet replaced (pending code inspection)
+- **DISASTER_RECOVERY.md** - Not yet replaced (pending code inspection)
+- **INCIDENT_RESPONSE.md** - Not yet replaced (pending code inspection)
+- **AUDIT_LOGGING.md** - Content integrated into NIST 800-53 and IRS Pub 1075 docs
+
+**Clean Break Methodology**:
+All new official compliance documentation is now generated exclusively from direct code inspection with the following requirements:
+1. Every claim must have file:line citation traceable to actual implementation code
+2. No aspirational or planned features documented as implemented
+3. Implementation gaps explicitly disclosed with "NOT IMPLEMENTED" or "NOT VERIFIED" status
+4. Total lines inspected and files examined documented for auditor verification
+
+**Code Evidence Base**:
+New compliance docs generated from inspection of 2,537 lines across 5 security service files:
+- `server/services/kms.service.ts` (1,049 lines)
+- `server/services/immutableAudit.service.ts` (402 lines)
+- `server/services/encryption.service.ts` (874 lines)
+- `server/auth.ts` (47 lines)
+- `server/middleware/auth.ts` (165 lines)
+
+**Audit Trail**:
+See `docs/official/CLEAN_BREAK_METHODOLOGY.md` for complete methodology documentation and auditor verification guidance.
+
 ### /assessments/ - Point-in-Time Assessments
 **Status**: Historical compliance and gap analyses  
 **Key Context**: Various audit reports, not maintained
