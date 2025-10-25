@@ -5,7 +5,7 @@ import { seedMarylandTestCases } from "./seedMarylandTestCases";
 import { seedQCData } from "./seedQcData";
 import { seedDhsForms } from "./seedDhsForms";
 import { db } from "./db";
-import { eq } from "drizzle-orm";
+import { eq, and, isNull } from "drizzle-orm";
 import { benefitPrograms } from "@shared/schema";
 import { policySourceScraper } from "./services/policySourceScraper";
 import { programCacheService } from "./services/programCache.service";
