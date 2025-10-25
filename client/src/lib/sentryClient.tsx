@@ -2,7 +2,7 @@
  * Sentry Client Configuration
  * 
  * Initializes Sentry for frontend error tracking and performance monitoring
- * with graceful degradation when packages are not available
+ * with graceful degradation when packages are not available.
  */
 
 import { useState, useEffect, ComponentType, ReactNode } from "react";
@@ -207,14 +207,3 @@ export function addBreadcrumb(message: string, category: string, data?: Record<s
 export function isSentryEnabled(): boolean {
   return sentryEnabled;
 }
-
-// Also export as default for backward compatibility
-export default {
-  SentryErrorBoundary,
-  getSentryErrorBoundary,
-  setUserContext,
-  captureException,
-  captureMessage,
-  addBreadcrumb,
-  isSentryEnabled,
-};

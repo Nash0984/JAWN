@@ -7,8 +7,8 @@
  * - Precaches critical pages
  */
 
-const CACHE_NAME = 'maryland-benefits-v1';
-const PUBLIC_API_CACHE = 'public-api-cache-v1';
+const CACHE_NAME = 'maryland-benefits-v2';
+const PUBLIC_API_CACHE = 'public-api-cache-v2';
 const OFFLINE_PAGE = '/offline.html';
 
 // Critical pages to precache
