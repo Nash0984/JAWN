@@ -201,7 +201,7 @@ For feature requests, please include:
    ```bash
    git push origin feature/your-feature-name
    ```
-
+as
 5. **Open a Pull Request:**
    - Go to the original repository
    - Click "New Pull Request"

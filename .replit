@@ -104,3 +104,12 @@ integrations = ["javascript_object_storage:1.0.0", "javascript_database:1.0.0", 
 
 [objectStorage]
 defaultBucketID = "replit-objstore-b4ecfa39-f52a-4d52-96db-a130c34e3d80"
+
+[rules]
+
+[rules.formatter]
+
+[rules.formatter.fileExtensions]
+
+[rules.formatter.fileExtensions.".json"]
+id = "module:web/languageServer:typescript-language-server"

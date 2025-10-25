@@ -8,6 +8,28 @@ The platform supports six benefit programs (SNAP, Medicaid, TANF, OHEP, Tax Cred
 
 Preferred communication style: Simple, everyday language.
 
+# Documentation Organization (NIST SP 800-218 + 800-218A Compliant)
+
+## Structure
+- **docs/official/**: Current NIST-compliant documentation from code inspection
+  - architecture/: API, Database, Multi-state, KMS, AI orchestration  
+  - compliance/: NIST 800-53, IRS Pub 1075, HIPAA, GDPR, SOC2
+  - features/: Benefits programs, Tax prep, Cross-enrollment
+  - ai-systems/: Gemini integration per SP 800-218A
+  - integrations/: PolicyEngine, Calendar, Object storage
+- **docs/supplemental/**: White-label revenue generators
+  - tenant-reporting/: Custom funder report templates
+  - legislative/: Compliance reporting modules  
+  - operational/: Dashboard specifications
+- **docs/archive/**: 85+ legacy docs with ARCHIVE_MANIFEST.md
+
+## Key Findings
+- 188 tables declared vs ~50-60 in database (schema drift)
+- Hybrid naming: Federal in code (LIHEAP), state in display (OHEP)
+- 3-tier KMS ready but needs cloud KMS integration
+- AI orchestration: 50% NIST 800-218A compliant
+- Cost optimization: 40% reduction possible via caching
+
 ## Terminology Standards
 
 **CRITICAL: Use precise terminology to avoid confusion with regulatory meanings:**
