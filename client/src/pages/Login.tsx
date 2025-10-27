@@ -44,25 +44,29 @@ const demoAccounts = [
   {
     username: "demo.applicant",
     password: "Demo2024!",
-    role: "Applicant",
+    role: "client",
+    label: "Applicant",
     description: "Test the applicant experience",
   },
   {
     username: "demo.navigator",
     password: "Demo2024!",
-    role: "Navigator",
+    role: "navigator",
+    label: "Navigator",
     description: "Benefits navigator tools",
   },
   {
     username: "demo.caseworker",
     password: "Demo2024!",
-    role: "Caseworker",
+    role: "caseworker",
+    label: "Caseworker",
     description: "Case management features",
   },
   {
     username: "demo.admin",
     password: "Demo2024!",
-    role: "Admin",
+    role: "admin",
+    label: "Admin",
     description: "Full system administration",
   },
 ];
@@ -296,10 +300,10 @@ export default function Login() {
                   className="w-full justify-start text-left h-auto py-2"
                   onClick={() => useDemoAccount(account.username, account.password)}
                   disabled={loginMutation.isPending}
-                  data-testid={`button-demo-${account.role.toLowerCase()}`}
+                  data-testid={`button-demo-${account.role}`}
                 >
                   <div className="flex flex-col items-start">
-                    <span className="font-medium text-sm">{account.role}</span>
+                    <span className="font-medium text-sm">{account.label}</span>
                     <span className="text-xs text-muted-foreground">{account.description}</span>
                     <span className="text-xs text-muted-foreground mt-1">
                       {account.username}
