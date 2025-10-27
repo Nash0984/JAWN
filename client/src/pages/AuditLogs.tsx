@@ -291,11 +291,12 @@ export default function AuditLogs() {
                   <div className="text-center py-12 text-gray-500 dark:text-gray-400">
                     <Shield className="h-12 w-12 mx-auto mb-3 opacity-50" />
                     <p>No audit logs found</p>
+                    <p className="text-sm mt-2">System audit tracking will begin once activities occur</p>
                   </div>
                 ) : (
                   <>
                     <div className="overflow-x-auto">
-                      <Table>
+                      <Table data-testid="table-audit-logs">
                         <TableHeader>
                           <TableRow>
                             <TableHead>Timestamp</TableHead>
