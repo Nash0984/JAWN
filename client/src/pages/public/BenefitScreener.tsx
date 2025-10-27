@@ -18,6 +18,7 @@ import { useToast } from "@/hooks/use-toast";
 import { CheckCircle2, DollarSign, Heart, Baby, Home, Users, Calculator, Info, ArrowRight, Save, Zap } from "lucide-react";
 import { PolicyEngineVerificationBadge } from "@/components/PolicyEngineVerificationBadge";
 import { useTenant } from "@/contexts/TenantContext";
+import { formatCurrency, formatMonthlyAmount, formatYearlyAmount } from "@/lib/utils";
 
 const screenerSchema = z.object({
   adults: z.coerce.number().min(1, "At least 1 adult required").max(20),
@@ -494,13 +495,13 @@ export default function BenefitScreener() {
                       <div className="bg-blue-50 dark:bg-blue-950 p-4 rounded-lg">
                         <p className="text-sm text-gray-600 dark:text-gray-400">Monthly Benefits</p>
                         <p className="text-2xl font-bold text-blue-700 dark:text-blue-400" data-testid="text-monthly-benefits">
-                          ${totalMonthlyBenefits.toFixed(0)}
+                          {formatCurrency(totalMonthlyBenefits)}
                         </p>
                       </div>
                       <div className="bg-green-50 dark:bg-green-950 p-4 rounded-lg">
                         <p className="text-sm text-gray-600 dark:text-gray-400">Yearly Tax Credits</p>
                         <p className="text-2xl font-bold text-green-700 dark:text-green-400" data-testid="text-yearly-benefits">
-                          ${totalYearlyBenefits.toFixed(0)}
+                          {formatCurrency(totalYearlyBenefits)}
                         </p>
                       </div>
                     </div>
@@ -525,7 +526,7 @@ export default function BenefitScreener() {
                             )}
                           </div>
                         </div>
-                        <p className="font-bold text-blue-600">${results.benefits.snap.toFixed(0)}/mo</p>
+                        <p className="font-bold text-blue-600">{formatMonthlyAmount(results.benefits.snap)}</p>
                       </div>
                     )}
 
@@ -554,7 +555,7 @@ export default function BenefitScreener() {
                             <p className="text-sm text-gray-500">Annual tax credit</p>
                           </div>
                         </div>
-                        <p className="font-bold text-green-600">${results.benefits.eitc.toFixed(0)}/yr</p>
+                        <p className="font-bold text-green-600">{formatYearlyAmount(results.benefits.eitc)}</p>
                       </div>
                     )}
 
@@ -567,7 +568,7 @@ export default function BenefitScreener() {
                             <p className="text-sm text-gray-500">Annual tax credit</p>
                           </div>
                         </div>
-                        <p className="font-bold text-purple-600">${results.benefits.childTaxCredit.toFixed(0)}/yr</p>
+                        <p className="font-bold text-purple-600">{formatYearlyAmount(results.benefits.childTaxCredit)}</p>
                       </div>
                     )}
 
@@ -580,7 +581,7 @@ export default function BenefitScreener() {
                             <p className="text-sm text-gray-500">Monthly benefit</p>
                           </div>
                         </div>
-                        <p className="font-bold text-orange-600">${results.benefits.ssi.toFixed(0)}/mo</p>
+                        <p className="font-bold text-orange-600">{formatMonthlyAmount(results.benefits.ssi)}</p>
                       </div>
                     )}
 
@@ -596,7 +597,7 @@ export default function BenefitScreener() {
                             )}
                           </div>
                         </div>
-                        <p className="font-bold text-teal-600">${results.benefits.tanf.toFixed(0)}/mo</p>
+                        <p className="font-bold text-teal-600">{formatMonthlyAmount(results.benefits.tanf)}</p>
                       </div>
                     )}
 
@@ -612,7 +613,7 @@ export default function BenefitScreener() {
                             )}
                           </div>
                         </div>
-                        <p className="font-bold text-amber-600">${results.benefits.ohep.toFixed(0)}/yr</p>
+                        <p className="font-bold text-amber-600">{formatYearlyAmount(results.benefits.ohep)}</p>
                       </div>
                     )}
 
