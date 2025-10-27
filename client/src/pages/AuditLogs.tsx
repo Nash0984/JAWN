@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -43,18 +43,24 @@ interface RuleChangeLog {
 
 export default function AuditLogs() {
   const [activeTab, setActiveTab] = useState("audit");
+  const [mounted, setMounted] = useState(false);
+  
+  // Ensure component is mounted before rendering to avoid HMR issues
+  useEffect(() => {
+    setMounted(true);
+  }, []);
   
   // Audit logs filters
-  const [auditAction, setAuditAction] = useState("");
-  const [auditEntityType, setAuditEntityType] = useState("");
+  const [auditAction, setAuditAction] = useState("all");
+  const [auditEntityType, setAuditEntityType] = useState("all");
   const [auditStartDate, setAuditStartDate] = useState("");
   const [auditEndDate, setAuditEndDate] = useState("");
   const [auditPage, setAuditPage] = useState(0);
   const auditPageSize = 50;
 
   // Rule change logs filters
-  const [ruleTable, setRuleTable] = useState("");
-  const [changeType, setChangeType] = useState("");
+  const [ruleTable, setRuleTable] = useState("all");
+  const [changeType, setChangeType] = useState("all");
   const [ruleStartDate, setRuleStartDate] = useState("");
   const [ruleEndDate, setRuleEndDate] = useState("");
   const [rulePage, setRulePage] = useState(0);
@@ -89,8 +95,8 @@ export default function AuditLogs() {
     queryKey: ['/api/audit-logs', auditAction, auditEntityType, auditStartDate, auditEndDate, auditPage],
     queryFn: async () => {
       const params = new URLSearchParams();
-      if (auditAction) params.append('action', auditAction);
-      if (auditEntityType) params.append('entityType', auditEntityType);
+      if (auditAction && auditAction !== 'all') params.append('action', auditAction);
+      if (auditEntityType && auditEntityType !== 'all') params.append('entityType', auditEntityType);
       if (auditStartDate) params.append('startDate', auditStartDate);
       if (auditEndDate) params.append('endDate', auditEndDate);
       params.append('limit', auditPageSize.toString());
@@ -110,8 +116,8 @@ export default function AuditLogs() {
     queryKey: ['/api/rule-change-logs', ruleTable, changeType, ruleStartDate, ruleEndDate, rulePage],
     queryFn: async () => {
       const params = new URLSearchParams();
-      if (ruleTable) params.append('ruleTable', ruleTable);
-      if (changeType) params.append('changeType', changeType);
+      if (ruleTable && ruleTable !== 'all') params.append('ruleTable', ruleTable);
+      if (changeType && changeType !== 'all') params.append('changeType', changeType);
       if (ruleStartDate) params.append('startDate', ruleStartDate);
       if (ruleEndDate) params.append('endDate', ruleEndDate);
       params.append('limit', rulePageSize.toString());
@@ -153,6 +159,18 @@ export default function AuditLogs() {
     };
     return colors[changeType] || 'bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200';
   };
+
+  // Prevent rendering until mounted to avoid HMR issues
+  if (!mounted) {
+    return (
+      <div className="min-h-screen bg-gray-50 dark:bg-gray-900 p-6">
+        <div className="max-w-7xl mx-auto">
+          <Skeleton className="h-12 w-48 mb-4" />
+          <Skeleton className="h-96 w-full" />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900 p-6">
@@ -203,7 +221,7 @@ export default function AuditLogs() {
                         <SelectValue placeholder="All actions" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="">All actions</SelectItem>
+                        <SelectItem value="all">All actions</SelectItem>
                         <SelectItem value="API_REQUEST">API Request</SelectItem>
                         <SelectItem value="ERROR">Error</SelectItem>
                         <SelectItem value="AUTH_LOGIN">Login</SelectItem>
@@ -222,7 +240,7 @@ export default function AuditLogs() {
                         <SelectValue placeholder="All entities" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="">All entities</SelectItem>
+                        <SelectItem value="all">All entities</SelectItem>
                         <SelectItem value="USER">User</SelectItem>
                         <SelectItem value="RULE">Rule</SelectItem>
                         <SelectItem value="DOCUMENT">Document</SelectItem>
@@ -259,8 +277,8 @@ export default function AuditLogs() {
                   <Button
                     variant="outline"
                     onClick={() => {
-                      setAuditAction("");
-                      setAuditEntityType("");
+                      setAuditAction("all");
+                      setAuditEntityType("all");
                       setAuditStartDate("");
                       setAuditEndDate("");
                       setAuditPage(0);
@@ -424,7 +442,7 @@ export default function AuditLogs() {
                         <SelectValue placeholder="All tables" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="">All tables</SelectItem>
+                        <SelectItem value="all">All tables</SelectItem>
                         <SelectItem value="snap_income_limits">Income Limits</SelectItem>
                         <SelectItem value="snap_deductions">Deductions</SelectItem>
                         <SelectItem value="snap_allotments">Allotments</SelectItem>
@@ -441,7 +459,7 @@ export default function AuditLogs() {
                         <SelectValue placeholder="All types" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="">All types</SelectItem>
+                        <SelectItem value="all">All types</SelectItem>
                         <SelectItem value="create">Create</SelectItem>
                         <SelectItem value="update">Update</SelectItem>
                         <SelectItem value="delete">Delete</SelectItem>
@@ -477,8 +495,8 @@ export default function AuditLogs() {
                   <Button
                     variant="outline"
                     onClick={() => {
-                      setRuleTable("");
-                      setChangeType("");
+                      setRuleTable("all");
+                      setChangeType("all");
                       setRuleStartDate("");
                       setRuleEndDate("");
                       setRulePage(0);
