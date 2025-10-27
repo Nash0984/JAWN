@@ -111,7 +111,7 @@ graph TB
     
     subgraph "Service Layer - 94 Services"
         AI_SERVICES[AI Services<br/>Gemini API, RAG, NLP]
-        BENEFIT_SERVICES[Benefits Services<br/>PolicyEngine, Rules Engines]
+        BENEFIT_SERVICES[Benefits Services<br/>Maryland Rules Engines PRIMARY]
         TAX_SERVICES[Tax Services<br/>Form Generation, E-Filing]
         DOC_SERVICES[Document Services<br/>OCR, Classification, Storage]
     end
@@ -124,7 +124,7 @@ graph TB
     
     subgraph "External Integrations"
         GEMINI[Google Gemini API<br/>AI + Embeddings]
-        POLICYENGINE[PolicyEngine API<br/>Benefit Calculations]
+        POLICYENGINE[PolicyEngine API<br/>Optional Verification]
         CALENDAR[Google Calendar<br/>Appointments]
         TWILIO[Twilio SMS<br/>Notifications]
     end
@@ -168,7 +168,7 @@ graph TB
 - **PostgreSQL** database (Neon recommended)
 - **Google Gemini API** key
 - **Google Cloud Storage** access (for documents)
-- **PolicyEngine API** credentials (optional but recommended)
+- **PolicyEngine API** credentials (optional - for third-party verification only)
 
 ### Installation
 
@@ -270,11 +270,12 @@ The system includes pre-configured demo accounts for testing all role-based feat
 - **Summary Dashboard**: Total monthly/annual benefits, program count, and effective benefit rate
 - **Instant Updates**: 300ms debounced calculations with request cancellation support
 
-### PolicyEngine Integration
-- **Multi-Benefit Calculations**: Accurate federal and state-specific estimates for all 6 programs
-- **Household Modeling**: Calculate benefits based on family composition, income, and expenses
-- **What-If Scenarios**: Test different income or expense changes to optimize benefits
-- **Real-Time Results**: Instant benefit calculations powered by PolicyEngine's API
+### Maryland Rules Engines (Primary Calculation System)
+- **State-Controlled Eligibility**: Maryland-owned rules engines for all 6 benefit programs (SNAP, Medicaid, TANF, LIHEAP, Tax Credits, SSI)
+- **Production-Ready Rules as Code**: Codified Maryland regulations with 358-line rules engine adapter
+- **Real-Time Calculations**: Sub-100ms benefit determinations using state-verified logic
+- **Optional Third-Party Verification**: PolicyEngine API available for cross-validation only
+- **RAG-Powered Policy Manuals**: Gemini AI integration for policy search and interpretation
 
 ### Adaptive Intake Copilot (AI-Powered)
 ```
@@ -306,14 +307,14 @@ The system includes pre-configured demo accounts for testing all role-based feat
 - **Conversational Application**: AI-powered dialogue guides applicants through the process
 - **Smart Data Extraction**: Automatically structures household information from natural conversation
 - **Progress Tracking**: Visual indicators show application completeness
-- **Integrated Calculations**: Real-time benefit estimates during intake using PolicyEngine
+- **Integrated Calculations**: Real-time benefit estimates during intake using Maryland rules engines
 
 ### Tax Preparation System (VITA)
 
 ```mermaid
 graph LR
     A[Upload Tax Docs] -->|Gemini Vision OCR| B[Extract W-2/1099]
-    B --> C[PolicyEngine<br/>Tax Calculation]
+    B --> C[Maryland Rules<br/>Tax Calculation]
     C --> D[Form 1040<br/>Generation]
     D --> E[State Form<br/>MD 502 / PA-40]
     E --> F[E-File Dashboard<br/>XML Submission]
@@ -328,10 +329,11 @@ graph LR
 
 - **Tax Document Extraction**: Gemini Vision API OCR for W-2, 1099, and other tax forms
 - **VITA Intake Workflow**: Guided process for tax preparers
-- **PolicyEngine Tax Calculations**: Accurate federal and state tax computations
+- **Maryland Tax Rules Engine**: State-controlled federal and state tax computations (EITC, CTC, MD credits)
 - **Form Generation**: PDF generation for Form 1040 and state forms (MD Form 502, PA-40, etc.)
 - **E-Filing Dashboard**: Production-ready XML generation and submission tracking
 - **Prior Year Support**: Handle previous tax years
+- **Optional PolicyEngine Verification**: Third-party cross-validation when needed
 
 ### Document Intelligence
 
@@ -388,11 +390,12 @@ graph LR
 
 - Financial Opportunity Radar
 - Household profiler
-- PolicyEngine integration
+- Maryland rules engines (SNAP, Medicaid, TANF, LIHEAP, Tax, SSI)
 - Scenario workspace
 - Cross-enrollment engine
 - Eligibility checker
 - Audit trail
+- Optional PolicyEngine verification
 </details>
 
 <details>
@@ -403,8 +406,9 @@ graph LR
 - State form generators (MD 502, PA-40, IN-40, MI-1040, VA-760, UT TC-40)
 - County tax rates (24 Maryland counties)
 - State-specific tax credits
-- PolicyEngine tax calculations
+- Maryland tax rules engine (EITC, CTC, state credits)
 - E-Filing dashboard with XML submission
+- Optional PolicyEngine verification
 </details>
 
 <details>
@@ -533,9 +537,10 @@ This project is licensed under the MIT License - see the [LICENSE](./LICENSE) fi
 
 ## 🙏 Acknowledgments
 
-- **PolicyEngine** - Benefit calculation engine
-- **Google Gemini** - AI and embeddings API
+- **Maryland Department of Human Services** - Benefit eligibility rules and policy guidance
+- **Google Gemini** - AI analysis, RAG, and embeddings API
 - **Neon Database** - Serverless PostgreSQL
+- **PolicyEngine** - Optional third-party verification for benefit calculations
 - **Replit** - Development platform
 - **shadcn/ui** - Component library
 - **Maryland Department of Human Services** - Policy guidance and requirements
