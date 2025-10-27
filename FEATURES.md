@@ -158,7 +158,7 @@ This document provides a comprehensive catalog of all 110 features implemented i
 **Purpose:** Real-time cross-program eligibility tracking
 
 **Features:**
-- Real-time eligibility across 6 programs (SNAP, Medicaid, TANF, EITC, CTC, SSI)
+- Real-time eligibility across 5 Maryland programs + 2 federal tax credits (SNAP, Medicaid, TANF, LIHEAP/OHEP, MD Tax Credits, EITC, CTC)
 - Dynamic change indicators (↑↓ arrows, "New" badges)
 - Smart alerts for cross-enrollment opportunities
 - Summary dashboard (monthly/annual totals)
@@ -179,7 +179,7 @@ This document provides a comprehensive catalog of all 110 features implemented i
 - Single household profile drives all calculations
 
 **Production Status**: ✅ Production Ready  
-**Completion Notes**: Flagship feature fully operational with real-time cross-program eligibility tracking across 6 programs, dynamic change indicators, and smart cross-enrollment alerts. Verified component and hook implementation.
+**Completion Notes**: Flagship feature fully operational with real-time cross-program eligibility tracking across 5 Maryland benefit programs (SNAP, Medicaid, TANF, LIHEAP/OHEP, Tax Credits) plus 2 federal tax credits (EITC, CTC), dynamic change indicators, and smart cross-enrollment alerts. Verified component and hook implementation.
 
 ---
 
@@ -207,26 +207,33 @@ This document provides a comprehensive catalog of all 110 features implemented i
 
 ---
 
-### 8. PolicyEngine Integration
-**Location:** Multiple pages  
-**User Type:** All authenticated users  
-**Purpose:** Accurate multi-benefit calculations
+### 8. Optional Third-Party Verification (PolicyEngine)
+**Location:** Admin verification tools  
+**User Type:** Administrators and QA staff  
+**Purpose:** Third-party verification of Maryland rules engine calculations
 
 **Features:**
-- Federal and Maryland-specific rules
-- SNAP, Medicaid, EITC, CTC, SSI, TANF calculations
-- Tax liability and refund calculations
-- Deduction optimization
-- What-if scenario support
+- **Optional verification layer** - Maryland rules engines are PRIMARY for all calculations
+- Benefit amount verification (SNAP, Medicaid, TANF, EITC, CTC, SSI)
+- Tax liability cross-validation
+- Discrepancy detection and reporting
+- Verification statistics and history tracking
+- Admin-only verification dashboard
 
 **Technical Details:**
 - Service: `server/services/policyEngineHttpClient.ts`
-- Python package: `policyengine-us`
-- API: `POST /api/policyengine/calculate`
+- Verification Service: `server/services/policyEngineVerification.service.ts`
+- API: `POST /api/policyengine/verify` (admin only)
+- API: `POST /api/benefits/calculate-hybrid` (with `verifyWithPolicyEngine: false` by default)
 - Caching: Server-side with 5-minute TTL
 
+**Architecture:**
+- **Maryland Rules Engines** calculate all benefits (PRIMARY)
+- **PolicyEngine** optionally verifies results (SECONDARY)
+- Used for quality assurance and testing, not required for production calculations
+
 **Production Status**: ✅ Production Ready  
-**Completion Notes**: PolicyEngine integration fully operational with federal and Maryland-specific rules, SNAP/Medicaid/EITC/CTC/SSI/TANF calculations, tax liability calculations, and server-side caching. Verified service implementation.
+**Completion Notes**: PolicyEngine verification layer fully operational as optional third-party cross-validation tool. Maryland rules engines (`rulesEngine.ts`, `medicaidRulesEngine.ts`, `tanfRulesEngine.ts`, `liheapRulesEngine.ts`, `vitaTaxRulesEngine.ts`) are PRIMARY calculation source. PolicyEngine verification service verified with discrepancy detection and admin dashboard.
 
 ---
 
