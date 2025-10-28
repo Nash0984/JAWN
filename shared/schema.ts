@@ -144,6 +144,16 @@ export const documents = pgTable("documents", {
   sectionNumber: text("section_number"), // e.g., "100", "200", for SNAP manual sections
   lastModifiedAt: timestamp("last_modified_at"), // last modified date from source
   auditTrail: jsonb("audit_trail"), // detailed provenance information
+  // Document quality and enhancement tracking
+  qualityMetrics: jsonb("quality_metrics"), // Quality assessment metrics
+  qualityFlags: jsonb("quality_flags"), // Quality issue flags
+  qualitySuggestions: jsonb("quality_suggestions"), // Improvement suggestions
+  analyzedAt: timestamp("analyzed_at"), // When quality analysis was performed
+  enhancementStatus: varchar("enhancement_status"), // pending, processing, completed, failed
+  enhancedObjectPath: text("enhanced_object_path"), // Path to enhanced/processed document
+  enhancementMetadata: jsonb("enhancement_metadata"), // Enhancement processing metadata
+  qualityImprovement: jsonb("quality_improvement"), // Quality improvement tracking
+  stateCode: varchar("state_code"), // Multi-state document routing
   // Data retention tracking (CRIT-002: IRS/HIPAA 7-year retention, GDPR storage limitation)
   retentionCategory: text("retention_category"), // tax_7yr, benefit_7yr, audit_log_7yr, phi_7yr, user_account_90d, reference_data_permanent
   retentionUntil: timestamp("retention_until"), // Calculated expiration date
