@@ -34599,3 +34599,694 @@ Risk Levels:
 
 ---
 
+
+---
+
+## 6.21 Smart Scheduler Service (server/services/smartScheduler.ts - 601 lines)
+
+**Purpose:** Cost-optimized intelligent scheduling system that checks each data source based on realistic update frequencies instead of wasteful global intervals
+
+**Critical Design:** Source-specific schedules with session-aware logic reduce check frequency by **70-80%** with **zero functionality loss**
+
+**Production Features:**
+- Database-driven config overrides
+- Session-aware scheduling (Congress, Maryland Legislature)
+- Non-blocking initialization (5-second delay for background checks)
+- Graceful shutdown (clears intervals and pending timers)
+- Manual trigger API
+- Health status reporting
+
+---
+
+### 6.21.1 Schedule Configurations (lines 25-248)
+
+#### ScheduleConfig Interface (lines 25-32)
+
+**Purpose:** Configuration for each scheduled data source
+
+```typescript
+export interface ScheduleConfig {
+  name: string;
+  cronExpression: string;
+  description: string;
+  enabled: boolean;
+  sessionAware?: boolean; // For Congress, Maryland Legislature
+  checkFunction: () => Promise<void>;
+}
+```
+
+---
+
+#### 8 Smart Schedules (lines 53-216)
+
+**Schedule Rationale:**
+```
+eCFR (SNAP regs): Weekly - Major updates quarterly at best
+IRS Publications: Weekly - Updated annually (Oct-Dec for tax season)
+Federal Bills: Daily during session, weekly during recess
+Public Laws: Weekly - Few enacted per month
+Maryland Legislature: Daily during session (Jan-Apr only), paused rest of year
+FNS State Options: Monthly - Updated semi-annually
+BAR Checkpoints: Daily - Upcoming/overdue reminders
+Audit Chain: Weekly recent (1000 entries), monthly full chain
+```
+
+**1. eCFR SNAP Regulations (lines 54-67)**
+```typescript
+{
+  name: 'ecfr',
+  cronExpression: '0 0 * * 0', // Weekly on Sunday at midnight
+  description: 'eCFR Title 7 SNAP regulations (weekly - updates quarterly)',
+  enabled: true,
+  checkFunction: async () => {
+    const result = await govInfoVersionChecker.checkECFRVersion();
+    if (result.needsSync) {
+      log('🔄 eCFR update detected - triggering download');
+      await ecfrBulkDownloader.downloadSNAPRegulations();
+    }
+  },
+}
+```
+
+**2. IRS VITA Publications (lines 69-78)**
+```typescript
+{
+  name: 'irs_publications',
+  cronExpression: '0 0 * * 0', // Weekly on Sunday at 2am
+  description: 'IRS VITA publications (weekly - updated annually Oct-Dec)',
+  enabled: true,
+  checkFunction: async () => {
+    await irsDirectDownloader.downloadAllVITAPublications();
+  },
+}
+```
+
+**3. Federal Bills (Session-Aware) (lines 80-104)**
+```typescript
+{
+  name: 'federal_bills',
+  cronExpression: '0 0 * * *', // Check daily, adjust frequency inside checkFunction
+  description: 'Federal bill status (daily during session, weekly during recess)',
+  enabled: true,
+  sessionAware: true,
+  checkFunction: async () => {
+    const inSession = this.isCongressInSession();
+    
+    // During recess, only run on Sundays (skip other days)
+    if (!inSession) {
+      const today = new Date().getDay(); // 0 = Sunday
+      if (today !== 0) {
+        log(`📅 Federal bills: Skipping (Congress in recess, next check Sunday)`);
+        return;
+      }
+    }
+    
+    log(`📅 Checking federal bills (Congress ${inSession ? 'in session' : 'in recess'})...`);
+    const result = await govInfoVersionChecker.checkBillStatusUpdates(DEFAULT_CONGRESS, 5);
+    if (result.packagesNeedingUpdate > 0) {
+      log(`🔄 ${result.packagesNeedingUpdate} bill(s) need updating`);
+    }
+  },
+}
+```
+
+**Congress Session Logic:**
+- **In Session (Jan-Dec except August):** Daily checks
+- **In Recess (August):** Weekly checks (Sundays only)
+- **Rationale:** Congress doesn't pass bills during recess
+
+**4. Public Laws (lines 106-117)**
+```typescript
+{
+  name: 'public_laws',
+  cronExpression: '0 0 * * 0', // Weekly on Sunday at 4am
+  description: 'Federal public laws (weekly - few enacted per month)',
+  enabled: true,
+  checkFunction: async () => {
+    const result = await govInfoVersionChecker.checkPublicLawsUpdates(DEFAULT_CONGRESS, 5);
+    if (result.packagesNeedingUpdate > 0) {
+      log(`🔄 ${result.packagesNeedingUpdate} law(s) need updating`);
+    }
+  },
+}
+```
+
+**5. Maryland Legislature (Session-Aware) (lines 119-134)**
+```typescript
+{
+  name: 'maryland_legislature',
+  cronExpression: '0 0 * * *', // Check daily, skip execution outside session
+  description: 'Maryland Legislature bills (daily during Jan-Apr session only)',
+  enabled: true, // Always enabled, session check happens inside checkFunction
+  sessionAware: true,
+  checkFunction: async () => {
+    if (!this.isMarylandLegislatureInSession()) {
+      // Outside Jan-Apr - skip silently (no spam in logs)
+      return;
+    }
+    log('📅 Checking Maryland Legislature (in session)...');
+    const year = new Date().getFullYear();
+    const session = `${year}RS`; // Regular Session format: 2025RS
+    await marylandLegislatureScraper.scrapeBills(session);
+  },
+}
+```
+
+**Maryland Legislature Session:**
+- **In Session (Jan-Apr):** Daily checks
+- **Out of Session (May-Dec):** Paused (no checks)
+- **Session Duration:** 90 days (Jan 8 - Apr 8 typically)
+
+**6. FNS State Options (lines 136-153)**
+```typescript
+{
+  name: 'fns_state_options',
+  cronExpression: '0 0 1 * *', // Monthly on 1st (actually 7 days due to JS timer limits)
+  description: 'FNS SNAP State Options (monthly check, published annually in August)',
+  enabled: true,
+  checkFunction: async () => {
+    const result = await fnsStateOptionsParser.downloadAndParse();
+    if (result.optionsCreated > 0) {
+      log(`✅ FNS State Options updated: ${result.optionsCreated} options`);
+    } else {
+      log(`✅ FNS State Options already current (Edition 17)`);
+    }
+  },
+}
+```
+
+**Note:** JavaScript `setInterval` has 32-bit limit (~24.8 days max), so monthly cron (`0 0 1 * *`) converts to 7-day interval
+
+**7. BAR Checkpoint Monitoring (lines 155-175)**
+```typescript
+{
+  name: 'bar_checkpoint_check',
+  cronExpression: '0 0 * * *', // Daily at midnight
+  description: 'BAR checkpoint monitoring (daily - upcoming and overdue checkpoints)',
+  enabled: true,
+  checkFunction: async () => {
+    const { barNotificationService } = await import('./barNotification.service');
+    
+    const upcomingCount = await barNotificationService.checkUpcomingCheckpoints();
+    log(`✅ BAR: Sent ${upcomingCount} upcoming checkpoint reminders`);
+    
+    const overdueCount = await barNotificationService.checkOverdueCheckpoints();
+    log(`📨 BAR: Sent ${overdueCount} overdue checkpoint alerts`);
+  },
+}
+```
+
+**8. Audit Chain Verification (NIST AU-6) (lines 177-215)**
+```typescript
+{
+  name: 'audit_chain_verification',
+  cronExpression: '0 0 * * 0', // Weekly on Sunday at midnight
+  description: 'Audit chain verification (weekly recent, monthly full per NIST AU-6)',
+  enabled: true,
+  checkFunction: async () => {
+    const { auditChainMonitor } = await import('./auditChainMonitor.service');
+    
+    if (auditChainMonitor.isFirstSundayOfMonth()) {
+      // MONTHLY: Full chain verification
+      log('🔍 Audit Chain: Running MONTHLY full chain verification...');
+      const result = await auditChainMonitor.verifyFullChain();
+      
+      if (result.success && result.isValid) {
+        log(`✅ Full chain verified (${result.verifiedEntries} entries)`);
+      } else {
+        log(`❌ Full chain compromised (${result.brokenLinks} broken links)`);
+      }
+    } else {
+      // WEEKLY: Recent 1000 entries
+      log('🔍 Audit Chain: Running WEEKLY recent entries verification...');
+      const result = await auditChainMonitor.verifyRecentEntries();
+      
+      if (result.success && result.isValid) {
+        log(`✅ Recent entries verified (${result.verifiedEntries} entries)`);
+      } else {
+        log(`❌ Recent entries compromised (${result.brokenLinks} broken links)`);
+      }
+    }
+  },
+}
+```
+
+**NIST AU-6 Compliance:**
+- **Weekly:** Verify recent 1000 audit entries
+- **Monthly:** Verify full audit chain (all entries)
+- **Detection:** Cryptographic hash chain tamper detection
+
+---
+
+### 6.21.2 Database-Driven Configuration (lines 218-248)
+
+**Purpose:** Load schedule overrides from database to allow runtime configuration changes
+
+```typescript
+// Merge DB overrides with defaults
+const mergedConfigs = defaultConfigs.map(defaultConfig => {
+  const dbOverride = dbConfigs.find(dc => dc.sourceName === defaultConfig.name);
+  
+  if (dbOverride) {
+    log(`📊 Loading scheduler override for ${defaultConfig.name}: enabled=${dbOverride.isEnabled}, cron=${dbOverride.cronExpression}`);
+    return {
+      ...defaultConfig,
+      enabled: dbOverride.isEnabled,
+      cronExpression: dbOverride.cronExpression,
+    };
+  }
+  
+  return defaultConfig;
+});
+
+this.configsCache = mergedConfigs;
+return mergedConfigs;
+```
+
+**Database Table:** `schedulerConfigs`
+```sql
+CREATE TABLE scheduler_configs (
+  id SERIAL PRIMARY KEY,
+  source_name VARCHAR NOT NULL UNIQUE,
+  display_name VARCHAR,
+  description TEXT,
+  is_enabled BOOLEAN DEFAULT true,
+  cron_expression VARCHAR NOT NULL,
+  created_at TIMESTAMP DEFAULT NOW(),
+  updated_at TIMESTAMP DEFAULT NOW()
+);
+```
+
+**Configuration Precedence:**
+```
+1. Database override (schedulerConfigs table)
+2. Hard-coded default (getScheduleConfigs)
+3. Fallback if DB fails
+```
+
+---
+
+
+### 6.21.3 Session-Aware Logic (lines 255-278)
+
+#### isCongressInSession() (lines 255-265)
+
+**Purpose:** Determine if Congress is in session to adjust bill check frequency
+
+```typescript
+private isCongressInSession(): boolean {
+  const now = new Date();
+  const month = now.getMonth(); // 0-11
+  
+  // August recess (month 7)
+  if (month === 7) {
+    return false;
+  }
+  
+  return true;
+}
+```
+
+**Congress Schedule:**
+- **In Session:** Jan-Jul, Sep-Dec (11 months)
+- **In Recess:** August (1 month)
+- **Check Frequency:** Daily when in session, weekly when in recess
+
+**Simplification:** Real Congress has additional breaks (Easter, Thanksgiving, etc.) but August is the major recess
+
+#### isMarylandLegislatureInSession() (lines 271-278)
+
+**Purpose:** Determine if Maryland General Assembly is in session
+
+```typescript
+private isMarylandLegislatureInSession(): boolean {
+  const now = new Date();
+  const month = now.getMonth(); // 0-11
+  
+  // Session months: January (0), February (1), March (2), April (3)
+  return month >= 0 && month <= 3;
+}
+```
+
+**Maryland Legislature Schedule:**
+- **In Session:** January-April (90-day session, typically Jan 8 - Apr 8)
+- **Out of Session:** May-December (8 months)
+- **Check Frequency:** Daily when in session, paused when out of session
+
+---
+
+### 6.21.4 Cron to Milliseconds Conversion (lines 285-313)
+
+#### cronToMs() - Simple Cron Parser (lines 285-313)
+
+**Purpose:** Convert cron expressions to milliseconds for `setInterval`
+
+```typescript
+private cronToMs(cronExpression: string): number {
+  const parts = cronExpression.split(' ');
+  // Format: minute hour day month weekday
+  
+  const [minute, hour, day, month, weekday] = parts;
+  
+  // Daily: '0 0 * * *'
+  if (minute === '0' && hour === '0' && day === '*' && month === '*' && weekday === '*') {
+    return 24 * 60 * 60 * 1000; // 24 hours
+  }
+  
+  // Weekly on Sunday: '0 0 * * 0'
+  if (minute === '0' && hour === '0' && day === '*' && month === '*' && weekday === '0') {
+    return 7 * 24 * 60 * 60 * 1000; // 7 days
+  }
+  
+  // Monthly on 1st: '0 0 1 * *' - FALLBACK to weekly (JS timer limits)
+  // JavaScript setInterval max is ~24.8 days (2^31-1 ms), so monthly isn't possible
+  if (minute === '0' && hour === '0' && day === '1' && month === '*' && weekday === '*') {
+    return 7 * 24 * 60 * 60 * 1000; // 7 days (check weekly for monthly sources)
+  }
+  
+  throw new Error(`Unsupported cron pattern: ${cronExpression}`);
+}
+```
+
+**Supported Cron Patterns:**
+| Cron Expression | Interval | Milliseconds | Use Case |
+|-----------------|----------|--------------|----------|
+| `0 0 * * *` | Daily | 86,400,000 ms (24 hours) | Federal bills, BAR checkpoints |
+| `0 0 * * 0` | Weekly | 604,800,000 ms (7 days) | eCFR, IRS, public laws, audit chain |
+| `0 0 1 * *` | Monthly → Weekly | 604,800,000 ms (7 days) | FNS State Options (fallback) |
+
+**JavaScript Timer Limitation:**
+```
+Max setInterval: 2^31 - 1 ms = 2,147,483,647 ms ≈ 24.8 days
+
+Monthly (30 days): 2,592,000,000 ms > 2,147,483,647 ms → OVERFLOW
+Solution: Use weekly interval for "monthly" sources
+```
+
+---
+
+### 6.21.5 Lifecycle Management (lines 318-412)
+
+#### startAll() - Non-Blocking Initialization (lines 318-390)
+
+**Purpose:** Start all enabled schedules with optimized initialization
+
+```typescript
+async startAll(): Promise<void> {
+  log('\n📅 Starting Smart Scheduler...');
+  
+  const configs = await this.getScheduleConfigs();
+  const inSession = this.isCongressInSession();
+  const mdInSession = this.isMarylandLegislatureInSession();
+  
+  for (const config of configs) {
+    if (!config.enabled) {
+      log(`⏸️  ${config.name}: PAUSED`);
+      continue;
+    }
+    
+    const intervalMs = this.cronToMs(config.cronExpression);
+    
+    // OPTIMIZATION: Defer initial checks to background (run after 5 seconds)
+    // This prevents blocking server startup with long-running downloads/API calls
+    const initialCheckTimer = setTimeout(async () => {
+      try {
+        await config.checkFunction();
+      } catch (error) {
+        log(`❌ Initial background check failed for ${config.name}: ${error}`);
+      }
+      this.initialCheckTimers.delete(config.name);
+    }, 5000); // Run first check 5 seconds after startup
+    
+    this.initialCheckTimers.set(config.name, initialCheckTimer);
+    
+    // Schedule periodic checks
+    const interval = setInterval(async () => {
+      try {
+        await config.checkFunction();
+      } catch (error) {
+        log(`❌ Scheduled check failed for ${config.name}: ${error}`);
+      }
+    }, intervalMs);
+    
+    this.intervals.set(config.name, interval);
+  }
+  
+  log('════════════════════════════════════════════════════════════');
+  log(`📊 Smart Scheduler Status:`);
+  log(`   Active schedules: ${this.intervals.size}`);
+  log(`   Session-aware: Federal bills ${inSession ? 'daily' : 'weekly'}, MD Legislature ${mdInSession ? 'active' : 'paused'}`);
+  log(`   Estimated check reduction: 70-80% vs 6-hour global interval`);
+  log('════════════════════════════════════════════════════════════\n');
+  
+  this.isInitialized = true;
+  this.initializationTime = Date.now();
+}
+```
+
+**Non-Blocking Initialization:**
+- **Problem:** Initial checks for eCFR, IRS, etc. can take 10-30 seconds (API calls, downloads)
+- **Solution:** Defer initial checks to background (5-second delay)
+- **Benefit:** Server startup completes instantly, checks run asynchronously
+
+**Check Reduction Calculation:**
+```
+NAIVE APPROACH (6-hour global interval):
+  8 sources × 4 checks/day = 32 checks/day = 960 checks/month
+
+SMART APPROACH (source-specific):
+  eCFR: 4 checks/month
+  IRS: 4 checks/month
+  Federal Bills: 30 checks/month (daily in session) + 4 checks/month (weekly in recess Aug)
+  Public Laws: 4 checks/month
+  Maryland Legislature: 120 checks/month (daily Jan-Apr) + 0 checks/month (May-Dec)
+  FNS: 4 checks/month
+  BAR: 30 checks/month (daily)
+  Audit Chain: 4 checks/month (weekly) + 1 check/month (monthly full)
+  
+  TOTAL: ~205 checks/month (averaged over year)
+  
+REDUCTION: (960 - 205) / 960 = 78.6% reduction
+```
+
+#### stopAll() - Graceful Shutdown (lines 395-411)
+
+**Purpose:** Clean up all intervals and pending timers on shutdown
+
+```typescript
+stopAll(): void {
+  log('⏹️  Stopping Smart Scheduler...');
+  
+  // Clear recurring intervals
+  Array.from(this.intervals.entries()).forEach(([name, interval]) => {
+    clearInterval(interval);
+    log(`   Stopped: ${name}`);
+  });
+  this.intervals.clear();
+  
+  // Clear pending initial check timers (shutdown hygiene)
+  Array.from(this.initialCheckTimers.entries()).forEach(([name, timer]) => {
+    clearTimeout(timer);
+    log(`   Canceled pending initial check: ${name}`);
+  });
+  this.initialCheckTimers.clear();
+}
+```
+
+**Graceful Shutdown:**
+1. Clear all `setInterval` recurring timers
+2. Clear all `setTimeout` pending initial checks
+3. Prevent timer leaks on server restart
+
+---
+
+### 6.21.6 Runtime Management API (lines 416-597)
+
+#### triggerCheck() - Manual Trigger (lines 416-426)
+
+**Purpose:** Manually trigger a specific source check (for admin dashboard)
+
+```typescript
+async triggerCheck(sourceName: string): Promise<void> {
+  const configs = await this.getScheduleConfigs();
+  const config = configs.find(c => c.name === sourceName);
+  
+  if (!config) {
+    throw new Error(`Unknown source: ${sourceName}`);
+  }
+  
+  log(`🔧 Manual trigger: ${config.name}`);
+  await config.checkFunction();
+}
+```
+
+**Use Case:** Admin wants to force-check for eCFR updates immediately
+
+#### toggleSchedule() - Enable/Disable Schedule (lines 477-512)
+
+**Purpose:** Toggle schedule on/off and persist to database
+
+```typescript
+async toggleSchedule(sourceName: string, enabled: boolean): Promise<void> {
+  // 1. Save to database first
+  await this.saveConfig(sourceName, { isEnabled: enabled });
+  
+  // 2. Invalidate cache to reload with new settings
+  this.configsCache = null;
+  const configs = await this.getScheduleConfigs();
+  const config = configs.find(c => c.name === sourceName);
+  
+  if (!config) throw new Error(`Unknown source: ${sourceName}`);
+  
+  if (enabled) {
+    // Start the schedule
+    const intervalMs = this.cronToMs(config.cronExpression);
+    const interval = setInterval(async () => {
+      try {
+        await config.checkFunction();
+      } catch (error) {
+        log(`❌ Scheduled check failed for ${sourceName}: ${error}`);
+      }
+    }, intervalMs);
+    
+    this.intervals.set(sourceName, interval);
+    log(`✅ Enabled schedule for ${sourceName}`);
+  } else {
+    // Stop the schedule
+    const interval = this.intervals.get(sourceName);
+    if (interval) {
+      clearInterval(interval);
+      this.intervals.delete(sourceName);
+      log(`⏸️  Disabled schedule for ${sourceName}`);
+    }
+  }
+}
+```
+
+**Use Case:** Temporarily disable Maryland Legislature scraper during off-season
+
+#### updateFrequency() - Change Cron Expression (lines 517-556)
+
+**Purpose:** Update schedule frequency and persist to database
+
+```typescript
+async updateFrequency(sourceName: string, cronExpression: string): Promise<void> {
+  // 1. Validate cron expression
+  try {
+    this.cronToMs(cronExpression);
+  } catch (error) {
+    throw new Error(`Invalid cron expression: ${cronExpression}`);
+  }
+  
+  // 2. Save to database
+  await this.saveConfig(sourceName, { cronExpression });
+  
+  // 3. Invalidate cache
+  this.configsCache = null;
+  const configs = await this.getScheduleConfigs();
+  const config = configs.find(c => c.name === sourceName);
+  
+  if (!config) throw new Error(`Unknown source: ${sourceName}`);
+  
+  // 4. Restart schedule with new frequency (if enabled)
+  if (config.enabled) {
+    const interval = this.intervals.get(sourceName);
+    if (interval) clearInterval(interval);
+    
+    const intervalMs = this.cronToMs(cronExpression);
+    const newInterval = setInterval(async () => {
+      try {
+        await config.checkFunction();
+      } catch (error) {
+        log(`❌ Scheduled check failed for ${sourceName}: ${error}`);
+      }
+    }, intervalMs);
+    
+    this.intervals.set(sourceName, newInterval);
+    log(`🔄 Updated frequency for ${sourceName} to ${cronExpression}`);
+  }
+}
+```
+
+**Use Case:** Change eCFR from weekly to daily during regulatory comment period
+
+---
+
+### 6.21 Summary - Smart Scheduler Service
+
+**Purpose:** Cost-optimized intelligent scheduling system for legislative and regulatory data sources
+
+**Critical Design:** **70-80% reduction** in API calls vs. naive 6-hour global interval
+
+**Core Innovation:** Source-specific schedules with realistic update frequencies
+```
+eCFR: Weekly (updates quarterly)
+IRS: Weekly (updates annually Oct-Dec)
+Federal Bills: Daily during session, weekly during recess
+Maryland Legislature: Daily during session (Jan-Apr), paused rest of year
+```
+
+**8 Scheduled Data Sources:**
+1. **eCFR SNAP Regulations** - Weekly
+2. **IRS VITA Publications** - Weekly
+3. **Federal Bills** - Session-aware (daily/weekly)
+4. **Public Laws** - Weekly
+5. **Maryland Legislature** - Session-aware (daily Jan-Apr, paused May-Dec)
+6. **FNS State Options** - Monthly (actually weekly due to JS timer limits)
+7. **BAR Checkpoints** - Daily (upcoming/overdue reminders)
+8. **Audit Chain Verification** - Weekly recent, monthly full (NIST AU-6)
+
+**Session-Aware Intelligence:**
+| Source | In Session | Out of Session | Session Period |
+|--------|------------|----------------|----------------|
+| Federal Bills | Daily | Weekly (Sundays) | Jan-Dec except August |
+| Maryland Legislature | Daily | Paused | Jan-Apr |
+
+**Production Features:**
+- ✅ Database-driven config overrides
+- ✅ Non-blocking initialization (5-second deferred checks)
+- ✅ Graceful shutdown (clears intervals + pending timers)
+- ✅ Manual trigger API
+- ✅ Toggle enable/disable
+- ✅ Update frequency (cron)
+- ✅ Health status reporting
+- ✅ Session-aware logic
+
+**Cost Optimization:**
+```
+Naive: 960 checks/month (6-hour global interval)
+Smart: ~205 checks/month (source-specific + session-aware)
+Reduction: 78.6%
+```
+
+**JavaScript Timer Workaround:**
+- **Problem:** `setInterval` max ~24.8 days (2^31-1 ms)
+- **Solution:** Monthly cron (`0 0 1 * *`) converts to weekly interval
+- **Impact:** FNS State Options checks weekly instead of monthly (no functional loss)
+
+**Database Integration:**
+```sql
+scheduler_configs (
+  source_name: "ecfr" | "federal_bills" | ...
+  is_enabled: boolean
+  cron_expression: "0 0 * * 0" | ...
+  created_at, updated_at
+)
+```
+
+**Integration Points:**
+- **govInfoVersionChecker:** eCFR, federal bills, public laws
+- **ecfrBulkDownloader:** SNAP regulations download
+- **irsDirectDownloader:** VITA publications download
+- **fnsStateOptionsParser:** FNS State Options
+- **marylandLegislatureScraper:** Maryland bills
+- **barNotificationService:** BAR checkpoint reminders
+- **auditChainMonitor:** Audit chain verification (NIST AU-6)
+
+**Compliance:**
+- ✅ NIST AU-6 (weekly recent, monthly full audit chain verification)
+- ✅ Real-time legislative tracking
+- ✅ Regulatory compliance monitoring
+
+---
+
