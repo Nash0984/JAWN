@@ -1048,6 +1048,7 @@ export const notifications = pgTable("notifications", {
   readAt: timestamp("read_at"),
   actionUrl: text("action_url"), // URL to navigate to when clicked
   metadata: jsonb("metadata"), // Additional context
+  stateCode: varchar("state_code"), // Multi-state routing for notifications
   createdAt: timestamp("created_at").defaultNow().notNull(),
 }, (table) => ({
   userIdReadIdx: index("notifications_user_read_idx").on(table.userId, table.isRead),
