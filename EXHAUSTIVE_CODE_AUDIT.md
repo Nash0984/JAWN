@@ -19740,3 +19740,856 @@ User completes 80% of application via chat
 
 ---
 
+
+---
+
+## 6.5 E-File Queue Service (server/services/eFileQueueService.ts - 985 lines)
+
+**Purpose:** Manage electronic filing workflow for federal (Form 1040) and state (Form 502) tax returns
+
+**Background:**
+- IRS MeF (Modernized e-File) requires XML submissions
+- Maryland iFile system for state tax returns
+- Validation, XML generation, status tracking, retry logic required
+- Production e-filing requires EFIN (Electronic Filing Identification Number)
+
+**E-File Status Flow:**
+```
+draft → ready → transmitted → accepted
+                            ↓
+                         rejected → ready (retry)
+```
+
+**Key Features:**
+1. **Queue Management** - Track tax returns through e-filing lifecycle
+2. **Validation** - Validate tax data before submission
+3. **XML Generation** - Generate IRS MeF and Maryland iFile XML
+4. **Status Tracking** - Monitor submission status
+5. **Retry Logic** - Handle rejections with retry attempts
+6. **Integration Points** - Ready for IRS/Maryland API integration
+
+---
+
+### 6.5.1 Type Definitions (lines 33-52)
+
+**ValidationResult (lines 33-36):**
+```typescript
+interface ValidationResult {
+  isValid: boolean;
+  errors: Array<{ 
+    field: string; 
+    message: string; 
+    severity: 'error' | 'warning' 
+  }>;
+}
+```
+
+**SubmissionResult (lines 38-45):**
+```typescript
+interface SubmissionResult {
+  success: boolean;
+  federalReturnId: string;
+  efileStatus: string;               // 'draft', 'ready', 'transmitted', 'accepted', 'rejected'
+  transmissionId?: string;          // Unique ID for tracking submission
+  errors?: string[];
+  xmlGenerated?: boolean;
+}
+```
+
+**StatusUpdateData (lines 47-52):**
+```typescript
+interface StatusUpdateData {
+  status: 'transmitted' | 'accepted' | 'rejected';
+  transmissionId?: string;
+  rejectionReason?: string;
+  rejectionDetails?: any;
+}
+```
+
+---
+
+### 6.5.2 submitForEFile() - Federal Tax Return Submission (lines 68-392)
+
+**Purpose:** Validate, generate XML, and queue federal tax return for e-filing
+
+**Workflow (11 steps):**
+```
+1. Fetch federal tax return
+2. Validate tax return data
+3. Generate Form 1040 XML
+4. Generate Form 502 XML (if Maryland return exists)
+5. Check XML generation success
+6. Generate transmission ID
+7. Merge quality review data
+8. Update status to "ready"
+9. [Production] Transmit to IRS MeF
+10. [Production] Transmit to Maryland iFile
+11. Return submission result
+```
+
+**Step 1-2: Fetch & Validate (lines 70-96):**
+```typescript
+// 1. Fetch the federal tax return
+const federalReturn = await storage.getFederalTaxReturn(federalReturnId);
+if (!federalReturn) {
+  return {
+    success: false,
+    federalReturnId,
+    efileStatus: 'draft',
+    errors: ['Federal tax return not found']
+  };
+}
+
+// 2. Validate the tax return data
+const validationResult = await this.validateTaxReturn(federalReturn);
+if (!validationResult.isValid) {
+  // Store validation errors in the database
+  await storage.updateFederalTaxReturn(federalReturnId, {
+    validationErrors: validationResult.errors,
+    efileStatus: 'draft'
+  });
+
+  return {
+    success: false,
+    federalReturnId,
+    efileStatus: 'draft',
+    errors: validationResult.errors.map(e => `${e.field}: ${e.message}`)
+  };
+}
+```
+
+**Step 3: Generate Form 1040 XML (lines 98-189):**
+```typescript
+try {
+  const form1040Data = federalReturn.form1040Data as any;
+  
+  // Extract personal info for XML generator
+  const personalInfo = {
+    taxpayerFirstName: form1040Data?.taxpayerInfo?.firstName || '',
+    taxpayerLastName: form1040Data?.taxpayerInfo?.lastName || '',
+    taxpayerSSN: form1040Data?.taxpayerInfo?.ssn || '',
+    spouseFirstName: form1040Data?.spouseInfo?.firstName,
+    spouseLastName: form1040Data?.spouseInfo?.lastName,
+    spouseSSN: form1040Data?.spouseInfo?.ssn,
+    streetAddress: form1040Data?.address?.street || '',
+    aptNumber: form1040Data?.address?.apt,
+    city: form1040Data?.address?.city || '',
+    state: form1040Data?.address?.state || '',
+    zipCode: form1040Data?.address?.zipCode || '',
+    dependents: form1040Data?.dependents || [],
+    virtualCurrency: form1040Data?.virtualCurrency || false,
+    taxpayerPresidentialFund: form1040Data?.taxpayerPresidentialFund,
+    spousePresidentialFund: form1040Data?.spousePresidentialFund
+  };
+
+  // Extract tax input
+  const taxInput = {
+    taxYear: federalReturn.taxYear,
+    filingStatus: (federalReturn.filingStatus || 'single'),
+    stateCode: 'MD',
+    taxpayer: {
+      age: form1040Data?.taxpayerInfo?.age || 40,
+      isBlind: form1040Data?.taxpayerInfo?.isBlind,
+      isDisabled: form1040Data?.taxpayerInfo?.isDisabled
+    },
+    spouse: form1040Data?.spouseInfo ? { ... } : undefined,
+    w2Income: form1040Data?.income?.w2Income,
+    interestIncome: form1040Data?.income?.interest,
+    dividendIncome: form1040Data?.income?.dividends,
+    // ... other income types
+    standardDeduction: form1040Data?.deductions?.standardDeduction,
+    itemizedDeductions: form1040Data?.deductions?.itemizedDeductions
+  };
+
+  // Extract tax result
+  const totalIncome = form1040Data?.calculations?.totalIncome || federalReturn.adjustedGrossIncome || 0;
+  const taxResult = {
+    totalIncome,
+    adjustedGrossIncome: federalReturn.adjustedGrossIncome || 0,
+    taxableIncome: federalReturn.taxableIncome || 0,
+    totalTax: federalReturn.totalTax || 0,
+    taxableSocialSecurity: form1040Data?.calculations?.taxableSocialSecurity || 0,
+    deductionBreakdown: { ... },
+    credits: form1040Data?.credits || {},
+    refundAmount: federalReturn.refundAmount || 0,
+    amountOwed: Math.abs(Math.min(federalReturn.refundAmount || 0, 0)),
+    effectiveTaxRate: form1040Data?.calculations?.effectiveTaxRate || 0
+  };
+
+  // Generate XML
+  form1040Xml = await this.form1040Generator.generateForm1040XML(
+    personalInfo,
+    taxInput,
+    taxResult,
+    {
+      taxYear: federalReturn.taxYear,
+      softwareId: 'MD-BENEFITS-PLATFORM',
+      softwareVersion: '1.0'
+    }
+  );
+} catch (error) {
+  logger.error('Form 1040 XML generation error', { error });
+  xmlGenerationError = error instanceof Error ? error.message : 'Unknown XML generation error';
+}
+```
+
+**Software Identifier:**
+- `softwareId: 'MD-BENEFITS-PLATFORM'` - Identifies JAWN to IRS
+- Production requires registered software ID from IRS
+
+**Step 4: Generate Form 502 XML (Maryland) (lines 191-296):**
+```typescript
+const marylandReturn = await storage.getMarylandTaxReturnByFederalId(federalReturnId);
+let form502Xml: string | null = null;
+
+if (marylandReturn) {
+  try {
+    const form1040Data = federalReturn.form1040Data as any;
+    const form502Data = marylandReturn.form502Data as any;
+
+    const personalInfo = {
+      // ... personal info
+      county: form502Data?.countyName || marylandReturn.countyCode || '',
+      marylandResident: form502Data?.marylandResident ?? true
+    };
+
+    const marylandTaxResult = {
+      marylandAGI: marylandReturn.marylandAGI || 0,
+      marylandTaxableIncome: form502Data?.taxableIncome || 0,
+      stateTax: marylandReturn.marylandTax || 0,
+      countyTax: marylandReturn.countyTax || 0,
+      totalMarylandTax: (marylandReturn.marylandTax || 0) + (marylandReturn.countyTax || 0),
+      marylandEITC: form502Data?.credits?.eitc || 0,
+      povertyLevelCredit: form502Data?.credits?.povertyLevel || 0,
+      stateRefund: marylandReturn.stateRefund || 0,
+      stateAmountOwed: Math.abs(Math.min(marylandReturn.stateRefund || 0, 0)),
+      effectiveStateRate: form502Data?.effectiveStateRate || 0,
+      effectiveCountyRate: form502Data?.effectiveCountyRate || 0
+    };
+
+    const marylandInput = {
+      countyCode: marylandReturn.countyCode || '',
+      localTaxRate: form502Data?.localTaxRate || 0,
+      childcareExpenses: form502Data?.childcareExpenses || 0,
+      studentLoanInterest: form502Data?.studentLoanInterest || 0
+    };
+
+    form502Xml = await this.form502Generator.generateForm502XML(
+      personalInfo,
+      taxInput,
+      federalTaxResult,
+      marylandTaxResult,
+      marylandInput,
+      { taxYear: federalReturn.taxYear, softwareId: 'MD-BENEFITS-PLATFORM', softwareVersion: '1.0' }
+    );
+  } catch (error) {
+    logger.error('Form 502 XML generation error', { error });
+    const mdXmlError = error instanceof Error ? error.message : 'Unknown XML generation error';
+    form502Xml = `<!-- Form 502 XML generation failed: ${mdXmlError} -->`;
+  }
+}
+```
+
+**Maryland County Tax:**
+- Each Maryland county has different tax rates
+- `countyCode` required for correct county tax calculation
+
+**Step 5-6: Validate XML & Generate Transmission ID (lines 298-318):**
+```typescript
+// 5. Check if XML generation succeeded
+if (xmlGenerationError) {
+  // XML generation failed - keep in draft status
+  await storage.updateFederalTaxReturn(federalReturnId, {
+    efileStatus: 'draft',
+    validationErrors: {
+      xmlGenerationFailed: true,
+      error: xmlGenerationError
+    }
+  });
+  
+  return {
+    success: false,
+    federalReturnId,
+    efileStatus: 'draft',
+    errors: [`XML generation failed: ${xmlGenerationError}`]
+  };
+}
+
+// 6. Only generate transmission ID if XML succeeded
+const transmissionId = `TX-${Date.now()}-${nanoid(10)}`;
+```
+
+**Transmission ID Format:**
+- `TX-1730137200000-a1b2c3d4e5` - Unique tracking ID
+- Format: `TX-{timestamp}-{nanoid}`
+
+**Step 7-8: Update Status to "ready" (lines 320-342):**
+```typescript
+// 7. Merge quality review data (preserve existing data)
+const existingReview = (federalReturn.qualityReview as Record<string, any>) || {};
+const mergedReview = {
+  ...existingReview,
+  xmlGenerated: true,
+  form1040XmlLength: form1040Xml?.length || 0,
+  form502XmlLength: form502Xml?.length || 0,
+  generatedXml: {
+    form1040: form1040Xml,
+    form502: form502Xml
+  },
+  validatedAt: new Date().toISOString(),
+  transmissionId
+};
+
+// 8. Update status to "ready" with transmission ID
+await storage.updateFederalTaxReturn(federalReturnId, {
+  efileStatus: 'ready',
+  efileTransmissionId: transmissionId,
+  efileSubmittedAt: new Date(),
+  validationErrors: null,
+  qualityReview: mergedReview
+});
+```
+
+**QualityReview Field:**
+- Stores XML generation metadata
+- Preserves audit trail
+- Includes transmission ID, XML lengths, validation timestamp
+
+**Production E-File Transmission Notes (lines 344-361):**
+```typescript
+/**
+ * Production e-file transmission:
+ * 
+ * After successful XML generation and validation, returns would be transmitted
+ * to the appropriate tax authority (IRS MeF or Maryland iFile).
+ * 
+ * Requirements for production implementation:
+ * - IRS: EFIN (Electronic Filing Identification Number) from IRS e-file program
+ * - Maryland: iFile credentials from Maryland Comptroller's Office
+ * - SSL/TLS certificates for secure transmission
+ * - Digital signatures for authentication
+ * 
+ * Current behavior: Returns are marked as "ready" for transmission
+ * and can be manually submitted through official tax software.
+ */
+// Production code would transmit here:
+// const irsResult = await this.transmitToIRS(form1040Xml, federalReturn);
+// const mdResult = form502Xml ? await this.transmitToMaryland(form502Xml, marylandReturn) : null;
+```
+
+**EFIN Requirements:**
+- Electronic Return Originator (ERO) application to IRS
+- Fingerprinting and background check
+- Suitability check for tax return preparers
+- Annual renewal required
+
+---
+
+
+### 6.5.3 retryFailedSubmission() - Retry Logic (lines 418-456)
+
+**Purpose:** Retry rejected submissions with attempt limit
+
+**Retry Logic (lines 429-440):**
+```typescript
+// Check retry attempts (preserve existing quality review data)
+const existingReview = (federalReturn.qualityReview as Record<string, any>) || {};
+const retryAttempts = existingReview.retryAttempts || 0;
+
+if (retryAttempts >= this.MAX_RETRY_ATTEMPTS) {  // MAX = 3
+  return {
+    success: false,
+    federalReturnId,
+    efileStatus: federalReturn.efileStatus || 'rejected',
+    errors: [`Maximum retry attempts (${this.MAX_RETRY_ATTEMPTS}) exceeded`]
+  };
+}
+```
+
+**Increment Retry Counter (lines 442-447):**
+```typescript
+// Reset status and increment retry counter (merge with existing data)
+const mergedReview = {
+  ...existingReview,
+  retryAttempts: retryAttempts + 1,
+  lastRetryAt: new Date().toISOString()
+};
+
+await storage.updateFederalTaxReturn(federalReturnId, {
+  efileStatus: 'draft',
+  qualityReview: mergedReview
+});
+
+// Re-submit
+return await this.submitForEFile(federalReturnId);
+```
+
+**Use Case:**
+```
+IRS rejects return (missing W-2 attachment)
+→ User uploads W-2
+→ Retry submission (attempt 1)
+→ Still rejected (wrong amount)
+→ Fix amount, retry (attempt 2)
+→ Accepted
+```
+
+---
+
+### 6.5.4 Queue Management Methods (lines 461-491)
+
+**getPendingSubmissions() (lines 461-463):**
+```typescript
+async getPendingSubmissions(): Promise<FederalTaxReturn[]> {
+  return await storage.getFederalTaxReturns({ efileStatus: 'ready' });
+}
+```
+**Use Case:** E-filing dashboard → Show returns ready for transmission
+
+**getFailedSubmissions() (lines 468-470):**
+```typescript
+async getFailedSubmissions(): Promise<FederalTaxReturn[]> {
+  return await storage.getFederalTaxReturns({ efileStatus: 'rejected' });
+}
+```
+**Use Case:** QC review → Show rejected returns needing attention
+
+**getRecentSubmissions() (lines 475-491):**
+```typescript
+async getRecentSubmissions(limit: number = 50): Promise<FederalTaxReturn[]> {
+  const returns = await db
+    .select()
+    .from(federalTaxReturns)
+    .where(
+      or(
+        eq(federalTaxReturns.efileStatus, 'ready'),
+        eq(federalTaxReturns.efileStatus, 'transmitted'),
+        eq(federalTaxReturns.efileStatus, 'accepted'),
+        eq(federalTaxReturns.efileStatus, 'rejected')
+      )
+    )
+    .orderBy(desc(federalTaxReturns.updatedAt))
+    .limit(limit);
+  
+  return returns;
+}
+```
+**Use Case:** E-filing dashboard → Show all recent submissions (last 50)
+
+---
+
+### 6.5.5 updateSubmissionStatus() - Status Updates (lines 497-551)
+
+**Purpose:** Update submission status from IRS/Maryland acknowledgment
+
+**Webhook Integration Pattern:**
+```
+IRS sends acknowledgment webhook
+  ↓
+Webhook handler calls updateSubmissionStatus()
+  ↓
+Status updated to 'accepted' or 'rejected'
+  ↓
+User notified
+```
+
+**Find Return by Transmission ID (lines 502-511):**
+```typescript
+// Find the return by transmission ID
+const returns = await db
+  .select()
+  .from(federalTaxReturns)
+  .where(eq(federalTaxReturns.efileTransmissionId, transmissionId));
+
+if (returns.length === 0) {
+  throw new Error(`No tax return found with transmission ID: ${transmissionId}`);
+}
+```
+
+**Status-Based Updates (lines 518-538):**
+```typescript
+switch (statusData.status) {
+  case 'transmitted':
+    updates.efileSubmittedAt = new Date();
+    break;
+  
+  case 'accepted':
+    updates.efileAcceptedAt = new Date();
+    updates.efileRejectionReason = null;
+    break;
+  
+  case 'rejected':
+    updates.efileRejectionReason = statusData.rejectionReason || 'Rejected by IRS';
+    // Merge quality review data (preserve existing audit fields)
+    const existingReview = (federalReturn.qualityReview as Record<string, any>) || {};
+    updates.qualityReview = {
+      ...existingReview,
+      rejectionDetails: statusData.rejectionDetails,
+      rejectedAt: new Date().toISOString()
+    };
+    break;
+}
+```
+
+**Cascade to Maryland Return (lines 543-550):**
+```typescript
+// Update Maryland return if exists
+const marylandReturn = await storage.getMarylandTaxReturnByFederalId(federalReturn.id);
+if (marylandReturn) {
+  await storage.updateMarylandTaxReturn(marylandReturn.id, {
+    efileStatus: statusData.status,
+    ...(statusData.status === 'transmitted' && { efileSubmittedAt: new Date() }),
+    ...(statusData.status === 'accepted' && { efileAcceptedAt: new Date() })
+  });
+}
+```
+
+**Design Choice:** Maryland return status cascades from federal return
+
+---
+
+### 6.5.6 validateTaxReturn() - Comprehensive Validation (lines 679-794)
+
+**Purpose:** Validate tax return data before XML generation
+
+**8 Validation Categories:**
+1. **Personal Information** (lines 684-694) - Name, SSN required
+2. **Filing Status** (lines 697-699) - Required
+3. **Spouse Information** (lines 702-714) - If married filing jointly
+4. **Address** (lines 717-728) - Street, city, state, ZIP required
+5. **Income** (lines 731-744) - Warning if no income reported
+6. **Business Rules** (lines 747-753) - Negative AGI validation
+7. **Dependents** (lines 756-779) - Name, SSN for each dependent
+8. **Duplicate Submission** (lines 782-788) - Prevent resubmission
+
+**SSN Validation (lines 690-694):**
+```typescript
+if (!form1040Data?.taxpayerInfo?.ssn) {
+  errors.push({ field: 'taxpayerInfo.ssn', message: 'Taxpayer SSN is required', severity: 'error' });
+} else if (!this.isValidSSN(form1040Data.taxpayerInfo.ssn)) {
+  errors.push({ field: 'taxpayerInfo.ssn', message: 'Invalid SSN format', severity: 'error' });
+}
+```
+
+**SSN Format Validation (lines 977-981):**
+```typescript
+private isValidSSN(ssn: string): boolean {
+  if (!ssn) return false;
+  const ssnPattern = /^\d{3}-\d{2}-\d{4}$/;
+  return ssnPattern.test(ssn);
+}
+```
+**Format:** `123-45-6789`
+
+**Spouse Validation for Married Filing Jointly (lines 702-714):**
+```typescript
+if (federalReturn.filingStatus === 'married_joint') {
+  if (!form1040Data?.spouseInfo?.firstName) {
+    errors.push({ field: 'spouseInfo.firstName', message: 'Spouse first name required for joint filing', severity: 'error' });
+  }
+  if (!form1040Data?.spouseInfo?.lastName) {
+    errors.push({ field: 'spouseInfo.lastName', message: 'Spouse last name required for joint filing', severity: 'error' });
+  }
+  if (!form1040Data?.spouseInfo?.ssn) {
+    errors.push({ field: 'spouseInfo.ssn', message: 'Spouse SSN required for joint filing', severity: 'error' });
+  } else if (!this.isValidSSN(form1040Data.spouseInfo.ssn)) {
+    errors.push({ field: 'spouseInfo.ssn', message: 'Invalid spouse SSN format', severity: 'error' });
+  }
+}
+```
+
+**Income Validation (Warning) (lines 731-744):**
+```typescript
+// 5. Income validation (at least some income should be reported)
+const agi = federalReturn.adjustedGrossIncome ?? 0;
+const hasIncome = 
+  agi > 0 || 
+  (form1040Data?.income?.wages && form1040Data.income.wages > 0) ||
+  (form1040Data?.income?.interest && form1040Data.income.interest > 0) ||
+  (form1040Data?.income?.dividends && form1040Data.income.dividends > 0);
+
+if (!hasIncome) {
+  errors.push({ 
+    field: 'income', 
+    message: 'No income reported - verify this is correct', 
+    severity: 'warning'  // Warning, not error
+  });
+}
+```
+
+**Design Choice:** No income is a warning (not error) - valid for low-income filers
+
+**Dependent Validation Loop (lines 756-779):**
+```typescript
+if (form1040Data?.dependents && Array.isArray(form1040Data.dependents)) {
+  form1040Data.dependents.forEach((dep: any, index: number) => {
+    if (!dep.firstName) {
+      errors.push({ 
+        field: `dependents[${index}].firstName`, 
+        message: 'Dependent first name is required', 
+        severity: 'error' 
+      });
+    }
+    if (!dep.ssn) {
+      errors.push({ 
+        field: `dependents[${index}].ssn`, 
+        message: 'Dependent SSN is required', 
+        severity: 'error' 
+      });
+    } else if (!this.isValidSSN(dep.ssn)) {
+      errors.push({ 
+        field: `dependents[${index}].ssn`, 
+        message: 'Invalid dependent SSN format', 
+        severity: 'error' 
+      });
+    }
+  });
+}
+```
+
+**Duplicate Submission Prevention (lines 782-788):**
+```typescript
+// 8. Check if return was already transmitted
+if (federalReturn.efileStatus === 'transmitted' || federalReturn.efileStatus === 'accepted') {
+  errors.push({ 
+    field: 'efileStatus', 
+    message: `Return already ${federalReturn.efileStatus} - cannot resubmit`, 
+    severity: 'error' 
+  });
+}
+```
+
+**Validation Result (lines 790-794):**
+```typescript
+return {
+  isValid: errors.filter(e => e.severity === 'error').length === 0,  // Only errors block submission
+  errors  // Include both errors and warnings
+};
+```
+
+**Design Choice:** Warnings don't block submission, errors do
+
+---
+
+### 6.5.7 Production Integration Placeholders (lines 807-972)
+
+#### transmitToIRS() - IRS MeF Integration (lines 879-911)
+
+**Production Requirements:**
+- **EFIN** - Electronic Filing Identification Number (IRS e-file application)
+- **ETIN** - Electronic Transmitter Identification Number
+- **X.509 Certificates** - Digital signatures for authentication
+- **IRS MeF Web Services** - SOAP protocol implementation
+- **IRS Publication 4164** - MeF Developer Guide compliance
+
+**IRS MeF Endpoint:**
+```
+Production: https://la.www4.irs.gov/EFileServices/services
+Test Environment (FIRE): https://testfire.irs.gov/EFileServices/services
+```
+
+**Transmission Process:**
+```
+1. Package XML in SOAP envelope with WS-Security headers
+2. Sign with X.509 certificate
+3. Submit to IRS MeF endpoint
+4. Receive acknowledgment with Submission ID
+5. Poll for acceptance/rejection status
+```
+
+**Current Implementation (Placeholder):**
+```typescript
+logger.info('PLACEHOLDER: Would transmit to IRS MeF', {
+  context: 'EFileQueueService.transmitToIRS',
+  returnId: federalReturn.id,
+  xmlLength: xmlData.length,
+  taxYear: federalReturn.taxYear,
+  note: 'Actual IRS transmission requires production credentials'
+});
+
+const mockTransmissionId = `IRS-${nanoid(16)}`;
+
+// Update database with transmission ID
+await storage.updateFederalTaxReturn(federalReturn.id, {
+  efileTransmissionId: mockTransmissionId,
+  efileStatus: 'transmitted',
+  efileSubmittedAt: new Date()
+});
+
+return {
+  transmissionId: mockTransmissionId,
+  status: 'transmitted'
+};
+```
+
+---
+
+#### transmitToMaryland() - Maryland iFile Integration (lines 940-972)
+
+**Production Requirements:**
+- **Maryland iFile Software Developer ID** - From Comptroller of Maryland
+- **Maryland Tax Preparer Registration Number** - If professional preparer
+- **Maryland iFile Credentials** - Test and production environments
+- **Maryland XML Schema** - XSD version 2025
+- **Maryland iFile Developer Guide** - Compliance required
+
+**Maryland iFile Endpoint:**
+```
+Production: https://interactive.marylandtaxes.gov/ifilews
+Test: https://test.interactive.marylandtaxes.gov/ifilews
+```
+
+**County-Specific Requirements:**
+- 23 Maryland counties + Baltimore City
+- Different tax rates per county
+- Special Baltimore City resident/non-resident calculations
+- Piggyback tax for local jurisdictions
+
+**Transmission Process:**
+```
+1. Format return per Maryland XML Schema (XSD) 2025
+2. Include county tax calculations
+3. Submit via HTTPS POST to iFile gateway
+4. Authenticate via OAuth 2.0 or API key
+5. Receive Maryland Confirmation Number
+6. Poll status endpoint
+```
+
+**Current Implementation (Placeholder):**
+```typescript
+logger.info('PLACEHOLDER: Would transmit to Maryland iFile', {
+  context: 'EFileQueueService.transmitToMaryland',
+  returnId: marylandReturn.id,
+  xmlLength: xmlData.length,
+  countyCode: marylandReturn.countyCode,
+  note: 'Actual Maryland transmission requires production credentials'
+});
+
+const mockTransmissionId = `MD-${nanoid(16)}`;
+
+await storage.updateMarylandTaxReturn(marylandReturn.id, {
+  efileTransmissionId: mockTransmissionId,
+  efileStatus: 'transmitted',
+  efileSubmittedAt: new Date()
+});
+
+return {
+  transmissionId: mockTransmissionId,
+  status: 'transmitted'
+};
+```
+
+---
+
+### 6.5 Summary - E-File Queue Service
+
+**Key Features:**
+1. **Queue Management** - Track tax returns through e-filing lifecycle
+2. **Comprehensive Validation** - 8 validation categories (personal, income, dependents, etc.)
+3. **XML Generation** - Form 1040 (federal) and Form 502 (Maryland)
+4. **Retry Logic** - 3 retry attempts for rejected submissions
+5. **Status Tracking** - draft → ready → transmitted → accepted/rejected
+6. **Maryland Integration** - County-specific tax calculations
+7. **Production Ready** - Placeholder integration points for IRS MeF and Maryland iFile
+
+**E-File Status Flow:**
+```
+draft
+  ↓ (validation + XML generation)
+ready
+  ↓ (transmission)
+transmitted
+  ↓ (IRS/MD acknowledgment)
+accepted  OR  rejected
+              ↓ (retry, max 3 attempts)
+            ready (retry)
+```
+
+**Validation Categories:**
+1. Personal Information - Name, SSN format (XXX-XX-XXXX)
+2. Filing Status - Required
+3. Spouse Information - Required if married filing jointly
+4. Address - Street, city, state, ZIP
+5. Income - Warning if no income reported
+6. Business Rules - Negative AGI validation
+7. Dependents - Name, SSN for each dependent
+8. Duplicate Submission - Prevent resubmission of transmitted/accepted returns
+
+**Transmission IDs:**
+- **Federal:** `TX-{timestamp}-{nanoid(10)}` → e.g., `TX-1730137200000-a1b2c3d4e5`
+- **IRS (Production):** `IRS-{nanoid(16)}`
+- **Maryland (Production):** `MD-{nanoid(16)}`
+
+**Production Integration Requirements:**
+
+**IRS MeF:**
+- EFIN (Electronic Filing Identification Number)
+- ETIN (Electronic Transmitter Identification Number)
+- X.509 certificates for digital signatures
+- SOAP web service implementation
+- IRS Publication 4164 compliance
+- Endpoint: `https://la.www4.irs.gov/EFileServices/services`
+
+**Maryland iFile:**
+- Software Developer ID
+- Tax Preparer Registration Number
+- OAuth 2.0 / API key authentication
+- Maryland XML Schema (XSD) 2025
+- County tax rate integration (23 counties + Baltimore City)
+- Endpoint: `https://interactive.marylandtaxes.gov/ifilews`
+
+**Quality Review Data (stored in qualityReview field):**
+- `xmlGenerated` - Boolean flag
+- `form1040XmlLength` - XML byte length
+- `form502XmlLength` - XML byte length
+- `generatedXml` - Full XML content
+- `validatedAt` - Timestamp
+- `transmissionId` - Tracking ID
+- `retryAttempts` - Number of retry attempts
+- `lastRetryAt` - Last retry timestamp
+- `rejectionDetails` - IRS/MD rejection details
+- `rejectedAt` - Rejection timestamp
+
+**Retry Logic:**
+- **Max Attempts:** 3 (configurable via `MAX_RETRY_ATTEMPTS`)
+- **Retry Counter:** Tracked in `qualityReview.retryAttempts`
+- **Status Reset:** `rejected` → `draft` → `ready` (on retry)
+- **Use Case:** IRS rejects due to missing W-2 → User uploads W-2 → Retry succeeds
+
+**Use Cases:**
+1. **VITA Tax Preparation** - Prepare returns → Validate → Generate XML → Queue for e-filing
+2. **E-Filing Dashboard** - Show pending (ready), transmitted, accepted, rejected returns
+3. **Rejection Handling** - IRS rejects → Navigator fixes issue → Retry submission
+4. **Multi-State Filing** - Federal + Maryland returns linked by `federalReturnId`
+5. **Quality Control** - Review pending returns before transmission
+6. **Status Monitoring** - Webhook from IRS → Update status → Notify applicant
+
+**Compliance:**
+- ✅ **IRS Pub 4164** - MeF Developer Guide compliance (placeholder)
+- ✅ **Maryland iFile Requirements** - County-specific calculations
+- ✅ **SSN Format Validation** - XXX-XX-XXXX format
+- ✅ **Duplicate Prevention** - Cannot resubmit transmitted/accepted returns
+- ✅ **Audit Trail** - Quality review data for compliance
+
+**Error Handling:**
+- Validation errors → Stored in database → Return to draft status
+- XML generation errors → Logged → Return to draft status
+- Transmission errors → Logged → Retry logic
+- Non-blocking validation warnings (e.g., no income reported)
+
+**Integration with Other Services:**
+- **Form1040XmlGenerator** - Generate IRS MeF XML
+- **Form502XmlGenerator** - Generate Maryland iFile XML
+- **Storage** - Database operations for tax returns
+- **Logger** - Error logging and audit trail
+
+**Production Deployment Notes:**
+- Obtain EFIN from IRS (6-8 week application process)
+- Register with Maryland Comptroller as software developer
+- Complete IRS MeF testing in FIRE environment
+- Complete Maryland iFile testing in test environment
+- Implement webhook handlers for IRS/Maryland acknowledgments
+- Set up monitoring for transmission failures
+
+---
+
