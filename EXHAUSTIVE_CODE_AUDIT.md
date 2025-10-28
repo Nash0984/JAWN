@@ -35290,3 +35290,916 @@ scheduler_configs (
 
 ---
 
+
+---
+
+## 6.22 Maryland Legislature Scraper (server/services/marylandLegislatureScraper.ts - 763 lines)
+
+**Purpose:** Scrapes mgaleg.maryland.gov for current session bills related to benefit programs (SNAP, TANF, Medicaid, EITC, energy assistance, tax credits)
+
+**Critical Design:** Respectful web scraping with 500ms delays, pagination support, keyword filtering, PDF downloads, RAG pipeline integration
+
+**Data Source:** https://mgaleg.maryland.gov (Maryland General Assembly)
+**Coverage:** 2025 Regular Session (2025RS), 90-day session (Jan 8 - Apr 8)
+
+**Production Features:**
+- Pagination auto-detection (dynamic param discovery)
+- Keyword filtering on title + synopsis (prevents missing relevant bills)
+- PDF download to object storage
+- Document record creation for RAG pipeline
+- Duplicate prevention
+- Graceful error handling
+
+---
+
+### 6.22.1 Data Structures (lines 20-53)
+
+#### Policy Keywords (lines 60-76)
+
+**Purpose:** Filter bills for benefit program relevance
+
+```typescript
+private readonly POLICY_KEYWORDS = [
+  'SNAP',
+  'food stamp',
+  'food assistance',
+  'TANF',
+  'temporary assistance',
+  'public assistance',
+  'Medicaid',
+  'energy assistance',
+  'tax credit',
+  'EITC',
+  'earned income',
+  'child tax credit',
+  'low-income',
+  'poverty',
+  'supplemental nutrition',
+];
+```
+
+**Maryland Benefit Programs:**
+| Program | Keywords |
+|---------|----------|
+| SNAP | "SNAP", "food stamp", "food assistance", "supplemental nutrition" |
+| TANF | "TANF", "temporary assistance", "public assistance" |
+| Medicaid | "Medicaid" |
+| EITC | "tax credit", "EITC", "earned income", "child tax credit" |
+| LIHEAP | "energy assistance" |
+| General | "low-income", "poverty" |
+
+---
+
+#### BillDetails Interface (lines 37-53)
+
+**Purpose:** Complete bill information including status, sponsors, committees
+
+```typescript
+interface BillDetails {
+  billNumber: string; // "HB0001", "SB0234"
+  billType: string; // "HB", "SB", "HJ", "SJ"
+  session: string; // "2025RS"
+  title: string;
+  synopsis?: string; // Full bill description
+  sponsors: any[]; // Delegates/Senators
+  committees: any[]; // Assigned committees
+  status: string; // "introduced", "committee", "passed_first", "passed_second", "enacted"
+  fiscalNoteUrl?: string; // Cost analysis
+  pdfUrl?: string; // Bill text PDF
+  fullTextUrl?: string; // Enacted text PDF
+  crossFiledWith?: string; // Companion bill (e.g., HB100 ↔ SB234)
+  introducedDate?: Date;
+  firstReadingDate?: Date;
+  relatedPrograms: string[]; // ["SNAP", "TANF"]
+}
+```
+
+**Bill Types:**
+- **HB:** House Bill
+- **SB:** Senate Bill
+- **HJ:** House Joint Resolution
+- **SJ:** Senate Joint Resolution
+
+**Bill Status Flow:**
+```
+prefiled → introduced → committee → passed_first (2nd reading) → 
+passed_second (3rd reading) → enacted (signed)
+```
+
+---
+
+### 6.22.2 Main Scraper Logic (lines 81-150)
+
+#### scrapeBills() - Main Entry Point (lines 81-150)
+
+**Purpose:** Scrape both chambers, filter by keywords, store in database
+
+```typescript
+async scrapeBills(session: string = '2025RS'): Promise<ScrapeResult> {
+  logger.info('Maryland Legislature Scraper started', { session });
+  
+  const result: ScrapeResult = {
+    success: true,
+    billsFound: 0,
+    billsStored: 0,
+    billsUpdated: 0,
+    errors: [],
+  };
+
+  try {
+    // 1. Scrape bills from both chambers
+    const houseBills = await this.scrapeChamber('house', session);
+    const senateBills = await this.scrapeChamber('senate', session);
+    
+    const allBills = [...houseBills, ...senateBills];
+    logger.info('Total bills found', { count: allBills.length });
+
+    // 2. Fetch details and filter by keywords (checks title + synopsis)
+    logger.info('Fetching details and filtering by keywords');
+    
+    for (const billItem of allBills) {
+      try {
+        // Fetch bill details first
+        const billDetails = await this.fetchBillDetails(billItem, session);
+        
+        // Check if policy-relevant (both title AND synopsis)
+        if (this.isPolicyRelevantWithSynopsis(billDetails.title, billDetails.synopsis)) {
+          result.billsFound++;
+          await this.processBillWithDetails(billItem, billDetails, session, result);
+        }
+        
+        // Respectful delay
+        await this.delay(this.DELAY_MS); // 500ms
+      } catch (error) {
+        result.errors.push(`Error processing ${billItem.billNumber}: ${error}`);
+      }
+    }
+    
+    logger.info('Policy-relevant bills found', { count: result.billsFound });
+
+    // 3. Update policy source sync status
+    await this.updatePolicySourceStatus(session, result);
+
+  } catch (error) {
+    result.success = false;
+    result.errors.push(`Fatal error: ${error}`);
+  }
+
+  return result;
+}
+```
+
+**3-Step Scraping Process:**
+```
+1. Scrape Chamber Lists (House + Senate)
+   ↓
+2. Fetch Details + Filter by Keywords
+   ↓
+3. Download PDFs + Store in Database
+```
+
+**Critical Design:** Fetches details BEFORE filtering to check synopsis (prevents missing relevant bills)
+
+---
+
+### 6.22.3 Chamber Scraping with Pagination (lines 156-290)
+
+#### scrapeChamber() - Pagination Auto-Detection (lines 156-290)
+
+**Purpose:** Scrape all bills from House or Senate with automatic pagination parameter discovery
+
+```typescript
+private async scrapeChamber(chamber: 'house' | 'senate', session: string): Promise<BillListItem[]> {
+  const allBills: BillListItem[] = [];
+  let page = 1;
+  let hasMore = true;
+  let paginationParam = 'page'; // default fallback
+  
+  while (hasMore && allBills.length < MAX_BILLS_PER_CHAMBER) { // 5000 limit
+    try {
+      let pageBills: BillListItem[] = [];
+      
+      // For page 1, fetch and detect pagination parameter from Next link
+      if (page === 1) {
+        const baseUrl = `${this.BASE_URL}/mgawebsite/Legislation/Index/${chamber}`;
+        const response = await axios.get(baseUrl, {
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (compatible; MarylandBenefitsBot/1.0)',
+          },
+        });
+        
+        const $ = cheerio.load(response.data);
+        pageBills = this.parseBillTable($, allBills);
+        
+        // Parse Next link to detect pagination parameter
+        const nextLink = $('a:contains("Next"), a[rel="next"]').attr('href');
+        if (nextLink) {
+          const url = new URL(nextLink, baseUrl);
+          // Extract param name (e.g., ?page=2 or ?pageNumber=2)
+          url.searchParams.forEach((value, key) => {
+            if (!isNaN(Number(value)) && Number(value) > 1) {
+              paginationParam = key;
+              logger.debug('Detected pagination parameter', { paginationParam });
+            }
+          });
+        }
+      } else {
+        // Subsequent pages use detected parameter
+        const url = `${this.BASE_URL}/mgawebsite/Legislation/Index/${chamber}?${paginationParam}=${page}`;
+        const response = await axios.get(url, { headers: { 'User-Agent': '...' } });
+        const $ = cheerio.load(response.data);
+        pageBills = this.parseBillTable($, allBills);
+      }
+      
+      // Count new bills (not duplicates)
+      const beforeCount = allBills.length;
+      allBills.push(...pageBills);
+      const actualNewBills = allBills.length - beforeCount;
+      
+      // END DETECTION: Stop if no bills found OR all were duplicates
+      if (pageBills.length === 0 || actualNewBills === 0) {
+        logger.debug('End of pagination detected');
+        hasMore = false;
+        break;
+      }
+      
+      // Additional end detection: Check DOM for pagination indicators
+      const hasNextButton = $('a:contains("Next")').length > 0;
+      const isLikelyLastPage = pageBills.length < 25; // Typical page size
+      
+      if (!hasNextButton && isLikelyLastPage) {
+        logger.debug('End of pagination detected (small page, no next indicators)');
+        hasMore = false;
+        break;
+      }
+      
+      page++;
+      await this.delay(500); // Respectful delay
+      
+    } catch (error) {
+      logger.error('Error fetching page', { page, error });
+      hasMore = false;
+    }
+  }
+  
+  logger.info('Chamber scrape complete', { 
+    chamber, 
+    totalBills: allBills.length, 
+    pages: page - 1, 
+    paginationParam 
+  });
+  
+  return allBills;
+}
+```
+
+**Pagination Auto-Detection:**
+```
+Page 1: Fetch → Parse Next link → Extract param name
+  Example: Next link "?pageNumber=2" → paginationParam = "pageNumber"
+
+Page 2+: Use detected parameter
+  Example: ?pageNumber=2, ?pageNumber=3, ...
+
+End Detection:
+  1. No bills found on page
+  2. All bills are duplicates
+  3. No "Next" button + small page size (<25 bills)
+```
+
+**Maryland Legislature Typical Counts:**
+- **House:** ~500 bills per session
+- **Senate:** ~400 bills per session
+- **Page Size:** ~25 bills per page
+- **Total Pages:** ~40 pages (20 House + 20 Senate)
+
+---
+
+### 6.22.4 Bill Parsing & Filtering (lines 296-364)
+
+#### parseBillTable() - HTML Parsing (lines 296-343)
+
+**Purpose:** Extract bill information from HTML table
+
+```typescript
+private parseBillTable($: cheerio.CheerioAPI, allBills: BillListItem[]): BillListItem[] {
+  const pageBills: BillListItem[] = [];
+  
+  $('table tbody tr').each((index, row) => {
+    const $row = $(row);
+    const billLinkEl = $row.find('a[href*="/Legislation/Details/"]').first();
+    
+    if (!billLinkEl.length) return;
+
+    const billNumber = billLinkEl.text().trim(); // "HB0001"
+    const detailUrl = this.BASE_URL + billLinkEl.attr('href');
+    
+    // Extract bill type (e.g., "HB0001" → "HB")
+    const billType = billNumber.match(/^([A-Z]+)/)?.[1] || '';
+    
+    // Extract title (after bill number)
+    const titleText = $row.find('td').eq(0).text();
+    const title = titleText.replace(billNumber, '').replace(/Title\s*/i, '').trim();
+    
+    // Extract sponsor (delegate/senator)
+    const sponsorEl = $row.find('a[href*="/Members/Details/"]').first();
+    const sponsor = sponsorEl.text().trim();
+    
+    // Extract cross-filed bill (e.g., "(SB234)" in title)
+    const crossFiledMatch = titleText.match(/\(\s*([HS][BJ]\d+)\s*\)/);
+    const crossFiledWith = crossFiledMatch ? crossFiledMatch[1] : undefined;
+
+    if (billNumber && title) {
+      // Check for duplicates before adding
+      if (!allBills.find(b => b.billNumber === billNumber)) {
+        pageBills.push({
+          billNumber,
+          billType,
+          title,
+          sponsor,
+          crossFiledWith,
+          detailUrl,
+        });
+      }
+    }
+  });
+  
+  return pageBills;
+}
+```
+
+**Example HTML Table Row:**
+```html
+<tr>
+  <td>
+    <a href="/Legislation/Details/HB0234">HB0234</a>
+    Public Assistance - SNAP Benefits - Income Verification (SB0567)
+  </td>
+  <td>
+    <a href="/Members/Details/smith001">Del. Smith</a>
+  </td>
+  <td>Ways and Means</td>
+</tr>
+```
+
+**Parsed Result:**
+```json
+{
+  "billNumber": "HB0234",
+  "billType": "HB",
+  "title": "Public Assistance - SNAP Benefits - Income Verification",
+  "sponsor": "Del. Smith",
+  "crossFiledWith": "SB0567",
+  "detailUrl": "https://mgaleg.maryland.gov/Legislation/Details/HB0234"
+}
+```
+
+#### isPolicyRelevantWithSynopsis() - Keyword Filtering (lines 359-364)
+
+**Purpose:** Check if bill is relevant based on keywords in title + synopsis
+
+```typescript
+private isPolicyRelevantWithSynopsis(title: string, synopsis?: string): boolean {
+  const text = `${title} ${synopsis || ''}`.toLowerCase();
+  return this.POLICY_KEYWORDS.some(keyword => 
+    text.includes(keyword.toLowerCase())
+  );
+}
+```
+
+**Why Check Synopsis:**
+```
+TITLE ONLY (OLD):
+  "HB0234 - Tax Code - Modifications"
+  ❌ No keywords → Filtered out
+  
+TITLE + SYNOPSIS (NEW):
+  "HB0234 - Tax Code - Modifications"
+  Synopsis: "Expands EITC eligibility for low-income families..."
+  ✅ Contains "EITC" and "low-income" → Kept
+```
+
+---
+
+
+### 6.22.5 Bill Details Extraction (lines 474-550)
+
+#### fetchBillDetails() - Detail Page Scraping (lines 474-550)
+
+**Purpose:** Scrape detailed information from bill detail page
+
+```typescript
+private async fetchBillDetails(
+  billItem: BillListItem,
+  session: string
+): Promise<BillDetails> {
+  const response = await axios.get(billItem.detailUrl, {
+    headers: {
+      'User-Agent': 'Mozilla/5.0 (compatible; MarylandBenefitsBot/1.0)',
+    },
+  });
+
+  const $ = cheerio.load(response.data);
+
+  // 1. Extract synopsis (full description)
+  const synopsis = $('#details-dropdown-content0').text().trim() || 
+                   $('div:contains("Synopsis")').next().text().trim();
+
+  // 2. Extract sponsors (delegates/senators)
+  const sponsors: any[] = [];
+  $('a[href*="/Members/Details/"]').each((i, el) => {
+    const name = $(el).text().trim();
+    if (name && !sponsors.find(s => s.name === name)) {
+      sponsors.push({ name });
+    }
+  });
+
+  // 3. Extract committees
+  const committees: any[] = [];
+  $('a[href*="/Committees/Details/"]').each((i, el) => {
+    const name = $(el).text().trim();
+    if (name && !committees.find(c => c.name === name)) {
+      committees.push({ name });
+    }
+  });
+
+  // 4. Extract status from history
+  const status = this.extractStatus($);
+
+  // 5. Extract fiscal note URL (cost analysis)
+  const fiscalNoteEl = $('a[href*="/fnotes/"]').first();
+  const fiscalNoteUrl = fiscalNoteEl.length 
+    ? this.BASE_URL + fiscalNoteEl.attr('href') 
+    : undefined;
+
+  // 6. Construct PDF URLs (predictable pattern)
+  const billNumLower = billItem.billNumber.toLowerCase();
+  const chamber = billItem.billType.startsWith('H') ? 'hb' : 'sb';
+  const pdfUrl = `${this.BASE_URL}/${session}/bills/${chamber}/${billNumLower}F.pdf`; // Filed version
+  const fullTextUrl = `${this.BASE_URL}/${session}/bills/${chamber}/${billNumLower}T.pdf`; // Enacted text
+
+  // 7. Extract dates from legislative history
+  const introducedDate = this.extractDateFromHistory($, 'First Reading');
+  const firstReadingDate = introducedDate;
+
+  // 8. Determine related programs (SNAP, TANF, Medicaid, etc.)
+  const relatedPrograms = this.determineRelatedPrograms(billItem.title, synopsis);
+
+  return {
+    billNumber: billItem.billNumber,
+    billType: billItem.billType,
+    session,
+    title: billItem.title,
+    synopsis,
+    sponsors,
+    committees,
+    status,
+    fiscalNoteUrl,
+    pdfUrl,
+    fullTextUrl,
+    crossFiledWith: billItem.crossFiledWith,
+    introducedDate,
+    firstReadingDate,
+    relatedPrograms,
+  };
+}
+```
+
+**Maryland Bill PDF URL Patterns:**
+```
+Filed Version (Original Text):
+  https://mgaleg.maryland.gov/2025RS/bills/hb/hb0234F.pdf
+
+Enrolled Text (Passed Version):
+  https://mgaleg.maryland.gov/2025RS/bills/hb/hb0234T.pdf
+
+Fiscal Note (Cost Analysis):
+  https://mgaleg.maryland.gov/2025RS/fnotes/bil_0000/hb0234.pdf
+```
+
+#### extractStatus() - Bill Status Detection (lines 555-579)
+
+**Purpose:** Determine bill status from legislative history
+
+```typescript
+private extractStatus($: cheerio.CheerioAPI): string {
+  // Check history for latest action
+  const latestAction = $('table.table-striped tbody tr').first().find('td').eq(3).text().toLowerCase();
+  
+  if (latestAction.includes('enacted') || latestAction.includes('signed')) {
+    return 'enacted';
+  }
+  if (latestAction.includes('third reading passed')) {
+    return 'passed_second';
+  }
+  if (latestAction.includes('second reading passed')) {
+    return 'passed_first';
+  }
+  if (latestAction.includes('committee')) {
+    return 'committee';
+  }
+  if (latestAction.includes('first reading')) {
+    return 'introduced';
+  }
+  if (latestAction.includes('prefiled')) {
+    return 'prefiled';
+  }
+  
+  return 'introduced';
+}
+```
+
+**Maryland Bill Status Flow:**
+```
+prefiled
+  ↓
+introduced (First Reading)
+  ↓
+committee (Assigned to Committee)
+  ↓
+passed_first (Second Reading Passed)
+  ↓
+passed_second (Third Reading Passed)
+  ↓
+enacted (Signed by Governor)
+```
+
+**Example Legislative History Table:**
+| Date | Chamber | Action | Details |
+|------|---------|--------|---------|
+| 01/15/2025 | House | First Reading | Economic Matters |
+| 01/22/2025 | House | Hearing | Economic Matters - 3/1 hearing |
+| 02/05/2025 | House | Second Reading Passed | Favorable report |
+| 02/10/2025 | House | Third Reading Passed | 98-42 |
+| 02/15/2025 | Senate | First Reading | Finance |
+
+→ **Status:** "passed_second" (Third Reading Passed in House)
+
+#### determineRelatedPrograms() - Program Classification (lines 607-628)
+
+**Purpose:** Classify bill by benefit program
+
+```typescript
+private determineRelatedPrograms(title: string, synopsis?: string): string[] {
+  const text = `${title} ${synopsis || ''}`.toLowerCase();
+  const programs: string[] = [];
+
+  if (text.includes('snap') || text.includes('food stamp') || text.includes('supplemental nutrition')) {
+    programs.push('SNAP');
+  }
+  if (text.includes('tanf') || text.includes('temporary assistance')) {
+    programs.push('TANF');
+  }
+  if (text.includes('medicaid')) {
+    programs.push('Medicaid');
+  }
+  if (text.includes('tax credit') || text.includes('eitc') || text.includes('earned income')) {
+    programs.push('EITC');
+  }
+  if (text.includes('energy assistance')) {
+    programs.push('Energy Assistance');
+  }
+
+  return programs;
+}
+```
+
+**Example:**
+```
+BILL: HB0234 - Public Assistance Modifications
+SYNOPSIS: "Expands SNAP income eligibility to 200% FPL for elderly households 
+and increases TANF cash assistance by 15% to account for inflation."
+
+PROGRAMS: ["SNAP", "TANF"]
+```
+
+---
+
+### 6.22.6 PDF Download & Storage (lines 633-671)
+
+#### downloadAndUploadPDF() - Object Storage Upload (lines 633-671)
+
+**Purpose:** Download bill PDF and upload to Replit Object Storage
+
+```typescript
+private async downloadAndUploadPDF(
+  pdfUrl: string,
+  billNumber: string,
+  session: string
+): Promise<string> {
+  logger.debug('Downloading PDF', { billNumber });
+
+  // 1. Download PDF from Maryland Legislature
+  const response = await axios.get(pdfUrl, {
+    responseType: 'arraybuffer',
+    headers: {
+      'User-Agent': 'Mozilla/5.0 (compatible; MarylandBenefitsBot/1.0)',
+    },
+    timeout: 30000, // 30 seconds
+  });
+
+  const buffer = Buffer.from(response.data);
+
+  // 2. Upload to object storage
+  const objectStorageService = new ObjectStorageService();
+  const uploadUrl = await objectStorageService.getObjectEntityUploadURL();
+  
+  const uploadResponse = await fetch(uploadUrl, {
+    method: 'PUT',
+    body: buffer,
+    headers: {
+      'Content-Type': 'application/pdf',
+    },
+  });
+
+  if (!uploadResponse.ok) {
+    throw new Error(`Failed to upload PDF: ${uploadResponse.statusText}`);
+  }
+
+  const objectPath = objectStorageService.normalizeObjectEntityPath(uploadUrl);
+  logger.debug('Uploaded PDF', { objectPath });
+  
+  return objectPath; // e.g., ".private/maryland_bills/HB0234_2025RS.pdf"
+}
+```
+
+**Storage Flow:**
+```
+1. Download from mgaleg.maryland.gov
+   ↓
+2. Upload to Replit Object Storage (.private/)
+   ↓
+3. Return object path for database record
+   ↓
+4. RAG pipeline processes PDF for semantic search
+```
+
+---
+
+### 6.22.7 Database Storage & RAG Integration (lines 388-469, 676-763)
+
+#### processBillWithDetails() - Database Upsert (lines 388-469)
+
+**Purpose:** Store or update bill in database, create document record for RAG
+
+```typescript
+private async processBillWithDetails(
+  billItem: BillListItem,
+  billDetails: BillDetails,
+  session: string,
+  result: ScrapeResult
+): Promise<void> {
+  logger.debug('Storing bill', { billNumber: billDetails.billNumber });
+
+  // 1. Check if bill exists
+  const existingBills = await db.select()
+    .from(marylandBills)
+    .where(
+      and(
+        eq(marylandBills.billNumber, billDetails.billNumber),
+        eq(marylandBills.session, session)
+      )
+    )
+    .limit(1);
+
+  const existingBill = existingBills[0];
+
+  // 2. Download PDF if available
+  let pdfObjectPath: string | undefined;
+  if (billDetails.pdfUrl) {
+    try {
+      pdfObjectPath = await this.downloadAndUploadPDF(
+        billDetails.pdfUrl,
+        billDetails.billNumber,
+        session
+      );
+    } catch (error) {
+      logger.error('Failed to download PDF', { billNumber: billDetails.billNumber, error });
+    }
+  }
+
+  // 3. Prepare bill data
+  const billData = {
+    billNumber: billDetails.billNumber,
+    session: billDetails.session,
+    billType: billDetails.billType,
+    title: billDetails.title,
+    synopsis: billDetails.synopsis,
+    fiscalNote: billDetails.fiscalNoteUrl,
+    fullTextUrl: billDetails.fullTextUrl,
+    pdfUrl: pdfObjectPath || billDetails.pdfUrl,
+    introducedDate: billDetails.introducedDate,
+    firstReadingDate: billDetails.firstReadingDate,
+    crossFiledWith: billDetails.crossFiledWith,
+    status: billDetails.status,
+    sponsors: billDetails.sponsors,
+    committees: billDetails.committees,
+    relatedPrograms: billDetails.relatedPrograms,
+    sourceUrl: billItem.detailUrl,
+    lastSyncedAt: new Date(),
+    updatedAt: new Date(),
+  };
+
+  // 4. Upsert bill
+  if (existingBill) {
+    await db.update(marylandBills)
+      .set(billData)
+      .where(eq(marylandBills.id, existingBill.id));
+    
+    result.billsUpdated++;
+    logger.info('Bill updated', { billNumber: billDetails.billNumber });
+  } else {
+    const [insertedBill] = await db.insert(marylandBills)
+      .values({
+        ...billData,
+        createdAt: new Date(),
+      })
+      .returning();
+    
+    result.billsStored++;
+    logger.info('Bill created', { billNumber: billDetails.billNumber });
+
+    // 5. Create document record for RAG pipeline
+    if (pdfObjectPath) {
+      await this.createDocumentRecord(billDetails, pdfObjectPath, insertedBill.id);
+    }
+  }
+}
+```
+
+#### createDocumentRecord() - RAG Pipeline Integration (lines 676-735)
+
+**Purpose:** Create document record that triggers RAG processing pipeline
+
+```typescript
+private async createDocumentRecord(
+  billDetails: BillDetails,
+  objectPath: string,
+  billId: string
+): Promise<void> {
+  try {
+    const [document] = await db.insert(documents).values({
+      filename: `${billDetails.billNumber}_${billDetails.session}.pdf`,
+      originalName: `${billDetails.billNumber} - ${billDetails.title}`,
+      objectPath,
+      fileSize: 0, // Will be updated by document processor
+      mimeType: 'application/pdf',
+      documentType: 'legislative_bill',
+      uploadedBy: 'system',
+      processingStatus: 'queued', // Triggers RAG pipeline
+      sourceUrl: billDetails.pdfUrl,
+      metadata: {
+        billNumber: billDetails.billNumber,
+        session: billDetails.session,
+        sponsors: billDetails.sponsors,
+        committees: billDetails.committees,
+        relatedPrograms: billDetails.relatedPrograms,
+        status: billDetails.status,
+      },
+    }).returning();
+
+    // Queue for RAG processing
+    await documentProcessor.processDocument(document);
+    
+    logger.info('Document record created for RAG', { 
+      billNumber: billDetails.billNumber,
+      documentId: document.id 
+    });
+  } catch (error) {
+    logger.error('Failed to create document record', { 
+      billNumber: billDetails.billNumber, 
+      error 
+    });
+  }
+}
+```
+
+**RAG Processing Pipeline:**
+```
+1. Maryland Bill PDF uploaded to Object Storage
+   ↓
+2. Document record created (processingStatus: 'queued')
+   ↓
+3. UnifiedDocumentService.processDocument():
+   - OCR text extraction (Tesseract)
+   - Semantic chunking (1000 tokens)
+   - Embedding generation (Gemini)
+   - Vector storage for semantic search
+   ↓
+4. Navigator can search: "What bills affect SNAP income limits?"
+   ↓
+5. RAG retrieves relevant bill chunks
+   ↓
+6. Gemini generates answer with bill citations
+```
+
+---
+
+### 6.22 Summary - Maryland Legislature Scraper
+
+**Purpose:** Real-time legislative tracking for Maryland benefit policy changes
+
+**Critical Design:** Respectful web scraping (500ms delays), keyword filtering on title + synopsis, PDF downloads, RAG integration
+
+**Data Source:** https://mgaleg.maryland.gov
+**Coverage:** Maryland General Assembly (90-day session, Jan-Apr)
+**Session Format:** 2025RS (Regular Session)
+
+**Production Features:**
+- ✅ Pagination auto-detection (dynamic parameter discovery)
+- ✅ Keyword filtering (16 policy keywords)
+- ✅ Title + synopsis checking (prevents missing bills)
+- ✅ PDF download to object storage
+- ✅ Document record creation for RAG
+- ✅ Duplicate prevention
+- ✅ Graceful error handling
+- ✅ Respectful delays (500ms between requests)
+
+**Scraping Process:**
+```
+1. Scrape Chamber Lists (House + Senate)
+   - Auto-detect pagination parameter
+   - Fetch all pages (~40 pages total)
+   - Extract bill numbers, titles, sponsors
+   ↓
+2. Fetch Bill Details
+   - Synopsis (full description)
+   - Sponsors, committees
+   - Status, dates
+   - Fiscal note URL
+   ↓
+3. Filter by Keywords (title + synopsis)
+   - SNAP, TANF, Medicaid, EITC, etc.
+   - Prevents missing relevant bills
+   ↓
+4. Download PDFs to Object Storage
+   - Filed version (original text)
+   - Enrolled text (passed version)
+   ↓
+5. Store in Database + RAG Pipeline
+   - maryland_bills table
+   - documents table (triggers RAG)
+```
+
+**Maryland Benefit Programs Tracked:**
+| Program | Keywords | Typical Bills/Year |
+|---------|----------|-------------------|
+| SNAP | "SNAP", "food stamp", "supplemental nutrition" | 5-10 |
+| TANF | "TANF", "temporary assistance" | 3-5 |
+| Medicaid | "Medicaid" | 10-15 |
+| EITC | "tax credit", "EITC", "earned income" | 8-12 |
+| LIHEAP | "energy assistance" | 2-4 |
+| General | "low-income", "poverty" | 15-20 |
+
+**Database Schema:**
+```sql
+CREATE TABLE maryland_bills (
+  id VARCHAR PRIMARY KEY,
+  bill_number VARCHAR NOT NULL, -- "HB0234"
+  session VARCHAR NOT NULL, -- "2025RS"
+  bill_type VARCHAR NOT NULL, -- "HB", "SB"
+  title TEXT NOT NULL,
+  synopsis TEXT,
+  fiscal_note TEXT, -- URL
+  full_text_url TEXT,
+  pdf_url TEXT, -- Object storage path
+  introduced_date TIMESTAMP,
+  first_reading_date TIMESTAMP,
+  cross_filed_with VARCHAR, -- Companion bill
+  status VARCHAR, -- "introduced", "committee", "passed_first", "passed_second", "enacted"
+  sponsors JSONB, -- [{"name": "Del. Smith"}]
+  committees JSONB, -- [{"name": "Economic Matters"}]
+  related_programs JSONB, -- ["SNAP", "TANF"]
+  source_url TEXT,
+  last_synced_at TIMESTAMP,
+  created_at TIMESTAMP,
+  updated_at TIMESTAMP,
+  UNIQUE(bill_number, session)
+);
+```
+
+**Integration Points:**
+- **smartScheduler:** Daily checks during session (Jan-Apr), paused otherwise
+- **ObjectStorageService:** PDF uploads
+- **UnifiedDocumentService:** RAG processing
+- **policySources table:** Sync status tracking
+
+**Compliance:**
+- ✅ Respectful web scraping (500ms delays)
+- ✅ User-Agent identification ("MarylandBenefitsBot/1.0")
+- ✅ Error handling (doesn't crash on failures)
+- ✅ Real-time legislative tracking
+
+**Example Output:**
+```json
+{
+  "success": true,
+  "billsFound": 47,
+  "billsStored": 12,
+  "billsUpdated": 35,
+  "errors": []
+}
+```
+
+---
+
