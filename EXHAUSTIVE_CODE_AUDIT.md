@@ -18787,3 +18787,956 @@ cron.schedule('0 0 * * *', async () => {
 
 ---
 
+
+---
+
+## 6.4 AI Intake Assistant Service (server/services/aiIntakeAssistant.service.ts - 998 lines)
+
+**Purpose:** Conversational AI assistant for guiding applicants through benefit applications
+
+**Background:**
+- Traditional benefit applications are complex and intimidating
+- Applicants struggle with jargon, missing information, and form completion
+- AI assistant provides human-like guidance in multiple languages
+- Reduces abandonment rates and improves data quality
+
+**Key Features:**
+1. **Multilingual Support** - English, Spanish, Chinese, Korean
+2. **Intent Classification** - Understand user goals (apply, check eligibility, upload docs)
+3. **Context-Aware Responses** - RAG-powered answers using policy manual
+4. **Data Extraction** - Auto-populate forms from conversation
+5. **Form Progress Tracking** - Track completion percentage
+6. **Document Processing** - Extract data from uploaded files
+7. **Smart Suggestions** - Context-aware action recommendations
+8. **Voice Support** - Text-to-speech for accessibility
+
+---
+
+### 6.4.1 Type Definitions (lines 18-72)
+
+**ConversationContext (lines 18-28):**
+```typescript
+interface ConversationContext {
+  sessionId: string;
+  userId?: string;
+  language: string;                    // 'en', 'es', 'zh', 'ko'
+  householdProfileId?: string;
+  currentTopic?: string;
+  conversationHistory: ConversationMessage[];
+  extractedData: Record<string, any>; // Auto-extracted form data
+  formProgress: FormProgress;
+  preferences: UserPreferences;
+}
+```
+
+**FormProgress (lines 42-48):**
+```typescript
+interface FormProgress {
+  currentForm?: string;
+  completedFields: Record<string, any>;
+  requiredFields: string[];
+  completionPercentage: number;       // 0-100
+  validationErrors: Record<string, string>;
+}
+```
+
+**IntentClassification (lines 59-64):**
+```typescript
+interface IntentClassification {
+  intent: string;                     // apply_benefits, check_eligibility, etc.
+  confidence: number;                 // 0.0-1.0
+  entities: Record<string, any>;      // Extracted dates, names, benefit types
+  suggestedActions: string[];
+}
+```
+
+**Supported Intents (lines 83-92):**
+- `apply_benefits` - User wants to apply for benefits
+- `check_eligibility` - User wants to check if they qualify
+- `document_upload` - User mentions uploading documents
+- `status_check` - User wants to check application status
+- `help_request` - User needs help or clarification
+- `schedule_appointment` - User wants to schedule appointment
+- `update_info` - User wants to update information
+- `general_question` - General question about benefits
+
+---
+
+### 6.4.2 initializeSession() - Session Initialization (lines 105-155)
+
+**Purpose:** Create or resume conversation session
+
+**Workflow:**
+```typescript
+// 1. Resume existing session if provided
+if (existingSessionId) {
+  const existingContext = await this.loadSession(existingSessionId);
+  if (existingContext) return existingContext;
+}
+
+// 2. Create new session in database
+const [session] = await db.insert(intakeSessions).values({
+  userId,
+  sessionType: 'ai_assistant',
+  language,
+  status: 'active',
+  metadata: {
+    startTime: new Date().toISOString(),
+    platform: 'web',
+    assistantVersion: '2.0'
+  }
+}).returning();
+
+// 3. Initialize conversation context
+const context: ConversationContext = {
+  sessionId: session.id,
+  userId,
+  language,
+  conversationHistory: [],
+  extractedData: {},
+  formProgress: {
+    completedFields: {},
+    requiredFields: [],
+    completionPercentage: 0,
+    validationErrors: {}
+  },
+  preferences: {
+    preferredLanguage: language,
+    voiceEnabled: false,
+    voiceSpeed: 1.0,
+    voicePitch: 1.0,
+    fontSize: 'medium',
+    highContrast: false
+  }
+};
+
+// 4. Store in memory cache
+this.activeSessions.set(session.id, context);
+```
+
+**Use Case:** Applicant starts SNAP application → Session created → AI greets user → Begins intake conversation
+
+---
+
+### 6.4.3 processMessage() - Message Processing Pipeline (lines 160-249)
+
+**Purpose:** Core message processing with language detection, translation, intent classification, and response generation
+
+**Pipeline Workflow:**
+```
+User message
+  ↓
+1. Detect language (if not already known)
+  ↓
+2. Translate to English (for internal processing)
+  ↓
+3. Classify intent (apply_benefits, check_eligibility, etc.)
+  ↓
+4. Process attachments (if any)
+  ↓
+5. Generate contextual response (RAG-powered)
+  ↓
+6. Translate response back to user's language
+  ↓
+7. Extract form data from conversation
+  ↓
+8. Update conversation history
+  ↓
+9. Save messages to database
+  ↓
+10. Generate suggested actions
+  ↓
+Return response + metadata
+```
+
+**Language Detection & Translation (lines 178-188):**
+```typescript
+// Detect language if needed
+const detectedLanguage = await this.detectLanguage(message);
+if (detectedLanguage !== context.language && detectedLanguage !== 'unknown') {
+  context.language = detectedLanguage;
+}
+
+// Translate to English for internal processing
+let processedMessage = message;
+if (context.language !== 'en') {
+  const translation = await this.translateText(message, context.language, 'en');
+  processedMessage = translation.translatedText;
+}
+```
+
+**Response Translation (lines 202-206):**
+```typescript
+// Translate response back to user's language
+let finalResponse = response;
+if (context.language !== 'en') {
+  const translation = await this.translateText(response, 'en', context.language);
+  finalResponse = translation.translatedText;
+}
+```
+
+**Design Choice:** English as pivot language for RAG queries (policy content in English)
+
+**Return Value (lines 242-248):**
+```typescript
+{
+  response: "¡Gracias! Puedo ayudarte con tu solicitud de SNAP...",
+  intent: { intent: "apply_benefits", confidence: 0.95, ... },
+  suggestedActions: ["Continue application", "Upload documents", ...],
+  formUpdate: { completionPercentage: 30, ... },
+  shouldSpeak: true  // Voice output enabled
+}
+```
+
+---
+
+### 6.4.4 classifyIntent() - Intent Classification (lines 254-307)
+
+**Purpose:** Classify user intent using Gemini with structured JSON output
+
+**Prompt Engineering (lines 258-282):**
+```typescript
+const prompt = `
+  Analyze the following message in a benefits application context and classify the intent.
+  
+  Message: "${message}"
+  
+  Previous context: ${context.conversationHistory.slice(-3).map(m => `${m.role}: ${m.content}`).join('\n')}
+  
+  Possible intents:
+  - apply_benefits: User wants to apply for benefits
+  - check_eligibility: User wants to check if they qualify
+  - document_upload: User mentions uploading or submitting documents
+  - status_check: User wants to check application status
+  - help_request: User needs help or clarification
+  - schedule_appointment: User wants to schedule an appointment
+  - update_info: User wants to update their information
+  - general_question: General question about benefits
+  
+  Return a JSON object with:
+  {
+    "intent": "the most likely intent",
+    "confidence": 0.0-1.0,
+    "entities": { extracted entities like dates, names, benefit types },
+    "suggestedActions": ["array of suggested follow-up actions"]
+  }
+`;
+```
+
+**Structured Output with responseMimeType (lines 285-291):**
+```typescript
+const response = await this.geminiClient.models.generateContent({
+  model: "gemini-2.0-flash",
+  contents: [{ role: 'user', parts: [{ text: prompt }] }],
+  generationConfig: {
+    responseMimeType: "application/json"  // Force JSON output
+  }
+});
+
+return JSON.parse(response.text || '{}');
+```
+
+**Gemini responseMimeType:**
+- Forces structured JSON output (no markdown, no extra text)
+- More reliable than prompt-based JSON requests
+- Reduces parsing errors
+
+**Fallback on Error (lines 294-306):**
+```typescript
+catch (error) {
+  logger.error('Intent classification error', { error, service: 'AIIntakeAssistantService' });
+  return {
+    intent: this.intents.GENERAL_QUESTION,
+    confidence: 0.5,
+    entities: {},
+    suggestedActions: []
+  };
+}
+```
+
+**Design Choice:** Never crash on AI errors, default to safe fallback
+
+**Example Classifications:**
+```
+User: "I want to apply for food stamps"
+→ { intent: "apply_benefits", confidence: 0.98, entities: { program: "SNAP" } }
+
+User: "How do I check if my application was approved?"
+→ { intent: "status_check", confidence: 0.92, entities: {} }
+
+User: "I need help uploading my pay stubs"
+→ { intent: "document_upload", confidence: 0.95, entities: { documentType: "pay_stub" } }
+```
+
+---
+
+### 6.4.5 generateResponse() - RAG-Powered Response (lines 312-377)
+
+**Purpose:** Generate contextual response using policy information from RAG
+
+**RAG Integration (line 319):**
+```typescript
+// Get relevant policy information using RAG
+const policyContext = await ragService.search(message);
+```
+
+**System Prompt - Writing Guidelines (lines 321-339):**
+```typescript
+const systemPrompt = `
+  You are a friendly and knowledgeable benefits counselor helping someone apply for Maryland benefits.
+  
+  Guidelines:
+  - Use simple, clear language (6th-grade reading level)
+  - Be empathetic and supportive
+  - Ask one question at a time
+  - Provide specific, actionable guidance
+  - If unsure, offer to connect them with a human counselor
+  - Use conversational tone, not bureaucratic language
+  
+  Current conversation context:
+  - Intent: ${intent.intent}
+  - Extracted entities: ${JSON.stringify(intent.entities)}
+  - Form progress: ${context.formProgress.completionPercentage}% complete
+  - User preferences: Language=${context.language}, Voice=${context.preferences.voiceEnabled}
+  
+  Policy context:
+  ${policyContext.sources ? policyContext.sources.map(s => s.content).join('\n\n') : 'No specific policy context available'}
+`;
+```
+
+**Reading Level:**
+- 6th-grade reading level (Flesch-Kincaid)
+- Avoids jargon: "food stamps" vs. "Supplemental Nutrition Assistance Program"
+- Conversational tone: "Let's figure this out together" vs. "Please provide required documentation"
+
+**Conversation History Context (lines 342-345):**
+```typescript
+const conversationHistory = context.conversationHistory
+  .slice(-10)  // Last 10 messages only
+  .map(m => `${m.role}: ${m.content}`)
+  .join('\n');
+```
+
+**Design Choice:** Last 10 messages to avoid context window overflow
+
+**Response Generation (lines 347-368):**
+```typescript
+const prompt = `
+  ${systemPrompt}
+  
+  Conversation history:
+  ${conversationHistory}
+  
+  User message: ${message}
+  
+  Generate a helpful, empathetic response that:
+  1. Addresses their specific question or concern
+  2. Guides them to the next step if applying for benefits
+  3. Asks for any missing required information naturally
+  4. Offers relevant help or resources
+`;
+
+const response = await this.geminiClient.models.generateContent({
+  model: "gemini-2.0-flash",
+  contents: [{ role: 'user', parts: [{ text: prompt }] }]
+});
+
+return response.text || "I'd be happy to help you with that. Could you tell me more about what you need?";
+```
+
+**Use Case:** 
+```
+User: "Can I get SNAP if I'm working?"
+→ RAG finds income eligibility rules
+→ Response: "Yes! Many working families qualify for SNAP. Your income needs to be below certain limits - for example, a family of 3 can earn up to $2,830 per month. Can you tell me how many people live in your household and your monthly income?"
+```
+
+---
+
+
+### 6.4.6 extractFormData() - Conversational Data Extraction (lines 382-447)
+
+**Purpose:** Extract structured form data from natural conversation using Gemini
+
+**Prompt Engineering (lines 387-418):**
+```typescript
+const prompt = `
+  Extract any form-relevant information from this conversation exchange.
+  
+  User said: "${userMessage}"
+  Assistant responded: "${assistantResponse}"
+  
+  Previously extracted data: ${JSON.stringify(context.extractedData)}
+  
+  Look for information like:
+  - Personal details (name, DOB, SSN, address)
+  - Household members and relationships
+  - Income sources and amounts
+  - Expenses (rent, utilities, medical)
+  - Assets (bank accounts, vehicles)
+  - Employment status
+  - Disability status
+  - Benefit types requested
+  
+  Return a JSON object with only newly identified or updated information:
+  {
+    "fieldName": "extracted value",
+    ...
+  }
+  
+  Use these field names when applicable:
+  firstName, lastName, dateOfBirth, ssn, phone, email, 
+  streetAddress, city, state, zipCode,
+  householdSize, householdMembers, 
+  monthlyIncome, incomeSource, employerName,
+  monthlyRent, monthlyUtilities,
+  hasDisability, isPregnant, isStudent
+`;
+```
+
+**Incremental Data Merging (lines 429-436):**
+```typescript
+const extractedData = JSON.parse(response.text || '{}');
+
+// Merge with existing data (incremental updates)
+context.extractedData = {
+  ...context.extractedData,
+  ...extractedData,
+  lastUpdated: new Date().toISOString()
+};
+
+// Update form progress
+await this.updateFormProgress(context);
+```
+
+**Example Extraction:**
+```
+User: "My name is Maria Rodriguez and I live at 123 Main St in Baltimore"
+→ Extracted: { firstName: "Maria", lastName: "Rodriguez", streetAddress: "123 Main St", city: "Baltimore" }
+
+User: "I have 2 kids and I make about $2,000 a month"
+→ Extracted: { householdSize: 3, monthlyIncome: 2000 }
+```
+
+**Design Choice:** Incremental extraction allows users to provide info naturally over multiple messages
+
+---
+
+### 6.4.7 updateFormProgress() - Progress Tracking (lines 452-478)
+
+**Purpose:** Calculate application completion percentage
+
+**Required Fields (lines 454-458):**
+```typescript
+const requiredFields = [
+  'firstName', 'lastName', 'dateOfBirth', 
+  'streetAddress', 'city', 'state', 'zipCode',
+  'phone', 'householdSize', 'monthlyIncome'
+];
+```
+
+**Completion Calculation (lines 460-472):**
+```typescript
+const completedFields = requiredFields.filter(
+  field => context.extractedData[field] !== undefined
+);
+
+context.formProgress.completedFields = Object.fromEntries(
+  completedFields.map(field => [field, context.extractedData[field]])
+);
+
+context.formProgress.completionPercentage = Math.round(
+  (completedFields.length / requiredFields.length) * 100
+);
+```
+
+**Example:**
+```
+Required: 10 fields
+Completed: 7 fields (firstName, lastName, city, state, zipCode, phone, householdSize)
+Missing: 3 fields (dateOfBirth, streetAddress, monthlyIncome)
+→ Progress: 70%
+```
+
+---
+
+### 6.4.8 validateFields() - Field Validation (lines 483-507)
+
+**Purpose:** Validate extracted data quality
+
+**Validation Rules:**
+- **Phone** (lines 487-489): 10-digit format
+  ```typescript
+  if (fields.phone && !/^\d{10}$/.test(fields.phone.replace(/\D/g, ''))) {
+    errors.phone = 'Please provide a valid 10-digit phone number';
+  }
+  ```
+
+- **ZIP Code** (lines 492-494): 5-digit or 5+4 format
+  ```typescript
+  if (fields.zipCode && !/^\d{5}(-\d{4})?$/.test(fields.zipCode)) {
+    errors.zipCode = 'Please provide a valid ZIP code';
+  }
+  ```
+
+- **Income** (lines 497-499): Numeric, non-negative
+  ```typescript
+  if (fields.monthlyIncome && (isNaN(fields.monthlyIncome) || fields.monthlyIncome < 0)) {
+    errors.monthlyIncome = 'Please provide a valid income amount';
+  }
+  ```
+
+- **Household Size** (lines 502-504): Integer ≥ 1
+  ```typescript
+  if (fields.householdSize && (!Number.isInteger(fields.householdSize) || fields.householdSize < 1)) {
+    errors.householdSize = 'Household size must be at least 1';
+  }
+  ```
+
+**Use Case:** Prevent submission with invalid data, prompt user for corrections
+
+---
+
+### 6.4.9 generateSuggestedActions() - Context-Aware Suggestions (lines 512-560)
+
+**Purpose:** Provide next-step suggestions based on intent and progress
+
+**Intent-Based Suggestions (lines 519-552):**
+```typescript
+switch (intent.intent) {
+  case this.intents.APPLY_BENEFITS:
+    if (context.formProgress.completionPercentage < 50) {
+      actions.push('Continue application');
+      actions.push('Upload documents');
+    } else {
+      actions.push('Review application');
+      actions.push('Submit application');
+    }
+    break;
+  
+  case this.intents.CHECK_ELIGIBILITY:
+    actions.push('Start application');
+    actions.push('Calculate benefits');
+    actions.push('Learn about programs');
+    break;
+  
+  case this.intents.DOCUMENT_UPLOAD:
+    actions.push('Upload pay stubs');
+    actions.push('Upload ID');
+    actions.push('Upload proof of address');
+    break;
+  
+  case this.intents.SCHEDULE_APPOINTMENT:
+    actions.push('View available times');
+    actions.push('Call office');
+    actions.push('Find nearest office');
+    break;
+}
+```
+
+**Multilingual Support (lines 555-557):**
+```typescript
+// Add language-specific action if not English
+if (context.language !== 'en') {
+  actions.push('Speak with translator');
+}
+```
+
+**Use Case:** Reduce cognitive load → Show 3-4 suggested actions → User clicks instead of typing
+
+---
+
+### 6.4.10 processAttachments() - Document Processing (lines 565-601)
+
+**Purpose:** Extract data from uploaded documents (pay stubs, IDs, etc.)
+
+**Integration with UnifiedDocumentService (lines 569-591):**
+```typescript
+for (const attachment of attachments) {
+  try {
+    // Extract information from document
+    const extractedInfo = await unifiedDocumentService.extractDocumentData(
+      attachment,
+      { sessionId: context.sessionId }
+    );
+
+    // Merge extracted data
+    if (extractedInfo.extractedData) {
+      context.extractedData = {
+        ...context.extractedData,
+        ...extractedInfo.extractedData,
+        documentsUploaded: [
+          ...(context.extractedData.documentsUploaded || []),
+          {
+            filename: attachment,
+            uploadedAt: new Date().toISOString(),
+            extractedFields: Object.keys(extractedInfo.extractedData)
+          }
+        ]
+      };
+    }
+  } catch (error) {
+    logger.error('Attachment processing error', { attachment, error });
+  }
+}
+```
+
+**Use Case:**
+```
+User uploads pay stub PDF
+→ UnifiedDocumentService extracts: { employerName: "Acme Corp", monthlyIncome: 2500 }
+→ Auto-populate form fields
+→ User confirms extracted data
+```
+
+**Error Handling:** Non-blocking - attachment processing errors don't crash conversation
+
+---
+
+### 6.4.11 detectLanguage() - Language Detection (lines 606-630)
+
+**Purpose:** Auto-detect user language for multilingual support
+
+**Gemini Language Detection (lines 607-622):**
+```typescript
+const prompt = `
+  Detect the language of this text: "${text}"
+  
+  Return only the ISO 639-1 language code (e.g., 'en' for English, 'es' for Spanish, 'zh' for Chinese, 'ko' for Korean).
+  If uncertain, return 'unknown'.
+`;
+
+const response = await this.geminiClient.models.generateContent({
+  model: "gemini-2.0-flash",
+  contents: [{ role: 'user', parts: [{ text: prompt }] }]
+});
+
+const langCode = response.text?.trim().toLowerCase() || 'unknown';
+return ['en', 'es', 'zh', 'ko'].includes(langCode) ? langCode : 'unknown';
+```
+
+**Supported Languages:**
+- `en` - English
+- `es` - Spanish
+- `zh` - Chinese (Simplified)
+- `ko` - Korean
+
+**Use Case:**
+```
+User types: "¿Puedo obtener SNAP?"
+→ Detected: 'es'
+→ Switch to Spanish responses
+```
+
+---
+
+### 6.4.12 translateText() - Translation Service (lines 635-692)
+
+**Purpose:** Translate between supported languages
+
+**Translation Prompt (lines 656-663):**
+```typescript
+const prompt = `
+  Translate the following text from ${languageNames[sourceLang]} to ${languageNames[targetLang]}.
+  Maintain a friendly, conversational tone appropriate for someone seeking government benefits assistance.
+  
+  Text to translate: "${text}"
+  
+  Provide only the translation, nothing else.
+`;
+```
+
+**Same-Language Passthrough (lines 640-647):**
+```typescript
+if (sourceLang === targetLang) {
+  return {
+    translatedText: text,
+    originalLanguage: sourceLang,
+    targetLanguage: targetLang,
+    confidence: 1.0
+  };
+}
+```
+
+**Example Translation:**
+```
+EN → ES:
+"Can you upload your pay stubs?"
+→ "¿Puede subir sus talones de pago?"
+
+ES → EN:
+"Tengo tres hijos"
+→ "I have three children"
+```
+
+---
+
+### 6.4.13 loadSession() - Session Resumption (lines 730-789)
+
+**Purpose:** Resume existing conversation session with full history
+
+**Workflow:**
+```typescript
+// 1. Load session from database
+const [session] = await db
+  .select()
+  .from(intakeSessions)
+  .where(eq(intakeSessions.id, sessionId))
+  .limit(1);
+
+// 2. Load conversation history
+const messages = await db
+  .select()
+  .from(intakeMessages)
+  .where(eq(intakeMessages.sessionId, sessionId))
+  .orderBy(intakeMessages.createdAt);
+
+// 3. Reconstruct conversation history
+const conversationHistory: ConversationMessage[] = messages.map(msg => ({
+  id: msg.id,
+  role: msg.role as 'user' | 'assistant' | 'system',
+  content: msg.content,
+  timestamp: msg.createdAt,
+  ...(msg.metadata as any)
+}));
+
+// 4. Reconstruct context
+const context: ConversationContext = {
+  sessionId,
+  userId: session.userId || undefined,
+  language: session.language || 'en',
+  householdProfileId: session.householdProfileId || undefined,
+  conversationHistory,
+  extractedData: session.extractedData as Record<string, any> || {},
+  formProgress: session.formProgress as FormProgress || { ... },
+  preferences: session.metadata?.preferences as UserPreferences || { ... }
+};
+
+// 5. Cache in memory
+this.activeSessions.set(sessionId, context);
+```
+
+**Use Case:**
+```
+User starts application on phone
+→ Closes browser
+→ Opens laptop next day
+→ Resume session with full history intact
+```
+
+---
+
+### 6.4.14 getConversationAnalytics() - Analytics (lines 794-848)
+
+**Purpose:** Track AI assistant performance metrics
+
+**Metrics Returned:**
+- `totalSessions` - Total conversation sessions
+- `completedApplications` - Sessions that led to completed applications
+- `averageCompletionRate` - % of sessions resulting in applications
+- `averageMessagesPerSession` - Conversation length
+- `commonIntents` - Most frequent user intents
+- `dropOffPoints` - Where users abandon application
+- `languageDistribution` - Usage by language
+- `satisfactionRating` - User satisfaction (1-5)
+
+**Example Analytics:**
+```json
+{
+  "totalSessions": 1247,
+  "completedApplications": 523,
+  "averageCompletionRate": 0.42,
+  "averageMessagesPerSession": 10,
+  "commonIntents": {
+    "apply_benefits": 245,
+    "check_eligibility": 189,
+    "document_upload": 156,
+    "help_request": 123
+  },
+  "dropOffPoints": ["income_verification", "document_upload", "household_members"],
+  "languageDistribution": { "en": 65, "es": 25, "zh": 7, "ko": 3 },
+  "satisfactionRating": 4.3
+}
+```
+
+**Use Case:** Identify improvement areas → "Most users drop off at income verification" → Simplify income questions
+
+---
+
+### 6.4.15 scheduleAppointment() - Appointment Scheduling (lines 853-909)
+
+**Purpose:** Schedule in-person appointments through chat
+
+**Integration with SmartScheduler (lines 871-877):**
+```typescript
+const appointment = await smartScheduler.scheduleAppointment({
+  clientId: context.userId,
+  requestedDate: requestedDate || new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // Default 1 week out
+  preferredTime: requestedTime,
+  appointmentType: 'benefits_consultation',
+  notes: `Scheduled via AI chat. Form completion: ${context.formProgress.completionPercentage}%`
+});
+```
+
+**Notification (lines 881-889):**
+```typescript
+await notificationService.sendNotification(
+  context.userId,
+  'appointment_scheduled',
+  {
+    title: 'Appointment Confirmed',
+    message: `Your appointment is scheduled for ${appointment.scheduledTime}`,
+    data: { appointmentId: appointment.id }
+  }
+);
+```
+
+**Use Case:**
+```
+User: "Can I schedule an appointment to finish my application?"
+→ AI: "Of course! When would you like to come in?"
+→ User: "Next Tuesday at 2pm"
+→ AI: "Great! I've scheduled your appointment for Tuesday, November 5 at 2:00 PM. You'll receive a confirmation email shortly."
+```
+
+---
+
+### 6.4.16 endSession() - Session Finalization (lines 941-966)
+
+**Purpose:** Complete conversation and create household profile if sufficient data collected
+
+**Auto-Create Household Profile (lines 960-962):**
+```typescript
+// If form is substantially complete, create household profile
+if (context.formProgress.completionPercentage >= 80) {
+  await this.createHouseholdProfile(context);
+}
+```
+
+**Session State Saved (lines 945-957):**
+```typescript
+await db
+  .update(intakeSessions)
+  .set({
+    status: 'completed',
+    extractedData: context.extractedData,
+    formProgress: context.formProgress as any,
+    metadata: {
+      endTime: new Date().toISOString(),
+      totalMessages: context.conversationHistory.length,
+      completionRate: context.formProgress.completionPercentage
+    }
+  })
+  .where(eq(intakeSessions.id, sessionId));
+```
+
+---
+
+### 6.4.17 createHouseholdProfile() - Profile Creation (lines 971-996)
+
+**Purpose:** Auto-create household profile from conversation data
+
+**Profile Creation (lines 975-986):**
+```typescript
+const [profile] = await db.insert(householdProfiles).values({
+  userId: context.userId,
+  householdSize: context.extractedData.householdSize || 1,
+  totalMonthlyIncome: context.extractedData.monthlyIncome || 0,
+  zipCode: context.extractedData.zipCode,
+  metadata: {
+    extractedFrom: 'ai_intake',
+    sessionId: context.sessionId,
+    extractedData: context.extractedData,
+    completionRate: context.formProgress.completionPercentage
+  }
+}).returning();
+```
+
+**Use Case:**
+```
+User completes 80% of application via chat
+→ Session ends
+→ Household profile auto-created
+→ User can continue application in Navigator workspace
+→ All extracted data pre-populated
+```
+
+---
+
+### 6.4 Summary - AI Intake Assistant Service
+
+**Key Features:**
+1. **Multilingual Conversations** - EN, ES, ZH, KO with auto-detection
+2. **Intent Classification** - 8 intent types with confidence scoring
+3. **RAG-Powered Responses** - Policy-informed answers
+4. **Conversational Data Extraction** - Auto-populate forms from natural language
+5. **Progress Tracking** - Real-time completion percentage
+6. **Document Intelligence** - Extract data from uploaded files
+7. **Smart Suggestions** - Context-aware next actions
+8. **Appointment Scheduling** - In-chat appointment booking
+9. **Session Resumption** - Continue conversations across devices
+10. **Analytics Dashboard** - Track performance and drop-off points
+
+**AI Techniques:**
+- **Intent Classification** - Gemini with structured JSON output
+- **Named Entity Recognition** - Extract names, dates, amounts from conversation
+- **Language Detection** - Auto-detect user language
+- **Translation** - Bidirectional translation for 4 languages
+- **Reading Level Optimization** - 6th-grade language for accessibility
+- **Sentiment Analysis** - (Metadata placeholder for future enhancement)
+
+**Integration Points:**
+- **RAG Service** - Policy context for accurate answers
+- **UnifiedDocumentService** - Document data extraction
+- **SmartScheduler** - Appointment booking
+- **NotificationService** - Confirmation messages
+- **HouseholdProfiles** - Auto-create profiles from conversations
+
+**Accessibility Features:**
+- Multilingual support (4 languages)
+- Voice input support (isVoiceInput flag)
+- Text-to-speech output (shouldSpeak flag)
+- 6th-grade reading level
+- Font size preferences (small/medium/large)
+- High contrast mode support
+
+**Form Fields Extracted:**
+- Personal: firstName, lastName, dateOfBirth, ssn, phone, email
+- Address: streetAddress, city, state, zipCode
+- Household: householdSize, householdMembers
+- Income: monthlyIncome, incomeSource, employerName
+- Expenses: monthlyRent, monthlyUtilities
+- Status: hasDisability, isPregnant, isStudent
+
+**Validation Rules:**
+- Phone: 10-digit format
+- ZIP Code: 5-digit or 5+4 format
+- Income: Numeric, ≥ 0
+- Household Size: Integer, ≥ 1
+
+**Performance Optimizations:**
+- In-memory session cache (activeSessions Map)
+- Last 10 messages for context (avoid token overflow)
+- Non-blocking attachment processing
+- Graceful AI error handling (never crash)
+
+**Use Cases:**
+1. **Spanish-speaking applicant** - Auto-detect language → Translate questions → Extract Spanish responses
+2. **Document upload** - User uploads pay stub → Extract income → Auto-populate form
+3. **Multi-device application** - Start on phone → Resume on laptop with full history
+4. **Appointment scheduling** - "I need help in person" → Schedule appointment in chat
+5. **Drop-off analysis** - Analytics show users abandon at income verification → Simplify questions
+
+**Compliance:**
+- ✅ **Section 508** - Accessibility (voice, font size, high contrast)
+- ✅ **WCAG 2.1** - Reading level, keyboard navigation support
+- ✅ **Language Access** - Executive Order 13166 (multilingual services)
+
+**Production Readiness:**
+- ✅ Error handling - Never crash on AI errors
+- ✅ Session persistence - Database-backed conversations
+- ✅ Analytics - Track performance metrics
+- ✅ Graceful degradation - Fallback responses on errors
+
+---
+
