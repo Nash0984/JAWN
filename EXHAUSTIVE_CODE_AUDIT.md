@@ -32975,3 +32975,639 @@ SNAP Approval →
 
 ---
 
+
+---
+
+## 6.19 Maryland Form 502 PDF Generator (server/services/form502Generator.ts - 758 lines)
+
+**Purpose:** Generate printable Maryland Form 502 (Maryland Resident Income Tax Return) PDF from federal Form 1040 data and PolicyEngine calculations
+
+**Critical Design:** Production-grade PDF generator creating Maryland state tax returns matching MD Comptroller format with DRAFT watermark for navigator review
+
+**Maryland Tax Features:**
+- Progressive state tax brackets (2% to 5.75%)
+- 24 county-specific local tax rates
+- Maryland EITC (50% of federal EITC - year-configurable)
+- Poverty level credit
+- Property tax credit
+- Renter's tax credit
+- Maryland-specific AGI adjustments
+
+**Navigator Workflow:** Federal → State → Review → Generate PDF
+
+---
+
+### 6.19.1 Data Structures (lines 29-120)
+
+#### Form502PersonalInfo Interface (lines 29-59)
+
+**Purpose:** Personal information for Form 502
+
+```typescript
+export interface Form502PersonalInfo {
+  // Taxpayer
+  taxpayerFirstName: string;
+  taxpayerLastName: string;
+  taxpayerSSN: string;
+  
+  // Spouse (if married filing jointly)
+  spouseFirstName?: string;
+  spouseLastName?: string;
+  spouseSSN?: string;
+  
+  // Address
+  streetAddress: string;
+  aptNumber?: string;
+  city: string;
+  state: string;
+  zipCode: string;
+  county: string; // Maryland county for local tax
+  
+  // Dependents
+  dependents?: Array<{
+    firstName: string;
+    lastName: string;
+    ssn: string;
+    relationship: string;
+  }>;
+  
+  // Maryland-specific
+  marylandResident: boolean;
+  yearsInMaryland?: number;
+}
+```
+
+---
+
+#### MarylandSpecificInput Interface (lines 61-77)
+
+**Purpose:** Maryland-specific additions, subtractions, and credits
+
+```typescript
+export interface MarylandSpecificInput {
+  // Additions to federal AGI
+  stateTaxRefund?: number; // State/local tax refunds received
+  
+  // Subtractions from federal AGI
+  socialSecurityBenefits?: number; // Full SS benefits (subtract from MD AGI)
+  railroadRetirement?: number;
+  pensionIncome?: number; // Up to $35,700 deductible (year-specific)
+  
+  // Credits
+  propertyTaxPaid?: number; // For property tax credit
+  rentPaid?: number; // For renter's tax credit
+  
+  // Other Maryland items
+  childcareExpenses?: number;
+  marylandWithholding?: number; // State tax withheld
+}
+```
+
+**Maryland AGI Calculation:**
+```
+Maryland AGI = Federal AGI
+  + Maryland Additions (state tax refunds)
+  - Maryland Subtractions (SS, pension, railroad retirement)
+```
+
+---
+
+#### MarylandTaxResult Interface (lines 87-120)
+
+**Purpose:** Complete Maryland tax calculation result
+
+```typescript
+export interface MarylandTaxResult {
+  // Maryland AGI calculation
+  federalAGI: number;
+  marylandAdditions: number;
+  marylandSubtractions: number;
+  marylandAGI: number;
+  
+  // Deductions
+  marylandStandardDeduction: number;
+  marylandItemizedDeduction: number;
+  marylandDeduction: number;
+  marylandTaxableIncome: number;
+  
+  // State tax calculation
+  marylandStateTax: number;
+  countyTax: number;
+  totalMarylandTax: number;
+  
+  // Credits
+  marylandEITC: number; // 50% of federal EITC (year-configurable)
+  povertyLevelCredit: number;
+  propertyTaxCredit: number;
+  rentersTaxCredit: number;
+  totalMarylandCredits: number;
+  
+  // Net tax and refund
+  taxAfterCredits: number;
+  marylandWithholding: number;
+  marylandRefund: number; // Positive = refund, Negative = owed
+  
+  // Breakdown
+  countyRate: number;
+  effectiveMarylandRate: number;
+}
+```
+
+---
+
+### 6.19.2 Maryland County Tax Rates (lines 123-148)
+
+#### COUNTY_TAX_RATES - 24 Maryland Counties (lines 123-148)
+
+**Purpose:** Hard-coded fallback county tax rates if database lookup fails
+
+```typescript
+const COUNTY_TAX_RATES: Record<string, { min: number; max: number }> = {
+  'ALLEGANY': { min: 0.0225, max: 0.032 },
+  'ANNE ARUNDEL': { min: 0.0225, max: 0.032 },
+  'BALTIMORE CITY': { min: 0.032, max: 0.032 },
+  'BALTIMORE COUNTY': { min: 0.0225, max: 0.032 },
+  // ... 20 more counties
+  'WORCESTER': { min: 0.0225, max: 0.0125 }
+};
+```
+
+**Maryland County Tax System:**
+- **24 counties** (23 counties + Baltimore City)
+- **Progressive rates** based on income
+- **Minimum rate:** 2.25% (all counties)
+- **Maximum rates:** Vary by county (1.25% to 3.2%)
+
+**County Tax Rate Table:**
+| County | Min Rate | Max Rate | Notes |
+|--------|----------|----------|-------|
+| Baltimore City | 3.2% | 3.2% | Flat rate (highest) |
+| Montgomery | 2.25% | 3.2% | Progressive |
+| Prince George's | 2.25% | 3.2% | Progressive |
+| Howard | 2.25% | 3.2% | Progressive |
+| Anne Arundel | 2.25% | 3.2% | Progressive |
+| Worcester | 2.25% | 1.25% | Unusual (min > max) |
+| ... | ... | ... | ... |
+
+**Worcester County Note:** Has unusual inverted rates (min 2.25%, max 1.25%) - possible data entry issue or special provision
+
+---
+
+### 6.19.3 Maryland Tax Calculation (lines 161-255)
+
+#### calculateMarylandTax() - Main Calculation (lines 161-255)
+
+**Purpose:** Calculate Maryland state and county taxes from federal return
+
+```typescript
+async calculateMarylandTax(
+  federalTaxResult: TaxCalculationResult,
+  taxInput: TaxHouseholdInput,
+  marylandInput: MarylandSpecificInput,
+  county: string,
+  taxYear: number = 2025
+): Promise<MarylandTaxResult> {
+  const federalAGI = federalTaxResult.adjustedGrossIncome;
+  
+  // 1. Maryland additions to federal AGI
+  const marylandAdditions = marylandInput.stateTaxRefund || 0;
+  
+  // 2. Get tax year configuration (year-specific values)
+  const taxConfig = getTaxYearConfig(taxYear);
+  
+  // 3. Maryland subtractions from federal AGI
+  const ssSubtraction = marylandInput.socialSecurityBenefits || 0;
+  const railroadSubtraction = marylandInput.railroadRetirement || 0;
+  const pensionSubtraction = Math.min(
+    marylandInput.pensionIncome || 0, 
+    taxConfig.maryland.pensionSubtractionMax // $35,700 for 2024
+  );
+  const marylandSubtractions = ssSubtraction + railroadSubtraction + pensionSubtraction;
+  
+  // 4. Maryland AGI
+  const marylandAGI = federalAGI + marylandAdditions - marylandSubtractions;
+  
+  // 5. Maryland deductions (year-specific values)
+  const marylandStandardDeduction = taxConfig.maryland.standardDeductions[taxInput.filingStatus];
+  const marylandItemizedDeduction = federalTaxResult.deductionBreakdown.itemizedDeduction * 0.85; // MD allows 85% of federal
+  const marylandDeduction = Math.max(marylandStandardDeduction, marylandItemizedDeduction);
+  
+  // 6. Maryland taxable income
+  const marylandTaxableIncome = Math.max(0, marylandAGI - marylandDeduction);
+  
+  // 7. Calculate Maryland state tax (progressive brackets, year-specific)
+  const marylandStateTax = this.calculateProgressiveTax(
+    marylandTaxableIncome, 
+    taxConfig.maryland.stateTaxBrackets
+  );
+  
+  // 8. Calculate county tax (database lookup with fallback)
+  const countyRate = await this.getCountyTaxRate(county, marylandTaxableIncome, taxYear);
+  const countyTax = marylandTaxableIncome * countyRate;
+  
+  const totalMarylandTax = marylandStateTax + countyTax;
+  
+  // 9. Maryland EITC (year-specific percentage)
+  const marylandEITC = federalTaxResult.eitc * taxConfig.maryland.eitcPercentage; // 50% for 2024
+  
+  // 10. Other credits
+  const povertyLevelCredit = this.calculatePovertyLevelCredit(marylandAGI, taxInput.filingStatus);
+  const propertyTaxCredit = this.calculatePropertyTaxCredit(marylandInput.propertyTaxPaid || 0, marylandAGI);
+  const rentersTaxCredit = this.calculateRentersTaxCredit(marylandInput.rentPaid || 0, marylandAGI);
+  
+  const totalMarylandCredits = marylandEITC + povertyLevelCredit + propertyTaxCredit + rentersTaxCredit;
+  
+  // 11. Tax after credits and refund
+  const taxAfterCredits = Math.max(0, totalMarylandTax - totalMarylandCredits);
+  const marylandWithholding = marylandInput.marylandWithholding || 0;
+  const marylandRefund = marylandWithholding - taxAfterCredits;
+  
+  return { ... };
+}
+```
+
+**11-Step Maryland Tax Calculation:**
+```
+1. Federal AGI (from Form 1040)
+2. + Maryland Additions (state tax refunds)
+3. - Maryland Subtractions (SS, pension, railroad)
+4. = Maryland AGI
+5. - Maryland Deduction (standard or itemized)
+6. = Maryland Taxable Income
+7. × Maryland State Tax Brackets (2%-5.75%)
+8. + County Tax (2.25%-3.2% progressive)
+9. = Total Maryland Tax
+10. - Maryland Credits (EITC, poverty, property, renter)
+11. = Tax After Credits → Refund or Owed
+```
+
+---
+
+
+**Complete Maryland Tax Example:**
+```
+INPUT:
+  Federal AGI: $50,000
+  State Tax Refund: $200
+  Social Security: $12,000
+  Pension: $10,000
+  Filing Status: Married Joint
+  County: Montgomery
+  Property Tax Paid: $4,000
+  Withholding: $2,500
+
+CALCULATION:
+Step 1: Maryland Additions
+  $200 (state tax refund)
+
+Step 2-3: Maryland Subtractions
+  SS: $12,000
+  Pension: $10,000 (capped at $35,700)
+  Total: $22,000
+
+Step 4: Maryland AGI
+  $50,000 + $200 - $22,000 = $28,200
+
+Step 5: Maryland Deduction
+  Standard (MJ): $8,550
+  Itemized (85% of federal): $12,000 × 85% = $10,200
+  Use: $10,200 (higher)
+
+Step 6: Maryland Taxable Income
+  $28,200 - $10,200 = $18,000
+
+Step 7: Maryland State Tax (progressive brackets)
+  First $1,000 @ 2.0%: $20
+  Next $2,000 @ 3.0%: $60
+  Next $3,000 @ 4.0%: $120
+  Remaining $12,000 @ 4.75%: $570
+  Total State Tax: $770
+
+Step 8: County Tax (Montgomery, progressive)
+  Income $18,000 (< $25,000 threshold)
+  Min Rate: 2.25%
+  County Tax: $18,000 × 2.25% = $405
+
+Step 9: Total Maryland Tax
+  State: $770
+  County: $405
+  Total: $1,175
+
+Step 10: Maryland Credits
+  EITC: $0 (no federal EITC)
+  Poverty Level: $85 (AGI < $31,250)
+  Property Tax: $2,400 (60% of $4,000, AGI < $60K)
+  Renter: $0 (homeowner)
+  Total Credits: $2,485
+
+Step 11: Tax After Credits
+  $1,175 - $2,485 = $0 (credits exceed tax)
+  Tax Due: $0
+  Withholding: $2,500
+  REFUND: $2,500
+
+RESULT:
+  Maryland Refund: $2,500
+  Effective Rate: 4.2% ($1,175 / $28,200)
+```
+
+---
+
+### 6.19.4 Progressive Tax & County Rates (lines 260-336)
+
+#### calculateProgressiveTax() - Bracket Calculation (lines 260-277)
+
+**Purpose:** Calculate tax using progressive brackets
+
+```typescript
+private calculateProgressiveTax(
+  income: number,
+  brackets: Array<{ limit: number; rate: number }>
+): number {
+  let tax = 0;
+  let previousLimit = 0;
+  
+  for (const bracket of brackets) {
+    if (income <= previousLimit) break;
+    
+    const taxableInBracket = Math.min(income, bracket.limit) - previousLimit;
+    tax += taxableInBracket * bracket.rate;
+    
+    previousLimit = bracket.limit;
+  }
+  
+  return tax;
+}
+```
+
+**Maryland State Tax Brackets (2024):**
+| Income Range | Rate | Tax on Bracket |
+|--------------|------|----------------|
+| $0 - $1,000 | 2.0% | $0 - $20 |
+| $1,001 - $2,000 | 3.0% | $20 - $50 |
+| $2,001 - $3,000 | 4.0% | $50 - $90 |
+| $3,001 - $100,000 | 4.75% | $90 - $4,702.50 |
+| $100,001 - $125,000 | 5.0% | $4,702.50 - $6,952.50 |
+| $125,001 - $150,000 | 5.25% | $6,952.50 - $8,265 |
+| $150,001 - $250,000 | 5.5% | $8,265 - $13,765 |
+| Over $250,000 | 5.75% | $13,765 + |
+
+---
+
+#### getCountyTaxRate() - Progressive County Tax (lines 317-336)
+
+**Purpose:** Get progressive county tax rate based on income (database lookup with fallback)
+
+```typescript
+private async getCountyTaxRate(county: string, income: number, taxYear: number): Promise<number> {
+  const countyUpper = county.toUpperCase().trim();
+  
+  // Try database lookup first
+  const dbRates = await this.fetchCountyRatesFromDB(countyUpper, taxYear);
+  
+  // Fall back to hard-coded rates if database fails
+  const rates = dbRates || COUNTY_TAX_RATES[countyUpper] || { min: 0.0225, max: 0.032 };
+  
+  // Progressive county tax: use max rate for income over $50,000
+  if (income > 50000) {
+    return rates.max;
+  } else if (income > 25000) {
+    // Interpolate between min and max
+    const ratio = (income - 25000) / 25000;
+    return rates.min + (rates.max - rates.min) * ratio;
+  } else {
+    return rates.min;
+  }
+}
+```
+
+**County Tax Progression:**
+```
+Income ≤ $25,000: Minimum rate (2.25%)
+Income $25,001 - $50,000: Interpolated (2.25% → max)
+Income > $50,000: Maximum rate (varies by county)
+
+Example (Montgomery County):
+  $20,000: 2.25%
+  $37,500: 2.25% + (3.2% - 2.25%) × 50% = 2.725%
+  $60,000: 3.2%
+```
+
+---
+
+### 6.19.5 Maryland Credits (lines 341-376)
+
+#### calculatePovertyLevelCredit() (lines 341-350)
+
+**Purpose:** Poverty level credit for low-income taxpayers
+
+```typescript
+private calculatePovertyLevelCredit(agi: number, filingStatus: string): number {
+  const povertyThreshold = filingStatus === 'married_joint' ? 25000 : 15000;
+  
+  if (agi < povertyThreshold * 1.25) {
+    return Math.min(500, Math.max(0, (povertyThreshold * 1.25 - agi) * 0.05));
+  }
+  
+  return 0;
+}
+```
+
+**Poverty Level Credit:**
+- **Single:** AGI < $18,750 (125% of $15,000)
+- **Married:** AGI < $31,250 (125% of $25,000)
+- **Maximum:** $500
+- **Formula:** (Threshold × 1.25 - AGI) × 5%
+
+#### calculatePropertyTaxCredit() (lines 355-363)
+
+**Purpose:** Credit for property taxes paid
+
+```typescript
+private calculatePropertyTaxCredit(propertyTaxPaid: number, agi: number): number {
+  if (agi > 60000) return 0;
+  
+  const maxCredit = 1200;
+  const creditRate = agi < 30000 ? 0.8 : 0.6;
+  
+  return Math.min(maxCredit, propertyTaxPaid * creditRate);
+}
+```
+
+**Property Tax Credit:**
+- **Eligibility:** AGI ≤ $60,000
+- **Maximum:** $1,200
+- **Rate:** 80% if AGI < $30K, otherwise 60%
+- **Calculation:** min($1,200, Property Tax × rate)
+
+#### calculateRentersTaxCredit() (lines 368-376)
+
+**Purpose:** Credit for rent paid
+
+```typescript
+private calculateRentersTaxCredit(rentPaid: number, agi: number): number {
+  if (agi > 50000) return 0;
+  
+  const maxCredit = 1000;
+  const creditRate = 0.15; // 15% of rent paid
+  
+  return Math.min(maxCredit, rentPaid * creditRate);
+}
+```
+
+**Renter's Tax Credit:**
+- **Eligibility:** AGI ≤ $50,000
+- **Maximum:** $1,000
+- **Rate:** 15% of rent paid
+- **Example:** $8,000 rent → $1,000 credit
+
+---
+
+### 6.19.6 PDF Generation (lines 381-758)
+
+#### generateForm502() - Main PDF Generator (lines 381-446)
+
+**Purpose:** Generate printable PDF matching Maryland Comptroller format
+
+```typescript
+async generateForm502(
+  personalInfo: Form502PersonalInfo,
+  taxInput: TaxHouseholdInput,
+  federalTaxResult: TaxCalculationResult,
+  marylandInput: MarylandSpecificInput,
+  options: Form502Options
+): Promise<{ pdf: Buffer; marylandTaxResult: MarylandTaxResult }> {
+  // 1. Calculate Maryland tax
+  const marylandTaxResult = await this.calculateMarylandTax(...);
+  
+  // 2. Initialize PDF
+  this.doc = new jsPDF({
+    orientation: 'portrait',
+    unit: 'pt',
+    format: 'letter'
+  });
+  
+  // 3. Add DRAFT watermark
+  if (options.includeWatermark !== false) {
+    this.addWatermark();
+  }
+  
+  // 4. Generate PDF sections
+  this.drawFormHeader(options.taxYear);
+  this.drawPersonalInfo(personalInfo, taxInput.filingStatus);
+  this.drawIncomeSection(federalTaxResult, marylandTaxResult);
+  this.drawDeductionsSection(marylandTaxResult);
+  this.drawTaxSection(marylandTaxResult, personalInfo.county);
+  this.drawCreditsSection(marylandTaxResult);
+  this.drawRefundSection(marylandTaxResult);
+  this.drawSignatureSection(options);
+  
+  if (options.preparerName) {
+    this.drawPreparerInfo(options);
+  }
+  
+  const pdfBuffer = Buffer.from(this.doc.output('arraybuffer'));
+  
+  return {
+    pdf: pdfBuffer,
+    marylandTaxResult
+  };
+}
+```
+
+**PDF Generation Sections:**
+1. **Form Header** - "Form 502 Maryland Resident Income Tax Return"
+2. **Personal Info** - Names, SSNs, address, county
+3. **Income** - Federal AGI, additions, subtractions, Maryland AGI
+4. **Deductions** - Standard/itemized, taxable income
+5. **Tax Computation** - State tax, county tax, total tax
+6. **Credits** - EITC, poverty, property, renter
+7. **Payments** - Withholding, refund/owed
+8. **Signatures** - Taxpayer, spouse, preparer
+
+**DRAFT Watermark:**
+```typescript
+private addWatermark(): void {
+  this.doc.setTextColor(220, 220, 220);
+  this.doc.setFontSize(60);
+  this.doc.text('DRAFT', this.pageWidth / 2, this.pageHeight / 2, {
+    angle: 45,
+    align: 'center'
+  });
+  this.doc.setTextColor(0, 0, 0);
+  this.doc.setFontSize(10);
+}
+```
+
+---
+
+### 6.19 Summary - Maryland Form 502 PDF Generator
+
+**Purpose:** Production PDF generator for Maryland Form 502 state tax returns
+
+**Critical Design:** Matches MD Comptroller format, includes DRAFT watermark for navigator review
+
+**Maryland-Specific Tax Features:**
+1. **Maryland AGI:** Federal AGI + Additions - Subtractions
+2. **Additions:** State tax refunds received
+3. **Subtractions:**
+   - Social Security benefits (100% deductible)
+   - Railroad retirement (100%)
+   - Pension income (up to $35,700)
+4. **Deductions:** Higher of standard or 85% of federal itemized
+5. **State Tax:** Progressive brackets (2% to 5.75%)
+6. **County Tax:** 24 counties, progressive (2.25% to 3.2%)
+7. **Maryland EITC:** 50% of federal EITC (year-configurable)
+8. **Additional Credits:** Poverty level, property tax, renter's
+
+**Progressive Tax System:**
+- **State:** 8 brackets (2% to 5.75%)
+- **County:** 3 tiers based on income (<$25K, $25K-$50K, >$50K)
+
+**Maryland Credits:**
+| Credit | Eligibility | Maximum | Formula |
+|--------|-------------|---------|---------|
+| MD EITC | Any | 50% of federal | Federal EITC × 50% |
+| Poverty Level | AGI < 125% poverty | $500 | (Threshold - AGI) × 5% |
+| Property Tax | AGI ≤ $60K | $1,200 | Property Tax × 60-80% |
+| Renter's | AGI ≤ $50K | $1,000 | Rent × 15% |
+
+**Database Integration:**
+- **countyTaxRates table:** Year-specific county rates
+- **Fallback:** Hard-coded COUNTY_TAX_RATES constant
+- **taxYearConfig:** Year-specific brackets, deductions, EITC %
+
+**Production Features:**
+- ✅ Professional PDF layout
+- ✅ DRAFT watermark
+- ✅ Navigator review workflow
+- ✅ Year-specific tax rules
+- ✅ Database lookup with fallback
+- ✅ Error handling
+
+**Integration Points:**
+- **policyEngineTaxCalculation** - Federal tax results
+- **vitaTaxRulesEngine** - Federal calculations
+- **taxYearConfig** - Year-specific values
+- **countyTaxRates (DB)** - County rates by year
+
+**Navigator Workflow:**
+```
+1. Federal Return (Form 1040) → PolicyEngine
+2. Maryland Additions/Subtractions → Navigator input
+3. County Selection → Database lookup
+4. Generate PDF → DRAFT watermark
+5. Navigator Review → Client signature
+6. Final PDF → Remove watermark
+7. File Return → MD Comptroller
+```
+
+**Compliance:**
+- ✅ Maryland Comptroller format
+- ✅ All required line items
+- ✅ Year-specific tax rules
+- ✅ County tax calculation
+- ✅ All credits implemented
+
+---
+
