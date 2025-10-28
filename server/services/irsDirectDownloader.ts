@@ -198,14 +198,19 @@ export class IRSDirectDownloader {
       
       const objectPath = objectStorageService.normalizeObjectEntityPath(uploadUrl);
       
-      // Extract text for RAG processing
-      // Use createRequire to load CommonJS pdf-parse in ESM
-      const { createRequire } = (await import('module')) as any;
-      const require = createRequire(import.meta.url);
-      const pdfParseModule = require('pdf-parse');
-      const pdfParse = pdfParseModule.default || pdfParseModule;
-      const pdfData = await pdfParse(pdfBuffer);
-      const pdfText = pdfData.text;
+      // Extract text for RAG processing  
+      let pdfText = '';
+      try {
+        const pdfParseModule = await import('pdf-parse');
+        const pdfParse = pdfParseModule.default;
+        const pdfData = await pdfParse(pdfBuffer);
+        pdfText = pdfData.text;
+      } catch (parseError) {
+        logger.warn('PDF text extraction failed, proceeding without text', {
+          service: 'IRSDirectDownloader',
+          error: parseError instanceof Error ? parseError.message : 'Unknown error'
+        });
+      }
       
       if (existingDoc) {
         // Update existing document
@@ -292,11 +297,9 @@ export class IRSDirectDownloader {
    */
   private async extractRevisionInfo(pdfBuffer: Buffer): Promise<string | null> {
     try {
-      // Use createRequire to load CommonJS pdf-parse in ESM
-      const { createRequire } = (await import('module')) as any;
-      const require = createRequire(import.meta.url);
-      const pdfParseModule = require('pdf-parse');
-      const pdfParse = pdfParseModule.default || pdfParseModule;
+      // Use dynamic import for pdf-parse
+      const pdfParseModule = await import('pdf-parse');
+      const pdfParse = pdfParseModule.default;
       const pdfData = await pdfParse(pdfBuffer);
       const pdfText = pdfData.text;
       
