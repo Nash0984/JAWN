@@ -18137,3 +18137,653 @@ GDPR compliance without physically deleting encrypted data
 
 ---
 
+
+---
+
+## 6.3 Unified Metrics Service (server/services/metricsService.ts - 1,063 lines)
+
+**Purpose:** Centralized metrics collection and analytics for monitoring system health, performance, and business outcomes
+
+**Background:**
+- Production systems require comprehensive monitoring
+- Manual metric queries are slow and error-prone
+- Need unified dashboard for system health and business KPIs
+- Support government reporting requirements (SNAP QC, VITA performance, etc.)
+
+**Key Features:**
+1. **Unified Metrics API** - Single endpoint for all dashboard metrics
+2. **Parallel Query Execution** - Fetch all metrics concurrently
+3. **Tenant-Aware** - Multi-state metrics isolation
+4. **Performance Optimized** - Database indexing + caching
+5. **Business Intelligence** - Benefits secured, success rates, processing times
+
+---
+
+
+### 6.3.1 Service Overview (lines 1-12)
+
+**7 Observability Domains:**
+1. **Errors** - Error tracking and rate trends
+2. **Security** - Security events and threat detection
+3. **Performance** - API/DB response times
+4. **E-Filing** - Tax return submission status
+5. **AI** - AI API usage and costs
+6. **Cache** - Cache performance metrics
+7. **Health** - System health checks
+
+---
+
+### 6.3.2 getAllMetrics() - Unified Metrics Collection (lines 92-118)
+
+**Purpose:** Get all metrics across 7 domains with parallel execution
+
+**Optimization - Parallel Query Pattern (lines 98-107):**
+```typescript
+// Fetch all domains in parallel for efficiency
+const [errors, security, performance, eFiling, ai, cache, health] = await Promise.all([
+  this.getErrorMetrics(defaultRange, tenantId),
+  this.getSecurityMetrics(defaultRange, tenantId),
+  this.getPerformanceMetrics(defaultRange, tenantId),
+  this.getEFilingMetrics(defaultRange, tenantId),
+  this.getAIMetrics(defaultRange),
+  this.getCacheMetrics(),
+  this.getHealthMetrics(),
+]);
+```
+
+**Performance Benefit:**
+- **Serial execution:** ~7 queries × 200ms = 1,400ms
+- **Parallel execution:** max(200ms) = ~200ms
+- **Speedup:** 7x faster
+
+**Default Time Range (lines 93-96):**
+```typescript
+const defaultRange = timeRange || {
+  start: new Date(Date.now() - 24 * 60 * 60 * 1000), // Last 24 hours
+  end: new Date()
+};
+```
+
+---
+
+### 6.3.3 Domain 1: Error Metrics (lines 123-193)
+
+**Purpose:** Track errors, error rates, and trends
+
+**Queries:**
+1. **Total errors** (lines 136-141)
+2. **Error rate** - Errors per minute (lines 143-145)
+3. **Top error types** - Top 10 by count (lines 148-158)
+4. **Error trend** - Hourly buckets (lines 161-169)
+
+**Top Error Types Query (lines 148-158):**
+```typescript
+const topTypes = await db
+  .select({
+    errorType: sql<string>`${monitoringMetrics.metadata}->>'errorType'`,
+    count: sql<number>`COUNT(*)`,
+    lastOccurrence: sql<Date>`MAX(${monitoringMetrics.timestamp})`,
+  })
+  .from(monitoringMetrics)
+  .where(and(...conditions))
+  .groupBy(sql`${monitoringMetrics.metadata}->>'errorType'`)
+  .orderBy(desc(sql`COUNT(*)`))
+  .limit(10);
+```
+
+**PostgreSQL JSON Operator:**
+- `->>` extracts JSON field as text
+- Allows querying error types stored in JSONB metadata field
+
+**Error Rate Calculation (lines 143-145):**
+```typescript
+const durationMinutes = (timeRange.end.getTime() - timeRange.start.getTime()) / (1000 * 60);
+const rate = durationMinutes > 0 ? total / durationMinutes : 0;
+```
+
+**Return Value:**
+```typescript
+{
+  totalCount: 42,
+  errorRate: 0.58,  // errors per minute
+  topErrors: [
+    { type: "ValidationError", count: 15, severity: "medium" },
+    { type: "DatabaseError", count: 10, severity: "medium" },
+    ...
+  ],
+  trend: [
+    { timestamp: "2025-10-28T10:00:00Z", count: 5 },
+    { timestamp: "2025-10-28T11:00:00Z", count: 8 },
+    ...
+  ]
+}
+```
+
+---
+
+### 6.3.4 Domain 2: Security Metrics (lines 198-307)
+
+**Purpose:** Track security events, threats, and suspicious activity
+
+**Queries:**
+1. **Total security events** (lines 206-211)
+2. **Events by type** (lines 214-226)
+3. **Failed logins** (lines 229-238)
+4. **Top threats** - High/critical severity (lines 241-255)
+5. **Suspicious activity** - Rate limiting, brute force (lines 258-265)
+6. **Security trend** - Hourly buckets (lines 277-285)
+
+**High-Severity Threats Query (lines 241-255):**
+```typescript
+const threats = await db
+  .select({
+    eventType: securityEvents.eventType,
+    severity: securityEvents.severity,
+    count: sql<number>`COUNT(*)`,
+    lastOccurrence: sql<Date>`MAX(${securityEvents.occurredAt})`,
+  })
+  .from(securityEvents)
+  .where(and(
+    ...conditions,
+    inArray(securityEvents.severity, ['high', 'critical'])  // Filter high-severity
+  ))
+  .groupBy(securityEvents.eventType, securityEvents.severity)
+  .orderBy(desc(sql`COUNT(*)`))
+  .limit(10);
+```
+
+**Suspicious Activity Detection (lines 258-265):**
+```typescript
+const suspiciousConditions = [
+  ...conditions,
+  inArray(securityEvents.eventType, [
+    'rate_limit_exceeded',
+    'brute_force_attempt',
+    'suspicious_activity'
+  ]),
+];
+```
+
+**Return Value:**
+```typescript
+{
+  totalEvents: 127,
+  highSeverityThreats: 8,
+  failedLogins: 23,
+  eventsByType: [
+    { type: "failed_login", count: 23 },
+    { type: "rate_limit_exceeded", count: 15 },
+    ...
+  ],
+  trend: [...]
+}
+```
+
+---
+
+### 6.3.5 Domain 3: Performance Metrics (lines 312-415)
+
+**Purpose:** Track API response times, database performance, and slow endpoints
+
+**Queries:**
+1. **Average response time** + P95/P99 percentiles (lines 325-336)
+2. **Slowest endpoints** - Top 10 by avg time (lines 339-350)
+3. **Database query time** (lines 353-363)
+4. **API latency** (lines 366-376)
+5. **Performance trend** - Hourly buckets (lines 379-388)
+
+**Percentile Calculation (lines 325-336):**
+```typescript
+const avgResult = await db
+  .select({
+    avg: sql<number>`AVG(${monitoringMetrics.metricValue})`,
+    p95: sql<number>`PERCENTILE_CONT(0.95) WITHIN GROUP (ORDER BY ${monitoringMetrics.metricValue})`,
+    p99: sql<number>`PERCENTILE_CONT(0.99) WITHIN GROUP (ORDER BY ${monitoringMetrics.metricValue})`,
+  })
+  .from(monitoringMetrics)
+  .where(and(...conditions));
+```
+
+**PostgreSQL PERCENTILE_CONT:**
+- Calculates continuous percentile (interpolates between values)
+- P95: 95% of requests faster than this value
+- P99: 99% of requests faster than this value
+
+**Slowest Endpoints Query (lines 339-350):**
+```typescript
+const slowEndpoints = await db
+  .select({
+    endpoint: sql<string>`${monitoringMetrics.metadata}->>'endpoint'`,
+    avgTime: sql<number>`AVG(${monitoringMetrics.metricValue})`,
+    p95: sql<number>`PERCENTILE_CONT(0.95) WITHIN GROUP (ORDER BY ${monitoringMetrics.metricValue})`,
+    count: sql<number>`COUNT(*)`,
+  })
+  .from(monitoringMetrics)
+  .where(and(...conditions))
+  .groupBy(sql`${monitoringMetrics.metadata}->>'endpoint'`)
+  .orderBy(desc(sql`AVG(${monitoringMetrics.metricValue})`))
+  .limit(10);
+```
+
+**Use Case:** Identify slow endpoints → Optimize queries → Reduce p95/p99 response times
+
+---
+
+### 6.3.6 Domain 4: E-Filing Metrics (lines 420-526)
+
+**Purpose:** Track tax return e-filing status, error rates, and processing times
+
+**Queries:**
+1. **Total submissions** (lines 428-433)
+2. **Submissions by status** (lines 436-448)
+3. **Error rate** - Rejected / total (lines 451-452)
+4. **Average processing time** - For accepted returns (lines 455-465)
+5. **Recent submissions** - Last 10 (lines 468-477)
+6. **Processing time trend** - Hourly buckets (lines 486-497)
+
+**Processing Time Calculation (lines 455-465):**
+```typescript
+const processingTimeResult = await db
+  .select({
+    avgTime: sql<number>`AVG(EXTRACT(EPOCH FROM (${federalTaxReturns.efileAcceptedAt} - ${federalTaxReturns.createdAt})))`,
+  })
+  .from(federalTaxReturns)
+  .where(and(
+    ...conditions,
+    eq(federalTaxReturns.efileStatus, 'accepted')
+  ));
+
+const avgProcessingTime = Number(processingTimeResult[0]?.avgTime || 0) / 60; // Convert to minutes
+```
+
+**PostgreSQL EXTRACT(EPOCH FROM ...):**
+- Extracts Unix timestamp (seconds since 1970)
+- `EPOCH FROM (acceptedAt - createdAt)` → duration in seconds
+- Divide by 60 → duration in minutes
+
+**Error Rate Calculation (lines 451-452):**
+```typescript
+const rejectedCount = byStatus['rejected'] || 0;
+const errorRate = totalSubmissions > 0 ? (rejectedCount / totalSubmissions) * 100 : 0;
+```
+
+**Return Value:**
+```typescript
+{
+  totalSubmissions: 342,
+  errorRate: 2.34,  // 2.34% rejected
+  avgProcessingTime: 4.5,  // 4.5 minutes
+  byStatus: [
+    { status: "accepted", count: 334 },
+    { status: "rejected", count: 8 },
+    { status: "pending", count: 0 }
+  ],
+  processingTimeTrend: [...],
+  recentSubmissions: [...]
+}
+```
+
+---
+
+### 6.3.7 Domain 5: AI Metrics (lines 531-575)
+
+**Purpose:** Track AI API usage, costs, and token consumption
+
+**Data Source:** `aiOrchestrator.getCostMetrics()` (line 533)
+
+**Transform Operations (lines 536-549):**
+```typescript
+// Convert callsByFeature Record to Array
+const callsByFeature = Object.entries(costMetrics.callsByFeature).map(([feature, data]) => ({
+  feature,
+  calls: data.calls,
+  tokens: data.tokens,
+  cost: data.cost,
+}));
+
+// Convert callsByModel Record to Array (tokensByModel)
+const tokensByModel = Object.entries(costMetrics.callsByModel).map(([model, data]) => ({
+  model,
+  tokens: data.tokens,
+  calls: data.calls,
+  cost: data.cost,
+}));
+```
+
+**Return Value:**
+```typescript
+{
+  totalCost: 42.35,  // $42.35
+  totalCalls: 1247,
+  totalTokens: 523847,
+  callsByFeature: [
+    { feature: "tax_doc_extraction", calls: 342, tokens: 245000, cost: 12.25 },
+    { feature: "intake_assistant", calls: 523, tokens: 178000, cost: 8.90 },
+    ...
+  ],
+  callsByModel: [
+    { model: "gemini-1.5-flash", tokens: 423000, calls: 980, cost: 21.15 },
+    { model: "gemini-1.5-pro", tokens: 100847, calls: 267, cost: 21.20 },
+    ...
+  ],
+  costTrend: [...]
+}
+```
+
+**Use Case:** Monitor AI costs → Budget forecasting → Identify expensive features
+
+---
+
+### 6.3.8 Domain 6: Cache Metrics (lines 580-625)
+
+**Purpose:** Track cache performance and hit rates
+
+**Data Source:** `cacheOrchestrator.getCacheHealth()` (line 582)
+
+**Overall Hit Rate Calculation (lines 584-596):**
+```typescript
+let totalHits = 0;
+let totalRequests = 0;
+const hitRateByLayer: Array<{ layer: string; hitRate: number }> = [];
+
+Object.entries(cacheHealth.layers.L1.caches).forEach(([key, cache]) => {
+  const hitRate = parseFloat(cache.hitRate.replace('%', ''));
+  hitRateByLayer.push({ layer: key, hitRate });
+  totalHits += hitRate * cache.size; // Approximation
+  totalRequests += cache.size;
+});
+
+const overallHitRate = totalRequests > 0 ? (totalHits / totalRequests) : 0;
+```
+
+**Return Value:**
+```typescript
+{
+  hitRate: 78.5,  // 78.5% overall hit rate
+  l1Status: "healthy",
+  status: "healthy",
+  hitRateByLayer: [
+    { layer: "programs", hitRate: 85.2 },
+    { layer: "rag", hitRate: 72.3 },
+    ...
+  ],
+  invalidationEvents: [...],
+  layers: {
+    L1: { status: "healthy", caches: {...} },
+    L2: { status: "healthy", caches: {...} },
+    L3: { status: "healthy", caches: {...} }
+  }
+}
+```
+
+
+### 6.3.9 Domain 7: Health Metrics (lines 633-710)
+
+**Purpose:** Check system component health (database, AI, memory, storage)
+
+**Health Checks:**
+1. **Database connectivity** (lines 648-665)
+2. **AI service configuration** (lines 668-676)
+3. **Memory usage** (lines 679-696)
+4. **Object storage configuration** (lines 699-707)
+
+**Database Health Check (lines 648-665):**
+```typescript
+try {
+  // Simple SELECT 1 query to test connection
+  const dbStart = Date.now();
+  await db.execute(sql`SELECT 1 as health_check`);
+  health.components.database = {
+    status: 'pass',
+    responseTime: Date.now() - dbStart,  // Measure latency
+    message: 'Database connection successful',
+  };
+  health.databaseConnected = true;
+} catch (error) {
+  health.status = 'unhealthy';
+  health.overallStatus = 'unhealthy';
+  health.databaseConnected = false;
+  health.components.database = {
+    status: 'fail',
+    message: error instanceof Error ? error.message : 'Database connection failed',
+  };
+}
+```
+
+**Memory Usage Check (lines 679-696):**
+```typescript
+const memUsage = process.memoryUsage();
+const heapUsedPercent = (memUsage.heapUsed / memUsage.heapTotal) * 100;
+
+if (heapUsedPercent > 90) {
+  health.components.memory = {
+    status: 'fail',
+    usagePercent: Number(heapUsedPercent.toFixed(1)),
+    message: `High memory usage: ${heapUsedPercent.toFixed(1)}%`,
+  };
+  health.status = 'unhealthy';
+  health.overallStatus = 'unhealthy';
+} else {
+  health.components.memory = {
+    status: 'pass',
+    usagePercent: Number(heapUsedPercent.toFixed(1)),
+    message: `Memory usage: ${heapUsedPercent.toFixed(1)}%`,
+  };
+}
+```
+
+**Health Status Levels:**
+- `healthy` - All components operational
+- `degraded` - Non-critical components failing (AI, storage)
+- `unhealthy` - Critical components failing (database, memory > 90%)
+
+**Return Value:**
+```typescript
+{
+  status: "healthy",
+  overallStatus: "healthy",
+  uptime: 86400,  // seconds
+  databaseConnected: true,
+  components: {
+    database: { status: "pass", responseTime: 5, message: "Database connection successful" },
+    aiService: { status: "pass", message: "AI service configured" },
+    memory: { status: "pass", usagePercent: 42.3, message: "Memory usage: 42.3%" },
+    objectStorage: { status: "pass", message: "Object storage configured" }
+  }
+}
+```
+
+---
+
+### 6.3.10 getRealtimeUpdate() - WebSocket Updates (lines 715-781)
+
+**Purpose:** Get real-time metrics for WebSocket broadcasting (5-minute window)
+
+**Queries:**
+1. **Recent errors** - Last 5 errors (lines 721-731)
+2. **Recent performance** - Avg response time + slow requests (lines 734-743)
+3. **Recent security events** - Count + max severity (lines 746-752)
+
+**PostgreSQL FILTER Clause (lines 737-738):**
+```typescript
+const performanceResult = await db
+  .select({
+    avg: sql<number>`AVG(${monitoringMetrics.metricValue})`,
+    slowCount: sql<number>`COUNT(*) FILTER (WHERE ${monitoringMetrics.metricValue} > 1000)`,
+  })
+  ...
+```
+
+**COUNT(*) FILTER:**
+- Conditionally counts rows matching filter
+- Equivalent to: `SUM(CASE WHEN metricValue > 1000 THEN 1 ELSE 0 END)`
+- More efficient and readable
+
+**Use Case:** Real-time dashboard → WebSocket updates every 5 seconds → Show live errors, performance, security
+
+---
+
+### 6.3.11 Legacy Methods (Backward Compatibility) (lines 787-1060)
+
+#### recordMetric() - Record Metric (lines 790-808)
+
+**Purpose:** Record a single metric value
+
+```typescript
+await metricsService.recordMetric(
+  'response_time',
+  142,  // milliseconds
+  { endpoint: '/api/snap/eligibility', method: 'POST' },
+  'maryland-tenant-id'
+);
+```
+
+**Error Handling (lines 805-806):**
+```typescript
+// Don't throw - metrics recording should never break the app
+```
+
+**Design Choice:** Metrics failures should never crash production
+
+---
+
+#### getMetricsSummary() - Percentile Calculation (lines 813-869)
+
+**Purpose:** Calculate percentiles in-memory (alternative to PostgreSQL PERCENTILE_CONT)
+
+**In-Memory Percentile Calculation (lines 849-852):**
+```typescript
+const percentile = (p: number) => {
+  const index = Math.ceil((p / 100) * count) - 1;
+  return values[index];
+};
+```
+
+**Return Value:**
+```typescript
+{
+  metricType: "response_time",
+  count: 1247,
+  avg: 185.3,
+  min: 12,
+  max: 1524,
+  p50: 142,  // Median
+  p90: 342,
+  p95: 487,
+  p99: 982
+}
+```
+
+**Use Case:** Compare in-memory percentiles vs. PostgreSQL PERCENTILE_CONT for accuracy
+
+---
+
+#### calculateTrends() - Trend Analysis (lines 874-916)
+
+**Purpose:** Calculate trends over time (hourly or daily buckets)
+
+**Dynamic Time Truncation (lines 892-894):**
+```typescript
+const truncFunc = bucketSize === 'hour' 
+  ? sql`date_trunc('hour', ${monitoringMetrics.timestamp})`
+  : sql`date_trunc('day', ${monitoringMetrics.timestamp})`;
+```
+
+**Use Case:** Error rate trend → Detect spikes → Alert on-call engineer
+
+---
+
+#### getTopErrors() - Top Errors (lines 921-959)
+
+**Purpose:** Get most frequent errors
+
+**Use Case:** Weekly report → Top 10 errors → Prioritize fixes
+
+---
+
+#### getSlowestEndpoints() - Performance Bottlenecks (lines 964-1004)
+
+**Purpose:** Identify slowest API endpoints
+
+**Return Value:**
+```typescript
+[
+  { endpoint: "/api/snap/calculate", avgResponseTime: 1247, p95: 2340, count: 523 },
+  { endpoint: "/api/documents/extract", avgResponseTime: 892, p95: 1523, count: 234 },
+  ...
+]
+```
+
+**Use Case:** Performance optimization → Identify slow endpoints → Add caching/indexing
+
+---
+
+#### getErrorRate() - Error Rate (lines 1009-1040)
+
+**Purpose:** Calculate error rate (errors per minute)
+
+**Use Case:** Alerting → Error rate > 5/min → Trigger incident
+
+---
+
+#### cleanupOldMetrics() - Retention Policy (lines 1045-1060)
+
+**Purpose:** Delete old metrics (default 30 days)
+
+**Scheduled Job:**
+```typescript
+// Run daily at midnight
+cron.schedule('0 0 * * *', async () => {
+  await metricsService.cleanupOldMetrics(30);
+});
+```
+
+**Use Case:** Compliance → GDPR data minimization → Retain only 30 days of metrics
+
+---
+
+### 6.3 Summary - Unified Metrics Service
+
+**Key Features:**
+1. **7 Observability Domains** - Errors, Security, Performance, E-Filing, AI, Cache, Health
+2. **Parallel Query Execution** - 7x faster than serial (200ms vs. 1,400ms)
+3. **Tenant-Aware** - Multi-state metrics isolation
+4. **Real-Time Updates** - WebSocket broadcasting (5-minute window)
+5. **Advanced SQL** - Percentiles, JSON operators, time bucketing, FILTER clause
+6. **Backward Compatibility** - Legacy methods for gradual migration
+
+**Performance Optimizations:**
+- **Parallel queries** - `Promise.all()` for 7 domains
+- **Database indexing** - `timestamp`, `metricType`, `tenantId` columns
+- **Time bucketing** - `date_trunc('hour', ...)` for hourly aggregation
+- **FILTER clause** - Conditional counting without subqueries
+
+**SQL Techniques:**
+- **JSON operators** - `->>` for JSONB field extraction
+- **Percentiles** - `PERCENTILE_CONT()` for P95/P99
+- **Time truncation** - `date_trunc()` for hourly/daily buckets
+- **Conditional aggregation** - `COUNT(*) FILTER (WHERE ...)`
+- **Epoch extraction** - `EXTRACT(EPOCH FROM ...)` for duration calculation
+
+**Use Cases:**
+1. **Admin Dashboard** - Real-time system health monitoring
+2. **Performance Optimization** - Identify slow endpoints, database bottlenecks
+3. **Security Monitoring** - Track failed logins, suspicious activity
+4. **Cost Tracking** - Monitor AI API costs by feature/model
+5. **E-Filing Analytics** - Track submission rates, error rates, processing times
+6. **Capacity Planning** - Memory usage trends, cache hit rates
+7. **Incident Response** - Error rate spikes, security threats
+
+**Compliance:**
+- ✅ **Data Retention** - 30-day retention policy (GDPR data minimization)
+- ✅ **Tenant Isolation** - Multi-state metrics separation
+- ✅ **Audit Trail** - All metrics timestamped and traceable
+
+**Production Readiness:**
+- ✅ Error handling - Never crash on metrics failures
+- ✅ Graceful degradation - Return empty arrays on errors
+- ✅ WebSocket support - Real-time dashboard updates
+- ✅ Scheduled cleanup - Automated retention policy
+
+---
+
