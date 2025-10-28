@@ -316,6 +316,7 @@ export const searchQueries = pgTable("search_queries", {
   relevanceScore: real("relevance_score"),
   responseTime: integer("response_time"), // in milliseconds
   searchType: text("search_type").default("semantic").notNull(), // semantic, keyword, hybrid
+  tenantId: varchar("tenant_id"), // Multi-tenant isolation
   createdAt: timestamp("created_at").defaultNow().notNull(),
 }, (table) => ({
   userIdIdx: index("search_queries_user_id_idx").on(table.userId),
