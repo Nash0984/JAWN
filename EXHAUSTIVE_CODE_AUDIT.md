@@ -36203,3 +36203,1051 @@ CREATE TABLE maryland_bills (
 
 ---
 
+
+---
+
+## 6.23 Predictive Analytics Service (server/services/predictiveAnalytics.service.ts - 749 lines)
+
+**Purpose:** ML-powered predictive analytics for case outcomes, processing times, renewal likelihood, benefit forecasting, resource allocation, anomaly detection, and seasonal trends using Google Gemini AI
+
+**Critical Design:** Historical pattern analysis + AI prediction for proactive case management and operational optimization
+
+**Production Features:**
+- Case outcome prediction (approved/denied/pending)
+- Processing time estimation with confidence intervals
+- Renewal likelihood & churn risk analysis
+- Benefit amount forecasting (6 months ahead)
+- Resource allocation prediction
+- Anomaly detection (real-time)
+- Seasonal trend analysis
+
+---
+
+### 6.23.1 Data Structures (lines 21-83)
+
+#### 7 Prediction Types
+
+**1. CaseOutcomePrediction** (lines 21-28)
+```typescript
+interface CaseOutcomePrediction {
+  caseId: string;
+  outcome: 'approved' | 'denied' | 'pending_review';
+  confidence: number; // 0-1
+  estimatedProcessingDays: number;
+  riskFactors: string[]; // ["Missing documentation", "Income verification needed"]
+  recommendations: string[]; // ["Submit pay stubs", "Complete interview"]
+}
+```
+
+**2. ProcessingTimePrediction** (lines 30-36)
+```typescript
+interface ProcessingTimePrediction {
+  programId: string;
+  complexity: 'low' | 'medium' | 'high' | 'very_high';
+  estimatedDays: number;
+  confidenceInterval: { lower: number; upper: number }; // e.g., {lower: 20, upper: 35}
+  bottlenecks: string[]; // ["Income verification", "Medical review"]
+}
+```
+
+**3. RenewalPrediction** (lines 38-45)
+```typescript
+interface RenewalPrediction {
+  householdId: string;
+  renewalLikelihood: number; // 0-1
+  churnRisk: number; // 0-1 (opposite of renewal likelihood)
+  riskFactors: string[]; // ["Low engagement", "Recent income change"]
+  interventions: string[]; // ["Send reminder", "Offer assistance"]
+  nextRenewalDate: Date;
+}
+```
+
+**4. BenefitAmountForecast** (lines 47-55)
+```typescript
+interface BenefitAmountForecast {
+  householdId: string;
+  programId: string;
+  currentAmount: number; // Current benefit (cents)
+  forecastedAmount: number; // Predicted benefit (cents)
+  changePercent: number; // +2.5% or -5.0%
+  factors: string[]; // ["COLA increase", "Inflation adjustment"]
+  confidenceLevel: number; // 0-1
+}
+```
+
+**5. ResourceAllocationPrediction** (lines 57-64)
+```typescript
+interface ResourceAllocationPrediction {
+  office: string; // "Baltimore City LDSS"
+  date: Date;
+  predictedCaseload: number; // Expected cases
+  requiredStaff: number; // Staff needed
+  utilizationRate: number; // 0-1 (0.85 = 85% capacity)
+  recommendations: string[]; // ["Add 2 temporary staff", "Extend hours"]
+}
+```
+
+**6. AnomalyDetection** (lines 66-74)
+```typescript
+interface AnomalyDetection {
+  entityType: string; // "client_case", "benefit_program"
+  entityId: string;
+  anomalyType: string; // "sudden_spike", "unusual_pattern"
+  severity: 'low' | 'medium' | 'high' | 'critical';
+  description: string; // "300% increase in applications"
+  detectedAt: Date;
+  suggestedAction: string; // "Investigate data quality"
+}
+```
+
+**7. SeasonalTrend** (lines 76-83)
+```typescript
+interface SeasonalTrend {
+  metric: string; // "application_volume"
+  period: string; // "monthly", "weekly"
+  trendDirection: 'increasing' | 'decreasing' | 'stable';
+  seasonalIndex: number; // 1.15 = 15% above baseline
+  forecast: number[]; // [125, 130, 128] next 3 periods
+  confidence: number; // 0-1
+}
+```
+
+---
+
+### 6.23.2 Case Outcome Prediction (lines 91-169)
+
+#### predictCaseOutcome() - AI-Powered Outcome Forecasting (lines 91-169)
+
+**Purpose:** Predict if case will be approved/denied using historical patterns and AI
+
+```typescript
+async predictCaseOutcome(caseId: string): Promise<CaseOutcomePrediction> {
+  const cacheKey = `prediction:outcome:${caseId}`;
+  const cached = await cacheService.get<CaseOutcomePrediction>(cacheKey);
+  if (cached) return cached;
+
+  try {
+    // 1. Get case details
+    const caseData = await db.query.clientCases.findFirst({
+      where: eq(clientCases.id, caseId)
+    });
+
+    if (!caseData) throw new Error(`Case ${caseId} not found`);
+
+    // 2. Get historical similar cases
+    const historicalCases = await this.getHistoricalSimilarCases(caseData);
+
+    // 3. Generate AI prediction
+    const prompt = `
+      Analyze this benefits case and predict the outcome:
+      
+      Case Details:
+      - Program: ${caseData.benefitProgramId}
+      - Household Size: ${caseData.householdSize}
+      - Income: $${caseData.estimatedIncome / 100}
+      - Status: ${caseData.status}
+      - Days Since Application: ${this.daysSince(caseData.createdAt)}
+      
+      Historical Similar Cases:
+      - Total Cases: ${historicalCases.length}
+      - Approval Rate: ${this.calculateApprovalRate(historicalCases)}%
+      - Average Processing Time: ${this.calculateAvgProcessingTime(historicalCases)} days
+      
+      Predict:
+      1. Most likely outcome (approved/denied/pending_review)
+      2. Confidence level (0-1)
+      3. Estimated processing days
+      4. Key risk factors
+      5. Recommendations to improve outcome
+      
+      Format as JSON:
+      {
+        "outcome": "approved",
+        "confidence": 0.85,
+        "estimatedProcessingDays": 21,
+        "riskFactors": ["Missing documentation", "Income verification needed"],
+        "recommendations": ["Submit pay stubs", "Complete interview"]
+      }
+    `;
+
+    const aiResponse = await generateTextWithGemini(prompt);
+    const prediction = JSON.parse(aiResponse);
+
+    const result: CaseOutcomePrediction = {
+      caseId,
+      outcome: prediction.outcome,
+      confidence: prediction.confidence,
+      estimatedProcessingDays: prediction.estimatedProcessingDays,
+      riskFactors: prediction.riskFactors,
+      recommendations: prediction.recommendations
+    };
+
+    // 4. Store prediction in database
+    await this.storePrediction('case_outcome', caseId, result);
+
+    // 5. Cache for 1 hour
+    await cacheService.set(cacheKey, result, 3600);
+
+    return result;
+  } catch (error) {
+    logger.error("Error predicting case outcome", { caseId, error });
+    throw error;
+  }
+}
+```
+
+**Prediction Logic:**
+```
+1. Fetch case details (program, income, household size, age)
+   ↓
+2. Query historical similar cases (same program, approved status)
+   ↓
+3. Calculate baseline metrics:
+   - Approval rate (%)
+   - Average processing time (days)
+   ↓
+4. Feed to Gemini AI with structured prompt
+   ↓
+5. Parse JSON response
+   ↓
+6. Store prediction + cache 1 hour
+```
+
+**Example Output:**
+```json
+{
+  "caseId": "case_xyz123",
+  "outcome": "approved",
+  "confidence": 0.85,
+  "estimatedProcessingDays": 21,
+  "riskFactors": [
+    "Missing pay stubs",
+    "Income verification pending"
+  ],
+  "recommendations": [
+    "Submit last 2 pay stubs",
+    "Schedule verification interview",
+    "Provide proof of residency"
+  ]
+}
+```
+
+---
+
+### 6.23.3 Processing Time Estimation (lines 174-222)
+
+#### estimateProcessingTime() - Complexity-Based Time Prediction (lines 174-222)
+
+**Purpose:** Estimate processing time based on case complexity and historical data
+
+```typescript
+async estimateProcessingTime(programId: string, caseAttributes: any): Promise<ProcessingTimePrediction> {
+  // 1. Assess case complexity (low/medium/high/very_high)
+  const complexity = await this.assessCaseComplexity(caseAttributes);
+  
+  // 2. Get historical processing times for this complexity
+  const historicalTimes = await this.getHistoricalProcessingTimes(programId, complexity);
+  
+  // 3. Generate AI prediction
+  const prompt = `
+    Estimate processing time for a ${complexity} complexity case:
+    
+    Program: ${programId}
+    Case Attributes: ${JSON.stringify(caseAttributes)}
+    Historical Data:
+    - Average: ${historicalTimes.avg} days
+    - Median: ${historicalTimes.median} days
+    - 90th Percentile: ${historicalTimes.p90} days
+    
+    Consider:
+    1. Current backlog and seasonality
+    2. Documentation requirements
+    3. Verification processes
+    4. Common bottlenecks
+    
+    Provide:
+    1. Point estimate in days
+    2. Confidence interval (lower and upper bounds)
+    3. Main bottlenecks
+    
+    Format as JSON:
+    {
+      "estimatedDays": 25,
+      "confidenceInterval": {"lower": 20, "upper": 35},
+      "bottlenecks": ["Income verification", "Medical review"]
+    }
+  `;
+
+  const aiResponse = await generateTextWithGemini(prompt);
+  const prediction = JSON.parse(aiResponse);
+
+  const result: ProcessingTimePrediction = {
+    programId,
+    complexity,
+    estimatedDays: prediction.estimatedDays,
+    confidenceInterval: prediction.confidenceInterval,
+    bottlenecks: prediction.bottlenecks
+  };
+
+  await this.storePrediction('processing_time', programId, result);
+  return result;
+}
+```
+
+**Complexity Assessment** (lines 555-569)
+```typescript
+private async assessCaseComplexity(attributes: any): Promise<'low' | 'medium' | 'high' | 'very_high'> {
+  const factors = {
+    householdSize: attributes.householdSize > 5 ? 2 : 1,
+    multiplePrograms: attributes.programs?.length > 2 ? 2 : 1,
+    documentation: attributes.missingDocs > 0 ? 3 : 1,
+    specialCircumstances: attributes.hasDisability || attributes.isHomeless ? 3 : 1
+  };
+
+  const score = Object.values(factors).reduce((a, b) => a + b, 0);
+  
+  if (score <= 4) return 'low';       // 4-6 points
+  if (score <= 6) return 'medium';    // 7-9 points
+  if (score <= 9) return 'high';      // 10-12 points
+  return 'very_high';                 // 13+ points
+}
+```
+
+**Historical Processing Times** (lines 571-581)
+```typescript
+private async getHistoricalProcessingTimes(programId: string, complexity: string): Promise<any> {
+  const times = {
+    low: { avg: 15, median: 12, p90: 20 },
+    medium: { avg: 25, median: 22, p90: 35 },
+    high: { avg: 40, median: 38, p90: 55 },
+    very_high: { avg: 60, median: 55, p90: 80 }
+  };
+  
+  return times[complexity] || times.medium;
+}
+```
+
+**Example Output:**
+```json
+{
+  "programId": "SNAP",
+  "complexity": "medium",
+  "estimatedDays": 25,
+  "confidenceInterval": {
+    "lower": 20,
+    "upper": 35
+  },
+  "bottlenecks": [
+    "Income verification (average 7 days)",
+    "Third-party verification (average 5 days)",
+    "Document review queue (average 3 days)"
+  ]
+}
+```
+
+---
+
+
+### 6.23.4 Renewal & Churn Prediction (lines 227-287)
+
+#### predictRenewalLikelihood() - Churn Risk Analysis (lines 227-287)
+
+**Purpose:** Predict household renewal likelihood and identify churn risk for proactive intervention
+
+```typescript
+async predictRenewalLikelihood(householdId: string): Promise<RenewalPrediction> {
+  const household = await db.query.householdProfiles.findFirst({
+    where: eq(householdProfiles.id, householdId),
+    with: { programEnrollments: true }
+  });
+
+  if (!household) throw new Error(`Household ${householdId} not found`);
+
+  // 1. Analyze engagement patterns
+  const engagementScore = await this.calculateEngagementScore(householdId); // 0-100
+  const benefitUtilization = await this.calculateBenefitUtilization(householdId); // 0-100%
+
+  // 2. Generate AI prediction
+  const prompt = `
+    Predict renewal likelihood for household:
+    
+    Household Profile:
+    - Size: ${household.householdSize}
+    - Enrolled Programs: ${household.programEnrollments?.length || 0}
+    - Account Age: ${this.daysSince(household.createdAt)} days
+    - Engagement Score: ${engagementScore}/100
+    - Benefit Utilization: ${benefitUtilization}%
+    
+    Analyze:
+    1. Renewal likelihood (0-1)
+    2. Churn risk (0-1)
+    3. Risk factors for non-renewal
+    4. Recommended interventions
+    5. Optimal renewal date
+    
+    Format as JSON:
+    {
+      "renewalLikelihood": 0.75,
+      "churnRisk": 0.25,
+      "riskFactors": ["Low engagement", "Recent income change"],
+      "interventions": ["Send reminder", "Offer assistance"],
+      "nextRenewalDate": "2025-03-15"
+    }
+  `;
+
+  const aiResponse = await generateTextWithGemini(prompt);
+  const prediction = JSON.parse(aiResponse);
+
+  const result: RenewalPrediction = {
+    householdId,
+    renewalLikelihood: prediction.renewalLikelihood,
+    churnRisk: prediction.churnRisk,
+    riskFactors: prediction.riskFactors,
+    interventions: prediction.interventions,
+    nextRenewalDate: new Date(prediction.nextRenewalDate)
+  };
+
+  // 3. Alert if high churn risk (>70%)
+  if (result.churnRisk > 0.7) {
+    await this.alertHighChurnRisk(householdId, result);
+  }
+
+  await this.storePrediction('renewal_likelihood', householdId, result);
+  return result;
+}
+```
+
+**Engagement Score Factors:**
+```
+1. Portal logins (frequency, recency)
+2. Message responses (response rate)
+3. Document submissions (timeliness)
+4. Appointment attendance (show rate)
+5. Proactive communication (initiation)
+
+Score: Weighted average (60-100 range)
+```
+
+**High Churn Risk Alert** (lines 655-665)
+```typescript
+private async alertHighChurnRisk(householdId: string, prediction: RenewalPrediction): Promise<void> {
+  await notificationService.create({
+    userId: 'system',
+    type: 'churn_risk_alert',
+    title: 'High Churn Risk Detected',
+    message: `Household ${householdId} has ${Math.round(prediction.churnRisk * 100)}% churn risk. Interventions recommended.`,
+    priority: 'high',
+    relatedEntityType: 'household_profile',
+    relatedEntityId: householdId
+  });
+}
+```
+
+**Example Output:**
+```json
+{
+  "householdId": "hh_abc456",
+  "renewalLikelihood": 0.45,
+  "churnRisk": 0.55,
+  "riskFactors": [
+    "Low engagement (no portal login in 60 days)",
+    "Missed last appointment",
+    "Recent income increase (potential ineligibility)"
+  ],
+  "interventions": [
+    "Send renewal reminder SMS (30 days before expiration)",
+    "Offer navigator assistance for recertification",
+    "Schedule proactive check-in call",
+    "Simplify renewal process (pre-fill forms)"
+  ],
+  "nextRenewalDate": "2025-06-15T00:00:00.000Z"
+}
+```
+
+---
+
+### 6.23.5 Benefit Amount Forecasting (lines 292-342)
+
+#### forecastBenefitAmount() - 6-Month Benefit Prediction (lines 292-342)
+
+**Purpose:** Forecast future benefit amounts based on historical trends and economic indicators
+
+```typescript
+async forecastBenefitAmount(
+  householdId: string, 
+  programId: string, 
+  months: number = 6
+): Promise<BenefitAmountForecast> {
+  // 1. Get historical benefit amounts
+  const historicalAmounts = await this.getHistoricalBenefitAmounts(householdId, programId);
+  
+  // 2. Get economic indicators (inflation, COLA)
+  const economicIndicators = await this.getEconomicIndicators();
+
+  // 3. Generate AI forecast
+  const prompt = `
+    Forecast benefit amount for the next ${months} months:
+    
+    Current Amount: $${historicalAmounts.current}
+    Historical Trend: ${historicalAmounts.trend}
+    Program: ${programId}
+    
+    Economic Factors:
+    - Inflation Rate: ${economicIndicators.inflation}%
+    - COLA Adjustment: ${economicIndicators.cola}%
+    - Policy Changes: ${economicIndicators.policyChanges}
+    
+    Predict:
+    1. Forecasted amount
+    2. Percent change
+    3. Contributing factors
+    4. Confidence level (0-1)
+    
+    Format as JSON:
+    {
+      "forecastedAmount": 285,
+      "changePercent": 2.5,
+      "factors": ["COLA increase", "Inflation adjustment"],
+      "confidenceLevel": 0.82
+    }
+  `;
+
+  const aiResponse = await generateTextWithGemini(prompt);
+  const prediction = JSON.parse(aiResponse);
+
+  const result: BenefitAmountForecast = {
+    householdId,
+    programId,
+    currentAmount: historicalAmounts.current,
+    forecastedAmount: prediction.forecastedAmount,
+    changePercent: prediction.changePercent,
+    factors: prediction.factors,
+    confidenceLevel: prediction.confidenceLevel
+  };
+
+  await this.storePrediction('benefit_amount', householdId, result);
+  return result;
+}
+```
+
+**Economic Indicators** (lines 602-608)
+```typescript
+private async getEconomicIndicators(): Promise<any> {
+  return {
+    inflation: 2.3,        // Current CPI
+    cola: 2.5,             // Cost of Living Adjustment
+    policyChanges: 'Minor adjustments expected'
+  };
+}
+```
+
+**Example Output:**
+```json
+{
+  "householdId": "hh_xyz789",
+  "programId": "SNAP",
+  "currentAmount": 278,
+  "forecastedAmount": 285,
+  "changePercent": 2.5,
+  "factors": [
+    "COLA increase (2.5%)",
+    "Inflation adjustment (2.3%)",
+    "No policy changes expected"
+  ],
+  "confidenceLevel": 0.82
+}
+```
+
+**Use Cases:**
+- Household budgeting assistance
+- Benefits cliff analysis (forecasted benefits at higher income)
+- Policy impact modeling
+
+---
+
+### 6.23.6 Resource Allocation Prediction (lines 347-399)
+
+#### predictResourceAllocation() - Staffing Optimization (lines 347-399)
+
+**Purpose:** Predict caseload and staffing needs for office resource planning
+
+```typescript
+async predictResourceAllocation(
+  office: string, 
+  targetDate: Date
+): Promise<ResourceAllocationPrediction> {
+  // 1. Get historical caseload data
+  const historicalCaseload = await this.getHistoricalCaseload(office);
+  
+  // 2. Get seasonal factors
+  const seasonalFactors = await this.getSeasonalFactors(targetDate);
+
+  const prompt = `
+    Predict resource allocation for office:
+    
+    Office: ${office}
+    Target Date: ${targetDate.toISOString().split('T')[0]}
+    
+    Historical Data:
+    - Average Daily Cases: ${historicalCaseload.avgDaily}
+    - Peak Cases: ${historicalCaseload.peak}
+    - Current Staff: ${historicalCaseload.currentStaff}
+    
+    Seasonal Factors:
+    - Season: ${seasonalFactors.season}
+    - Holiday Impact: ${seasonalFactors.holidayImpact}
+    - Historical Multiplier: ${seasonalFactors.multiplier}
+    
+    Predict:
+    1. Expected caseload
+    2. Required staff count
+    3. Utilization rate (0-1)
+    4. Staffing recommendations
+    
+    Format as JSON:
+    {
+      "predictedCaseload": 125,
+      "requiredStaff": 8,
+      "utilizationRate": 0.85,
+      "recommendations": ["Add 2 temporary staff", "Extend hours"]
+    }
+  `;
+
+  const aiResponse = await generateTextWithGemini(prompt);
+  const prediction = JSON.parse(aiResponse);
+
+  const result: ResourceAllocationPrediction = {
+    office,
+    date: targetDate,
+    predictedCaseload: prediction.predictedCaseload,
+    requiredStaff: prediction.requiredStaff,
+    utilizationRate: prediction.utilizationRate,
+    recommendations: prediction.recommendations
+  };
+
+  await this.storePrediction('resource_allocation', office, result);
+  return result;
+}
+```
+
+**Seasonal Factors** (lines 618-627)
+```typescript
+private async getSeasonalFactors(date: Date): Promise<any> {
+  const month = date.getMonth();
+  const season = month < 3 ? 'winter' : month < 6 ? 'spring' : month < 9 ? 'summer' : 'fall';
+  
+  return {
+    season,
+    holidayImpact: month === 11 || month === 0 ? 'high' : 'low', // Dec/Jan
+    multiplier: month === 0 ? 1.3 : month === 11 ? 1.2 : 1.0 // January +30%, December +20%
+  };
+}
+```
+
+**Example Output:**
+```json
+{
+  "office": "Baltimore City LDSS",
+  "date": "2025-01-15T00:00:00.000Z",
+  "predictedCaseload": 125,
+  "requiredStaff": 8,
+  "utilizationRate": 0.85,
+  "recommendations": [
+    "Add 2 temporary staff for January surge",
+    "Extend hours on Tuesdays/Thursdays",
+    "Enable virtual appointments to reduce wait times"
+  ]
+}
+```
+
+**Seasonal Patterns:**
+| Month | Multiplier | Reason |
+|-------|-----------|--------|
+| January | 1.3x | Post-holiday applications, tax season prep |
+| February-October | 1.0x | Normal baseline |
+| November | 1.0x | Pre-holiday slowdown |
+| December | 1.2x | Holiday assistance applications |
+
+---
+
+### 6.23.7 Anomaly Detection (lines 404-456)
+
+#### detectAnomalies() - Real-Time Pattern Analysis (lines 404-456)
+
+**Purpose:** Detect unusual patterns in case data, application volumes, processing times
+
+```typescript
+async detectAnomalies(entityType: string, timeWindow: number = 24): Promise<AnomalyDetection[]> {
+  // 1. Get recent data (last 24 hours by default)
+  const recentData = await this.getRecentData(entityType, timeWindow);
+  
+  // 2. Get baseline metrics (historical normal)
+  const baseline = await this.getBaselineMetrics(entityType);
+
+  const prompt = `
+    Detect anomalies in ${entityType} data:
+    
+    Time Window: Last ${timeWindow} hours
+    Data Points: ${recentData.length}
+    
+    Baseline Metrics:
+    ${JSON.stringify(baseline, null, 2)}
+    
+    Recent Patterns:
+    ${JSON.stringify(recentData.slice(0, 5), null, 2)}
+    
+    Identify:
+    1. Anomaly type and severity
+    2. Affected entities
+    3. Description of unusual pattern
+    4. Suggested actions
+    
+    Return array of anomalies as JSON:
+    [{
+      "entityId": "123",
+      "anomalyType": "sudden_spike",
+      "severity": "high",
+      "description": "300% increase in applications",
+      "suggestedAction": "Investigate data quality"
+    }]
+  `;
+
+  const aiResponse = await generateTextWithGemini(prompt);
+  const anomalies = JSON.parse(aiResponse);
+
+  const results: AnomalyDetection[] = anomalies.map((a: any) => ({
+    entityType,
+    entityId: a.entityId,
+    anomalyType: a.anomalyType,
+    severity: a.severity,
+    description: a.description,
+    detectedAt: new Date(),
+    suggestedAction: a.suggestedAction
+  }));
+
+  // 3. Alert on critical anomalies
+  const critical = results.filter(a => a.severity === 'critical');
+  if (critical.length > 0) {
+    await this.alertCriticalAnomalies(critical);
+  }
+
+  return results;
+}
+```
+
+**Anomaly Types:**
+- **sudden_spike:** 300%+ increase in volume
+- **sudden_drop:** 70%+ decrease in volume
+- **unusual_pattern:** Atypical time-of-day distribution
+- **data_quality_issue:** Missing fields, invalid values
+- **processing_delay:** Significantly longer processing times
+
+**Critical Anomaly Alert** (lines 667-679)
+```typescript
+private async alertCriticalAnomalies(anomalies: AnomalyDetection[]): Promise<void> {
+  for (const anomaly of anomalies) {
+    await notificationService.create({
+      userId: 'system',
+      type: 'anomaly_alert',
+      title: `Critical Anomaly: ${anomaly.anomalyType}`,
+      message: anomaly.description,
+      priority: 'urgent',
+      relatedEntityType: anomaly.entityType,
+      relatedEntityId: anomaly.entityId
+    });
+  }
+}
+```
+
+**Example Output:**
+```json
+[
+  {
+    "entityType": "client_case",
+    "entityId": "office_baltimore",
+    "anomalyType": "sudden_spike",
+    "severity": "high",
+    "description": "300% increase in SNAP applications (15 → 45 cases/hour) in last 6 hours",
+    "detectedAt": "2025-01-28T14:30:00.000Z",
+    "suggestedAction": "Investigate: (1) Data quality issue, (2) System outage recovery, (3) Policy announcement impact"
+  },
+  {
+    "entityType": "processing_time",
+    "entityId": "program_medicaid",
+    "anomalyType": "processing_delay",
+    "severity": "critical",
+    "description": "Average processing time increased from 25 to 65 days (160% increase)",
+    "detectedAt": "2025-01-28T14:30:00.000Z",
+    "suggestedAction": "URGENT: Check verification queue backlog, staff availability, system issues"
+  }
+]
+```
+
+---
+
+
+### 6.23.8 Seasonal Trend Analysis (lines 461-502)
+
+#### analyzeSeasonalTrends() - Time Series Forecasting (lines 461-502)
+
+**Purpose:** Analyze seasonal patterns and forecast future values for capacity planning
+
+```typescript
+async analyzeSeasonalTrends(metric: string, period: string = 'monthly'): Promise<SeasonalTrend> {
+  // 1. Get historical metric data (last 24 periods)
+  const historicalData = await this.getHistoricalMetricData(metric, period);
+
+  const prompt = `
+    Analyze seasonal trends for ${metric}:
+    
+    Period: ${period}
+    Historical Data Points: ${historicalData.length}
+    
+    Data:
+    ${JSON.stringify(historicalData.slice(-12), null, 2)}
+    
+    Analyze:
+    1. Trend direction (increasing/decreasing/stable)
+    2. Seasonal index (multiplier)
+    3. Next 3 period forecast
+    4. Confidence level
+    
+    Format as JSON:
+    {
+      "trendDirection": "increasing",
+      "seasonalIndex": 1.15,
+      "forecast": [125, 130, 128],
+      "confidence": 0.78
+    }
+  `;
+
+  const aiResponse = await generateTextWithGemini(prompt);
+  const analysis = JSON.parse(aiResponse);
+
+  const result: SeasonalTrend = {
+    metric,
+    period,
+    trendDirection: analysis.trendDirection,
+    seasonalIndex: analysis.seasonalIndex,
+    forecast: analysis.forecast,
+    confidence: analysis.confidence
+  };
+
+  await this.storeAggregation(metric, period, result);
+  return result;
+}
+```
+
+**Example Metrics:**
+- `application_volume` - Daily/weekly/monthly applications
+- `approval_rate` - Percentage of approved cases
+- `processing_time` - Average days to process
+- `caseload` - Active cases per office
+- `staff_utilization` - Staff capacity utilization
+
+**Example Output:**
+```json
+{
+  "metric": "application_volume",
+  "period": "monthly",
+  "trendDirection": "increasing",
+  "seasonalIndex": 1.15,
+  "forecast": [125, 130, 128],
+  "confidence": 0.78
+}
+```
+
+**Interpretation:**
+- **Seasonal Index 1.15:** Current period is 15% above baseline
+- **Forecast [125, 130, 128]:** Next 3 months predicted at 125, 130, 128 applications
+- **Confidence 0.78:** 78% confidence in prediction
+- **Trend "increasing":** Overall upward trend over time
+
+---
+
+### 6.23.9 Model Training & Prediction Storage (lines 507-748)
+
+#### trainModels() - ML Model Training (lines 507-518)
+
+**Purpose:** Train ML models for production use (placeholder for future implementation)
+
+```typescript
+async trainModels(): Promise<void> {
+  const models = [
+    { name: 'case_outcome_classifier', type: 'classification', target: 'case_outcome' },
+    { name: 'processing_time_regressor', type: 'regression', target: 'processing_days' },
+    { name: 'churn_predictor', type: 'classification', target: 'churn_risk' },
+    { name: 'benefit_forecaster', type: 'regression', target: 'benefit_amount' }
+  ];
+
+  for (const model of models) {
+    await this.trainModel(model);
+  }
+}
+```
+
+**Future Model Types:**
+1. **case_outcome_classifier:** Binary classification (approved/denied)
+2. **processing_time_regressor:** Regression (days to completion)
+3. **churn_predictor:** Binary classification (will renew / won't renew)
+4. **benefit_forecaster:** Regression (benefit amount in cents)
+
+#### storePrediction() - Prediction History (lines 681-695)
+
+**Purpose:** Store all predictions in database for audit trail and model evaluation
+
+```typescript
+private async storePrediction(type: string, entityId: string, prediction: any): Promise<void> {
+  const record: InsertPredictionHistory = {
+    predictionType: type, // "case_outcome", "processing_time", etc.
+    entityType: this.getEntityType(type),
+    entityId,
+    prediction, // Full prediction object (JSON)
+    confidence: prediction.confidence || prediction.confidenceLevel || 0.5,
+    features: {}, // Feature vector (for ML model training)
+    modelName: `${type}_model`,
+    modelVersion: this.MODEL_VERSION, // "v1.0.0"
+    metadata: { timestamp: new Date().toISOString() }
+  };
+
+  await db.insert(predictionHistory).values(record);
+}
+```
+
+**Database Schema:**
+```sql
+CREATE TABLE prediction_history (
+  id VARCHAR PRIMARY KEY,
+  prediction_type VARCHAR NOT NULL, -- "case_outcome", "renewal_likelihood"
+  entity_type VARCHAR NOT NULL, -- "client_case", "household_profile"
+  entity_id VARCHAR NOT NULL,
+  prediction JSONB NOT NULL, -- Full prediction object
+  confidence DECIMAL,
+  features JSONB, -- Feature vector
+  model_name VARCHAR,
+  model_version VARCHAR,
+  metadata JSONB,
+  created_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE INDEX idx_prediction_history_type ON prediction_history(prediction_type);
+CREATE INDEX idx_prediction_history_entity ON prediction_history(entity_type, entity_id);
+```
+
+**Entity Type Mapping** (lines 697-706)
+```typescript
+private getEntityType(predictionType: string): string {
+  const mapping = {
+    case_outcome: 'client_case',
+    processing_time: 'benefit_program',
+    renewal_likelihood: 'household_profile',
+    benefit_amount: 'household_profile',
+    resource_allocation: 'office'
+  };
+  return mapping[predictionType] || 'unknown';
+}
+```
+
+---
+
+### 6.23 Summary - Predictive Analytics Service
+
+**Purpose:** ML-powered predictive analytics for proactive case management and operational optimization using Google Gemini AI
+
+**Critical Design:** Historical pattern analysis + AI-generated predictions stored in database for audit trail
+
+**7 Prediction Types:**
+1. **Case Outcome** - Predict approved/denied/pending_review
+2. **Processing Time** - Estimate days to completion with confidence intervals
+3. **Renewal Likelihood** - Churn risk analysis with intervention recommendations
+4. **Benefit Amount** - 6-month forecast based on COLA, inflation, policy changes
+5. **Resource Allocation** - Staffing needs based on predicted caseload
+6. **Anomaly Detection** - Real-time pattern analysis for data quality, spikes, delays
+7. **Seasonal Trends** - Time series forecasting for capacity planning
+
+**Production Features:**
+- ✅ Gemini AI integration for all predictions
+- ✅ Historical pattern analysis (100 similar cases)
+- ✅ Confidence scoring (0-1)
+- ✅ Distributed caching (1-hour TTL)
+- ✅ Database persistence (prediction_history table)
+- ✅ Automated alerts (high churn risk, critical anomalies)
+- ✅ Complexity assessment (low/medium/high/very_high)
+- ✅ Seasonal adjustment (January +30%, December +20%)
+
+**AI Prompt Engineering:**
+All prompts use structured format:
+```
+Context: [entity data, historical patterns]
+Analysis Requirements: [specific questions to answer]
+Output Format: JSON with specific fields
+```
+
+**Key Metrics & Thresholds:**
+| Metric | Threshold | Action |
+|--------|-----------|--------|
+| Churn Risk | >70% | Send alert to navigator |
+| Anomaly Severity | Critical | Urgent notification |
+| Confidence | <50% | Flag for manual review |
+| Processing Time | >60 days | Escalate to supervisor |
+
+**Complexity Assessment:**
+```
+Factors (1-3 points each):
+- Household size >5: +2
+- Multiple programs (>2): +2
+- Missing documentation: +3
+- Special circumstances: +3
+
+Score Ranges:
+  0-4: Low complexity (15 days avg)
+  5-6: Medium complexity (25 days avg)
+  7-9: High complexity (40 days avg)
+  10+: Very high complexity (60 days avg)
+```
+
+**Seasonal Multipliers:**
+- **January:** 1.3x (post-holiday surge, tax season)
+- **December:** 1.2x (holiday assistance)
+- **February-November:** 1.0x (baseline)
+
+**Cache Strategy:**
+- **Case Outcome:** 1 hour (case data changes frequently)
+- **Processing Time:** No cache (real-time estimates)
+- **Renewal Prediction:** No cache (user-triggered)
+- **Benefit Forecast:** No cache (economic indicators change)
+
+**Database Integration:**
+- **predictionHistory:** Audit trail of all predictions
+- **mlModels:** Model metadata, version tracking
+- **analyticsAggregations:** Seasonal trends, aggregated metrics
+- **clientCases, householdProfiles:** Source data
+
+**Integration Points:**
+- **gemini.service:** AI prediction generation
+- **cacheService:** Distributed caching (Redis/Upstash)
+- **notificationService:** High churn risk, critical anomaly alerts
+- **logger.service:** Structured error logging
+
+**Use Cases:**
+1. **Navigator Dashboard:** Show case outcome predictions to prioritize interventions
+2. **Capacity Planning:** Predict caseload and staffing needs
+3. **Proactive Outreach:** Identify high churn risk households for early intervention
+4. **Performance Monitoring:** Detect processing delays and anomalies
+5. **Budget Forecasting:** Predict benefit amounts for fiscal planning
+6. **Policy Impact Analysis:** Forecast effects of policy changes on benefit amounts
+
+**Compliance:**
+- ✅ Audit trail (prediction_history table)
+- ✅ Model versioning (v1.0.0)
+- ✅ Confidence scoring (0-1)
+- ✅ Explainable AI (risk factors, recommendations)
+
+**Cost Optimization:**
+- Distributed caching reduces Gemini API calls
+- Structured prompts minimize token usage
+- Batch predictions for similar entities
+- Historical data caching (complex queries)
+
+---
+
