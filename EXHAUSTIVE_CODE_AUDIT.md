@@ -21538,3 +21538,912 @@ Discovery → Report to supervisory authority within 72 hours
 
 ---
 
+
+---
+
+## 6.7 Benefits Access Review Service (server/services/benefitsAccessReview.service.ts - 878 lines)
+
+**Purpose:** Autonomous quality monitoring system for benefit case management (BAR - Benefits Access Review)
+
+**Background:**
+- Federal requirement: Quality Control (QC) reviews for SNAP (7 CFR 275)
+- Maryland requirement: SNAP Error Rate monitoring
+- Federal fiscal sanction if error rate exceeds 6% (SNAP QC requirements)
+- Stratified random sampling to ensure representative quality assessment
+
+**Key Features:**
+1. **Blind Review** - SHA-256 anonymization prevents bias
+2. **Stratified Sampling** - Weighted random sampling for program/county/worker diversity
+3. **Lifecycle Checkpoints** - 5 standard checkpoints per case
+4. **AI Assessment** - Gemini-powered quality scoring
+5. **Weekly Automation** - Autonomous case selection every Monday
+
+---
+
+### 6.7.1 Anonymization Service - Blind Review (lines 108-159)
+
+**Purpose:** Enable unbiased quality reviews by hiding caseworker/case identities
+
+**Design Choice:** SHA-256 hashing with stable salt
+- **Consistent anonymization** - Same ID always produces same anonymized ID
+- **One-way transformation** - Cannot reverse without brute-force
+- **Reveal capability** - Super-admin can reveal identities if needed
+
+#### Anonymization Implementation (lines 129-136)
+
+```typescript
+anonymize(identifier: string, type: "case" | "worker"): string {
+  const hash = createHash("sha256")
+    .update(`${type}:${identifier}:${this.salt}`)  // Include type prefix
+    .digest("hex");
+  
+  // Return first 16 chars for readability
+  return `${type === "case" ? "C" : "W"}_${hash.substring(0, 12)}`;
+}
+```
+
+**Examples:**
+- Case ID `case_abc123` → `C_a1b2c3d4e5f6`
+- Worker ID `user_xyz789` → `W_x9y8z7w6v5u4`
+
+**Salt Management:**
+```typescript
+constructor() {
+  this.salt = process.env.ANONYMIZATION_SALT || 
+              process.env.DATABASE_URL?.substring(0, 32) || 
+              "REPLACE_ME_IN_PRODUCTION_WITH_STABLE_SALT";
+  
+  if (this.salt === "REPLACE_ME_IN_PRODUCTION_WITH_STABLE_SALT") {
+    logger.warn("Using default anonymization salt", {
+      message: 'Set ANONYMIZATION_SALT env variable for production'
+    });
+  }
+}
+```
+
+**Critical:** Salt must be stable across restarts to maintain consistent anonymization
+
+---
+
+#### reveal() - Identity Revelation (lines 142-149)
+
+**Purpose:** Allow super-admin to reveal anonymized identities for appeals/audits
+
+```typescript
+reveal(anonymizedId: string, possibleIds: string[], type: "case" | "worker"): string | null {
+  for (const id of possibleIds) {
+    if (this.anonymize(id, type) === anonymizedId) {
+      return id;  // Found matching ID
+    }
+  }
+  return null;  // No match found
+}
+```
+
+**Brute-Force Approach:**
+- Tries all possible IDs
+- Returns first match
+- Production optimization: Use mapping table
+
+**Permission Check:**
+```typescript
+canReveal(userRole: string): boolean {
+  return userRole === "super_admin" || userRole === "admin";
+}
+```
+
+**Use Case:**
+```
+Quality reviewer flags C_a1b2c3d4e5f6 for severe error
+→ Super-admin reveals identity
+→ Returns "case_abc123"
+→ Corrective action taken with caseworker
+```
+
+---
+
+### 6.7.2 Stratified Sampling Service (lines 165-414)
+
+**Purpose:** Select representative case sample using stratified random sampling
+
+**Sampling Goals:**
+1. **Diversity** - Multiple programs, counties, workers
+2. **Representativeness** - Sample mirrors population distribution
+3. **Randomness** - Weighted random selection (not deterministic)
+4. **Fairness** - All workers reviewed proportionally
+
+#### selectWeeklyCases() - Weekly Case Selection (lines 171-257)
+
+**Target:** 2 cases per worker
+
+**Eligibility Window:** 30-60 days old cases
+```typescript
+const thirtyDaysAgo = new Date();
+thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+const sixtyDaysAgo = new Date();
+sixtyDaysAgo.setDate(sixtyDaysAgo.getDate() - 60);
+
+const eligibleCases = await db
+  .select()
+  .from(clientCases)
+  .where(
+    and(
+      gte(clientCases.createdAt, sixtyDaysAgo),
+      lte(clientCases.createdAt, thirtyDaysAgo)
+    )
+  );
+```
+
+**Rationale:** Cases 30-60 days old have completed most checkpoints but aren't too old for review
+
+**Stratification Algorithm:**
+```typescript
+// Group by worker
+const casesByWorker = eligibleCases.reduce((acc, case_) => {
+  const workerId = case_.assignedNavigator || "unassigned";
+  if (!acc[workerId]) acc[workerId] = [];
+  acc[workerId].push(case_);
+  return acc;
+}, {} as Record<string, typeof eligibleCases>);
+
+// For each worker, select up to 2 cases
+for (const [workerId, cases] of Object.entries(casesByWorker)) {
+  const sampleSize = Math.min(cases.length, targetCasesPerWorker);  // Max 2
+  
+  // Calculate diversity weights
+  const weightedCases = cases.map(case_ => ({
+    ...case_,
+    weight: this.calculateSelectionWeight(case_, cases)
+  }));
+  
+  // Weighted random sampling
+  const selected = this.weightedRandomSample(weightedCases, sampleSize);
+  
+  selectedCases.push(...selected);
+}
+```
+
+---
+
+#### calculateSelectionWeight() - Diversity Weighting (lines 301-328)
+
+**Purpose:** Boost underrepresented programs/counties
+
+**Weight Formula:**
+```typescript
+private calculateSelectionWeight(case_: any, allWorkerCases: any[]): number {
+  const MIN_WEIGHT = 0.1;  // Ensures randomness
+  let weight = 1.0;
+
+  // Program diversity boost
+  const programCounts = /* count programs */;
+  const programFreq = programCounts[case_.benefitProgramId] / allWorkerCases.length;
+  weight *= (1 - programFreq);  // Lower frequency = higher weight
+
+  // County diversity boost
+  const countyCounts = /* count counties */;
+  const countyFreq = countyCounts[case_.countyCode] / allWorkerCases.length;
+  weight *= (1 - countyFreq);
+
+  // Ensure minimum weight (prevents zero weight)
+  return Math.max(weight, MIN_WEIGHT);
+}
+```
+
+**Example:**
+```
+Worker has 10 SNAP cases, 2 Medicaid cases
+→ SNAP frequency: 10/12 = 0.83
+→ SNAP weight: 1 - 0.83 = 0.17
+→ Medicaid frequency: 2/12 = 0.17
+→ Medicaid weight: 1 - 0.17 = 0.83
+→ Medicaid 5x more likely to be selected (for diversity)
+```
+
+**MIN_WEIGHT Rationale:**
+- Prevents zero weight for uniform cohorts
+- Maintains randomness even if worker only handles one program
+- Ensures all cases have chance of selection
+
+---
+
+#### weightedRandomSample() - Roulette Wheel Selection (lines 263-295)
+
+**Purpose:** Select cases using weighted random sampling
+
+**Algorithm:** Roulette wheel selection (proportional to weight)
+
+```typescript
+private weightedRandomSample<T extends { weight: number }>(
+  items: T[],
+  sampleSize: number
+): T[] {
+  const selected: T[] = [];
+  const remaining = [...items];
+
+  for (let i = 0; i < sampleSize && remaining.length > 0; i++) {
+    // Total weight of remaining items
+    const totalWeight = remaining.reduce((sum, item) => sum + item.weight, 0);
+    
+    // Random value [0, totalWeight]
+    let random = Math.random() * totalWeight;
+    
+    // Roulette wheel: select item where random "lands"
+    let selectedIndex = 0;
+    for (let j = 0; j < remaining.length; j++) {
+      random -= remaining[j].weight;
+      if (random <= 0) {
+        selectedIndex = j;
+        break;
+      }
+    }
+
+    // Add selected item, remove from pool
+    selected.push(remaining[selectedIndex]);
+    remaining.splice(selectedIndex, 1);
+  }
+
+  return selected;
+}
+```
+
+**Visualization:**
+```
+Items: [A (weight=0.1), B (weight=0.3), C (weight=0.6)]
+Roulette wheel:
+|--A--|--------B--------|------------------C------------------|
+0    0.1              0.4                                    1.0
+
+Random = 0.7 → Lands in C → Select C
+```
+
+---
+
+#### calculateRepresentativenessScore() - Jensen-Shannon Divergence (lines 349-411)
+
+**Purpose:** Measure how well sample represents population
+
+**Method:** Jensen-Shannon divergence (symmetric KL divergence)
+
+**Formula:**
+```
+JS(P || Q) = 1/2 * KL(P || M) + 1/2 * KL(Q || M)
+where M = (P + Q) / 2
+
+KL(P || M) = Σ P(x) * log(P(x) / M(x))
+```
+
+**Implementation:**
+```typescript
+private calculateRepresentativenessScore(
+  sample: SamplingResult["selectedCases"],
+  population: any[]
+): number {
+  const allPrograms = new Set(population.map(c => c.benefitProgramId));
+  
+  // Add-one smoothing (handle zeros)
+  const smoothing = 0.01;
+  const sampleDist: Record<string, number> = {};
+  const popDist: Record<string, number> = {};
+
+  // Initialize with smoothing
+  for (const program of allPrograms) {
+    sampleDist[program] = smoothing;
+    popDist[program] = smoothing;
+  }
+
+  // Add actual counts
+  for (const c of sample) {
+    sampleDist[c.programType] += 1;
+  }
+  for (const c of population) {
+    popDist[c.benefitProgramId] += 1;
+  }
+
+  // Normalize to probabilities
+  const sampleTotal = sample.length + smoothing * allPrograms.size;
+  const popTotal = population.length + smoothing * allPrograms.size;
+  
+  for (const program of allPrograms) {
+    sampleDist[program] /= sampleTotal;
+    popDist[program] /= popTotal;
+  }
+
+  // Calculate JS divergence
+  let jsDiv = 0;
+  for (const program of allPrograms) {
+    const p = popDist[program];
+    const q = sampleDist[program];
+    const m = (p + q) / 2;
+
+    if (p > 0 && m > 0) jsDiv += p * Math.log(p / m);
+    if (q > 0 && m > 0) jsDiv += q * Math.log(q / m);
+  }
+  jsDiv /= 2;
+  
+  // Convert to similarity (1 = perfect, 0 = poor)
+  const similarity = 1 - Math.min(jsDiv / Math.log(2), 1);
+  return Math.max(0, Math.min(1, similarity));
+}
+```
+
+**Interpretation:**
+- **1.0** - Perfect representation (sample distribution = population distribution)
+- **0.8-0.9** - Good representation
+- **0.5-0.7** - Acceptable representation
+- **<0.5** - Poor representation (consider resampling)
+
+**Example:**
+```
+Population: 60% SNAP, 30% Medicaid, 10% TANF
+Sample: 50% SNAP, 40% Medicaid, 10% TANF
+JS Divergence ≈ 0.02 → Similarity = 0.98 (excellent)
+```
+
+---
+
+### 6.7.3 Lifecycle Checkpoint Tracking (lines 420-553)
+
+**Purpose:** Monitor case processing milestones
+
+**5 Standard Checkpoints:**
+```typescript
+const CHECKPOINT_DEFINITIONS: CheckpointConfig[] = [
+  {
+    type: "intake",
+    name: "Initial Intake",
+    description: "Application received and entered into system",
+    expectedDayStart: 0,
+    expectedDayEnd: 3
+  },
+  {
+    type: "verification",
+    name: "Verification Documents",
+    description: "All required verification documents collected and reviewed",
+    expectedDayStart: 7,
+    expectedDayEnd: 14
+  },
+  {
+    type: "determination",
+    name: "Eligibility Determination",
+    description: "Case reviewed and eligibility determined",
+    expectedDayStart: 21,
+    expectedDayEnd: 30
+  },
+  {
+    type: "notification",
+    name: "Applicant Notification",
+    description: "Notification letter sent to applicant",
+    expectedDayStart: 30,
+    expectedDayEnd: 45
+  },
+  {
+    type: "followup",
+    name: "Follow-up",
+    description: "Post-determination follow-up and case closure",
+    expectedDayStart: 45,
+    expectedDayEnd: 60
+  }
+];
+```
+
+**Federal Timeliness Requirements:**
+- **SNAP:** 30 days for standard applications (7 CFR 273.2(g))
+- **Medicaid:** 45 days for standard applications (42 CFR 435.912)
+- **TANF:** 45 days for eligibility determination
+
+---
+
+#### createCheckpoints() - Initialize Checkpoints (lines 425-458)
+
+```typescript
+async createCheckpoints(
+  reviewId: string,
+  caseId: string,
+  caseStartDate: Date
+): Promise<CaseLifecycleEvent[]> {
+  
+  const checkpoints: InsertCaseLifecycleEvent[] = CHECKPOINT_DEFINITIONS.map(config => {
+    // Calculate expected date range
+    const expectedStart = new Date(caseStartDate);
+    expectedStart.setDate(expectedStart.getDate() + config.expectedDayStart);
+    
+    const expectedEnd = new Date(caseStartDate);
+    expectedEnd.setDate(expectedEnd.getDate() + config.expectedDayEnd);
+    
+    // Use midpoint as expected date
+    const expectedDate = new Date(
+      (expectedStart.getTime() + expectedEnd.getTime()) / 2
+    );
+
+    return {
+      reviewId,
+      caseId,
+      checkpointType: config.type,
+      checkpointName: config.name,
+      checkpointDescription: config.description,
+      expectedDate,
+      daysFromStart: config.expectedDayStart,
+      status: "pending",
+      aiAlerted: false
+    };
+  });
+
+  return await db.insert(caseLifecycleEvents).values(checkpoints).returning();
+}
+```
+
+**Expected Date Calculation:**
+- Intake: Day 0-3 → Expected Day 1.5
+- Verification: Day 7-14 → Expected Day 10.5
+- Determination: Day 21-30 → Expected Day 25.5
+- Notification: Day 30-45 → Expected Day 37.5
+- Follow-up: Day 45-60 → Expected Day 52.5
+
+---
+
+#### updateCheckpoint() - Mark Checkpoint Complete (lines 463-507)
+
+```typescript
+async updateCheckpoint(
+  checkpointId: string,
+  actualDate: Date,
+  completedBy: string,
+  notes?: string
+): Promise<CaseLifecycleEvent> {
+  
+  const [checkpoint] = await db
+    .select()
+    .from(caseLifecycleEvents)
+    .where(eq(caseLifecycleEvents.id, checkpointId));
+
+  // Calculate delay
+  const delayDays = Math.floor(
+    (actualDate.getTime() - checkpoint.expectedDate.getTime()) / (1000 * 60 * 60 * 24)
+  );
+  
+  const isOnTime = delayDays <= 2;  // 2-day grace period
+  const aiAlerted = delayDays > 5;  // Flag if >5 days late
+
+  return await db
+    .update(caseLifecycleEvents)
+    .set({
+      actualDate,
+      delayDays,
+      isOnTime,
+      status: "completed",
+      completedBy,
+      notes,
+      aiAlerted,
+      aiAlertReason: aiAlerted ? `Checkpoint completed ${delayDays} days late` : null,
+      updatedAt: new Date()
+    })
+    .where(eq(caseLifecycleEvents.id, checkpointId))
+    .returning();
+}
+```
+
+**Delay Thresholds:**
+- **≤2 days** - On time (grace period)
+- **3-5 days** - Late (warning)
+- **>5 days** - Significantly late (AI alert triggered)
+
+**Use Case:**
+```
+Case created: 2024-10-01
+Expected intake: 2024-10-02 (Day 1.5)
+Actual intake: 2024-10-05
+→ delayDays = 3
+→ isOnTime = false
+→ aiAlerted = false (< 5 days)
+```
+
+---
+
+
+### 6.7.4 AI Assessment Service - Gemini Quality Scoring (lines 559-686)
+
+**Purpose:** Autonomous case quality assessment using Gemini 1.5 Flash
+
+#### assessCaseQuality() - AI Quality Analysis (lines 572-683)
+
+**4 Quality Dimensions:**
+1. **Documentation Completeness** - All checkpoints completed?
+2. **Timeliness** - Checkpoints completed on time?
+3. **Process Compliance** - Workflow follows procedures?
+4. **Overall Quality** - General case handling assessment
+
+**Prompt Engineering:**
+```typescript
+const prompt = `You are a quality assurance reviewer for a public benefits case management system.
+Analyze the following case and provide a quality assessment.
+
+Case Information:
+- Program: ${caseData.benefitProgramId || "Unknown"}
+- Status: ${caseData.status || "Unknown"}
+- Created: ${caseData.createdAt}
+- County: ${caseData.countyCode || "Unknown"}
+
+Checkpoint Progress:
+${checkpoints.map(cp => `- ${cp.checkpointName}: ${cp.status} ${cp.delayDays ? `(${cp.delayDays} days delay)` : ""}`).join("\n")}
+
+Please evaluate the case on these dimensions:
+1. Documentation Completeness
+2. Timeliness
+3. Process Compliance
+4. Overall Quality
+
+Return JSON:
+{
+  "overallScore": 0.85,
+  "dimensions": {
+    "documentation": 0.9,
+    "timeliness": 0.8,
+    "compliance": 0.85,
+    "quality": 0.85
+  },
+  "strengths": ["Clear documentation", "Good communication"],
+  "concerns": ["Minor delay in verification"],
+  "summary": "Well-managed case with minor timeliness issues"
+}`;
+```
+
+**Gemini API Call:**
+```typescript
+const result = await this.genAI.models.generateContent({
+  model: "gemini-1.5-flash",  // Fast, cost-effective
+  contents: [{ role: 'user', parts: [{ text: prompt }] }]
+});
+```
+
+**Response Parsing:**
+```typescript
+// Extract JSON from response
+const jsonMatch = text.match(/\{[\s\S]*\}/);
+const assessment = JSON.parse(jsonMatch[0]);
+
+const result_obj = {
+  score: assessment.overallScore || 0.5,
+  summary: assessment.summary || "Assessment completed",
+  details: assessment  // Full dimension breakdown
+};
+```
+
+**Caching Strategy:**
+```typescript
+// Check cache first
+const cacheKey = `bar:ai-assessment:${caseId}`;
+const cached = await cacheOrchestrator.get(cacheKey);
+if (cached) return JSON.parse(cached);
+
+// ... Run assessment ...
+
+// Cache for 24 hours
+await cacheOrchestrator.set(
+  cacheKey,
+  JSON.stringify(result_obj),
+  { ttl: 86400 }  // 24 hours
+);
+```
+
+**Rationale:** AI assessments are expensive, cache prevents re-assessment
+
+**Fallback on Error:**
+```typescript
+catch (error) {
+  logger.error("AI assessment error", { caseId, error });
+  return {
+    score: 0.5,  // Neutral score
+    summary: "AI assessment unavailable - manual review required",
+    details: { error: "AI service error" }
+  };
+}
+```
+
+**Score Interpretation:**
+- **0.9-1.0** - Excellent quality
+- **0.8-0.9** - Good quality
+- **0.7-0.8** - Acceptable quality
+- **0.6-0.7** - Below standard (needs improvement)
+- **<0.6** - Poor quality (corrective action required)
+
+---
+
+### 6.7.5 Main BAR Service (lines 692-867)
+
+#### runWeeklySelection() - Automated Weekly Review (lines 697-776)
+
+**Purpose:** Autonomous weekly case selection and review creation
+
+**Workflow:**
+```
+Monday morning (automated cron job)
+  ↓
+1. Select cases via stratified sampling (2 per worker)
+  ↓
+2. Create review sample record
+  ↓
+3. For each selected case:
+   - Anonymize case ID and worker ID
+   - Create review record (blind review mode)
+   - Create 5 lifecycle checkpoints
+   - Run AI quality assessment (async)
+  ↓
+Weekly review batch ready
+```
+
+**Step 1: Stratified Sampling**
+```typescript
+const samplingResult = await samplingService.selectWeeklyCases(2);  // 2 cases per worker
+```
+
+**Step 2: Create Sample Record**
+```typescript
+const weekId = this.getWeekId();  // e.g., "2024-W43"
+const [sample] = await db.insert(reviewSamples).values({
+  samplingPeriod: weekId,
+  totalCases: samplingResult.selectedCases.length * 10,  // Estimate population
+  selectedCases: samplingResult.selectedCases.length,
+  samplingRate: 0.2,  // 20% sample rate
+  stratificationDimensions: {
+    programs: Array.from(new Set(samplingResult.selectedCases.map(c => c.programType))),
+    counties: Array.from(new Set(samplingResult.selectedCases.map(c => c.county)))
+  },
+  stratificationDistribution: samplingResult.stratificationDistribution,
+  diversityScore: samplingResult.diversityScore,
+  representativenessScore: samplingResult.representativenessScore,
+  workersIncluded: new Set(samplingResult.selectedCases.map(c => c.caseworkerId)).size,
+  casesPerWorker: this.calculateCasesPerWorker(samplingResult.selectedCases)
+}).returning();
+```
+
+**Sample Metadata:**
+- **samplingPeriod** - Week identifier (YYYY-WXX)
+- **diversityScore** - 0-1 (program/county diversity)
+- **representativenessScore** - 0-1 (Jensen-Shannon divergence)
+- **workersIncluded** - Number of unique workers reviewed
+- **casesPerWorker** - Distribution (e.g., `{ "worker1": 2, "worker2": 2 }`)
+
+**Step 3: Create Individual Reviews**
+```typescript
+for (const selectedCase of samplingResult.selectedCases) {
+  // Anonymize for blind review
+  const anonymizedCaseId = anonymizationService.anonymize(selectedCase.caseId, "case");
+  const anonymizedWorkerId = anonymizationService.anonymize(selectedCase.caseworkerId, "worker");
+
+  const [review] = await db.insert(benefitsAccessReviews).values({
+    caseId: selectedCase.caseId,
+    caseworkerId: selectedCase.caseworkerId,
+    reviewPeriodStart: new Date(),
+    reviewPeriodEnd: new Date(Date.now() + 45 * 86400000),  // +45 days
+    reviewDuration: 45,
+    samplingMethod: "stratified",
+    samplingCriteria: {
+      program: selectedCase.programType,
+      county: selectedCase.county,
+      weight: selectedCase.weight
+    },
+    selectedForReview: true,
+    selectionWeight: selectedCase.weight,
+    reviewStatus: "pending",
+    reviewPriority: "normal",
+    anonymizedCaseId,    // e.g., "C_a1b2c3d4e5f6"
+    anonymizedWorkerId,  // e.g., "W_x9y8z7w6v5u4"
+    blindReviewMode: true,
+    totalCheckpoints: 5  // CHECKPOINT_DEFINITIONS.length
+  }).returning();
+
+  // Create 5 lifecycle checkpoints
+  await checkpointService.createCheckpoints(
+    review.id,
+    selectedCase.caseId,
+    caseData.createdAt || new Date()
+  );
+
+  // Run AI assessment (async, don't block)
+  this.runAIAssessment(review.id, selectedCase.caseId).catch(err => 
+    logger.error("AI assessment failed", { reviewId: review.id, error: err })
+  );
+}
+```
+
+**45-Day Review Period:**
+- Federal QC requirement: Reviews completed within 45 days
+- Allows time for checkpoint verification, document review, AI assessment
+
+---
+
+#### getWeekId() - Week Identifier (lines 799-806)
+
+**Purpose:** Generate ISO week number (YYYY-WXX format)
+
+```typescript
+private getWeekId(): string {
+  const now = new Date();
+  const year = now.getFullYear();
+  const firstDayOfYear = new Date(year, 0, 1);
+  const pastDaysOfYear = (now.getTime() - firstDayOfYear.getTime()) / 86400000;
+  const weekNumber = Math.ceil((pastDaysOfYear + firstDayOfYear.getDay() + 1) / 7);
+  return `${year}-W${weekNumber.toString().padStart(2, "0")}`;
+}
+```
+
+**Examples:**
+- January 1, 2024 → `2024-W01`
+- October 28, 2024 → `2024-W44`
+- December 31, 2024 → `2024-W53`
+
+---
+
+#### revealIdentity() - Super-Admin De-Anonymization (lines 841-866)
+
+**Purpose:** Reveal anonymized identities for appeals, audits, corrective action
+
+**Permission Check:**
+```typescript
+async revealIdentity(
+  anonymizedId: string,
+  type: "case" | "worker",
+  userRole: string
+): Promise<string | null> {
+  if (!anonymizationService.canReveal(userRole)) {
+    throw new Error("Insufficient permissions to reveal anonymized data");
+  }
+
+  // Brute-force search
+  if (type === "case") {
+    const cases = await db.select({ id: clientCases.id }).from(clientCases);
+    return anonymizationService.reveal(
+      anonymizedId,
+      cases.map(c => c.id),
+      "case"
+    );
+  } else {
+    const workers = await db.select({ id: users.id }).from(users);
+    return anonymizationService.reveal(
+      anonymizedId,
+      workers.map(w => w.id),
+      "worker"
+    );
+  }
+}
+```
+
+**Use Case:**
+```
+Quality reviewer flags C_a1b2c3d4e5f6 for severe error (wrong benefit amount)
+→ Super-admin calls revealIdentity("C_a1b2c3d4e5f6", "case", "super_admin")
+→ Returns "case_abc123"
+→ Reveal caseworker: revealIdentity("W_x9y8z7w6v5u4", "worker", "super_admin")
+→ Returns "user_xyz789"
+→ Corrective action: Retrain caseworker on benefit calculation
+```
+
+**Audit Trail:** All reveal operations logged via auditService
+
+---
+
+### 6.7 Summary - Benefits Access Review Service
+
+**Key Features:**
+1. **Blind Review** - SHA-256 anonymization prevents caseworker bias
+2. **Stratified Sampling** - Representative case selection (program/county/worker diversity)
+3. **Lifecycle Checkpoints** - 5 standard milestones per case
+4. **AI Quality Scoring** - Gemini-powered assessment (4 dimensions)
+5. **Weekly Automation** - Autonomous Monday selection
+
+**Sampling Algorithm:**
+- **Method:** Stratified random sampling with weighted roulette wheel selection
+- **Target:** 2 cases per worker
+- **Eligibility:** Cases 30-60 days old
+- **Weighting:** Underrepresented programs/counties boosted
+- **Diversity Score:** 0-1 (unique programs/counties)
+- **Representativeness:** Jensen-Shannon divergence (1 = perfect match)
+
+**5 Lifecycle Checkpoints:**
+1. **Intake** (Day 0-3) - Application entered
+2. **Verification** (Day 7-14) - Documents collected
+3. **Determination** (Day 21-30) - Eligibility decided
+4. **Notification** (Day 30-45) - Applicant notified
+5. **Follow-up** (Day 45-60) - Case closure
+
+**Delay Thresholds:**
+- **≤2 days** - On time (grace period)
+- **3-5 days** - Late (warning)
+- **>5 days** - Significantly late (AI alert)
+
+**AI Quality Dimensions:**
+1. Documentation Completeness - 0-1
+2. Timeliness - 0-1
+3. Process Compliance - 0-1
+4. Overall Quality - 0-1
+
+**AI Score Interpretation:**
+- **0.9-1.0** - Excellent
+- **0.8-0.9** - Good
+- **0.7-0.8** - Acceptable
+- **0.6-0.7** - Below standard
+- **<0.6** - Poor (corrective action)
+
+**Anonymization:**
+- **Method:** SHA-256 with stable salt
+- **Format:** `C_{12-char hash}` (cases), `W_{12-char hash}` (workers)
+- **Reveal:** Super-admin only (brute-force search)
+- **Audit:** All reveal operations logged
+
+**Federal Compliance:**
+- **SNAP QC:** 7 CFR 275 - Quality Control requirements
+- **Error Rate Target:** <6% (federal fiscal sanction if exceeded)
+- **Review Frequency:** Weekly automated selection
+- **Review Period:** 45 days (federal QC timeline)
+
+**Maryland Counties (24 jurisdictions):**
+```
+Allegany, Anne Arundel, Baltimore City, Baltimore County,
+Calvert, Caroline, Carroll, Cecil, Charles, Dorchester,
+Frederick, Garrett, Harford, Howard, Kent, Montgomery,
+Prince George's, Queen Anne's, Somerset, St. Mary's,
+Talbot, Washington, Wicomico, Worcester
+```
+
+**Weekly Workflow:**
+```
+Monday 00:00 (cron job)
+  ↓
+runWeeklySelection()
+  ↓
+Stratified sampling (2 cases/worker)
+  ↓
+Anonymize case & worker IDs
+  ↓
+Create review records (blind mode)
+  ↓
+Create 5 checkpoints per case
+  ↓
+AI assessment (async)
+  ↓
+Reviewers assess cases (45-day period)
+  ↓
+Quality metrics calculated
+  ↓
+Corrective action (if needed)
+```
+
+**Diversity Metrics:**
+- **Diversity Score:** Unique programs/counties (0-1)
+- **Representativeness Score:** JS divergence (1 = perfect)
+- **Stratification Distribution:** Cases per program:county combo
+- **Workers Included:** Count of unique workers
+- **Cases Per Worker:** Distribution map
+
+**Use Cases:**
+1. **Federal QC Compliance** - SNAP error rate monitoring
+2. **Worker Performance** - Identify training needs
+3. **Process Improvement** - Detect workflow bottlenecks
+4. **Timeliness Monitoring** - Track checkpoint delays
+5. **Program Evaluation** - Compare quality across programs/counties
+6. **Audit Support** - Documented quality reviews for state/federal audits
+
+**Integration Points:**
+- **cacheOrchestrator** - Cache AI assessments (24h TTL)
+- **Gemini API** - AI quality scoring
+- **auditService** - Log all review/reveal operations
+- **clientCases** - Source cases for sampling
+- **users** - Caseworker information
+
+**Production Deployment:**
+- Set `ANONYMIZATION_SALT` environment variable (stable across restarts)
+- Configure Gemini API key (`GEMINI_API_KEY`)
+- Set up weekly cron job: `0 0 * * 1` (Monday midnight)
+- Monitor diversity/representativeness scores (target >0.7)
+- Review AI assessment cache hit rate (optimize costs)
+
+**Performance Optimizations:**
+- AI assessments cached 24 hours (prevent re-assessment)
+- Async AI assessment (don't block review creation)
+- Batch checkpoint creation (single DB insert)
+- Brute-force reveal optimized for production (use mapping table)
+
+---
+
