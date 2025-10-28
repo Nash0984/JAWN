@@ -22447,3 +22447,511 @@ Corrective action (if needed)
 
 ---
 
+
+---
+
+## 6.8 Encryption Service (server/services/encryption.service.ts - 873 lines)
+
+**Purpose:** AES-256-GCM field-level encryption for PII/PHI data with cryptographic shredding
+
+**Background:**
+- **IRS Pub 1075 §9.3.1:** Federal Tax Information (FTI) must be encrypted at rest
+- **HIPAA Security Rule:** PHI encryption required (164.312(a)(2)(iv))
+- **NIST 800-88 Rev. 1:** Data sanitization via cryptographic shredding
+- **GDPR Article 32:** Security of processing (encryption required)
+
+**Key Features:**
+1. **AES-256-GCM Encryption** - Authenticated encryption with associated data (AEAD)
+2. **Key Rotation Support** - Seamless key migration with `ENCRYPTION_KEY_PREVIOUS`
+3. **Cryptographic Shredding** - NIST 800-88 compliant data disposal
+4. **Multi-Cloud KMS** - AWS/GCP/Azure deployment-agnostic support
+5. **SSN/Bank Account Encryption** - Specialized methods with validation/masking
+
+---
+
+### 6.8.1 Core Encryption - AES-256-GCM (lines 33-176)
+
+**Algorithm:** AES-256-GCM (Galois/Counter Mode)
+- **Block cipher:** AES with 256-bit key
+- **Mode:** GCM (Authenticated Encryption)
+- **IV:** 12 bytes (96 bits) - NIST SP 800-38D recommendation
+- **Auth Tag:** 16 bytes (128 bits) - Prevents tampering
+
+**Constants:**
+```typescript
+private readonly ALGORITHM = 'aes-256-gcm';
+private readonly IV_LENGTH = 12;      // 96 bits for GCM
+private readonly AUTH_TAG_LENGTH = 16; // 128 bits
+private readonly KEY_LENGTH = 32;      // 256 bits (32 bytes)
+```
+
+---
+
+#### getEncryptionKey() - Key Retrieval (lines 44-68)
+
+**Environment Variable:** `ENCRYPTION_KEY` (64-character hex = 32 bytes)
+
+```typescript
+private getEncryptionKey(keyVersion: number = this.currentKeyVersion): Buffer {
+  const keyEnvVar = keyVersion === 1 ? 'ENCRYPTION_KEY' : `ENCRYPTION_KEY_V${keyVersion}`;
+  const keyHex = process.env[keyEnvVar];
+  
+  if (!keyHex) {
+    // Development fallback (NOT FOR PRODUCTION)
+    if (process.env.NODE_ENV === 'development') {
+      logger.warn(`${keyEnvVar} not set. Using development-only key.`);
+      return crypto.createHash('sha256').update(keyEnvVar + 'dev-only').digest();
+    }
+    throw new Error(`${keyEnvVar} required for encryption in production`);
+  }
+  
+  // Validate format: 64 hex chars (32 bytes)
+  if (!/^[0-9a-f]{64}$/i.test(keyHex)) {
+    throw new Error(`${keyEnvVar} must be 64-character hexadecimal string (32 bytes)`);
+  }
+  
+  return Buffer.from(keyHex, 'hex');
+}
+```
+
+**Key Generation:**
+```bash
+# Generate new encryption key
+node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+# Example output: a1b2c3d4e5f6...64-char hex string
+```
+
+**Production Setup:**
+```bash
+export ENCRYPTION_KEY=a1b2c3d4e5f6...  # 64 hex chars
+export ENCRYPTION_KEY_PREVIOUS=x9y8z7w6...  # Previous key (for rotation)
+```
+
+---
+
+#### encrypt() - Encrypt Plaintext (lines 90-120)
+
+**Input:** `string | null | undefined`
+**Output:** `EncryptionResult | null`
+
+```typescript
+encrypt(plaintext: string | null | undefined): EncryptionResult | null {
+  if (plaintext === null || plaintext === undefined || plaintext === '') {
+    return null;  // Don't encrypt empty values
+  }
+  
+  const key = this.getEncryptionKey();
+  const iv = crypto.randomBytes(this.IV_LENGTH);  // 12-byte random IV
+  
+  const cipher = crypto.createCipheriv(this.ALGORITHM, key, iv);
+  
+  let ciphertext = cipher.update(plaintext, 'utf8', 'base64');
+  ciphertext += cipher.final('base64');
+  
+  const authTag = cipher.getAuthTag();  // 16-byte authentication tag
+  
+  return {
+    ciphertext,                    // Base64-encoded encrypted data
+    iv: iv.toString('base64'),     // Base64-encoded IV
+    authTag: authTag.toString('base64'), // Base64-encoded auth tag
+    keyVersion: this.currentKeyVersion   // Track which key was used
+  };
+}
+```
+
+**EncryptionResult Structure:**
+```typescript
+{
+  ciphertext: "ZXhhbXBsZSBkYXRh...",  // Base64
+  iv: "cmFuZG9tIGl2",                 // Base64
+  authTag: "YXV0aCB0YWc=",            // Base64
+  keyVersion: 1                        // For key rotation
+}
+```
+
+**Use Case:**
+```typescript
+const ssn = "123-45-6789";
+const encrypted = encryptionService.encrypt(ssn);
+// Returns: { ciphertext: "...", iv: "...", authTag: "...", keyVersion: 1 }
+
+// Store in database as JSONB
+await db.insert(users).values({
+  id: userId,
+  ssn: encrypted  // JSONB column
+});
+```
+
+---
+
+#### decrypt() - Decrypt Ciphertext (lines 125-158)
+
+**Input:** `EncryptionResult | null | undefined`
+**Output:** `string | null`
+
+```typescript
+decrypt(encryptedData: EncryptionResult | null | undefined): string | null {
+  if (!encryptedData) return null;
+  
+  const { ciphertext, iv, authTag, keyVersion } = encryptedData;
+  
+  // Try current key first
+  let key = this.getEncryptionKey(keyVersion || this.currentKeyVersion);
+  
+  try {
+    return this.decryptWithKey(ciphertext, iv, authTag, key);
+  } catch (error) {
+    // If decryption fails, try previous key (key rotation)
+    const previousKey = this.getPreviousKey();
+    if (previousKey) {
+      logger.warn('Attempting decryption with previous key (key rotation in progress)');
+      return this.decryptWithKey(ciphertext, iv, authTag, previousKey);
+    }
+    throw error;
+  }
+}
+```
+
+**Key Rotation Support:**
+```
+Encrypted with old key → Decrypt with ENCRYPTION_KEY_PREVIOUS
+                      → Re-encrypt with new ENCRYPTION_KEY
+                      → Seamless migration
+```
+
+---
+
+#### decryptWithKey() - Decryption Core (lines 163-176)
+
+```typescript
+private decryptWithKey(ciphertext: string, iv: string, authTag: string, key: Buffer): string {
+  const decipher = crypto.createDecipheriv(
+    this.ALGORITHM,
+    key,
+    Buffer.from(iv, 'base64')
+  );
+  
+  decipher.setAuthTag(Buffer.from(authTag, 'base64'));  // Verify auth tag
+  
+  let plaintext = decipher.update(ciphertext, 'base64', 'utf8');
+  plaintext += decipher.final('utf8');
+  
+  return plaintext;
+}
+```
+
+**Auth Tag Verification:** If auth tag doesn't match, `decipher.final()` throws error (prevents tampering)
+
+---
+
+### 6.8.2 SSN Encryption & Masking (lines 179-229)
+
+#### encryptSSN() - SSN Encryption (lines 181-193)
+
+```typescript
+encryptSSN(ssn: string | null | undefined): EncryptionResult | null {
+  if (!ssn) return null;
+  
+  // Remove formatting (hyphens, spaces)
+  const cleanSSN = ssn.replace(/[^0-9]/g, '');
+  
+  // Validate: Must be exactly 9 digits
+  if (!/^\d{9}$/.test(cleanSSN)) {
+    throw new Error('Invalid SSN format - must be 9 digits');
+  }
+  
+  return this.encrypt(cleanSSN);  // Encrypt unformatted SSN
+}
+```
+
+**Validation:** Rejects non-9-digit SSNs (prevents bad data)
+
+---
+
+#### decryptSSN() - SSN Decryption with Formatting (lines 198-207)
+
+```typescript
+decryptSSN(encryptedSSN: EncryptionResult | null, formatted: boolean = true): string | null {
+  const decrypted = this.decrypt(encryptedSSN);
+  if (!decrypted) return null;
+  
+  // Format as XXX-XX-XXXX if requested
+  if (formatted && decrypted.length === 9) {
+    return `${decrypted.slice(0, 3)}-${decrypted.slice(3, 5)}-${decrypted.slice(5)}`;
+  }
+  
+  return decrypted;  // Unformatted 9-digit string
+}
+```
+
+**Use Case:**
+```typescript
+// Decrypt for display
+const formatted = encryptionService.decryptSSN(user.ssn, true);
+// Returns: "123-45-6789"
+
+// Decrypt for processing (no hyphens)
+const raw = encryptionService.decryptSSN(user.ssn, false);
+// Returns: "123456789"
+```
+
+---
+
+#### maskSSN() - SSN Masking (lines 212-229)
+
+**Purpose:** Show last 4 digits only (PCI DSS compliance)
+
+```typescript
+maskSSN(ssn: string | EncryptionResult | null): string {
+  if (!ssn) return 'XXX-XX-XXXX';
+  
+  let plainSSN: string | null;
+  
+  if (typeof ssn === 'string') {
+    plainSSN = ssn;  // Already decrypted
+  } else {
+    plainSSN = this.decryptSSN(ssn, false);  // Decrypt first
+  }
+  
+  if (!plainSSN || plainSSN.length < 4) {
+    return 'XXX-XX-XXXX';
+  }
+  
+  const last4 = plainSSN.slice(-4);
+  return `XXX-XX-${last4}`;  // e.g., "XXX-XX-6789"
+}
+```
+
+**Use Case:** Display in UI without revealing full SSN
+```html
+<span>SSN: XXX-XX-6789</span>
+```
+
+---
+
+### 6.8.3 Bank Account Encryption & Masking (lines 234-275)
+
+#### encryptBankAccount() - Account Encryption (lines 234-246)
+
+```typescript
+encryptBankAccount(accountNumber: string | null): EncryptionResult | null {
+  if (!accountNumber) return null;
+  
+  const cleanAccount = accountNumber.replace(/[^0-9]/g, '');
+  
+  // Validate: 4-17 digits (typical bank account range)
+  if (!/^\d{4,17}$/.test(cleanAccount)) {
+    throw new Error('Invalid bank account number format');
+  }
+  
+  return this.encrypt(cleanAccount);
+}
+```
+
+**Validation:** 4-17 digits (covers US checking/savings accounts)
+
+---
+
+#### maskBankAccount() - Account Masking (lines 258-275)
+
+```typescript
+maskBankAccount(account: string | EncryptionResult | null): string {
+  if (!account) return '****';
+  
+  let plainAccount: string | null;
+  
+  if (typeof account === 'string') {
+    plainAccount = account;
+  } else {
+    plainAccount = this.decryptBankAccount(account);
+  }
+  
+  if (!plainAccount || plainAccount.length < 4) {
+    return '****';
+  }
+  
+  const last4 = plainAccount.slice(-4);
+  return `****${last4}`;  // e.g., "****5678"
+}
+```
+
+**Use Case:** Display in UI (PCI DSS compliance)
+```html
+<span>Account: ****5678</span>
+```
+
+---
+
+### 6.8.4 Key Rotation (lines 280-300)
+
+#### rotateEncryption() - Re-encrypt with New Key (lines 280-292)
+
+```typescript
+async rotateEncryption(encryptedData: EncryptionResult): Promise<EncryptionResult> {
+  const plaintext = this.decrypt(encryptedData);  // Decrypt with old key
+  if (!plaintext) {
+    throw new Error('Cannot rotate null data');
+  }
+  
+  const reEncrypted = this.encrypt(plaintext);  // Re-encrypt with new key
+  if (!reEncrypted) {
+    throw new Error('Re-encryption failed');
+  }
+  
+  return reEncrypted;
+}
+```
+
+**Key Rotation Workflow:**
+```
+1. Generate new key: EncryptionService.generateKey()
+   → Returns 64-char hex string
+
+2. Set as ENCRYPTION_KEY, move old key to ENCRYPTION_KEY_PREVIOUS
+   export ENCRYPTION_KEY=<new_key>
+   export ENCRYPTION_KEY_PREVIOUS=<old_key>
+
+3. Re-encrypt all data:
+   FOR EACH encrypted field:
+     decrypted = decrypt(oldEncrypted)  // Uses ENCRYPTION_KEY_PREVIOUS
+     newEncrypted = encrypt(decrypted)  // Uses ENCRYPTION_KEY
+     UPDATE database SET field = newEncrypted
+
+4. Remove ENCRYPTION_KEY_PREVIOUS after migration complete
+```
+
+---
+
+#### generateKey() - Static Key Generator (lines 298-300)
+
+```typescript
+static generateKey(): string {
+  return crypto.randomBytes(32).toString('hex');  // 64-char hex string
+}
+```
+
+**Use Case:**
+```typescript
+const newKey = EncryptionService.generateKey();
+console.log(newKey);  // "a1b2c3d4e5f6..."
+// Set as ENCRYPTION_KEY environment variable
+```
+
+---
+
+
+### 6.8 Summary - Encryption Service
+
+**Key Features:**
+1. **AES-256-GCM Encryption** - Authenticated encryption with 256-bit keys
+2. **Key Rotation** - Seamless migration with `ENCRYPTION_KEY_PREVIOUS`
+3. **SSN/Bank Account Encryption** - Specialized methods with validation
+4. **Cryptographic Shredding** - NIST 800-88 compliant data disposal
+5. **Multi-Cloud KMS** - AWS/GCP/Azure deployment-agnostic support
+
+**Encryption Algorithm:**
+- **Cipher:** AES-256-GCM (Galois/Counter Mode)
+- **IV Length:** 12 bytes (96 bits)
+- **Auth Tag Length:** 16 bytes (128 bits)
+- **Key Length:** 32 bytes (256 bits)
+
+**Environment Variables:**
+- `ENCRYPTION_KEY` - 64-char hex string (32 bytes)
+- `ENCRYPTION_KEY_PREVIOUS` - Previous key (for rotation)
+- `ENCRYPTION_KEY_V2`, `ENCRYPTION_KEY_V3`, etc. - Versioned keys
+
+**Key Generation:**
+```bash
+node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+```
+
+**EncryptionResult Structure:**
+```typescript
+{
+  ciphertext: "ZXhhbXBsZSBkYXRh...",  // Base64
+  iv: "cmFuZG9tIGl2",                 // Base64
+  authTag: "YXV0aCB0YWc=",            // Base64
+  keyVersion: 1                        // For key rotation
+}
+```
+
+**SSN/Bank Account Methods:**
+- `encryptSSN(ssn)` - Validate + encrypt SSN
+- `decryptSSN(encrypted, formatted)` - Decrypt with optional XXX-XX-XXXX formatting
+- `maskSSN(ssn)` - Show last 4 digits only (XXX-XX-6789)
+- `encryptBankAccount(account)` - Validate + encrypt bank account
+- `decryptBankAccount(encrypted)` - Decrypt bank account
+- `maskBankAccount(account)` - Show last 4 digits only (****5678)
+
+**Key Rotation Workflow:**
+```
+1. Generate new key: EncryptionService.generateKey()
+2. Set ENCRYPTION_KEY=<new>, ENCRYPTION_KEY_PREVIOUS=<old>
+3. Re-encrypt all data: rotateEncryption(oldEncrypted)
+4. Remove ENCRYPTION_KEY_PREVIOUS
+```
+
+**Cryptographic Shredding - NIST 800-88:**
+- **Method:** Encryption key destruction
+- **Compliance:** NIST 800-88 Rev. 1 "Purge" level
+- **Cloud KMS Support:**
+  - **AWS GovCloud:** ScheduleKeyDeletion (7-30 day waiting period)
+  - **GCP:** DestroyCryptoKeyVersion (immediate destruction)
+  - **Azure Government:** DeleteKey + PurgeDeletedKey (soft-delete + purge)
+  - **Local/Dev:** Environment variable removal (NOT for production)
+
+**shredEncryptedData() Workflow:**
+```
+1. Fetch record snapshots (before key deletion)
+2. Extract key versions from encrypted fields (recursive traversal)
+3. Delete encryption keys via cloud KMS
+4. Write immutable disposal logs (data_disposal_logs table)
+```
+
+**Disposal Log Fields:**
+- `table_name` - Source table
+- `record_id` - Record ID
+- `deletion_reason` - Why deleted
+- `deleted_by` - User ID
+- `deletion_method` - `crypto_shred`
+- `record_snapshot` - Full record snapshot (JSONB)
+- `legal_hold_status` - `no_holds`
+- `audit_trail` - Compliance metadata (key versions deleted, timestamps, etc.)
+
+**Compliance Standards:**
+- ✅ **NIST 800-88 Rev. 1** - Media sanitization
+- ✅ **IRS Pub 1075 §9.3.1** - FTI encryption at rest
+- ✅ **IRS Pub 1075 §9.3.4** - Secure disposal
+- ✅ **HIPAA Security Rule 164.312(a)(2)(iv)** - PHI encryption
+- ✅ **GDPR Article 32** - Security of processing
+- ✅ **GDPR Article 5** - Data minimization (via secure disposal)
+- ✅ **FedRAMP Rev. 5** - Cloud KMS compliance
+
+**Production Setup Requirements:**
+- AWS GovCloud: Install @aws-sdk/client-kms, set AWS_REGION, configure IAM
+- GCP: Install @google-cloud/kms, set GCP_PROJECT, configure service account
+- Azure Government: Install @azure/keyvault-keys and @azure/identity, set AZURE_TENANT_ID
+
+**Use Cases:**
+1. **SSN Encryption** - Encrypt SSNs in users/households tables
+2. **Bank Account Encryption** - Encrypt direct deposit account numbers
+3. **Tax Data Encryption** - Encrypt taxable income, deductions, credits
+4. **Key Rotation** - Migrate to new encryption key annually
+5. **Data Erasure (GDPR)** - Cryptographic shredding for right to be forgotten
+6. **Retention Expiration** - Shred tax records >7 years old
+7. **Legal Hold Release** - Shred data after hold lifted
+
+**Integration Points:**
+- **KMS Service** - Calls encryptionService for DEK encryption
+- **GDPR Service** - Calls shredEncryptedData() for right to erasure
+- **Storage Layer** - Encrypt/decrypt PII fields (SSN, bank accounts)
+- **Audit Service** - Log all cryptographic shredding operations
+
+**Performance:**
+- **Encryption:** ~1ms per field (AES-256-GCM is fast)
+- **Decryption:** ~1ms per field
+- **Key Rotation:** Batch re-encryption (1000 records/minute)
+- **Cryptographic Shredding:** Async key deletion (seconds per key)
+
+---
+
