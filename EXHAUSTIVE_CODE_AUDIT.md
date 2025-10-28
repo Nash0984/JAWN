@@ -22955,3 +22955,920 @@ node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 
 ---
 
+
+---
+
+## 6.9 Rules Extraction Service (server/services/rulesExtractionService.ts - 840 lines)
+
+**Purpose:** AI-powered Rules as Code extraction pipeline - converts policy manual text into structured database rules
+
+**Background:**
+- **Living Policy Manual** - Policy text auto-synced from 30+ official sources
+- **Rules as Code** - Convert natural language policy into executable code
+- **Gemini 2.0 Flash** - Fast, cost-effective extraction model
+- **Maryland SNAP Manual** - Primary source for SNAP eligibility rules
+
+**Key Features:**
+1. **5 Extraction Types** - Income limits, deductions, allotments, categorical eligibility, document requirements
+2. **Auto-Detection** - Section number-based extraction type detection
+3. **Structured Output** - Gemini JSON extraction with validation
+4. **Batch Processing** - Extract rules from multiple sections
+5. **Job Tracking** - Extraction job status monitoring
+
+---
+
+### 6.9.1 Gemini API Integration (lines 18-91)
+
+#### getGemini() - Lazy Initialization (lines 20-40)
+
+```typescript
+let genAI: GoogleGenAI | null = null;
+
+function getGemini(): GoogleGenAI | null {
+  if (!genAI) {
+    const apiKey = process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY;
+    if (!apiKey) {
+      logger.warn("No Gemini API key found for rules extraction");
+      return null;
+    }
+    try {
+      genAI = new GoogleGenAI({ apiKey });
+    } catch (error) {
+      logger.error('Failed to initialize Gemini API', { error });
+      return null;
+    }
+  }
+  return genAI;
+}
+```
+
+**Environment Variables:**
+- `GOOGLE_API_KEY` (primary)
+- `GEMINI_API_KEY` (fallback)
+
+**Lazy Initialization:** Only creates Gemini client when first needed (not at import time)
+
+---
+
+#### parseGeminiResponse() - Response Parser (lines 45-91)
+
+**Purpose:** Parse Gemini JSON responses with error handling
+
+```typescript
+function parseGeminiResponse<T>(responseText: string, arrayKey: string, functionName: string): T[] {
+  try {
+    // Handle markdown code blocks
+    let jsonText = responseText.trim();
+    if (jsonText.startsWith('```')) {
+      const match = jsonText.match(/```(?:json)?\n([\s\S]*?)\n```/);
+      if (match) {
+        jsonText = match[1].trim();
+      }
+    }
+    
+    const parsed = JSON.parse(jsonText);
+    
+    // Validate structure
+    if (!parsed || typeof parsed !== 'object') {
+      logger.error('Invalid Gemini response structure (not object)');
+      return [];
+    }
+    
+    const data = parsed[arrayKey];
+    
+    // Ensure array
+    if (!Array.isArray(data)) {
+      logger.error('Invalid Gemini response - expected array', { arrayKey });
+      return [];
+    }
+    
+    return data as T[];
+  } catch (error) {
+    logger.error('Error parsing Gemini response', { error, responseText });
+    return [];
+  }
+}
+```
+
+**Markdown Code Block Handling:**
+```
+Gemini response:
+```json
+{
+  "incomeLimits": [...]
+}
+```
+
+→ Extracted: { "incomeLimits": [...] }
+```
+
+**Fallback:** Returns empty array `[]` on parse errors (prevents crashes)
+
+---
+
+### 6.9.2 Extraction Type Detection (lines 151-192)
+
+#### detectExtractionType() - Auto-Detection (lines 151-192)
+
+**Purpose:** Determine extraction type from section number and title
+
+**Section Number Mapping:**
+```typescript
+function detectExtractionType(sectionNumber: string, sectionTitle: string): string {
+  const num = parseInt(sectionNumber);
+  
+  // Income-related sections (200s)
+  if (num >= 200 && num < 300) {
+    if (sectionTitle.toLowerCase().includes('income') && 
+        (sectionTitle.toLowerCase().includes('limit') || sectionTitle.toLowerCase().includes('eligibility'))) {
+      return 'income_limits';
+    }
+  }
+  
+  // Deduction sections (300s)
+  if (num >= 300 && num < 400) {
+    return 'deductions';
+  }
+  
+  // Allotment sections (400s)
+  if (num >= 400 && num < 500) {
+    if (sectionTitle.toLowerCase().includes('allotment') || sectionTitle.toLowerCase().includes('benefit')) {
+      return 'allotments';
+    }
+  }
+  
+  // Categorical eligibility (100s)
+  if (num >= 100 && num < 200) {
+    if (sectionTitle.toLowerCase().includes('categorical') || 
+        sectionTitle.toLowerCase().includes('ssi') || 
+        sectionTitle.toLowerCase().includes('tanf')) {
+      return 'categorical_eligibility';
+    }
+  }
+  
+  // Document requirements (500s-600s or verification sections)
+  if ((num >= 500 && num < 700) || 
+      sectionTitle.toLowerCase().includes('verification') ||
+      sectionTitle.toLowerCase().includes('document')) {
+    return 'document_requirements';
+  }
+  
+  // Default: try all extraction types
+  return 'full_auto';
+}
+```
+
+**Section Number Schema:**
+- **100-199:** Categorical eligibility
+- **200-299:** Income limits
+- **300-399:** Deductions
+- **400-499:** Allotments
+- **500-699:** Document requirements
+
+**Examples:**
+- Section 273.9 "Income Limits" → `income_limits`
+- Section 373.5 "Standard Deduction" → `deductions`
+- Section 473.1 "Maximum Allotments" → `allotments`
+- Section 130.2 "SSI Categorical Eligibility" → `categorical_eligibility`
+- Section 573.2 "Verification Requirements" → `document_requirements`
+
+**`full_auto` Mode:** If section doesn't match patterns, try all extraction types
+
+---
+
+### 6.9.3 Extraction Functions (lines 197-460)
+
+**5 Extraction Types:**
+1. **Income Limits** (lines 197-254)
+2. **Deductions** (lines 259-307)
+3. **Allotments** (lines 312-355)
+4. **Categorical Rules** (lines 360-407)
+5. **Document Requirements** (lines 412-460)
+
+---
+
+#### extractIncomeLimits() - Income Limit Extraction (lines 197-254)
+
+**Purpose:** Extract SNAP gross/net income limits from policy text
+
+**Prompt Engineering:**
+```typescript
+const prompt = `You are an expert at extracting structured policy rules from government documents.
+
+Analyze this SNAP policy manual section about income limits and extract all income limit rules as structured data.
+
+Section ${sectionNumber} Text:
+${sectionText}
+
+Extract ALL income limits mentioned in the text. For each income limit, provide:
+1. householdSize: The household size (1, 2, 3, etc.)
+2. grossMonthlyLimit: Gross monthly income limit in CENTS (multiply dollars by 100)
+3. netMonthlyLimit: Net monthly income limit in CENTS (multiply dollars by 100)
+4. percentOfPoverty: Percentage of Federal Poverty Level (e.g., 200 for 200% FPL)
+5. effectiveDate: Effective date in ISO format (YYYY-MM-DD), or use current date if not specified
+6. notes: Any additional context or conditions
+
+Return a JSON object with this structure:
+{
+  "incomeLimits": [
+    {
+      "householdSize": 1,
+      "grossMonthlyLimit": 200000,
+      "netMonthlyLimit": 154000,
+      "percentOfPoverty": 200,
+      "effectiveDate": "2023-10-01",
+      "notes": "Additional context here"
+    }
+  ]
+}
+
+If no income limits are found, return: {"incomeLimits": []}`;
+```
+
+**Gemini Model:** `gemini-2.0-flash-exp` (fast, cost-effective)
+
+**API Call:**
+```typescript
+const result = await ai.models.generateContent({
+  model: "gemini-2.0-flash-exp",
+  contents: [{ role: 'user', parts: [{ text: prompt }] }]
+});
+const responseText = result.text || "{}";
+
+return parseGeminiResponse<ExtractedIncomeLimit>(responseText, 'incomeLimits', 'extractIncomeLimits');
+```
+
+**ExtractedIncomeLimit Interface:**
+```typescript
+interface ExtractedIncomeLimit {
+  householdSize: number;          // 1, 2, 3, etc.
+  grossMonthlyLimit: number;      // in cents (e.g., 200000 = $2,000)
+  netMonthlyLimit: number;        // in cents
+  percentOfPoverty: number;       // e.g., 200 for 200% FPL
+  effectiveDate: string;          // ISO date "YYYY-MM-DD"
+  notes?: string;
+}
+```
+
+**Use Case:**
+```
+Input (policy text):
+"For households of 1, the gross monthly income limit is $2,000 and the net monthly income limit is $1,540 (200% of Federal Poverty Level). Effective October 1, 2023."
+
+Output:
+{
+  "incomeLimits": [{
+    "householdSize": 1,
+    "grossMonthlyLimit": 200000,
+    "netMonthlyLimit": 154000,
+    "percentOfPoverty": 200,
+    "effectiveDate": "2023-10-01",
+    "notes": null
+  }]
+}
+```
+
+---
+
+#### extractDeductions() - Deduction Extraction (lines 259-307)
+
+**Purpose:** Extract SNAP deduction rules (standard, earned income, shelter, etc.)
+
+**5 Deduction Types:**
+- `standard` - Standard deduction
+- `earned_income` - 20% earned income deduction
+- `dependent_care` - Child/dependent care expenses
+- `shelter` - Shelter/housing costs
+- `medical` - Medical expenses for elderly/disabled
+
+**4 Calculation Types:**
+- `fixed` - Fixed dollar amount
+- `percentage` - Percentage of income/expense
+- `tiered` - Different amounts for different household sizes
+- `capped` - Maximum amount (e.g., shelter deduction cap)
+
+**ExtractedDeduction Interface:**
+```typescript
+interface ExtractedDeduction {
+  deductionType: string;        // standard, earned_income, dependent_care, shelter, medical
+  deductionName: string;        // Human-readable name
+  calculationType: string;      // fixed, percentage, tiered, capped
+  amount?: number;              // Fixed amount in cents
+  percentage?: number;          // Percentage if applicable (e.g., 20 for 20%)
+  minAmount?: number;           // Minimum in cents
+  maxAmount?: number;           // Maximum/cap in cents
+  conditions?: any;             // When deduction applies
+  effectiveDate: string;
+  notes?: string;
+}
+```
+
+**Use Case:**
+```
+Input:
+"The standard deduction is $193 for households of 1-3, $206 for households of 4, and $237 for households of 5+. Effective October 1, 2023."
+
+Output:
+{
+  "deductions": [
+    {
+      "deductionType": "standard",
+      "deductionName": "Standard Deduction",
+      "calculationType": "tiered",
+      "amount": null,
+      "conditions": {"householdSize": [1,2,3], "amount": 19300},
+      "effectiveDate": "2023-10-01"
+    },
+    {
+      "deductionType": "standard",
+      "deductionName": "Standard Deduction (household of 4)",
+      "calculationType": "tiered",
+      "amount": 20600,
+      "conditions": {"householdSize": 4},
+      "effectiveDate": "2023-10-01"
+    },
+    {
+      "deductionType": "standard",
+      "deductionName": "Standard Deduction (household of 5+)",
+      "calculationType": "tiered",
+      "amount": 23700,
+      "conditions": {"householdSize": "5+"},
+      "effectiveDate": "2023-10-01"
+    }
+  ]
+}
+```
+
+---
+
+#### extractAllotments() - Benefit Allotment Extraction (lines 312-355)
+
+**Purpose:** Extract maximum monthly SNAP benefit amounts by household size
+
+**ExtractedAllotment Interface:**
+```typescript
+interface ExtractedAllotment {
+  householdSize: number;
+  maxMonthlyBenefit: number;    // in cents
+  minMonthlyBenefit?: number;   // in cents
+  effectiveDate: string;
+  notes?: string;
+}
+```
+
+**Use Case:**
+```
+Input:
+"Maximum monthly allotment for household of 1 is $291, for household of 2 is $535. Minimum benefit is $23. Effective October 1, 2023."
+
+Output:
+{
+  "allotments": [
+    {
+      "householdSize": 1,
+      "maxMonthlyBenefit": 29100,
+      "minMonthlyBenefit": 2300,
+      "effectiveDate": "2023-10-01"
+    },
+    {
+      "householdSize": 2,
+      "maxMonthlyBenefit": 53500,
+      "minMonthlyBenefit": 2300,
+      "effectiveDate": "2023-10-01"
+    }
+  ]
+}
+```
+
+---
+
+#### extractCategoricalRules() - Categorical Eligibility (lines 360-407)
+
+**Purpose:** Extract categorical eligibility rules (SSI, TANF, GA, BBCE)
+
+**Categorical Eligibility:** Receiving certain benefits (SSI, TANF) grants automatic or simplified SNAP eligibility
+
+**ExtractedCategoricalRule Interface:**
+```typescript
+interface ExtractedCategoricalRule {
+  ruleName: string;
+  ruleCode: string;               // SSI, TANF, GA, BBCE
+  description: string;
+  bypassGrossIncomeTest: boolean; // Skip gross income test?
+  bypassAssetTest: boolean;       // Skip asset test?
+  bypassNetIncomeTest: boolean;   // Skip net income test?
+  conditions?: any;
+  effectiveDate: string;
+  notes?: string;
+}
+```
+
+**Common Rule Codes:**
+- **SSI** - Supplemental Security Income categorical eligibility
+- **TANF** - Temporary Assistance for Needy Families categorical eligibility
+- **GA** - General Assistance categorical eligibility
+- **BBCE** - Broad-Based Categorical Eligibility
+
+**Use Case:**
+```
+Input:
+"Households receiving SSI automatically qualify for SNAP without income or asset tests."
+
+Output:
+{
+  "categoricalRules": [{
+    "ruleName": "SSI Categorical Eligibility",
+    "ruleCode": "SSI",
+    "description": "Households receiving SSI automatically qualify",
+    "bypassGrossIncomeTest": true,
+    "bypassAssetTest": true,
+    "bypassNetIncomeTest": true,
+    "conditions": {"receivesSSI": true},
+    "effectiveDate": "2023-10-01"
+  }]
+}
+```
+
+---
+
+#### extractDocumentRequirements() - Verification Rules (lines 412-460)
+
+**Purpose:** Extract document requirement rules
+
+**Document Types:**
+- `income` - Paystubs, tax returns, SSI letters
+- `identity` - Driver's license, birth certificate
+- `residency` - Utility bills, lease agreements
+- `expenses` - Rent receipts, medical bills
+- `citizenship` - Birth certificate, passport
+- `other` - Other verification
+
+**ExtractedDocumentRequirement Interface:**
+```typescript
+interface ExtractedDocumentRequirement {
+  requirementName: string;
+  documentType: string;         // income, identity, residency, expenses, citizenship, other
+  requiredWhen: any;            // When required
+  acceptableDocuments: any[];   // List of acceptable docs
+  validityPeriod?: number;      // Days document remains valid
+  isRequired: boolean;
+  canBeWaived: boolean;
+  waiverConditions?: any;
+  effectiveDate: string;
+  notes?: string;
+}
+```
+
+**Use Case:**
+```
+Input:
+"Households must verify income with paystubs, tax returns, or employer statement. Documents must be less than 30 days old. Required for all applicants, can be waived for good cause."
+
+Output:
+{
+  "documentRequirements": [{
+    "requirementName": "Income Verification",
+    "documentType": "income",
+    "requiredWhen": {"allApplicants": true},
+    "acceptableDocuments": ["paystubs", "tax returns", "employer statement"],
+    "validityPeriod": 30,
+    "isRequired": true,
+    "canBeWaived": true,
+    "waiverConditions": {"goodCause": true},
+    "effectiveDate": "2023-10-01"
+  }]
+}
+```
+
+---
+
+### 6.9.4 Main Extraction Function (lines 465-778)
+
+#### extractRulesFromSection() - Core Extraction Workflow (lines 465-778)
+
+**Purpose:** Extract rules from a manual section and save to database
+
+**Workflow:**
+```
+1. Fetch manual section from database
+2. Fetch section text from document chunks
+3. Auto-detect extraction type (if not provided)
+4. Create extraction job (status: processing)
+5. Extract rules using Gemini
+6. Insert rules into database tables
+7. Update extraction job (status: completed)
+```
+
+**Implementation:**
+```typescript
+export async function extractRulesFromSection(
+  manualSectionId: string,
+  extractionType?: string,
+  userId?: string
+): Promise<{
+  jobId: string;
+  rulesExtracted: number;
+  extractionType: string;
+}> {
+  // 1. Get manual section
+  const [section] = await db
+    .select()
+    .from(manualSections)
+    .where(eq(manualSections.id, manualSectionId));
+  
+  if (!section) {
+    throw new Error(`Manual section not found: ${manualSectionId}`);
+  }
+
+  // 2. Get section text from chunks
+  const chunks = await db
+    .select()
+    .from(documentChunks)
+    .innerJoin(documents, eq(documentChunks.documentId, documents.id))
+    .innerJoin(manualSections, eq(manualSections.documentId, documents.id))
+    .where(eq(manualSections.id, manualSectionId))
+    .orderBy(documentChunks.chunkIndex);
+
+  const sectionText = chunks.map(c => c.document_chunks.content).join('\n\n');
+
+  // 3. Auto-detect extraction type
+  const finalExtractionType = extractionType || detectExtractionType(section.sectionNumber, section.sectionTitle);
+
+  // 4. Create extraction job
+  const [job] = await db
+    .insert(extractionJobs)
+    .values({
+      manualSectionId: section.id,
+      sectionNumber: section.sectionNumber,
+      sectionTitle: section.sectionTitle,
+      extractionType: finalExtractionType,
+      status: 'processing',
+      extractedBy: userId,
+      startedAt: new Date(),
+    })
+    .returning();
+
+  try {
+    let extractedRules: any[] = [];
+    let rulesCount = 0;
+
+    // Get SNAP program ID
+    const [snapProgram] = await db
+      .select()
+      .from(benefitPrograms)
+      .where(eq(benefitPrograms.code, 'SNAP'));
+
+    // 5. Extract based on type
+    switch (finalExtractionType) {
+      case 'income_limits':
+        const incomeLimits = await extractIncomeLimits(sectionText, section.sectionNumber);
+        extractedRules = incomeLimits;
+        
+        // Insert into database
+        for (const limit of incomeLimits) {
+          await db.insert(snapIncomeLimits).values({
+            benefitProgramId: snapProgram.id,
+            householdSize: limit.householdSize,
+            grossMonthlyLimit: limit.grossMonthlyLimit,
+            netMonthlyLimit: limit.netMonthlyLimit,
+            percentOfPoverty: limit.percentOfPoverty,
+            effectiveDate: new Date(limit.effectiveDate),
+            isActive: true,
+            notes: limit.notes,
+            createdBy: userId,
+          });
+          rulesCount++;
+        }
+        break;
+
+      case 'deductions':
+        // ... similar pattern for deductions
+        break;
+
+      case 'allotments':
+        // ... similar pattern for allotments
+        break;
+
+      case 'categorical_eligibility':
+        // ... similar pattern for categorical rules
+        break;
+
+      case 'document_requirements':
+        // ... similar pattern for document requirements
+        break;
+
+      case 'full_auto':
+        // Try all extraction types
+        const autoIncomeLimits = await extractIncomeLimits(sectionText, section.sectionNumber);
+        const autoDeductions = await extractDeductions(sectionText, section.sectionNumber);
+        const autoAllotments = await extractAllotments(sectionText, section.sectionNumber);
+        const autoCatRules = await extractCategoricalRules(sectionText, section.sectionNumber);
+        const autoDocReqs = await extractDocumentRequirements(sectionText, section.sectionNumber);
+        
+        extractedRules = [
+          ...autoIncomeLimits,
+          ...autoDeductions,
+          ...autoAllotments,
+          ...autoCatRules,
+          ...autoDocReqs
+        ];
+        
+        // Insert all rules
+        // ... (insert logic for each rule type)
+        break;
+    }
+
+    // 7. Update job as completed
+    await db
+      .update(extractionJobs)
+      .set({
+        status: 'completed',
+        rulesExtracted: rulesCount,
+        extractedRules: extractedRules,
+        completedAt: new Date(),
+      })
+      .where(eq(extractionJobs.id, job.id));
+
+    return {
+      jobId: job.id,
+      rulesExtracted: rulesCount,
+      extractionType: finalExtractionType,
+    };
+
+  } catch (error) {
+    // Update job as failed
+    await db
+      .update(extractionJobs)
+      .set({
+        status: 'failed',
+        errorMessage: error instanceof Error ? error.message : 'Unknown error',
+        completedAt: new Date(),
+      })
+      .where(eq(extractionJobs.id, job.id));
+
+    throw error;
+  }
+}
+```
+
+**Database Tables (Rule Storage):**
+- `snapIncomeLimits` - Income limit rules
+- `snapDeductions` - Deduction rules
+- `snapAllotments` - Benefit allotment amounts
+- `categoricalEligibilityRules` - Categorical eligibility rules
+- `documentRequirementRules` - Document verification requirements
+
+**Extraction Job States:**
+- `processing` - Currently extracting
+- `completed` - Extraction succeeded
+- `failed` - Extraction failed (error logged)
+
+---
+
+
+### 6.9.5 Batch Processing & Job Management (lines 783-840)
+
+#### getExtractionJob() - Job Status (lines 783-790)
+
+```typescript
+export async function getExtractionJob(jobId: string) {
+  const [job] = await db
+    .select()
+    .from(extractionJobs)
+    .where(eq(extractionJobs.id, jobId));
+  
+  return job;
+}
+```
+
+**Use Case:** Check extraction job status
+```typescript
+const job = await getExtractionJob(jobId);
+console.log(job.status);  // processing, completed, failed
+console.log(job.rulesExtracted);  // Number of rules extracted
+```
+
+---
+
+#### getAllExtractionJobs() - List All Jobs (lines 795-800)
+
+```typescript
+export async function getAllExtractionJobs() {
+  return await db
+    .select()
+    .from(extractionJobs)
+    .orderBy(extractionJobs.createdAt);
+}
+```
+
+**Use Case:** Display extraction history in admin dashboard
+
+---
+
+#### batchExtractRules() - Batch Extraction (lines 805-840)
+
+**Purpose:** Extract rules from multiple sections in sequence
+
+```typescript
+export async function batchExtractRules(
+  manualSectionIds: string[],
+  userId?: string
+): Promise<{
+  totalSections: number;
+  successfulExtractions: number;
+  failedExtractions: number;
+  totalRulesExtracted: number;
+}> {
+  let successCount = 0;
+  let failCount = 0;
+  let totalRules = 0;
+
+  for (const sectionId of manualSectionIds) {
+    try {
+      const result = await extractRulesFromSection(sectionId, undefined, userId);
+      successCount++;
+      totalRules += result.rulesExtracted;
+    } catch (error) {
+      logger.error('Failed to extract rules from section', { sectionId, error });
+      failCount++;
+    }
+  }
+
+  return {
+    totalSections: manualSectionIds.length,
+    successfulExtractions: successCount,
+    failedExtractions: failCount,
+    totalRulesExtracted: totalRules,
+  };
+}
+```
+
+**Use Case:** Bulk extraction workflow
+```
+New Maryland SNAP manual released (October 2023)
+→ Parse manual into sections (30+ sections)
+→ batchExtractRules(sectionIds)
+→ Extract rules from all sections
+→ Report: 30 sections, 28 successful, 2 failed, 150 rules extracted
+```
+
+**Error Handling:** Continues on failure (doesn't crash entire batch)
+
+---
+
+### 6.9 Summary - Rules Extraction Service
+
+**Key Features:**
+1. **5 Extraction Types** - Income limits, deductions, allotments, categorical eligibility, document requirements
+2. **Auto-Detection** - Section number-based extraction type detection (100s-600s schema)
+3. **Gemini 2.0 Flash** - Fast, cost-effective AI extraction
+4. **Structured Output** - JSON validation with error handling
+5. **Batch Processing** - Extract multiple sections sequentially
+
+**Extraction Types:**
+- **`income_limits`** - SNAP gross/net income limits by household size
+- **`deductions`** - Standard, earned income, shelter, medical, dependent care deductions
+- **`allotments`** - Maximum monthly benefit amounts
+- **`categorical_eligibility`** - SSI, TANF, GA, BBCE categorical eligibility rules
+- **`document_requirements`** - Verification document requirements
+- **`full_auto`** - Try all extraction types (when section type unclear)
+
+**Section Number Schema:**
+- **100-199:** Categorical eligibility (SSI, TANF, BBCE)
+- **200-299:** Income limits and eligibility tests
+- **300-399:** Deductions (standard, earned income, shelter, medical)
+- **400-499:** Benefit allotments and issuance
+- **500-699:** Document requirements and verification
+
+**Gemini Prompt Pattern:**
+```
+1. System role: "You are an expert at extracting structured policy rules"
+2. Task: "Analyze this SNAP policy manual section about [topic]"
+3. Input: Section text
+4. Instructions: Extract ALL [rules] mentioned, for each provide:
+   - Field 1: [description]
+   - Field 2: [description]
+   - ...
+5. Output format: JSON with specific structure
+6. Fallback: If none found, return {"[arrayKey]": []}
+```
+
+**Structured Interfaces:**
+```typescript
+ExtractedIncomeLimit {
+  householdSize, grossMonthlyLimit, netMonthlyLimit, percentOfPoverty, effectiveDate, notes
+}
+
+ExtractedDeduction {
+  deductionType, deductionName, calculationType, amount, percentage, minAmount, maxAmount, conditions, effectiveDate, notes
+}
+
+ExtractedAllotment {
+  householdSize, maxMonthlyBenefit, minMonthlyBenefit, effectiveDate, notes
+}
+
+ExtractedCategoricalRule {
+  ruleName, ruleCode, description, bypassGrossIncomeTest, bypassAssetTest, bypassNetIncomeTest, conditions, effectiveDate, notes
+}
+
+ExtractedDocumentRequirement {
+  requirementName, documentType, requiredWhen, acceptableDocuments, validityPeriod, isRequired, canBeWaived, waiverConditions, effectiveDate, notes
+}
+```
+
+**Database Tables:**
+- `snapIncomeLimits` - Income limit rules
+- `snapDeductions` - Deduction rules
+- `snapAllotments` - Benefit allotment amounts
+- `categoricalEligibilityRules` - Categorical eligibility rules
+- `documentRequirementRules` - Document verification requirements
+- `extractionJobs` - Extraction job tracking
+
+**Extraction Job States:**
+- `processing` - Currently extracting rules
+- `completed` - Successfully extracted (rulesExtracted > 0)
+- `failed` - Extraction failed (errorMessage logged)
+
+**Money Representation:** All dollar amounts in CENTS
+- $2,000 → 200000 cents
+- $19.30 → 1930 cents
+- **Rationale:** Avoid floating-point precision issues
+
+**Error Handling:**
+- Gemini API unavailable → Log warning, return empty array
+- JSON parse error → Log error, return empty array
+- Section not found → Throw error
+- Batch extraction failure → Log error, continue with next section
+
+**Markdown Code Block Handling:**
+```
+Gemini often returns:
+```json
+{"incomeLimits": [...]}
+```
+
+parseGeminiResponse() extracts JSON from markdown blocks
+```
+
+**Use Cases:**
+1. **Policy Manual Upload** - Admin uploads new Maryland SNAP manual → Auto-extract rules
+2. **Quarterly Updates** - Maryland updates income limits (Oct 1) → Re-extract Section 273.9
+3. **Federal Regulation Changes** - 7 CFR Part 273 amended → Re-extract affected sections
+4. **New State** - Add Pennsylvania → Extract PA SNAP manual rules
+5. **Audit/Review** - Navigator reviews extracted rules for accuracy
+
+**Integration Points:**
+- **policySourceScraper** - Provides raw policy text (30+ sources)
+- **manualSections** - Structured sections from policy manuals
+- **documentChunks** - Section text storage
+- **rulesEngine** - Consumes extracted rules for eligibility calculations
+- **Gemini API** - AI extraction model
+
+**Performance:**
+- **Extraction Time:** ~5-10 seconds per section (Gemini API latency)
+- **Batch Processing:** Sequential (not parallel) to avoid rate limits
+- **Token Usage:** ~1,000-5,000 tokens per section (depends on section length)
+- **Cost:** ~$0.01-0.05 per section (Gemini 2.0 Flash pricing)
+
+**Production Deployment:**
+1. Set `GOOGLE_API_KEY` or `GEMINI_API_KEY` environment variable
+2. Upload Maryland SNAP manual to document management system
+3. Parse manual into sections (manualSections table)
+4. Run batch extraction: `batchExtractRules(sectionIds, adminUserId)`
+5. Review extraction jobs for failures
+6. Manually review extracted rules for accuracy
+7. Activate rules (`isActive = true`)
+
+**Quality Assurance:**
+- **Human Review:** Navigator reviews extracted rules before activation
+- **Comparison Testing:** Compare extracted rules to existing rules engines
+- **Federal Compliance:** Cross-check with 7 CFR Part 273
+- **Test Cases:** Sample household scenarios to validate rule accuracy
+
+**Limitations:**
+- **AI Extraction Errors:** Gemini may misinterpret complex policy text
+- **Manual Review Required:** Extracted rules must be human-verified before production use
+- **Single State Focus:** Currently optimized for Maryland SNAP manual structure
+- **Section Numbering:** Assumes Maryland's section numbering schema (100s-600s)
+
+**Future Enhancements:**
+- **Multi-State Support:** Adapt extraction prompts for PA/VA manual structures
+- **Confidence Scores:** Gemini confidence ratings for extracted rules
+- **Diff Detection:** Highlight changes when re-extracting updated sections
+- **Parallel Batch Processing:** Extract multiple sections concurrently
+- **Rule Validation:** Automated validation against known test cases
+- **Version Control:** Track rule changes over time (effective dates, superseded rules)
+
+**Regulatory Compliance:**
+- ✅ **7 CFR Part 273** - SNAP federal regulations (source of truth)
+- ✅ **COMAR 07.03.01-19** - Maryland SNAP regulations
+- ✅ **FNS Memos** - Federal guidance updates
+- ✅ **Maryland SNAP Manual** - State implementation guidance
+
+**Maryland Rules Engines - PRIMARY:**
+- Rules extracted by this service populate Maryland rules engines
+- Maryland rules engines are PRIMARY for eligibility determinations
+- PolicyEngine provides third-party verification only (not primary calculator)
+
+---
+
