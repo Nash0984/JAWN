@@ -30870,3 +30870,712 @@ Result:
 
 ---
 
+
+---
+
+## 6.16 Maryland TANF (TCA) Rules Engine - PRIMARY Calculator (server/services/tanfRulesEngine.ts - 477 lines)
+
+**Purpose:** Deterministic TANF (Temporary Assistance for Needy Families) eligibility and benefit calculation implementing Maryland's Temporary Cash Assistance (TCA) program
+
+**Critical Design:** This is the **PRIMARY Maryland-controlled TANF/TCA Rules Engine** implementing Maryland TANF policies. NOT a PolicyEngine wrapper.
+
+**Program Name:** Maryland calls TANF "Temporary Cash Assistance (TCA)" - same federal program, state branding
+
+**Federal Authority:** 
+- **Personal Responsibility and Work Opportunity Reconciliation Act (PRWORA) of 1996**
+- **42 U.S.C. § 601** - TANF block grants
+- **45 CFR Part 260-265** - Federal TANF regulations
+
+**Maryland Policy:** TCA-100 through TCA-300 series (income, assets, work requirements)
+
+**TANF Unique Requirements:**
+```
+1. Income Test: Countable income ≤ Needs Standard
+2. Asset Test: Liquid assets + vehicle value limits
+3. Work Requirements: 30-35 hours/week (varies by household type)
+4. Time Limits:
+   ├─ Federal: 60 months lifetime limit (5 years)
+   └─ Maryland: May have additional continuous limits
+5. Benefit Calculation: Payment Standard - Countable Income
+```
+
+---
+
+### 6.16.1 Data Structures (lines 18-78)
+
+#### TANFHouseholdInput Interface (lines 18-33)
+
+**Purpose:** Input parameters for TANF/TCA eligibility determination
+
+```typescript
+export interface TANFHouseholdInput {
+  size: number;
+  countableMonthlyIncome: number; // in cents - after exemptions
+  liquidAssets: number; // in cents - checking, savings, cash
+  vehicleValue?: number; // in cents
+  hasEarnedIncome: boolean;
+  householdType: "single_parent" | "two_parent";
+  
+  // Work requirement tracking
+  isWorkExempt?: boolean;
+  exemptionReason?: string; // disabled, caring_for_infant, etc
+  currentWorkHours?: number; // Hours per week
+  
+  // Time limit tracking
+  monthsReceived?: number; // Lifetime months of TANF
+  continuousMonthsReceived?: number; // Current consecutive months
+  hasHardshipExemption?: boolean;
+}
+```
+
+**All monetary amounts in CENTS**
+
+**Example Input - Single Parent Household:**
+```typescript
+{
+  size: 3,  // Single parent with 2 children
+  countableMonthlyIncome: 50000,  // $500/month
+  liquidAssets: 80000,  // $800 in savings
+  vehicleValue: 450000,  // $4,500 car value
+  hasEarnedIncome: true,
+  householdType: "single_parent",
+  isWorkExempt: false,
+  exemptionReason: undefined,
+  currentWorkHours: 30,  // Working 30 hours/week
+  monthsReceived: 15,  // Used 15 months lifetime
+  continuousMonthsReceived: 6,  // Current episode: 6 months
+  hasHardshipExemption: false
+}
+```
+
+---
+
+#### TANFEligibilityResult Interface (lines 35-78)
+
+**Purpose:** Complete TANF eligibility determination with work and time limit tracking
+
+```typescript
+export interface TANFEligibilityResult {
+  isEligible: boolean;
+  reason?: string;
+  ineligibilityReasons?: string[];
+  
+  incomeTest: {
+    passed: boolean;
+    needsStandard: number; // Income limit in cents
+    countableIncome: number; // Actual income in cents
+  };
+  
+  assetTest: {
+    passed: boolean;
+    liquidAssetLimit: number;
+    actualLiquidAssets: number;
+    vehicleTestPassed: boolean;
+  };
+  
+  workRequirements: {
+    requirementsMet: boolean;
+    requiredHours: number;
+    actualHours?: number;
+    isExempt: boolean;
+    exemptionReason?: string;
+  };
+  
+  timeLimits: {
+    withinLimits: boolean;
+    lifetimeMonthsUsed: number;
+    lifetimeMonthsRemaining: number;
+    continuousMonthsUsed: number;
+    hasHardshipExemption: boolean;
+  };
+  
+  monthlyBenefit: number; // in cents
+  calculationBreakdown: string[];
+  rulesSnapshot: {
+    incomeLimitId: string;
+    assetLimitIds: string[];
+    workRequirementId?: string;
+    timeLimitId?: string;
+  };
+  policyCitations: Array<{
+    sectionNumber: string;
+    sectionTitle: string;
+    ruleType: string;
+    description: string;
+  }>;
+}
+```
+
+---
+
+### 6.16.2 TANF Eligibility Calculation - 6-Step Process (lines 194-474)
+
+#### calculateEligibility() - Main Entry Point (lines 194-474)
+
+**Purpose:** Calculate TANF/TCA eligibility and monthly benefit using Maryland rules
+
+**6-Step TANF Calculation Process:**
+
+```
+Step 1: Get Income Limits - Needs Standard & Payment Standard (lines 210-254)
+  ├─ Needs Standard: Income eligibility threshold
+  └─ Payment Standard: Maximum benefit amount
+
+Step 2: Income Test (lines 263-276)
+  └─ Countable Income ≤ Needs Standard
+
+Step 3: Asset Test (lines 278-320)
+  ├─ Liquid Assets (cash, checking, savings)
+  └─ Vehicle Value
+
+Step 4: Work Requirements (lines 322-357)
+  ├─ Single Parent: 30 hours/week
+  ├─ Two Parent: 35 hours/week
+  └─ Exemptions: disabled, caring for infant, etc.
+
+Step 5: Time Limits (lines 359-389)
+  ├─ Federal Lifetime: 60 months (5 years)
+  ├─ Continuous: Varies by state
+  └─ Hardship Exemption: May extend limits
+
+Step 6: Calculate Benefit (lines 391-403)
+  └─ Benefit = Payment Standard - Countable Income
+```
+
+---
+
+### 6.16.3 Step 1: Income Limits - Needs Standard & Payment Standard (lines 210-261)
+
+**TANF Dual Standards:**
+| Standard | Purpose | Example (Family of 3) |
+|----------|---------|----------------------|
+| Needs Standard | Income eligibility threshold | $692/month |
+| Payment Standard | Maximum benefit amount | $727/month |
+
+**Why Two Standards?**
+- **Needs Standard:** Determines if you're eligible
+- **Payment Standard:** Determines how much you receive
+- Payment Standard is typically higher than Needs Standard
+- This allows working families to remain eligible even with some income
+
+```typescript
+// Get income limits (needs standard)
+const incomeLimit = await this.getActiveIncomeLimits(household.size, effectiveDate);
+
+breakdown.push(
+  `TANF Needs Standard (Income Limit): $${(incomeLimit.needsStandard / 100).toFixed(2)}/month`
+);
+breakdown.push(
+  `TANF Payment Standard (Max Benefit): $${(incomeLimit.paymentStandard / 100).toFixed(2)}/month`
+);
+```
+
+**Example - Family of 3 (Maryland 2024):**
+```
+Needs Standard: $692/month (income eligibility threshold)
+Payment Standard: $727/month (maximum benefit)
+
+Scenario 1: $0 income
+  Income Test: $0 ≤ $692 ✓ ELIGIBLE
+  Benefit: $727 - $0 = $727/month (max benefit)
+
+Scenario 2: $400 income
+  Income Test: $400 ≤ $692 ✓ ELIGIBLE
+  Benefit: $727 - $400 = $327/month
+
+Scenario 3: $700 income
+  Income Test: $700 > $692 ✗ INELIGIBLE
+  Benefit: $0 (over needs standard)
+```
+
+**Citation:** TCA-100 - TANF Income Eligibility
+
+---
+
+### 6.16.4 Step 2: Income Test (lines 263-276)
+
+**Purpose:** Determine if countable income is below needs standard
+
+```typescript
+const incomeTestPassed = household.countableMonthlyIncome <= incomeLimit.needsStandard;
+
+if (!incomeTestPassed) {
+  ineligibilityReasons.push(
+    `Countable income $${(household.countableMonthlyIncome / 100).toFixed(2)} exceeds needs standard $${(
+      incomeLimit.needsStandard / 100
+    ).toFixed(2)}`
+  );
+  breakdown.push(`✗ Income test FAILED`);
+} else {
+  breakdown.push(`✓ Income test PASSED`);
+}
+```
+
+**Countable Income Calculation (performed before this engine):**
+```
+Gross Income
+  - $90 earned income disregard (first $90 not counted)
+  - Child care costs (if working)
+  - Dependent care deduction
+  = Countable Income
+```
+
+**Example:**
+```
+Gross Monthly Income: $800
+Earned Income Disregard: -$90
+Childcare Costs: -$200
+Countable Income: $510
+
+Needs Standard: $692
+Income Test: $510 ≤ $692 ✓ PASS
+```
+
+---
+
+### 6.16.5 Step 3: Asset Test (lines 278-320)
+
+**Purpose:** Verify liquid assets and vehicle value are within limits
+
+```typescript
+// Asset test
+const assetLimits = await this.getActiveAssetLimits(effectiveDate);
+const liquidAssetLimit = assetLimits.find((a) => a.assetType === "liquid");
+const vehicleAssetLimit = assetLimits.find((a) => a.assetType === "vehicle");
+
+let assetTestPassed = true;
+let vehicleTestPassed = true;
+
+// Liquid assets (cash, checking, savings)
+if (liquidAssetLimit) {
+  assetTestPassed = household.liquidAssets <= liquidAssetLimit.maxAssetValue;
+  
+  if (!assetTestPassed) {
+    ineligibilityReasons.push(
+      `Liquid assets $${(household.liquidAssets / 100).toFixed(2)} exceed limit $${(
+        liquidAssetLimit.maxAssetValue / 100
+      ).toFixed(2)}`
+    );
+    breakdown.push(`✗ Asset test FAILED`);
+  } else {
+    breakdown.push(`✓ Asset test PASSED`);
+  }
+}
+
+// Vehicle value
+if (vehicleAssetLimit && household.vehicleValue) {
+  vehicleTestPassed = household.vehicleValue <= vehicleAssetLimit.maxAssetValue;
+  if (!vehicleTestPassed) {
+    assetTestPassed = false;
+    ineligibilityReasons.push(`Vehicle value exceeds limit`);
+    breakdown.push(`✗ Vehicle asset test FAILED`);
+  } else {
+    breakdown.push(`✓ Vehicle asset test PASSED`);
+  }
+}
+```
+
+**Maryland TANF Asset Limits (typical):**
+| Asset Type | Limit | Notes |
+|------------|-------|-------|
+| Liquid Assets | $1,000 | Cash, checking, savings |
+| Vehicle | $5,500 | One vehicle exempt, additional vehicles counted |
+| Home | Exempt | Primary residence not counted |
+| Personal Property | Exempt | Household goods, clothing |
+
+**Example - Asset Test:**
+```
+Household Assets:
+  Checking Account: $500
+  Savings Account: $300
+  Cash: $50
+  Total Liquid Assets: $850
+
+Vehicle:
+  2015 Honda Civic: $4,500 (fair market value)
+
+Asset Limits:
+  Liquid Asset Limit: $1,000
+  Vehicle Limit: $5,500
+
+Tests:
+  Liquid: $850 ≤ $1,000 ✓ PASS
+  Vehicle: $4,500 ≤ $5,500 ✓ PASS
+
+Result: Asset test PASSED
+```
+
+**Citation:** TCA-200 - TANF Asset Limits
+
+---
+
+
+### 6.16.6 Step 4: Work Requirements (lines 322-357)
+
+**Purpose:** Verify household meets federal TANF work participation requirements
+
+```typescript
+// Work requirements
+const workReqs = await this.getActiveWorkRequirements(household.householdType, effectiveDate);
+
+let workRequirementsMet = true;
+let requiredHours = 0;
+
+if (workReqs) {
+  requiredHours = workReqs.requiredHoursPerWeek;
+
+  if (household.isWorkExempt) {
+    breakdown.push(
+      `Work requirement EXEMPT: ${household.exemptionReason || "unknown reason"}`
+    );
+    workRequirementsMet = true;
+  } else {
+    const actualHours = household.currentWorkHours || 0;
+    workRequirementsMet = actualHours >= requiredHours;
+
+    breakdown.push(`Work Requirement: ${requiredHours} hours/week`);
+    breakdown.push(`Actual Work Hours: ${actualHours} hours/week`);
+
+    if (!workRequirementsMet) {
+      ineligibilityReasons.push(
+        `Work hours ${actualHours}/week below required ${requiredHours}/week`
+      );
+      breakdown.push(`✗ Work requirement NOT MET (sanctions may apply)`);
+    } else {
+      breakdown.push(`✓ Work requirement MET`);
+    }
+  }
+}
+```
+
+**Federal TANF Work Requirements:**
+| Household Type | Required Hours/Week | Citation |
+|----------------|-------------------|----------|
+| Single Parent | 30 hours/week | 42 U.S.C. § 607(c)(1)(A) |
+| Two Parent | 35 hours/week | 42 U.S.C. § 607(c)(1)(B) |
+
+**Qualifying Work Activities:**
+- Unsubsidized employment
+- Subsidized employment
+- Work experience
+- On-the-job training
+- Job search (limited duration)
+- Community service
+- Vocational training (limited)
+- Education directly related to employment
+
+**Work Exemptions:**
+- Caring for child under 6 months old
+- Disabled and unable to work
+- Caring for disabled household member
+- Age 60+ (state option)
+- Participating in substance abuse treatment
+
+**Example - Single Parent:**
+```
+Household: Single parent with 2 children
+Work Requirement: 30 hours/week
+
+Scenario 1: Working 32 hours/week
+  Actual Hours: 32
+  Required: 30
+  Result: ✓ Work requirement MET
+
+Scenario 2: Working 25 hours/week
+  Actual Hours: 25
+  Required: 30
+  Result: ✗ Work requirement NOT MET
+  Consequence: Financial sanction (benefit reduction)
+
+Scenario 3: Disabled parent
+  isWorkExempt: true
+  exemptionReason: "disabled"
+  Result: ✓ Work requirement EXEMPT
+```
+
+**Sanctions for Non-Compliance:**
+- **First Violation:** 25% benefit reduction
+- **Second Violation:** 50% benefit reduction
+- **Third Violation:** Case closure
+
+**Citation:** TCA-300 - TANF Work Requirements
+
+---
+
+### 6.16.7 Step 5: Time Limits (lines 359-389)
+
+**Purpose:** Verify household has not exceeded federal/state TANF time limits
+
+```typescript
+// Time limits
+const timeLimits = await this.getActiveTimeLimits(effectiveDate);
+const lifetimeLimit = timeLimits.find((t) => t.limitType === "lifetime");
+const continuousLimit = timeLimits.find((t) => t.limitType === "continuous");
+
+const lifetimeMonthsUsed = household.monthsReceived || 0;
+const continuousMonthsUsed = household.continuousMonthsReceived || 0;
+
+let timeLimitsOk = true;
+
+if (lifetimeLimit && !household.hasHardshipExemption) {
+  const lifetimeMonthsRemaining = lifetimeLimit.maxMonths - lifetimeMonthsUsed;
+  breakdown.push(
+    `Lifetime Limit: ${lifetimeLimit.maxMonths} months (${lifetimeMonthsRemaining} remaining)`
+  );
+
+  if (lifetimeMonthsRemaining <= 0) {
+    timeLimitsOk = false;
+    ineligibilityReasons.push(
+      `Lifetime time limit reached (${lifetimeLimit.maxMonths} months)`
+    );
+    breakdown.push(`✗ Lifetime time limit EXCEEDED`);
+  } else {
+    breakdown.push(`✓ Within lifetime time limit`);
+  }
+}
+
+if (household.hasHardshipExemption) {
+  breakdown.push(`Time limit EXEMPT: Hardship exemption granted`);
+  timeLimitsOk = true;
+}
+```
+
+**Federal TANF Time Limits:**
+| Limit Type | Duration | Authority |
+|------------|----------|-----------|
+| Lifetime | 60 months (5 years) | 42 U.S.C. § 608(a)(7) |
+| Continuous | Varies by state | State option |
+
+**Lifetime Limit Calculation:**
+```
+Federal Lifetime Limit: 60 months total
+Example:
+  Episode 1: 18 months (Jan 2020 - Jun 2021)
+  Episode 2: 12 months (Jan 2022 - Dec 2022)
+  Episode 3: 8 months (Mar 2023 - Oct 2023)
+  
+  Total Months Used: 18 + 12 + 8 = 38 months
+  Remaining: 60 - 38 = 22 months
+```
+
+**Hardship Exemption:**
+- States may exempt up to 20% of caseload from time limits
+- Criteria: domestic violence, disabled family member, etc.
+- Allows continued benefits beyond 60 months
+
+**Example - Time Limit Check:**
+```
+Household:
+  Lifetime Months Used: 48
+  Federal Lifetime Limit: 60 months
+
+Calculation:
+  Remaining: 60 - 48 = 12 months
+  Status: ✓ Within lifetime limit (12 months remaining)
+
+Notification to client:
+  "You have 12 months of TANF eligibility remaining"
+```
+
+**Example - Exceeded Limit:**
+```
+Household:
+  Lifetime Months Used: 60
+  Federal Lifetime Limit: 60 months
+  Hardship Exemption: No
+
+Calculation:
+  Remaining: 60 - 60 = 0 months
+  Status: ✗ Lifetime limit EXCEEDED
+  
+Result: INELIGIBLE (time limit reached)
+```
+
+**Example - Hardship Exemption:**
+```
+Household:
+  Lifetime Months Used: 62
+  Federal Lifetime Limit: 60 months
+  Hardship Exemption: Yes (domestic violence survivor)
+
+Calculation:
+  Hardship exemption overrides time limit
+  Status: ✓ Time limit EXEMPT
+  
+Result: Eligible to continue receiving benefits
+```
+
+---
+
+### 6.16.8 Step 6: Calculate Benefit (lines 183-189, 391-403)
+
+**Purpose:** Calculate monthly TANF benefit amount
+
+```typescript
+// Calculate benefit
+private calculateBenefit(paymentStandard: number, countableIncome: number): number {
+  const benefit = paymentStandard - countableIncome;
+  return Math.max(0, benefit); // Benefit cannot be negative
+}
+
+// In main calculation
+let monthlyBenefit = 0;
+if (incomeTestPassed && assetTestPassed && timeLimitsOk) {
+  monthlyBenefit = this.calculateBenefit(
+    incomeLimit.paymentStandard,
+    household.countableMonthlyIncome
+  );
+  breakdown.push(
+    `Monthly Benefit: $${(incomeLimit.paymentStandard / 100).toFixed(2)} - $${(
+      household.countableMonthlyIncome / 100
+    ).toFixed(2)} = $${(monthlyBenefit / 100).toFixed(2)}`
+  );
+}
+```
+
+**TANF Benefit Formula:**
+```
+Monthly Benefit = Payment Standard - Countable Income
+
+If result < $0, then Monthly Benefit = $0
+```
+
+**Maryland Payment Standards (2024 typical):**
+| Household Size | Payment Standard |
+|----------------|-----------------|
+| 1 | $308/month |
+| 2 | $502/month |
+| 3 | $727/month |
+| 4 | $834/month |
+| 5 | $961/month |
+| Each additional | +$127/month |
+
+**Complete Calculation Example - Family of 3:**
+```
+INPUT:
+  Household Size: 3
+  Gross Monthly Income: $800 (wages)
+  Liquid Assets: $600
+  Vehicle Value: $4,000
+  Work Hours: 32 hours/week
+  Months Received: 24 (lifetime)
+
+STEP 1: Income Limits
+  Needs Standard: $692/month
+  Payment Standard: $727/month
+
+STEP 2: Countable Income Calculation (pre-engine)
+  Gross Income: $800
+  Earned Income Disregard: -$90
+  Childcare Costs: -$200
+  Countable Income: $510
+
+STEP 2: Income Test
+  $510 ≤ $692 ✓ PASS
+
+STEP 3: Asset Test
+  Liquid Assets: $600 ≤ $1,000 ✓ PASS
+  Vehicle: $4,000 ≤ $5,500 ✓ PASS
+
+STEP 4: Work Requirements
+  Required: 30 hours/week (single parent)
+  Actual: 32 hours/week
+  ✓ MET
+
+STEP 5: Time Limits
+  Lifetime Used: 24 months
+  Lifetime Limit: 60 months
+  Remaining: 36 months ✓ OK
+
+STEP 6: Calculate Benefit
+  Payment Standard: $727
+  Countable Income: -$510
+  Monthly Benefit: $217
+
+RESULT:
+  Eligible: Yes
+  Monthly Benefit: $217
+  Time Remaining: 36 months
+```
+
+---
+
+### 6.16 Summary - Maryland TANF (TCA) Rules Engine
+
+**Purpose:** PRIMARY Maryland-controlled TANF/TCA eligibility and benefit calculator
+
+**Critical Design:** NOT a PolicyEngine wrapper - implements Maryland's Temporary Cash Assistance program rules
+
+**Program:** Maryland's implementation of federal TANF (Personal Responsibility and Work Opportunity Reconciliation Act of 1996)
+
+**6 Eligibility Tests:**
+1. **Income Test:** Countable income ≤ Needs Standard
+2. **Asset Test:** Liquid assets ≤ $1,000, Vehicle ≤ $5,500
+3. **Work Requirements:** 30 hours/week (single parent), 35 hours/week (two parent)
+4. **Time Limits:** 60 months lifetime federal limit
+5. **Categorical:** Must have dependent child or be pregnant
+6. **Other:** U.S. citizen or qualified alien, Maryland resident
+
+**Benefit Calculation:**
+```
+Monthly Benefit = Payment Standard - Countable Income
+(Benefit cannot be negative)
+```
+
+**Dual Standards System:**
+- **Needs Standard:** Eligibility threshold (lower)
+- **Payment Standard:** Maximum benefit (higher)
+- Allows working families to remain eligible
+
+**Federal Authorities:**
+- **42 U.S.C. § 601-619** - TANF block grants
+- **42 U.S.C. § 607** - Work participation requirements
+- **42 U.S.C. § 608(a)(7)** - 60-month lifetime limit
+- **45 CFR Part 260-265** - Federal TANF regulations
+
+**Maryland Policy Citations:**
+- **TCA-100** - Income Eligibility
+- **TCA-200** - Asset Limits
+- **TCA-300** - Work Requirements
+
+**Work Requirements:**
+- Single parent: 30 hours/week
+- Two parent: 35 hours/week
+- Exemptions: disabled, infant care, elderly
+
+**Sanctions:**
+- 1st violation: 25% reduction
+- 2nd violation: 50% reduction
+- 3rd violation: Case closure
+
+**Time Limits:**
+- Federal: 60 months lifetime
+- Hardship exemption: Up to 20% of caseload
+- Exempt: domestic violence, disabled member
+
+**Integration Points:**
+- **rulesEngine (SNAP)** - Cross-program eligibility
+- **medicaidRulesEngine** - Categorical eligibility for Medicaid
+- **crossEnrollmentEngine** - Auto-enrollment alerts
+- **storage.ts** - Persist benefit determinations
+
+**Database Tables:**
+- `tanfIncomeLimits` - Needs standard & payment standard by household size
+- `tanfAssetLimits` - Liquid asset & vehicle limits
+- `tanfWorkRequirements` - Hours/week by household type
+- `tanfTimeLimits` - Lifetime & continuous limits
+
+**Production Deployment:**
+- Used by Navigator Workspace for TCA determinations
+- Tracks work participation for federal reporting
+- Monitors time limits and alerts when nearing 60 months
+- Generates sanction notices for work non-compliance
+
+**Compliance:**
+- ✅ **42 U.S.C. § 607** - Work participation
+- ✅ **42 U.S.C. § 608(a)(7)** - Time limits
+- ✅ **45 CFR 261** - Work verification
+- ✅ **Maryland TCA Manual** - State policies
+
+---
+
