@@ -202,7 +202,8 @@ export class IRSDirectDownloader {
       // Use createRequire to load CommonJS pdf-parse in ESM
       const { createRequire } = (await import('module')) as any;
       const require = createRequire(import.meta.url);
-      const pdfParse = require('pdf-parse');
+      const pdfParseModule = require('pdf-parse');
+      const pdfParse = pdfParseModule.default || pdfParseModule;
       const pdfData = await pdfParse(pdfBuffer);
       const pdfText = pdfData.text;
       
@@ -294,7 +295,8 @@ export class IRSDirectDownloader {
       // Use createRequire to load CommonJS pdf-parse in ESM
       const { createRequire } = (await import('module')) as any;
       const require = createRequire(import.meta.url);
-      const pdfParse = require('pdf-parse');
+      const pdfParseModule = require('pdf-parse');
+      const pdfParse = pdfParseModule.default || pdfParseModule;
       const pdfData = await pdfParse(pdfBuffer);
       const pdfText = pdfData.text;
       

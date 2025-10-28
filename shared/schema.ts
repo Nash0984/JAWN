@@ -1847,6 +1847,13 @@ export const consentForms = pgTable("consent_forms", {
   irsPublicationRef: text("irs_publication_ref"), // e.g., "Pub 4299 (2024)"
   disclosureScope: jsonb("disclosure_scope"), // Specific data elements authorized for disclosure
   
+  // GDPR/HIPAA Data Retention
+  retentionCategory: text("retention_category"),
+  retentionUntil: timestamp("retention_until"),
+  scheduledForDeletion: boolean("scheduled_for_deletion").default(false).notNull(),
+  deletionApprovedBy: varchar("deletion_approved_by").references(() => users.id),
+  deletionApprovedAt: timestamp("deletion_approved_at"),
+  
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 }, (table) => ({
@@ -2777,6 +2784,13 @@ export const intakeSessions = pgTable("intake_sessions", {
   exportedToEE: boolean("exported_to_ee").default(false),
   exportedAt: timestamp("exported_at"),
   eeApplicationId: text("ee_application_id"), // ID from E&E system
+  
+  // GDPR/HIPAA Data Retention
+  retentionCategory: text("retention_category"),
+  retentionUntil: timestamp("retention_until"),
+  scheduledForDeletion: boolean("scheduled_for_deletion").default(false).notNull(),
+  deletionApprovedBy: varchar("deletion_approved_by").references(() => users.id),
+  deletionApprovedAt: timestamp("deletion_approved_at"),
   
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
@@ -6370,6 +6384,14 @@ export const userConsents = pgTable("user_consents", {
   consentedAt: timestamp("consented_at").defaultNow().notNull(),
   ipAddress: text("ip_address"),
   userAgent: text("user_agent"),
+  
+  // GDPR/HIPAA Data Retention
+  retentionCategory: text("retention_category"),
+  retentionUntil: timestamp("retention_until"),
+  scheduledForDeletion: boolean("scheduled_for_deletion").default(false).notNull(),
+  deletionApprovedBy: varchar("deletion_approved_by").references(() => users.id),
+  deletionApprovedAt: timestamp("deletion_approved_at"),
+  
   createdAt: timestamp("created_at").defaultNow().notNull(),
 }, (table) => ({
   userIdIdx: index("user_consents_user_id_idx").on(table.userId),
