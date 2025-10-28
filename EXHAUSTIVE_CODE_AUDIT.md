@@ -23872,3 +23872,1187 @@ parseGeminiResponse() extracts JSON from markdown blocks
 
 ---
 
+
+---
+
+## 6.10 Cross-State Rules Engine (server/services/CrossStateRulesEngine.ts - 881 lines)
+
+**Purpose:** Production-grade multi-state jurisdiction management and benefit coordination across Maryland, Pennsylvania, Virginia, and DC
+
+**Background:**
+- **Multi-State Deployment** - JAWN supports MD, PA, VA with planned DC expansion
+- **Border Workers** - Handle residents living in one state, working in another (e.g., MD→DC, PA→MD)
+- **Federal Employees** - Special rules for DC federal workers
+- **Military Families** - Home of record portability
+- **Reciprocity Agreements** - Interstate benefit coordination
+- **Jurisdiction Hierarchy** - Federal → State → County → City precedence
+
+**Key Features:**
+1. **7 Household Scenarios** - Border worker, college student, military, shared custody, relocation, federal employee, multi-state
+2. **6 Conflict Types** - Income threshold, asset limit, work requirement, eligibility criteria, benefit calculation, documentation
+3. **6 Resolution Strategies** - Primary residence, work state, most favorable, federal override, reciprocity, manual review
+4. **Benefit Portability** - SNAP (portable), Medicaid (expansion conflicts), TANF (non-portable)
+5. **NYC vs NY State** - Special handling for NYC jurisdiction
+
+---
+
+### 6.10.1 Enums & Interfaces (lines 24-88)
+
+#### ResolutionStrategy (lines 62-69)
+
+**6 Conflict Resolution Strategies:**
+```typescript
+enum ResolutionStrategy {
+  PRIMARY_RESIDENCE = "primary_residence",   // Use residence state rules
+  WORK_STATE = "work_state",                  // Use employment state rules
+  MOST_FAVORABLE = "most_favorable",          // Highest benefit calculation
+  FEDERAL_OVERRIDE = "federal_override",      // Federal rules supersede state
+  RECIPROCITY = "reciprocity",                // Interstate agreement applies
+  MANUAL_REVIEW = "manual_review"             // Navigator review required
+}
+```
+
+**Examples:**
+- **Border Worker (MD resident, DC job):** SNAP uses `PRIMARY_RESIDENCE` (MD), unemployment uses `WORK_STATE` (DC)
+- **Military Family:** Uses `PRIMARY_RESIDENCE` based on home of record
+- **Federal Employee in DC:** Uses `FEDERAL_OVERRIDE` - federal employee benefit rules
+- **PA↔MD Reciprocity:** Uses `RECIPROCITY` if interstate agreement exists
+- **Medicaid Expansion Conflict:** Uses `MANUAL_REVIEW` for critical policy differences
+
+---
+
+#### ConflictType (lines 71-78)
+
+**6 Types of State Conflicts:**
+```typescript
+enum ConflictType {
+  INCOME_THRESHOLD = "income_threshold",      // Different income limits
+  ASSET_LIMIT = "asset_limit",                 // Different asset tests
+  WORK_REQUIREMENT = "work_requirement",       // Different work requirements
+  ELIGIBILITY_CRITERIA = "eligibility_criteria", // Different eligibility rules
+  BENEFIT_CALCULATION = "benefit_calculation", // Different benefit formulas
+  DOCUMENTATION = "documentation"              // Different verification requirements
+}
+```
+
+**Real-World Examples:**
+- **INCOME_THRESHOLD:** MD SNAP gross income limit 200% FPL, PA uses 165% FPL
+- **ASSET_LIMIT:** VA SNAP has $2,500 asset limit, MD has no asset test (BBCE)
+- **ELIGIBILITY_CRITERIA:** PA has Medicaid expansion, VA does not → coverage gap
+- **WORK_REQUIREMENT:** MD SNAP has work exemptions, PA has stricter ABAWD rules
+- **BENEFIT_CALCULATION:** Different standard deductions by state
+- **DOCUMENTATION:** MD accepts self-attestation for some items, PA requires verification
+
+---
+
+#### HouseholdScenario (lines 80-88)
+
+**7 Multi-State Household Scenarios:**
+```typescript
+enum HouseholdScenario {
+  BORDER_WORKER = "border_worker",           // Lives in one state, works in another
+  COLLEGE_STUDENT = "college_student",       // Student attending out-of-state school
+  MILITARY = "military",                      // Active duty military family
+  SHARED_CUSTODY = "shared_custody",         // Children split between states
+  RELOCATION = "relocation",                  // Recently moved between states
+  FEDERAL_EMPLOYEE = "federal_employee",     // Works for federal government
+  MULTI_STATE = "multi_state"                 // Household members in different states
+}
+```
+
+**Examples:**
+- **BORDER_WORKER:** Lives in Baltimore, MD, works in Washington, DC
+- **COLLEGE_STUDENT:** MD resident attending University of Virginia
+- **MILITARY:** Marine stationed at Quantico, VA with MD home of record
+- **SHARED_CUSTODY:** Child lives with mom in MD, dad in PA (alternating weeks)
+- **RELOCATION:** Family just moved from PA to MD (transition period)
+- **FEDERAL_EMPLOYEE:** Works at NIH in Bethesda, MD (federal rules apply)
+- **MULTI_STATE:** Parents in MD, adult child in VA
+
+---
+
+### 6.10.2 Household Scenario Detection (lines 94-245)
+
+#### analyzeHousehold() - Main Analysis Workflow (lines 94-146)
+
+**Purpose:** Detect multi-state scenarios and generate conflict resolutions
+
+**Workflow:**
+```
+1. Fetch household profile and client case
+2. Detect household scenario (border worker, military, etc.)
+3. Create/update multi-state household record
+4. Detect state conflicts (income limits, asset tests, etc.)
+5. Generate resolution recommendations
+6. Determine if manual review required
+```
+
+**Implementation:**
+```typescript
+async analyzeHousehold(householdId: string): Promise<{
+  scenario: HouseholdScenario | null;
+  conflicts: StateConflict[];
+  recommendations: ConflictResolution[];
+  requiresReview: boolean;
+  multiStateHousehold?: MultiStateHousehold;
+}> {
+  // Get household data
+  const household = await storage.getHouseholdProfile(householdId);
+  const clientCase = household.clientCaseId 
+    ? await storage.getClientCase(household.clientCaseId)
+    : null;
+
+  // Check for existing multi-state record
+  let multiStateHousehold = await storage.getMultiStateHouseholdByHouseholdId(householdId);
+
+  // Detect scenario
+  const scenario = this.detectHouseholdScenario(household, clientCase);
+
+  // Create multi-state household record if needed
+  if (scenario && !multiStateHousehold) {
+    multiStateHousehold = await this.createMultiStateHousehold(
+      household,
+      clientCase,
+      scenario
+    );
+  }
+
+  // Detect conflicts
+  const conflicts = await this.detectStateConflicts(household, multiStateHousehold);
+
+  // Generate recommendations
+  const recommendations = await this.generateResolutionRecommendations(
+    conflicts,
+    household,
+    multiStateHousehold
+  );
+
+  // Check if review required
+  const requiresReview = this.checkIfReviewRequired(conflicts, recommendations);
+
+  return {
+    scenario,
+    conflicts,
+    recommendations,
+    requiresReview,
+    multiStateHousehold
+  };
+}
+```
+
+**Return Values:**
+- **scenario:** Detected household scenario (or null if single-state)
+- **conflicts:** List of state conflicts requiring resolution
+- **recommendations:** AI-generated resolution strategies
+- **requiresReview:** Whether navigator review is required
+- **multiStateHousehold:** Database record tracking multi-state status
+
+---
+
+#### detectHouseholdScenario() - Scenario Detection (lines 151-203)
+
+**Purpose:** Auto-detect multi-state scenario from household data
+
+**Detection Logic:**
+```typescript
+private detectHouseholdScenario(
+  household: HouseholdProfile,
+  clientCase: ClientCase | null
+): HouseholdScenario | null {
+  const data = household.householdData as any;
+
+  // 1. Federal employee in DC
+  if (data?.members?.some(m => 
+    m.employer?.toLowerCase().includes("federal") && 
+    (data.state === "DC" || data.workState === "DC")
+  )) {
+    return HouseholdScenario.FEDERAL_EMPLOYEE;
+  }
+
+  // 2. Military family
+  if (data?.members?.some(m => 
+    m.military || m.employer?.toLowerCase().includes("military")
+  )) {
+    return HouseholdScenario.MILITARY;
+  }
+
+  // 3. Border worker (different residence and work states)
+  if (data?.state && data?.workState && data.state !== data.workState) {
+    return HouseholdScenario.BORDER_WORKER;
+  }
+
+  // 4. College student
+  if (data?.members?.some(m => 
+    m.studentStatus === "full_time" && m.outOfState
+  )) {
+    return HouseholdScenario.COLLEGE_STUDENT;
+  }
+
+  // 5. Recent relocation
+  if (clientCase?.metadata?.relocation || data?.previousState) {
+    return HouseholdScenario.RELOCATION;
+  }
+
+  // 6. Shared custody
+  if (data?.members?.some(m => m.sharedCustody)) {
+    return HouseholdScenario.SHARED_CUSTODY;
+  }
+
+  // 7. Multi-state household (members in different states)
+  const memberStates = new Set(
+    data?.members?.map(m => m.state || data.state).filter(Boolean)
+  );
+  if (memberStates.size > 1) {
+    return HouseholdScenario.MULTI_STATE;
+  }
+
+  return null; // Single-state household
+}
+```
+
+**Priority Order:** Federal employee > Military > Border worker > College student > Relocation > Shared custody > Multi-state
+
+**Examples:**
+```
+Household A: Lives in MD, works at NIH (federal)
+→ FEDERAL_EMPLOYEE
+
+Household B: Lives in MD, works in DC (private sector)
+→ BORDER_WORKER
+
+Household C: MD resident, child at UVA
+→ COLLEGE_STUDENT
+
+Household D: Marine at Quantico, VA (MD home of record)
+→ MILITARY
+```
+
+---
+
+#### createMultiStateHousehold() - Database Record (lines 208-245)
+
+**Purpose:** Create multi-state household tracking record
+
+```typescript
+private async createMultiStateHousehold(
+  household: HouseholdProfile,
+  clientCase: ClientCase | null,
+  scenario: HouseholdScenario
+): Promise<MultiStateHousehold> {
+  const data = household.householdData as any;
+
+  // Build member states mapping
+  const memberStates: Record<string, string> = {};
+  data?.members?.forEach((member: any, index: number) => {
+    memberStates[member.id || `member_${index}`] = member.state || data.state;
+  });
+
+  const multiStateData: InsertMultiStateHousehold = {
+    householdId: household.id,
+    clientCaseId: clientCase?.id,
+    primaryResidenceState: data.state || "MD",
+    primaryResidenceCounty: data.county,
+    primaryResidenceZip: data.zipCode,
+    workState: data.workState,
+    workCounty: data.workCounty,
+    workZip: data.workZip,
+    memberStates,  // { "member1": "MD", "member2": "VA" }
+    outOfStateMembers: Object.values(memberStates).filter(
+      s => s !== data.state
+    ).length,
+    scenario,
+    scenarioDetails: {
+      detectedAt: new Date().toISOString(),
+      householdSize: data.members?.length || 1,
+    },
+    hasFederalEmployee: scenario === HouseholdScenario.FEDERAL_EMPLOYEE,
+    hasMilitaryMember: scenario === HouseholdScenario.MILITARY,
+    status: "pending"
+  };
+
+  return await storage.createMultiStateHousehold(multiStateData);
+}
+```
+
+**Database Fields:**
+- `primaryResidenceState` - Where household lives
+- `workState` - Where household members work
+- `memberStates` - JSONB mapping of members to states
+- `outOfStateMembers` - Count of members in different states
+- `scenario` - Detected scenario type
+- `status` - pending, resolved, needs_review
+
+---
+
+
+### 6.10.3 State Conflict Detection (lines 250-336)
+
+#### detectStateConflicts() - Conflict Detection (lines 250-336)
+
+**Purpose:** Detect policy conflicts between residence and work states
+
+```typescript
+private async detectStateConflicts(
+  household: HouseholdProfile,
+  multiStateHousehold: MultiStateHousehold | null
+): Promise<StateConflict[]> {
+  const conflicts: StateConflict[] = [];
+
+  if (!multiStateHousehold) return conflicts;
+
+  const primaryState = multiStateHousehold.primaryResidenceState;
+  const workState = multiStateHousehold.workState;
+
+  if (!workState || primaryState === workState) return conflicts;
+
+  // Get state configurations
+  const primaryConfig = await stateConfigurationService.getStateConfigByCode(primaryState);
+  const workConfig = await stateConfigurationService.getStateConfigByCode(workState);
+
+  // Get benefit programs for both states
+  const primaryPrograms = await storage.getStateBenefitPrograms(primaryConfig.id);
+  const workPrograms = await storage.getStateBenefitPrograms(workConfig.id);
+
+  // Check SNAP conflicts
+  const primarySNAP = primaryPrograms.find(p => p.benefitProgramId === "SNAP");
+  const workSNAP = workPrograms.find(p => p.benefitProgramId === "SNAP");
+
+  if (primarySNAP && workSNAP) {
+    // Income limit conflict
+    if (primarySNAP.incomeLimitMultiplier !== workSNAP.incomeLimitMultiplier) {
+      conflicts.push({
+        type: ConflictType.INCOME_THRESHOLD,
+        states: [primaryState, workState],
+        programId: "SNAP",
+        conflictingValues: {
+          [primaryState]: primarySNAP.incomeLimitMultiplier,
+          [workState]: workSNAP.incomeLimitMultiplier
+        },
+        severity: "medium",
+        requiresReview: false
+      });
+    }
+
+    // Asset limit conflict
+    const primaryAssetLimit = primarySNAP.assetLimitOverride;
+    const workAssetLimit = workSNAP.assetLimitOverride;
+    if (primaryAssetLimit !== workAssetLimit) {
+      conflicts.push({
+        type: ConflictType.ASSET_LIMIT,
+        states: [primaryState, workState],
+        programId: "SNAP",
+        conflictingValues: {
+          [primaryState]: primaryAssetLimit,
+          [workState]: workAssetLimit
+        },
+        severity: primaryAssetLimit === null || workAssetLimit === null ? "high" : "medium",
+        requiresReview: false
+      });
+    }
+  }
+
+  // Check Medicaid expansion conflicts (critical!)
+  const primaryMedicaid = primaryPrograms.find(p => p.benefitProgramId === "MEDICAID");
+  const workMedicaid = workPrograms.find(p => p.benefitProgramId === "MEDICAID");
+
+  if (primaryMedicaid && workMedicaid) {
+    const primaryExpansion = primaryMedicaid.eligibilityOverrides?.["medicaidExpansion"] ?? true;
+    const workExpansion = workMedicaid.eligibilityOverrides?.["medicaidExpansion"] ?? true;
+
+    if (primaryExpansion !== workExpansion) {
+      conflicts.push({
+        type: ConflictType.ELIGIBILITY_CRITERIA,
+        states: [primaryState, workState],
+        programId: "MEDICAID",
+        conflictingValues: {
+          [primaryState]: { medicaidExpansion: primaryExpansion },
+          [workState]: { medicaidExpansion: workExpansion }
+        },
+        severity: "critical",  // Medicaid expansion is critical!
+        requiresReview: true
+      });
+    }
+  }
+
+  return conflicts;
+}
+```
+
+**Conflict Severity Levels:**
+- **low:** Minor policy differences (standard deduction amount)
+- **medium:** Moderate differences (income limit multipliers)
+- **high:** Major differences (asset test vs. no asset test)
+- **critical:** Life-changing differences (Medicaid expansion vs. no expansion)
+
+**Real-World Example - MD→VA Border Worker:**
+```
+Conflict 1: SNAP Asset Limit
+- MD: No asset test (BBCE)
+- VA: $2,500 asset limit
+- Severity: high (null vs. value)
+- Resolution: Use MD rules (PRIMARY_RESIDENCE)
+
+Conflict 2: Medicaid Expansion
+- MD: Expanded Medicaid (138% FPL)
+- VA: No expansion (traditional Medicaid only)
+- Severity: critical
+- Resolution: Manual review required
+```
+
+---
+
+### 6.10.4 Conflict Resolution (lines 341-479)
+
+#### generateResolutionRecommendations() - Generate Recommendations (lines 341-362)
+
+```typescript
+private async generateResolutionRecommendations(
+  conflicts: StateConflict[],
+  household: HouseholdProfile,
+  multiStateHousehold: MultiStateHousehold | null
+): Promise<ConflictResolution[]> {
+  const recommendations: ConflictResolution[] = [];
+
+  if (!multiStateHousehold) return recommendations;
+
+  for (const conflict of conflicts) {
+    const resolution = await this.resolveConflict(
+      conflict,
+      household,
+      multiStateHousehold
+    );
+    if (resolution) {
+      recommendations.push(resolution);
+    }
+  }
+
+  return recommendations;
+}
+```
+
+---
+
+#### resolveConflict() - Conflict Resolution Logic (lines 367-431)
+
+**Purpose:** Apply resolution strategy based on household scenario
+
+```typescript
+private async resolveConflict(
+  conflict: StateConflict,
+  household: HouseholdProfile,
+  multiStateHousehold: MultiStateHousehold
+): Promise<ConflictResolution | null> {
+  // Check for reciprocity agreements first
+  const reciprocity = await this.checkReciprocityAgreement(
+    multiStateHousehold.primaryResidenceState,
+    multiStateHousehold.workState!,
+    conflict.programId
+  );
+
+  if (reciprocity) {
+    return {
+      strategy: ResolutionStrategy.RECIPROCITY,
+      primaryState: multiStateHousehold.primaryResidenceState,
+      secondaryState: multiStateHousehold.workState!,
+      explanation: `States have reciprocity agreement for ${conflict.programId}`,
+      rulesApplied: []
+    };
+  }
+
+  // Apply resolution based on household scenario
+  switch (multiStateHousehold.scenario) {
+    case HouseholdScenario.FEDERAL_EMPLOYEE:
+      return {
+        strategy: ResolutionStrategy.FEDERAL_OVERRIDE,
+        primaryState: "DC",
+        explanation: "Federal employee rules take precedence",
+        rulesApplied: []
+      };
+
+    case HouseholdScenario.MILITARY:
+      return {
+        strategy: ResolutionStrategy.PRIMARY_RESIDENCE,
+        primaryState: multiStateHousehold.homeOfRecord || multiStateHousehold.primaryResidenceState,
+        explanation: "Military home of record rules apply",
+        rulesApplied: []
+      };
+
+    case HouseholdScenario.BORDER_WORKER:
+      // SNAP/TANF use residence, unemployment uses work state
+      if (conflict.programId === "SNAP" || conflict.programId === "TANF") {
+        return {
+          strategy: ResolutionStrategy.PRIMARY_RESIDENCE,
+          primaryState: multiStateHousehold.primaryResidenceState,
+          secondaryState: multiStateHousehold.workState!,
+          explanation: "Nutrition and cash assistance based on residence state",
+          rulesApplied: []
+        };
+      } else {
+        return {
+          strategy: ResolutionStrategy.WORK_STATE,
+          primaryState: multiStateHousehold.workState!,
+          secondaryState: multiStateHousehold.primaryResidenceState,
+          explanation: "Work-related benefits based on employment state",
+          rulesApplied: []
+        };
+      }
+
+    default:
+      // Apply most favorable rule for other scenarios
+      return this.applyMostFavorableRule(conflict, multiStateHousehold);
+  }
+}
+```
+
+**Resolution Strategy by Scenario:**
+
+| Scenario | SNAP/TANF | Medicaid | Unemployment | Tax |
+|----------|-----------|----------|--------------|-----|
+| Border Worker | PRIMARY_RESIDENCE | PRIMARY_RESIDENCE | WORK_STATE | Both states |
+| Federal Employee | FEDERAL_OVERRIDE | FEDERAL_OVERRIDE | FEDERAL_OVERRIDE | DC |
+| Military | HOME_OF_RECORD | HOME_OF_RECORD | HOME_OF_RECORD | Home of record |
+| College Student | PRIMARY_RESIDENCE | PRIMARY_RESIDENCE | N/A | Parent's state |
+| Relocation | MOST_FAVORABLE | PRIMARY_RESIDENCE | WORK_STATE | Pro-rata both states |
+
+---
+
+#### applyMostFavorableRule() - Most Favorable Calculation (lines 436-479)
+
+**Purpose:** Select state with most generous benefit
+
+```typescript
+private applyMostFavorableRule(
+  conflict: StateConflict,
+  multiStateHousehold: MultiStateHousehold
+): ConflictResolution {
+  const primaryValue = conflict.conflictingValues[multiStateHousehold.primaryResidenceState];
+  const secondaryValue = conflict.conflictingValues[multiStateHousehold.workState!];
+
+  let effectiveState = multiStateHousehold.primaryResidenceState;
+  let explanation = "Most favorable benefit calculation applied";
+
+  // Determine which is more favorable
+  switch (conflict.type) {
+    case ConflictType.INCOME_THRESHOLD:
+      // Higher income threshold = more favorable
+      if (secondaryValue > primaryValue) {
+        effectiveState = multiStateHousehold.workState!;
+      }
+      break;
+
+    case ConflictType.ASSET_LIMIT:
+      // No asset limit (null) or higher limit = more favorable
+      if (primaryValue === null) {
+        effectiveState = multiStateHousehold.primaryResidenceState;
+      } else if (secondaryValue === null || secondaryValue > primaryValue) {
+        effectiveState = multiStateHousehold.workState!;
+      }
+      break;
+
+    case ConflictType.ELIGIBILITY_CRITERIA:
+      explanation = "Eligibility criteria conflict requires manual review";
+      break;
+  }
+
+  return {
+    strategy: ResolutionStrategy.MOST_FAVORABLE,
+    primaryState: effectiveState,
+    secondaryState: effectiveState === multiStateHousehold.primaryResidenceState 
+      ? multiStateHousehold.workState! 
+      : multiStateHousehold.primaryResidenceState,
+    explanation,
+    rulesApplied: []
+  };
+}
+```
+
+**Examples:**
+```
+MD SNAP: 200% FPL gross income limit, no asset test
+VA SNAP: 165% FPL gross income limit, $2,500 asset test
+
+Most Favorable:
+- Income threshold: MD (200% > 165%)
+- Asset limit: MD (null > $2,500)
+→ Use MD rules
+```
+
+---
+
+### 6.10.5 Reciprocity Agreements (lines 484-502)
+
+#### checkReciprocityAgreement() - Interstate Agreements (lines 484-502)
+
+**Purpose:** Check if states have benefit reciprocity agreement
+
+```typescript
+async checkReciprocityAgreement(
+  stateA: string,
+  stateB: string,
+  programId?: string
+): Promise<StateReciprocityAgreement | null> {
+  const agreement = await storage.getReciprocityAgreement(stateA, stateB);
+  
+  if (!agreement || !agreement.isActive) return null;
+
+  // Check if program is covered
+  if (programId) {
+    const covered = agreement.coveredPrograms?.includes(programId);
+    const excluded = agreement.excludedPrograms?.includes(programId);
+    
+    if (!covered || excluded) return null;
+  }
+
+  return agreement;
+}
+```
+
+**Reciprocity Agreement Fields:**
+- `coveredPrograms` - Programs included in agreement (e.g., ["SNAP", "MEDICAID"])
+- `excludedPrograms` - Programs explicitly excluded
+- `benefitPortability` - Whether benefits transfer between states
+- `waitingPeriodDays` - Required waiting period
+- `documentationRequired` - Verification documents needed
+
+**Real-World Example - PA↔MD Reciprocity:**
+```typescript
+{
+  stateA: "PA",
+  stateB: "MD",
+  agreementType: "benefit_portability",
+  isActive: true,
+  coveredPrograms: ["SNAP"],
+  excludedPrograms: ["TANF"],  // TANF not portable
+  benefitPortability: true,
+  waitingPeriodDays: 0,
+  documentationRequired: {
+    required: ["proof_of_residence", "income_verification"],
+    optional: ["previous_state_termination_letter"]
+  },
+  effectiveDate: "2023-01-01",
+  notes: "PA and MD have SNAP portability agreement"
+}
+```
+
+---
+
+### 6.10.6 Benefit Portability Analysis (lines 608-695)
+
+#### checkPortability() - Benefit Portability (lines 608-695)
+
+**Purpose:** Analyze benefit portability when moving between states
+
+```typescript
+async checkPortability(
+  fromState: string,
+  toState: string,
+  programId: string
+): Promise<PortabilityAnalysis> {
+  // Check for reciprocity agreement
+  const reciprocity = await this.checkReciprocityAgreement(fromState, toState, programId);
+
+  const analysis: PortabilityAnalysis = {
+    fromState,
+    toState,
+    programId,
+    isPortable: false,
+    waitingPeriod: 0,
+    documentationRequired: [],
+    restrictions: []
+  };
+
+  if (reciprocity && reciprocity.benefitPortability) {
+    analysis.isPortable = true;
+    analysis.waitingPeriod = reciprocity.waitingPeriodDays || 0;
+    analysis.documentationRequired = reciprocity.documentationRequired?.required || [];
+    analysis.reciprocityAgreement = reciprocity;
+    return analysis;
+  }
+
+  // Default portability rules by program
+  switch (programId) {
+    case "SNAP":
+      analysis.isPortable = true;
+      analysis.waitingPeriod = 0; // SNAP benefits immediately portable
+      analysis.documentationRequired = [
+        "Proof of new residence",
+        "Proof of identity",
+        "Income verification"
+      ];
+      break;
+
+    case "MEDICAID":
+      // Check Medicaid expansion status
+      const fromPrograms = await storage.getStateBenefitPrograms(fromConfig.id);
+      const toPrograms = await storage.getStateBenefitPrograms(toConfig.id);
+      
+      const fromMedicaid = fromPrograms.find(p => p.benefitProgramId === "MEDICAID");
+      const toMedicaid = toPrograms.find(p => p.benefitProgramId === "MEDICAID");
+
+      const fromExpansion = fromMedicaid?.eligibilityOverrides?.["medicaidExpansion"] ?? true;
+      const toExpansion = toMedicaid?.eligibilityOverrides?.["medicaidExpansion"] ?? true;
+
+      if (fromExpansion && !toExpansion) {
+        analysis.restrictions.push("Moving to non-expansion state may affect eligibility");
+      }
+      
+      analysis.isPortable = true;
+      analysis.waitingPeriod = 0; // Must reapply in new state
+      analysis.documentationRequired = [
+        "Proof of new residence",
+        "Medicaid termination letter from previous state",
+        "Income verification",
+        "Identity documents"
+      ];
+      break;
+
+    case "TANF":
+      analysis.isPortable = false; // TANF is state-specific
+      analysis.restrictions = ["TANF benefits must be reapplied for in new state"];
+      analysis.documentationRequired = [
+        "Complete new application in destination state",
+        "Proof of residence",
+        "Income verification",
+        "Work history"
+      ];
+      break;
+  }
+
+  return analysis;
+}
+```
+
+**Portability by Program:**
+
+| Program | Portable? | Waiting Period | Notes |
+|---------|-----------|----------------|-------|
+| SNAP | ✅ Yes | 0 days | Immediately portable, must report address change |
+| Medicaid | ⚠️ Conditional | 0 days | Must reapply, expansion status matters |
+| TANF | ❌ No | N/A | State-specific, must reapply in new state |
+| SSI | ✅ Yes | 0 days | Federal program, portable nationwide |
+| LIHEAP | ⚠️ Conditional | Varies | Seasonal, may need to reapply |
+
+**Real-World Example - MD→VA Relocation:**
+```
+Family moves from Maryland to Virginia
+
+SNAP:
+- Portable: Yes
+- Action: Report address change to VA DSS
+- Waiting: 0 days
+- Docs: Proof of VA residence, income verification
+
+Medicaid:
+- Portable: Conditional
+- Issue: MD has expansion (138% FPL), VA does not (traditional only)
+- Action: Must reapply in VA
+- Warning: May lose coverage if income 100-138% FPL (coverage gap)
+
+TANF:
+- Portable: No
+- Action: Close MD TANF, apply for VA TANF
+- Waiting: VA work requirement may apply
+- Docs: Complete new application
+```
+
+---
+
+
+### 6.10.7 Border Worker Benefits Calculation (lines 700-777)
+
+#### calculateBorderWorkerBenefits() - Border Worker Analysis (lines 700-777)
+
+**Purpose:** Calculate benefits for households living in one state, working in another
+
+```typescript
+async calculateBorderWorkerBenefits(
+  householdId: string,
+  residenceState: string,
+  workState: string
+): Promise<{
+  eligiblePrograms: string[];
+  benefitCalculations: BenefitCalculation[];
+  recommendations: string[];
+}> {
+  const household = await storage.getHouseholdProfile(householdId);
+  
+  const eligiblePrograms: string[] = [];
+  const benefitCalculations: BenefitCalculation[] = [];
+  const recommendations: string[] = [];
+
+  // Get state configurations
+  const residenceConfig = await stateConfigurationService.getStateConfigByCode(residenceState);
+  const workConfig = await stateConfigurationService.getStateConfigByCode(workState);
+
+  // SNAP eligibility (residence-based)
+  const residencePrograms = await storage.getStateBenefitPrograms(residenceConfig.id);
+  const snapProgram = residencePrograms.find(p => p.benefitProgramId === "SNAP");
+  
+  if (snapProgram) {
+    eligiblePrograms.push("SNAP");
+    benefitCalculations.push({
+      programId: "SNAP",
+      resolvedAmount: 0, // Would be calculated based on household income
+      effectiveState: residenceState,
+      notes: "SNAP benefits based on residence state"
+    });
+    recommendations.push(`Apply for SNAP benefits in ${residenceState} (residence state)`);
+  }
+
+  // Unemployment insurance (work-based)
+  recommendations.push(`Unemployment insurance would be through ${workState} (employment state)`);
+
+  // Check for tax reciprocity
+  const taxReciprocity = await this.checkReciprocityAgreement(
+    residenceState,
+    workState,
+    "TAX"
+  );
+
+  if (taxReciprocity) {
+    recommendations.push(`Tax reciprocity agreement exists - may only need to file in ${residenceState}`);
+  } else {
+    recommendations.push(`May need to file taxes in both ${residenceState} and ${workState}`);
+  }
+
+  // Special handling for NYC/NY
+  if ((residenceState === "NY" && workState === "NYC") || 
+      (residenceState === "NYC" && workState === "NY")) {
+    recommendations.push("NYC uses NY State benefit rules - single application covers both");
+  }
+
+  // Special handling for DC federal employees
+  const data = household.householdData as any;
+  if (workState === "DC" && data?.members?.some(m => 
+    m.employer?.toLowerCase().includes("federal")
+  )) {
+    recommendations.push("As a federal employee in DC, you may have access to federal employee benefit programs");
+    eligiblePrograms.push("FEHB"); // Federal Employee Health Benefits
+  }
+
+  return {
+    eligiblePrograms,
+    benefitCalculations,
+    recommendations
+  };
+}
+```
+
+**Real-World Example - Baltimore, MD Resident → DC Worker:**
+```typescript
+calculateBorderWorkerBenefits(householdId, "MD", "DC")
+
+Returns:
+{
+  eligiblePrograms: ["SNAP", "MEDICAID"],
+  benefitCalculations: [
+    {
+      programId: "SNAP",
+      effectiveState: "MD",
+      notes: "SNAP benefits based on residence state"
+    },
+    {
+      programId: "MEDICAID",
+      effectiveState: "MD",
+      notes: "Medicaid based on residence state"
+    }
+  ],
+  recommendations: [
+    "Apply for SNAP benefits in MD (residence state)",
+    "Unemployment insurance would be through DC (employment state)",
+    "May need to file taxes in both MD and DC",
+    "Consider DC commuter tax credit"
+  ]
+}
+```
+
+---
+
+### 6.10.8 Special Jurisdiction Handling (lines 782-816)
+
+#### resolveNYCvsNYState() - NYC Jurisdiction (lines 782-790)
+
+**Purpose:** Handle NYC vs NY State jurisdiction (no conflict)
+
+```typescript
+async resolveNYCvsNYState(householdId: string): Promise<ConflictResolution> {
+  // NYC uses NY State rules, so no conflict exists
+  return {
+    strategy: ResolutionStrategy.PRIMARY_RESIDENCE,
+    primaryState: "NY",
+    explanation: "NYC follows NY State benefit rules - no conflict to resolve",
+    rulesApplied: []
+  };
+}
+```
+
+**NYC Jurisdiction:**
+- NYC is NOT a separate state
+- NYC uses NY State benefit programs (SNAP, Medicaid, TANF)
+- NYC has local offices but follows NY State rules
+- No cross-state conflict exists
+
+---
+
+#### resolveDCFederalEmployee() - Federal Employee Rules (lines 795-816)
+
+**Purpose:** Handle DC federal employee special rules
+
+```typescript
+async resolveDCFederalEmployee(
+  householdId: string,
+  employeeDetails: any
+): Promise<ConflictResolution> {
+  const rules = await storage.getCrossStateRules({
+    primaryState: "DC",
+    ruleType: "federal_employee"
+  });
+
+  return {
+    strategy: ResolutionStrategy.FEDERAL_OVERRIDE,
+    primaryState: "DC",
+    explanation: "Federal employee rules apply, overriding standard DC rules",
+    rulesApplied: rules,
+    benefitCalculation: {
+      programId: "FEHB",
+      resolvedAmount: 0,
+      effectiveState: "DC",
+      notes: "Federal Employee Health Benefits program applies"
+    }
+  };
+}
+```
+
+**Federal Employee Benefits:**
+- **FEHB** (Federal Employee Health Benefits) - Federal health insurance
+- **FEGLI** (Federal Employee Group Life Insurance) - Federal life insurance
+- **TSP** (Thrift Savings Plan) - Federal 401(k)
+- **OPM** (Office of Personnel Management) - Federal retirement
+
+**DC Federal Employee Scenario:**
+```
+Employee: Works at NIH in Bethesda, MD (federal employer)
+Residence: Lives in Silver Spring, MD
+
+Resolution:
+- Strategy: FEDERAL_OVERRIDE
+- Primary State: DC (federal jurisdiction)
+- Benefits: FEHB (federal health insurance)
+- SNAP: Still apply in MD (residence state)
+- Note: Federal employee benefits supplement, not replace, state benefits
+```
+
+---
+
+### 6.10.9 Jurisdiction Hierarchy (lines 821-878)
+
+#### getJurisdictionHierarchy() - Hierarchy Lookup (lines 821-852)
+
+**Purpose:** Build jurisdiction hierarchy (Federal → State → County → City)
+
+```typescript
+async getJurisdictionHierarchy(
+  state: string,
+  county?: string,
+  city?: string
+): Promise<JurisdictionHierarchy[]> {
+  const hierarchy: JurisdictionHierarchy[] = [];
+
+  // Get federal level
+  const federal = await storage.getJurisdictionByCode("US");
+  if (federal) hierarchy.push(federal);
+
+  // Get state level
+  const stateJurisdiction = await storage.getJurisdictionByCode(state);
+  if (stateJurisdiction) hierarchy.push(stateJurisdiction);
+
+  // Get county level
+  if (county) {
+    const countyJurisdiction = await storage.getJurisdictionByCode(`${state}-${county}`);
+    if (countyJurisdiction) hierarchy.push(countyJurisdiction);
+  }
+
+  // Get city level
+  if (city) {
+    const cityJurisdiction = await storage.getJurisdictionByCode(`${state}-${city}`);
+    if (cityJurisdiction) hierarchy.push(cityJurisdiction);
+  }
+
+  // Sort by hierarchy level (federal first)
+  hierarchy.sort((a, b) => a.hierarchyLevel - b.hierarchyLevel);
+
+  return hierarchy;
+}
+```
+
+**Hierarchy Levels:**
+- **0:** Federal (US)
+- **1:** State (MD, PA, VA, DC)
+- **2:** County (Baltimore County, Allegheny County, Fairfax County)
+- **3:** City (Baltimore City, Philadelphia, Richmond)
+
+**Example - Baltimore City, MD:**
+```typescript
+getJurisdictionHierarchy("MD", "Baltimore City")
+
+Returns:
+[
+  { jurisdictionCode: "US", hierarchyLevel: 0, name: "United States" },
+  { jurisdictionCode: "MD", hierarchyLevel: 1, name: "Maryland" },
+  { jurisdictionCode: "MD-Baltimore City", hierarchyLevel: 2, name: "Baltimore City" }
+]
+```
+
+---
+
+#### applyJurisdictionPrecedence() - Precedence Rules (lines 857-878)
+
+**Purpose:** Apply jurisdiction precedence (Federal > State > Local)
+
+```typescript
+async applyJurisdictionPrecedence(
+  rules: any[],
+  jurisdictionHierarchy: JurisdictionHierarchy[]
+): Promise<any[]> {
+  // Federal rules override state rules
+  // State rules override local rules
+  // Unless special override permissions exist
+
+  const sortedRules = [...rules];
+  
+  sortedRules.sort((a, b) => {
+    const aJurisdiction = jurisdictionHierarchy.find(j => j.jurisdictionCode === a.jurisdictionCode);
+    const bJurisdiction = jurisdictionHierarchy.find(j => j.jurisdictionCode === b.jurisdictionCode);
+
+    if (!aJurisdiction || !bJurisdiction) return 0;
+
+    // Lower hierarchy level = higher precedence (federal = 0, state = 1)
+    return aJurisdiction.hierarchyLevel - bJurisdiction.hierarchyLevel;
+  });
+
+  return sortedRules;
+}
+```
+
+**Precedence Example:**
+```
+Rule A: Federal SNAP income limit (200% FPL)
+Rule B: Maryland SNAP income limit (BBCE 200% FPL)
+Rule C: Baltimore City SNAP income limit (local override N/A)
+
+Precedence: A > B > C
+Applied Rule: A (Federal rule wins)
+```
+
+---
+
+### 6.10 Summary - Cross-State Rules Engine
+
+**Key Features:**
+1. **7 Household Scenarios** - Border worker, military, federal employee, college student, relocation, shared custody, multi-state
+2. **6 Conflict Types** - Income threshold, asset limit, work requirement, eligibility criteria, benefit calculation, documentation
+3. **6 Resolution Strategies** - Primary residence, work state, most favorable, federal override, reciprocity, manual review
+4. **Benefit Portability** - SNAP (portable), Medicaid (conditional), TANF (non-portable), SSI (portable)
+5. **Jurisdiction Hierarchy** - Federal → State → County → City precedence
+
+**Household Scenario Detection:**
+```typescript
+detectHouseholdScenario(household, clientCase)
+→ FEDERAL_EMPLOYEE (federal employer in DC)
+→ MILITARY (military service + home of record)
+→ BORDER_WORKER (residence state ≠ work state)
+→ COLLEGE_STUDENT (full-time student, out-of-state)
+→ RELOCATION (previousState exists)
+→ SHARED_CUSTODY (sharedCustody flag)
+→ MULTI_STATE (members in different states)
+→ null (single-state household)
+```
+
+**State Conflict Detection:**
+```typescript
+detectStateConflicts(household, multiStateHousehold)
+→ INCOME_THRESHOLD (different income limits)
+→ ASSET_LIMIT (different asset tests)
+→ WORK_REQUIREMENT (different ABAWD rules)
+→ ELIGIBILITY_CRITERIA (Medicaid expansion differences)
+→ BENEFIT_CALCULATION (different deductions/allotments)
+→ DOCUMENTATION (different verification requirements)
+```
+
+**Resolution Strategy Selection:**
+| Scenario | Strategy | Rationale |
+|----------|----------|-----------|
+| Border Worker (SNAP/TANF) | PRIMARY_RESIDENCE | Nutrition/cash assistance follows residence |
+| Border Worker (Unemployment) | WORK_STATE | Unemployment insurance follows employment |
+| Military | PRIMARY_RESIDENCE (home of record) | Military home of record rules |
+| Federal Employee | FEDERAL_OVERRIDE | Federal employee benefits supersede state |
+| College Student | PRIMARY_RESIDENCE | Student retains parental residence |
+| Relocation | MOST_FAVORABLE | Transition period, use best option |
+| Reciprocity Agreement | RECIPROCITY | Interstate agreement applies |
+| Critical Conflict | MANUAL_REVIEW | Navigator review required |
+
+**Benefit Portability:**
+| Program | Portable? | Waiting Period | Considerations |
+|---------|-----------|----------------|----------------|
+| SNAP | ✅ Yes | 0 days | Report address change, immediately portable |
+| Medicaid | ⚠️ Conditional | 0 days | Must reapply, expansion status matters |
+| TANF | ❌ No | N/A | State-specific, complete new application |
+| SSI | ✅ Yes | 0 days | Federal program, portable nationwide |
+| LIHEAP | ⚠️ Conditional | Varies | Seasonal, state funding varies |
+
+**Multi-State Deployment Support:**
+- **Maryland** - Primary deployment state
+- **Pennsylvania** - Planned expansion
+- **Virginia** - Planned expansion
+- **DC** - Federal employee support
+
+**Real-World Use Cases:**
+1. **Baltimore, MD Resident → DC Worker (Border Worker)**
+   - SNAP: Apply in MD (residence)
+   - Unemployment: File in DC (employment)
+   - Tax: File in both MD and DC
+   
+2. **Marine at Quantico, VA (Military)**
+   - Home of Record: Maryland
+   - SNAP: Apply in MD (home of record)
+   - Medicaid: Apply in MD (home of record)
+   
+3. **NIH Employee in Bethesda, MD (Federal Employee)**
+   - Health Insurance: FEHB (federal)
+   - SNAP: Apply in MD (residence)
+   - Retirement: TSP (federal)
+   
+4. **MD Student at UVA (College Student)**
+   - SNAP: Apply in MD (parent's residence)
+   - Medicaid: MD (parent's residence)
+   - Note: May qualify for VA SNAP if living independently
+
+**Compliance:**
+- ✅ **7 CFR Part 273.2** - SNAP residence and work requirements
+- ✅ **42 CFR Part 435** - Medicaid residence requirements
+- ✅ **45 CFR Part 233** - TANF state plan requirements
+- ✅ **20 CFR Part 616** - Interstate unemployment insurance
+- ✅ **Servicemembers Civil Relief Act** - Military home of record protections
+
+**Database Tables:**
+- `multiStateHouseholds` - Multi-state household tracking
+- `crossStateRules` - Jurisdiction-specific rules
+- `stateReciprocityAgreements` - Interstate benefit agreements
+- `jurisdictionHierarchies` - Federal/State/County/City hierarchy
+- `crossStateRuleApplications` - Audit trail of applied resolutions
+
+**Integration Points:**
+- **stateConfigurationService** - State-level configurations
+- **rulesEngine** - Applies resolved rules for eligibility calculations
+- **storage** - Multi-state household persistence
+- **officeRouting** - Routes cases to correct state office
+
+**Production Deployment:**
+- Multi-state architecture supports MD, PA, VA deployments
+- Border worker support for MD→DC, PA→MD, VA→DC commuters
+- Medicaid expansion conflict detection (critical for PA→VA relocation)
+- Federal employee support for DC workforce
+- Military family home of record portability
+
+---
+
