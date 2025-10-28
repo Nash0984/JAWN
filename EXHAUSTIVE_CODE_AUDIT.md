@@ -30168,3 +30168,705 @@ RESULT:
 
 ---
 
+
+---
+
+## 6.15 Maryland Medicaid Rules Engine - PRIMARY Calculator (server/services/medicaidRulesEngine.ts - 464 lines)
+
+**Purpose:** Deterministic Medicaid eligibility determination implementing Maryland's MAGI and Non-MAGI pathways under the Affordable Care Act (ACA)
+
+**Critical Design:** This is the **PRIMARY Maryland-controlled Medicaid Rules Engine** implementing COMAR 10.09.24 and federal Medicaid regulations. NOT a PolicyEngine wrapper.
+
+**Maryland Status:** Medicaid expansion state under ACA (138% FPL for adults)
+
+**Policy References:**
+- **COMAR 10.09.24** - Maryland Medicaid Medical Assistance regulations
+- **Maryland HealthChoice Manual** - State Medicaid program policies
+- **ACA Section 2001** - Medicaid expansion (42 U.S.C. § 1396a)
+- **42 CFR 435** - Federal Medicaid eligibility standards
+
+**Dual Pathway System:**
+```
+MAGI Pathways (Modified Adjusted Gross Income):
+  ├─ Adults (19-64): 138% FPL (ACA expansion)
+  ├─ Children (<19): 322% FPL (includes CHIP)
+  └─ Pregnant Women: 264% FPL
+
+Non-MAGI Pathways:
+  ├─ SSI Recipients: Automatic eligibility
+  └─ Aged/Blind/Disabled (ABD): Income + asset tests
+```
+
+---
+
+### 6.15.1 Data Structures (lines 33-85)
+
+#### MedicaidEligibilityInput Interface (lines 33-54)
+
+**Purpose:** Input parameters for Medicaid eligibility determination
+
+```typescript
+export interface MedicaidEligibilityInput {
+  // Household Information
+  size: number;
+  age: number;
+  isPregnant?: boolean;
+  
+  // Income (in cents)
+  monthlyIncome: number;
+  annualIncome: number;
+  
+  // Special Statuses
+  isSSIRecipient?: boolean;
+  isDisabled?: boolean;
+  isBlind?: boolean;
+  isElderly?: boolean; // 65+
+  
+  // Assets (for Non-MAGI only, in cents)
+  countableAssets?: number;
+  
+  // MAGI-specific
+  magiAdjustments?: number; // Additional MAGI-specific deductions (in cents)
+}
+```
+
+**Example Input - Single Adult:**
+```typescript
+{
+  size: 1,
+  age: 35,
+  isPregnant: false,
+  monthlyIncome: 150000,  // $1,500/month
+  annualIncome: 1800000,  // $18,000/year
+  isSSIRecipient: false,
+  isDisabled: false,
+  isBlind: false,
+  isElderly: false,
+  countableAssets: 100000,  // $1,000
+  magiAdjustments: 0
+}
+```
+
+**Example Input - Pregnant Woman:**
+```typescript
+{
+  size: 1,  // Household size before adjustment
+  age: 28,
+  isPregnant: true,  // Will be adjusted to size 2 for income calculation
+  monthlyIncome: 300000,  // $3,000/month
+  annualIncome: 3600000,  // $36,000/year
+}
+```
+
+---
+
+#### MedicaidEligibilityResult Interface (lines 56-85)
+
+**Purpose:** Complete Medicaid eligibility determination with coverage type
+
+```typescript
+export interface MedicaidEligibilityResult {
+  isEligible: boolean;
+  category: string; // MAGI_ADULT, MAGI_CHILD, MAGI_PREGNANT, SSI, ABD
+  categoryName: string;
+  pathway: "MAGI" | "Non-MAGI";
+  
+  incomeTest: {
+    passed: boolean;
+    testType: "MAGI" | "Non-MAGI" | "SSI_Automatic";
+    monthlyIncome: number;
+    annualIncome: number;
+    incomeLimit: number;
+    percentOfFPL: number;  // Household's % of FPL
+  };
+  
+  assetTest?: {  // Only for Non-MAGI
+    passed: boolean;
+    countableAssets: number;
+    assetLimit: number;
+  };
+  
+  coverageType: "Full Medicaid" | "CHIP" | "Medically Needy" | null;
+  hasSpenddown: boolean;
+  spenddownAmount?: number;
+  
+  reason?: string;
+  ineligibilityReasons?: string[];
+  calculationBreakdown: string[];
+  policyCitations: string[];
+}
+```
+
+---
+
+### 6.15.2 Category Determination (lines 153-215)
+
+#### determineCategory() - Priority-Based Category Selection (lines 153-215)
+
+**Purpose:** Determine which Medicaid category applies using priority order
+
+```typescript
+private determineCategory(input: MedicaidEligibilityInput): { 
+  code: string; 
+  categoryName: string; 
+  pathway: "MAGI" | "Non-MAGI";
+  percentOfFPL: number;
+  adjustedHouseholdSize: number; // Adjusted for pregnancy
+} {
+  // Adjust household size for pregnancy (pregnant woman counts as 2)
+  const adjustedHouseholdSize = input.isPregnant ? input.size + 1 : input.size;
+  
+  // Priority 1: SSI Recipients (automatic)
+  if (input.isSSIRecipient) {
+    return { code: "SSI", categoryName: "SSI Recipients", pathway: "Non-MAGI", ... };
+  }
+  
+  // Priority 2: Non-MAGI Aged/Blind/Disabled (65+ or disabled/blind)
+  if (input.isElderly || input.isDisabled || input.isBlind) {
+    return { code: "ABD", categoryName: "Aged, Blind, or Disabled", pathway: "Non-MAGI", ... };
+  }
+  
+  // Priority 3: MAGI Pregnant Women (use adjusted household size)
+  if (input.isPregnant) {
+    return { code: "MAGI_PREGNANT", categoryName: "Pregnant Women", pathway: "MAGI", percentOfFPL: 264, ... };
+  }
+  
+  // Priority 4: MAGI Children (<19)
+  if (input.age < 19) {
+    return { code: "MAGI_CHILD", categoryName: "Children", pathway: "MAGI", percentOfFPL: 322, ... };
+  }
+  
+  // Priority 5: MAGI Adults (19-64)
+  return { code: "MAGI_ADULT", categoryName: "Adults", pathway: "MAGI", percentOfFPL: 138, ... };
+}
+```
+
+**Category Priority Table:**
+| Priority | Category | Pathway | Income Limit | Condition |
+|----------|----------|---------|--------------|-----------|
+| 1 | SSI Recipients | Non-MAGI | Automatic | SSI benefit recipient |
+| 2 | Aged/Blind/Disabled (ABD) | Non-MAGI | 100% FPL | Age 65+ OR disabled OR blind |
+| 3 | Pregnant Women | MAGI | 264% FPL | Pregnant |
+| 4 | Children | MAGI | 322% FPL | Age < 19 |
+| 5 | Adults | MAGI | 138% FPL | Age 19-64 (default) |
+
+**Pregnancy Household Size Adjustment:**
+```
+Pregnant woman counts as HERSELF + number of unborn children
+
+Example:
+  Applicant: 1 pregnant woman living alone
+  Household Size (input): 1
+  Adjusted Household Size (for income limit): 2
+  
+  This INCREASES the income limit because FPL is higher for larger households
+  
+  Result: More generous income limit for pregnant applicants
+```
+
+**Example - Single Pregnant Woman:**
+```
+Input:
+  size: 1
+  isPregnant: true
+
+Category Determination:
+  Priority 3: Pregnant Women
+  Code: MAGI_PREGNANT
+  Pathway: MAGI
+  Income Limit: 264% FPL
+  Adjusted Household Size: 1 + 1 = 2
+
+Income Limit Lookup:
+  264% FPL for household size 2 (instead of size 1)
+  2024 FPL (2 person): $20,440
+  Income Limit: $20,440 × 264% = $53,962 / 12 = $4,497/month
+```
+
+---
+
+### 6.15.3 SSI Automatic Eligibility (lines 114-136)
+
+**Federal Authority:** 42 U.S.C. § 1396a(a)(10)(A)(i)(II) - SSI recipients automatically eligible
+
+```typescript
+// Step 2: SSI Recipients get automatic eligibility (Non-MAGI)
+if (input.isSSIRecipient) {
+  breakdown.push(`✓ SSI recipient - AUTOMATIC ELIGIBILITY`);
+  citations.push(`42 U.S.C. § 1396a(a)(10)(A)(i)(II) - SSI recipients automatically eligible`);
+  
+  return {
+    isEligible: true,
+    category: "SSI",
+    categoryName: "SSI Recipients",
+    pathway: "Non-MAGI",
+    incomeTest: {
+      passed: true,
+      testType: "SSI_Automatic",
+      monthlyIncome: input.monthlyIncome,
+      annualIncome: input.annualIncome,
+      incomeLimit: 0, // N/A for SSI
+      percentOfFPL: 0,
+    },
+    coverageType: "Full Medicaid",
+    hasSpenddown: false,
+    calculationBreakdown: breakdown,
+    policyCitations: citations,
+  };
+}
+```
+
+**SSI Automatic Eligibility:**
+- **No income test** - SSI eligibility already includes income/asset limits
+- **No asset test** - SSI has strict asset limits ($2,000 individual, $3,000 couple)
+- **Full Medicaid** - Complete healthcare coverage
+- **Federal mandate** - All states must cover SSI recipients
+
+**SSI Eligibility Requirements (for reference, not calculated by this engine):**
+- **Income Limit:** $943/month individual, $1,415/month couple (2024)
+- **Asset Limit:** $2,000 individual, $3,000 couple
+- **Age/Disability:** 65+ OR blind OR disabled
+
+**Example - SSI Recipient:**
+```
+Input:
+  isSSIRecipient: true
+  monthlyIncome: 900  // SSI benefit amount
+
+Result:
+  AUTOMATIC ELIGIBILITY
+  Category: SSI Recipients
+  Pathway: Non-MAGI
+  Coverage: Full Medicaid
+  No further testing required
+```
+
+---
+
+
+### 6.15.4 MAGI Pathway (lines 220-346)
+
+#### applyMAGITest() - MAGI Income Test (lines 220-346)
+
+**Purpose:** Apply Modified Adjusted Gross Income (MAGI) eligibility test for non-elderly/disabled applicants
+
+```typescript
+private async applyMAGITest(
+  input: MedicaidEligibilityInput,
+  category: { code: string; categoryName: string; pathway: "MAGI" | "Non-MAGI"; percentOfFPL: number; adjustedHouseholdSize: number },
+  breakdown: string[],
+  citations: string[]
+): Promise<MedicaidEligibilityResult> {
+  
+  // Get MAGI income limit using ADJUSTED household size (pregnancy adjustment)
+  const incomeLimit = await db.query.medicaidIncomeLimits.findFirst({
+    where: and(
+      eq(medicaidIncomeLimits.category, category.code.toLowerCase().replace('magi_', '')),
+      eq(medicaidIncomeLimits.householdSize, category.adjustedHouseholdSize),
+      eq(medicaidIncomeLimits.isActive, true)
+    ),
+  });
+  
+  // Calculate MAGI (income with any adjustments)
+  const magi = input.monthlyIncome - (input.magiAdjustments || 0);
+  const percentOfFPL = Math.round((input.annualIncome / incomeLimit.annualIncomeLimit) * incomeLimit.percentOfFPL);
+  
+  const incomePassed = magi <= incomeLimit.monthlyIncomeLimit;
+  
+  if (incomePassed) {
+    // ELIGIBLE - Determine coverage type
+    let coverageType: "Full Medicaid" | "CHIP" = "Full Medicaid";
+    if (category.code === "MAGI_CHILD" && percentOfFPL > 200) {
+      coverageType = "CHIP"; // Children >200% FPL get CHIP
+    }
+    
+    return {
+      isEligible: true,
+      category: category.code,
+      categoryName: category.categoryName,
+      pathway: "MAGI",
+      incomeTest: { passed: true, ... },
+      coverageType,
+      hasSpenddown: false,
+      ...
+    };
+  } else {
+    // INCOME TOO HIGH - Check Medically Needy with spenddown
+    const excessIncome = magi - incomeLimit.monthlyIncomeLimit;
+    
+    if (magi <= incomeLimit.monthlyIncomeLimit * 2) {
+      // Eligible for Medically Needy with spenddown
+      return {
+        isEligible: true,
+        category: category.code,
+        categoryName: category.categoryName + " (Medically Needy)",
+        pathway: "MAGI",
+        incomeTest: { passed: false, ... },
+        coverageType: "Medically Needy",
+        hasSpenddown: true,
+        spenddownAmount: excessIncome,
+        ...
+      };
+    }
+    
+    // Too high even for Medically Needy
+    return {
+      isEligible: false,
+      ...
+    };
+  }
+}
+```
+
+**MAGI Income Limits by Category:**
+| Category | Age Range | Maryland Income Limit | Federal Authority |
+|----------|-----------|---------------------|-------------------|
+| Adults | 19-64 | 138% FPL | ACA Section 2001 (expansion) |
+| Children | 0-18 | 322% FPL | CHIP authorization |
+| Pregnant | Any | 264% FPL | Medicaid pregnancy coverage |
+
+**2024 FPL Reference:**
+| Household Size | 100% FPL (Annual) | 138% FPL (Adult) | 264% FPL (Pregnant) | 322% FPL (Child) |
+|----------------|------------------|------------------|---------------------|------------------|
+| 1 | $15,060 | $20,783 | $39,758 | $48,493 |
+| 2 | $20,440 | $28,207 | $53,962 | $65,817 |
+| 3 | $25,820 | $35,631 | $68,165 | $83,141 |
+| 4 | $31,200 | $43,056 | $82,368 | $100,464 |
+
+**Example - Adult Applicant (19-64):**
+```
+Input:
+  age: 35
+  size: 1
+  monthlyIncome: $1,500
+  annualIncome: $18,000
+
+Category: MAGI_ADULT (138% FPL)
+Income Limit: $15,060 × 138% = $20,783 / 12 = $1,732/month
+
+Test: $1,500 ≤ $1,732 ✓ PASS
+
+Result:
+  Eligible: true
+  Coverage: Full Medicaid
+  Percent of FPL: ($18,000 / $20,783) × 138% = 119% FPL
+```
+
+**Example - Child Applicant (<19):**
+```
+Input:
+  age: 8
+  size: 4
+  monthlyIncome: $6,000
+  annualIncome: $72,000
+
+Category: MAGI_CHILD (322% FPL)
+Income Limit: $31,200 × 322% = $100,464 / 12 = $8,372/month
+
+Test: $6,000 ≤ $8,372 ✓ PASS
+
+Percent of FPL: ($72,000 / $100,464) × 322% = 231% FPL
+
+Result:
+  Eligible: true
+  Coverage: CHIP (children >200% FPL typically get CHIP vs Medicaid)
+```
+
+---
+
+#### Medically Needy with Spenddown (lines 292-320)
+
+**Purpose:** Allow coverage for those slightly above income limits if they have high medical expenses
+
+```typescript
+const excessIncome = magi - incomeLimit.monthlyIncomeLimit;
+
+// Check for Medically Needy with spenddown
+if (magi <= incomeLimit.monthlyIncomeLimit * 2) {
+  // Potentially eligible for medically needy with spenddown
+  breakdown.push(`May qualify for Medically Needy with spenddown`);
+  breakdown.push(`Spenddown Amount: $${(excessIncome / 100).toFixed(2)}/month`);
+  
+  return {
+    isEligible: true,
+    category: category.code,
+    categoryName: category.categoryName + " (Medically Needy)",
+    pathway: "MAGI",
+    incomeTest: { passed: false, ... },
+    coverageType: "Medically Needy",
+    hasSpenddown: true,
+    spenddownAmount: excessIncome,
+    ...
+  };
+}
+```
+
+**Medically Needy Program:**
+- **Purpose:** Medicaid coverage for those with high medical expenses who are slightly over income limits
+- **Spenddown:** Amount of medical bills applicant must pay before Medicaid coverage begins
+- **Eligibility:** Income ≤ 200% of MAGI limit (2x standard limit)
+- **Citation:** COMAR 10.09.24.04 - Medically Needy Program
+
+**Spenddown Formula:**
+```
+Spenddown Amount = Monthly Income - MAGI Income Limit
+
+Example:
+  MAGI Income Limit (Adult): $1,732/month
+  Actual Income: $2,200/month
+  Excess Income: $468/month
+  
+  Spenddown: $468/month
+  
+  Applicant must incur $468 in medical expenses each month to qualify for Medicaid
+  Once $468 in bills are submitted, Medicaid covers remaining expenses for that month
+```
+
+**Example - Medically Needy Adult:**
+```
+Input:
+  age: 55
+  size: 1
+  monthlyIncome: $2,200
+  annualIncome: $26,400
+
+Category: MAGI_ADULT (138% FPL)
+Income Limit: $1,732/month
+
+Test: $2,200 > $1,732 ✗ FAIL
+
+Check Medically Needy:
+  2x Income Limit: $1,732 × 2 = $3,464
+  $2,200 ≤ $3,464 ✓ Eligible for Medically Needy
+
+Spenddown: $2,200 - $1,732 = $468/month
+
+Result:
+  Eligible: true (with spenddown)
+  Coverage: Medically Needy
+  Spenddown: $468/month
+  
+  Applicant must incur $468 in medical bills monthly to trigger coverage
+```
+
+**Use Case:**
+- Chronic health conditions with regular medical expenses
+- Elderly individuals with high prescription costs
+- Disabled individuals with therapy/equipment needs
+
+---
+
+### 6.15.5 Non-MAGI Pathway (lines 351-461)
+
+#### applyNonMAGITest() - ABD Eligibility (lines 351-461)
+
+**Purpose:** Apply Non-MAGI income and asset tests for Aged, Blind, or Disabled applicants
+
+```typescript
+private async applyNonMAGITest(
+  input: MedicaidEligibilityInput,
+  category: { code: string; categoryName: string; pathway: "MAGI" | "Non-MAGI"; percentOfFPL: number; adjustedHouseholdSize: number },
+  breakdown: string[],
+  citations: string[]
+): Promise<MedicaidEligibilityResult> {
+  
+  // Non-MAGI income limit (typically 100% FPL for ABD)
+  const incomeLimit = await db.query.medicaidIncomeLimits.findFirst({
+    where: and(
+      eq(medicaidIncomeLimits.category, "elderly_disabled"),
+      eq(medicaidIncomeLimits.householdSize, category.adjustedHouseholdSize),
+      eq(medicaidIncomeLimits.isActive, true)
+    ),
+  });
+  
+  const incomePassed = input.monthlyIncome <= incomeLimit.monthlyIncomeLimit;
+  
+  // Asset test for Non-MAGI (typically $2,000 for individual, $3,000 for couple)
+  const assetLimit = input.size === 1 ? 200000 : 300000; // $2,000 or $3,000
+  const assetsPassed = (input.countableAssets || 0) <= assetLimit;
+  
+  citations.push(`COMAR 10.09.24.07 - Non-MAGI Aged, Blind, or Disabled`);
+  citations.push(`42 CFR 435.121 - Eligibility for individuals age 65 or older`);
+  
+  if (incomePassed && assetsPassed) {
+    return {
+      isEligible: true,
+      category: category.code,
+      categoryName: category.categoryName,
+      pathway: "Non-MAGI",
+      incomeTest: { passed: true, testType: "Non-MAGI", ... },
+      assetTest: { passed: true, countableAssets: input.countableAssets || 0, assetLimit },
+      coverageType: "Full Medicaid",
+      hasSpenddown: false,
+      ...
+    };
+  } else {
+    // Failed - return reasons
+    const reasons: string[] = [];
+    if (!incomePassed) {
+      reasons.push(`Income exceeds limit`);
+    }
+    if (!assetsPassed) {
+      reasons.push(`Assets exceed limit`);
+    }
+    
+    return {
+      isEligible: false,
+      reason: reasons.join("; "),
+      ineligibilityReasons: reasons,
+      ...
+    };
+  }
+}
+```
+
+**Non-MAGI (ABD) Eligibility Requirements:**
+| Test | Individual Limit | Couple Limit | Citation |
+|------|-----------------|--------------|----------|
+| Income | 100% FPL (~$1,255/month) | 100% FPL (~$1,703/month) | COMAR 10.09.24.07 |
+| Assets | $2,000 | $3,000 | 42 CFR 435.121 |
+
+**Who Qualifies for Non-MAGI:**
+- **Aged:** 65 years or older
+- **Blind:** Statutory definition of blindness
+- **Disabled:** Meets Social Security disability criteria
+
+**Example - Elderly Individual:**
+```
+Input:
+  age: 72
+  size: 1
+  isElderly: true
+  monthlyIncome: $1,100
+  countableAssets: $1,500
+
+Category: ABD (Aged, Blind, or Disabled)
+Pathway: Non-MAGI
+
+Income Test:
+  Limit: 100% FPL = $1,255/month
+  Actual: $1,100
+  Result: PASS ($1,100 ≤ $1,255)
+
+Asset Test:
+  Limit: $2,000 (individual)
+  Actual: $1,500
+  Result: PASS ($1,500 ≤ $2,000)
+
+Result:
+  Eligible: true
+  Coverage: Full Medicaid
+  No spenddown
+```
+
+**Example - Disabled Couple:**
+```
+Input:
+  size: 2
+  isDisabled: true
+  monthlyIncome: $1,600
+  countableAssets: $2,800
+
+Category: ABD
+Pathway: Non-MAGI
+
+Income Test:
+  Limit: 100% FPL = $1,703/month (couple)
+  Actual: $1,600
+  Result: PASS ($1,600 ≤ $1,703)
+
+Asset Test:
+  Limit: $3,000 (couple)
+  Actual: $2,800
+  Result: PASS ($2,800 ≤ $3,000)
+
+Result:
+  Eligible: true
+  Coverage: Full Medicaid
+```
+
+**Countable vs Exempt Assets:**
+
+**Countable Assets:**
+- Cash, checking, savings accounts
+- Stocks, bonds, mutual funds
+- Non-primary vehicles
+- Property other than primary residence
+
+**Exempt Assets:**
+- Primary residence (no matter the value)
+- One vehicle
+- Household goods and personal effects
+- Burial plots and funeral funds ($1,500 limit)
+- Retirement accounts (401k, IRA) while actively employed
+
+---
+
+### 6.15 Summary - Maryland Medicaid Rules Engine
+
+**Purpose:** PRIMARY Maryland-controlled Medicaid eligibility calculator implementing MAGI and Non-MAGI pathways under ACA
+
+**Critical Design:** NOT a PolicyEngine wrapper - implements Maryland's interpretation of federal Medicaid regulations
+
+**Dual Pathway System:**
+1. **MAGI (Modified Adjusted Gross Income):**
+   - Adults (19-64): 138% FPL (ACA expansion)
+   - Children (<19): 322% FPL (includes CHIP)
+   - Pregnant Women: 264% FPL
+   - Income test only (no asset test)
+
+2. **Non-MAGI:**
+   - SSI Recipients: Automatic eligibility
+   - Aged/Blind/Disabled (ABD): 100% FPL + $2,000/$3,000 asset limit
+   - Income AND asset tests
+
+**Category Priority:**
+```
+1. SSI → Automatic eligibility (highest priority)
+2. Elderly/Blind/Disabled → Non-MAGI ABD
+3. Pregnant → MAGI Pregnant (264% FPL)
+4. Children (<19) → MAGI Child (322% FPL)
+5. Adults (19-64) → MAGI Adult (138% FPL, default)
+```
+
+**Pregnancy Adjustment:** Pregnant woman counts as herself + 1, increasing household size for income limit calculation (more generous)
+
+**Medically Needy:** Available for those with income up to 200% of MAGI limit, with spenddown equal to excess income
+
+**Coverage Types:**
+- **Full Medicaid:** Comprehensive healthcare (most common)
+- **CHIP:** Children's Health Insurance Program (children >200% FPL)
+- **Medically Needy:** Coverage after spenddown met
+
+**Policy References:**
+- **COMAR 10.09.24** - Maryland Medicaid Medical Assistance
+- **ACA Section 2001** - Medicaid expansion
+- **42 U.S.C. § 1396a** - Federal Medicaid Act
+- **42 CFR 435** - Federal eligibility standards
+
+**Integration Points:**
+- **rulesEngine (SNAP)** - Express Lane Enrollment (SNAP→Medicaid)
+- **crossEnrollmentEngine** - Automatic cross-enrollment
+- **storage.ts** - Persist eligibility determinations
+- **policyEngine** - Third-party verification (not primary)
+
+**Database Tables:**
+- `medicaidIncomeLimits` - MAGI/Non-MAGI income limits by category/household size
+- `medicaidCategories` - Category definitions
+- `medicaidMAGIRules` - MAGI pathway rules
+- `medicaidNonMAGIRules` - Non-MAGI pathway rules
+
+**Production Deployment:**
+- Used by Navigator Workspace for Medicaid determinations
+- Supports Express Lane Enrollment (auto-enroll SNAP → Medicaid)
+- Generates Financial Opportunity Radar alerts
+- Enables Benefits Access Review quality checks
+
+**Compliance:**
+- ✅ **COMAR 10.09.24** - Maryland regulations
+- ✅ **ACA Section 2001** - Medicaid expansion
+- ✅ **42 CFR 435** - Federal eligibility
+- ✅ **SSI Automatic** - Federal mandate compliance
+
+---
+
