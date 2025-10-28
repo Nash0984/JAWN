@@ -29072,3 +29072,1099 @@ const changes = await aiOrchestrator.detectDocumentChanges(
 
 ---
 
+
+---
+
+## 6.14 Maryland SNAP Rules Engine - PRIMARY Calculator (server/services/rulesEngine.ts - 614 lines)
+
+**Purpose:** Deterministic SNAP eligibility and benefit calculation engine implementing federal regulations (7 CFR Part 273) and Maryland state policies
+
+**Critical Design:** This is the **PRIMARY Maryland-controlled Rules Engine** - NOT a wrapper around PolicyEngine. Policy Engine provides third-party verification only. This engine implements federal SNAP regulations directly.
+
+**Federal Authority:** 7 CFR Part 273 - Supplemental Nutrition Assistance Program (SNAP)
+
+**Eligibility Flow:**
+```
+1. Asset/Resource Test (7 CFR § 273.8)
+   ├─ Standard: $2,750 limit
+   └─ Elderly/Disabled: $4,250 limit
+
+2. Gross Income Test (7 CFR § 273.9)
+   ├─ Limit: 130% of Federal Poverty Level (FPL)
+   └─ Exemption: Elderly/disabled households
+
+3. Net Income Test (7 CFR § 273.9)
+   ├─ Limit: 100% of FPL
+   └─ Net Income = Gross Income - Deductions
+
+4. Deductions (7 CFR § 273.9)
+   ├─ Standard Deduction
+   ├─ Earned Income (20%)
+   ├─ Dependent Care
+   ├─ Medical (elderly/disabled only)
+   └─ Shelter (excess over 50% of income)
+
+5. Benefit Calculation (7 CFR § 273.10)
+   └─ Benefit = Max Allotment - (30% × Net Income)
+```
+
+---
+
+### 6.14.1 Data Structures (lines 26-88)
+
+#### HouseholdInput Interface (lines 26-38)
+
+**Purpose:** Input parameters for SNAP eligibility calculation
+
+```typescript
+export interface HouseholdInput {
+  size: number;
+  grossMonthlyIncome: number; // in cents
+  earnedIncome: number; // in cents
+  unearnedIncome: number; // in cents
+  assets?: number; // in cents - countable household resources
+  hasElderly?: boolean; // 60+ years
+  hasDisabled?: boolean;
+  dependentCareExpenses?: number; // in cents
+  medicalExpenses?: number; // in cents (only for elderly/disabled)
+  shelterCosts?: number; // in cents (rent + utilities)
+  categoricalEligibility?: string; // SSI, TANF, GA, BBCE
+}
+```
+
+**All monetary amounts in CENTS** (divide by 100 for dollars)
+
+**Example Input - Family of 4:**
+```typescript
+{
+  size: 4,
+  grossMonthlyIncome: 350000,  // $3,500/month
+  earnedIncome: 300000,  // $3,000 from wages
+  unearnedIncome: 50000,  // $500 child support
+  assets: 150000,  // $1,500 in savings
+  hasElderly: false,
+  hasDisabled: false,
+  dependentCareExpenses: 60000,  // $600 daycare
+  medicalExpenses: 0,
+  shelterCosts: 120000,  // $1,200 rent+utilities
+  categoricalEligibility: undefined
+}
+```
+
+---
+
+#### EligibilityResult Interface (lines 40-79)
+
+**Purpose:** Complete eligibility determination with policy citations
+
+```typescript
+export interface EligibilityResult {
+  isEligible: boolean;
+  reason?: string;
+  ineligibilityReasons?: string[];
+  
+  grossIncomeTest: {
+    passed: boolean;
+    limit: number; // 130% FPL in cents
+    actual: number; // Gross income in cents
+    bypassedBy?: string; // Categorical eligibility or elderly/disabled
+  };
+  
+  netIncomeTest: {
+    passed: boolean;
+    limit: number; // 100% FPL in cents
+    actual: number; // Net income in cents
+    bypassedBy?: string;
+  };
+  
+  deductions: {
+    standardDeduction: number;
+    earnedIncomeDeduction: number; // 20% of earned income
+    dependentCareDeduction: number;
+    medicalExpenseDeduction: number;
+    shelterDeduction: number;
+    total: number;
+  };
+  
+  monthlyBenefit: number; // in cents
+  maxAllotment: number; // in cents
+  calculationBreakdown: string[]; // Step-by-step calculation
+  
+  rulesSnapshot: {
+    incomeLimitId: string;
+    deductionIds: string[];
+    allotmentId: string;
+    categoricalRuleId?: string;
+  };
+  
+  policyCitations: Array<{
+    sectionNumber: string;
+    sectionTitle: string;
+    ruleType: string; // 'income' | 'deduction' | 'categorical' | 'allotment'
+    description: string;
+  }>;
+}
+```
+
+---
+
+### 6.14.2 Rules Retrieval via rulesAsCodeService (lines 95-139)
+
+**Purpose:** Retrieve active rules with effective date versioning
+
+**Delegation Pattern:** All database queries delegated to `rulesAsCodeService` for centralized versioning logic
+
+```typescript
+private async getActiveIncomeLimits(
+  benefitProgramId: string,
+  householdSize: number,
+  effectiveDate: Date = new Date()
+): Promise<SnapIncomeLimit | null> {
+  return await rulesAsCodeService.getActiveIncomeLimits(
+    benefitProgramId,
+    householdSize,
+    effectiveDate
+  );
+}
+
+private async getActiveDeductions(
+  benefitProgramId: string,
+  effectiveDate: Date = new Date()
+): Promise<SnapDeduction[]> {
+  return await rulesAsCodeService.getActiveDeductions(
+    benefitProgramId,
+    effectiveDate
+  );
+}
+
+private async getActiveAllotment(
+  benefitProgramId: string,
+  householdSize: number,
+  effectiveDate: Date = new Date()
+): Promise<SnapAllotment | null> {
+  return await rulesAsCodeService.getActiveAllotment(
+    benefitProgramId,
+    householdSize,
+    effectiveDate
+  );
+}
+
+private async getCategoricalEligibilityRule(
+  benefitProgramId: string,
+  ruleCode: string,
+  effectiveDate: Date = new Date()
+): Promise<CategoricalEligibilityRule | null> {
+  return await rulesAsCodeService.getCategoricalEligibilityRule(
+    benefitProgramId,
+    ruleCode,
+    effectiveDate
+  );
+}
+```
+
+**Rules As Code Pattern:**
+- Rules stored in database tables (not hardcoded)
+- Effective date versioning (rules change over time)
+- Audit trail via `rulesSnapshot` in results
+
+---
+
+### 6.14.3 Eligibility Calculation - 8-Step Process (lines 144-514)
+
+#### calculateEligibility() - Main Entry Point (lines 144-514)
+
+**Purpose:** Calculate SNAP eligibility and monthly benefit using Maryland/federal rules
+
+**8-Step Calculation Process:**
+
+```
+Step 1: Get Active Rules (lines 152-162)
+  ├─ Income limits (130% gross, 100% net FPL)
+  ├─ Deductions (standard, earned income, etc.)
+  ├─ Allotments (max benefit by household size)
+  └─ Categorical eligibility rules (if applicable)
+
+Step 2: Check Categorical Eligibility (lines 168-183)
+  ├─ SSI recipients
+  ├─ TANF recipients
+  ├─ General Assistance (GA)
+  └─ Broad-Based Categorical Eligibility (BBCE)
+
+Step 2.5: Asset/Resource Limit Test (lines 186-244)
+  ├─ Standard limit: $2,750
+  ├─ Elderly/Disabled limit: $4,250
+  └─ Bypass if categorical eligibility applies
+
+Step 3: Gross Income Test (lines 246-276)
+  ├─ Limit: 130% of FPL
+  ├─ Exemption: Elderly/disabled households
+  └─ Bypass: Categorical eligibility
+
+Step 4: Calculate Deductions (lines 278-366)
+  ├─ Standard Deduction (varies by household size)
+  ├─ Earned Income Deduction (20% of earned income)
+  ├─ Dependent Care Deduction (actual costs)
+  ├─ Medical Expense Deduction (elderly/disabled only, amount over threshold)
+  └─ Shelter Deduction (excess over 50% of income after other deductions)
+
+Step 5: Calculate Net Income (lines 369-371)
+  └─ Net Income = Gross Income - Total Deductions
+
+Step 6: Net Income Test (lines 373-396)
+  ├─ Limit: 100% of FPL
+  └─ Bypass: Categorical eligibility
+
+Step 7: Determine Eligibility (lines 398-399)
+  └─ Eligible if BOTH gross AND net income tests pass
+
+Step 8: Calculate Benefit Amount (lines 401-430)
+  ├─ Benefit = Max Allotment - (30% × Net Income)
+  ├─ Minimum benefit for 1-2 person elderly/disabled households
+  └─ $0 if benefit rounds down
+```
+
+---
+
+
+#### Step 2.5: Asset/Resource Limit Test (lines 186-244)
+
+**Federal Authority:** 7 CFR § 273.8 - Resource eligibility standards
+
+```typescript
+if (household.assets !== undefined) {
+  // Federal SNAP asset limits
+  const assetLimit = (household.hasElderly || household.hasDisabled) ? 425000 : 275000;
+  const assetLimitLabel = assetLimit === 425000 ? '$4,250 (elderly/disabled)' : '$2,750';
+  
+  if (household.assets > assetLimit) {
+    ineligibilityReasons.push(
+      `Assets ($${(household.assets / 100).toFixed(2)}) exceed limit (${assetLimitLabel})`
+    );
+    
+    // If assets exceed limit, household is ineligible (unless categorical eligibility applies)
+    if (!categoricalRule || !categoricalRule.bypassAssetTest) {
+      return {
+        isEligible: false,
+        reason: `Household assets exceed the ${assetLimitLabel} limit`,
+        // ... return ineligible result
+      };
+    } else {
+      calculationBreakdown.push(`✓ Asset test bypassed (categorical eligibility: ${categoricalRule.ruleName})`);
+    }
+  }
+}
+```
+
+**Asset Limits:**
+| Household Type | Asset Limit | Citation |
+|----------------|-------------|----------|
+| Standard | $2,750 | 7 CFR § 273.8(e)(1) |
+| Elderly or Disabled | $4,250 | 7 CFR § 273.8(e)(2) |
+
+**Countable Assets:**
+- Cash
+- Checking/savings accounts
+- Stocks, bonds, mutual funds
+- Non-primary vehicles (over certain value)
+
+**Excluded Assets:**
+- Primary residence
+- One vehicle per household
+- Retirement accounts (401k, IRA)
+- Educational savings (529 plans)
+
+**Example - Failed Asset Test:**
+```
+Household: 2 adults, no elderly/disabled
+Assets: $3,000
+Asset Limit: $2,750
+
+Result: INELIGIBLE
+Reason: "Assets ($3,000.00) exceed limit ($2,750)"
+```
+
+---
+
+#### Step 3: Gross Income Test (lines 246-276)
+
+**Federal Authority:** 7 CFR § 273.9(a) - Gross income test
+
+```typescript
+const grossIncomeTest = {
+  passed: false,
+  limit: incomeLimit.grossMonthlyLimit,  // 130% of FPL
+  actual: household.grossMonthlyIncome,
+  bypassedBy: undefined,
+};
+
+if (bypassGrossIncomeTest) {
+  grossIncomeTest.passed = true;
+} else if (household.grossMonthlyIncome <= incomeLimit.grossMonthlyLimit) {
+  grossIncomeTest.passed = true;
+} else if (household.hasElderly || household.hasDisabled) {
+  // Elderly/disabled households are exempt from gross income test
+  grossIncomeTest.passed = true;
+  grossIncomeTest.bypassedBy = "Elderly/Disabled Exemption";
+} else {
+  grossIncomeTest.passed = false;
+  ineligibilityReasons.push(
+    `Gross income ($${...}) exceeds limit ($${...})`
+  );
+}
+```
+
+**Gross Income Test:**
+| Component | Requirement |
+|-----------|-------------|
+| Limit | 130% of Federal Poverty Level (FPL) |
+| Exemptions | Elderly (60+) or disabled households |
+| Bypass | Categorical eligibility (SSI, TANF, etc.) |
+
+**Example - Household of 4 (2024 FPL = $31,200):**
+```
+Gross Income Limit: 130% × $31,200 = $40,560 / 12 = $3,380/month
+
+Example 1: $3,000 gross income
+  Result: PASS ($3,000 ≤ $3,380)
+
+Example 2: $4,000 gross income, no elderly/disabled
+  Result: FAIL ($4,000 > $3,380)
+
+Example 3: $4,000 gross income, has elderly member
+  Result: PASS (gross income test waived for elderly/disabled)
+```
+
+---
+
+#### Step 4: Calculate Deductions (lines 278-366)
+
+**Federal Authority:** 7 CFR § 273.9(d) - Income deductions
+
+**Standard Deduction** (lines 288-295)
+```typescript
+const standardDeductionRule = deductions.find(d => d.deductionType === 'standard');
+if (standardDeductionRule) {
+  deductionAmounts.standardDeduction = standardDeductionRule.amount || 0;
+}
+```
+
+**2024 Standard Deductions:**
+| Household Size | Standard Deduction |
+|----------------|-------------------|
+| 1-3 | $193 |
+| 4 | $206 |
+| 5 | $242 |
+| 6+ | $277 |
+
+---
+
+**Earned Income Deduction** (lines 297-305)
+```typescript
+const earnedIncomeDeductionRule = deductions.find(d => d.deductionType === 'earned_income');
+if (earnedIncomeDeductionRule && household.earnedIncome > 0) {
+  const percentage = earnedIncomeDeductionRule.percentage || 20;
+  deductionAmounts.earnedIncomeDeduction = Math.floor(household.earnedIncome * percentage / 100);
+}
+```
+
+**Earned Income Deduction:** 20% of earned income (wages, salaries, self-employment)
+
+**Example:**
+```
+Earned Income: $2,500
+Deduction: $2,500 × 20% = $500
+```
+
+**Citation:** 7 CFR § 273.9(d)(2)
+
+---
+
+**Dependent Care Deduction** (lines 307-317)
+```typescript
+if (household.dependentCareExpenses && household.dependentCareExpenses > 0) {
+  const dependentCareRule = deductions.find(d => d.deductionType === 'dependent_care');
+  const maxCap = dependentCareRule?.maxAmount;
+  deductionAmounts.dependentCareDeduction = maxCap
+    ? Math.min(household.dependentCareExpenses, maxCap)
+    : household.dependentCareExpenses;
+}
+```
+
+**Dependent Care Deduction:** Actual costs for care of children or disabled dependents to allow household member to work, look for work, or attend training
+
+**Example:**
+```
+Daycare Costs: $600/month
+Deduction: $600 (full amount, no cap for most households)
+```
+
+**Citation:** 7 CFR § 273.9(d)(4)
+
+---
+
+**Medical Expense Deduction** (lines 319-330) - Elderly/Disabled Only
+```typescript
+if ((household.hasElderly || household.hasDisabled) && household.medicalExpenses) {
+  const medicalRule = deductions.find(d => d.deductionType === 'medical');
+  const threshold = medicalRule?.minAmount || 0;  // $35 in 2024
+  
+  if (household.medicalExpenses > threshold) {
+    deductionAmounts.medicalExpenseDeduction = household.medicalExpenses - threshold;
+  }
+}
+```
+
+**Medical Expense Deduction:**
+- **Eligible:** Elderly (60+) or disabled household members only
+- **Threshold:** Amount over $35/month (2024)
+- **Allowable Expenses:** Medical care, prescriptions, health insurance premiums
+
+**Example:**
+```
+Medical Expenses: $150/month
+Threshold: $35
+Deduction: $150 - $35 = $115
+```
+
+**Citation:** 7 CFR § 273.9(d)(3)
+
+---
+
+**Shelter Deduction** (lines 332-358) - Excess Shelter Costs
+```typescript
+if (household.shelterCosts && household.shelterCosts > 0) {
+  const shelterRule = deductions.find(d => d.deductionType === 'shelter');
+  const incomeAfterOtherDeductions = household.grossMonthlyIncome - (
+    deductionAmounts.standardDeduction +
+    deductionAmounts.earnedIncomeDeduction +
+    deductionAmounts.dependentCareDeduction +
+    deductionAmounts.medicalExpenseDeduction
+  );
+  
+  const halfIncome = Math.floor(incomeAfterOtherDeductions / 2);
+  const excessShelter = Math.max(0, household.shelterCosts - halfIncome);
+  
+  // Apply cap unless household has elderly/disabled
+  const shelterCap = shelterRule?.maxAmount;  // $672 in 2024
+  if (shelterCap && !(household.hasElderly || household.hasDisabled)) {
+    deductionAmounts.shelterDeduction = Math.min(excessShelter, shelterCap);
+  } else {
+    deductionAmounts.shelterDeduction = excessShelter;  // No cap for elderly/disabled
+  }
+}
+```
+
+**Shelter Deduction Formula:**
+```
+1. Calculate income after other deductions
+2. Half Income = Income After Other Deductions / 2
+3. Excess Shelter = Shelter Costs - Half Income
+4. Apply cap ($672 in 2024) unless elderly/disabled household
+```
+
+**Allowable Shelter Costs:**
+- Rent or mortgage payments
+- Property taxes
+- Homeowner's insurance
+- Utility allowances (heating, cooling, phone, etc.)
+
+**Example - Standard Household:**
+```
+Gross Income: $3,000
+Income After Other Deductions: $2,200
+Half Income: $1,100
+Shelter Costs (rent + utilities): $1,400
+
+Excess Shelter: $1,400 - $1,100 = $300
+Cap: $672
+Shelter Deduction: $300 (under cap)
+```
+
+**Example - Elderly Household:**
+```
+Same as above, but elderly household
+Excess Shelter: $1,400 - $1,100 = $300
+Cap: N/A (no cap for elderly/disabled)
+Shelter Deduction: $300 (uncapped)
+```
+
+**Citation:** 7 CFR § 273.9(d)(6)
+
+---
+
+#### Step 5: Calculate Net Income (lines 369-371)
+
+```typescript
+const netMonthlyIncome = Math.max(0, household.grossMonthlyIncome - deductionAmounts.total);
+```
+
+**Net Income Formula:**
+```
+Net Monthly Income = Gross Monthly Income - Total Deductions
+
+Total Deductions = 
+  Standard Deduction +
+  Earned Income Deduction (20%) +
+  Dependent Care Deduction +
+  Medical Expense Deduction (elderly/disabled only) +
+  Shelter Deduction
+```
+
+**Example - Household of 4:**
+```
+Gross Monthly Income: $3,500
+
+Deductions:
+  Standard Deduction: $206
+  Earned Income Deduction (20% of $3,000): $600
+  Dependent Care: $600
+  Medical: $0 (no elderly/disabled)
+  Shelter: $300
+  Total Deductions: $1,706
+
+Net Monthly Income: $3,500 - $1,706 = $1,794
+```
+
+---
+
+#### Step 6: Net Income Test (lines 373-396)
+
+**Federal Authority:** 7 CFR § 273.9(a)(2) - Net income test
+
+```typescript
+const netIncomeTest = {
+  passed: false,
+  limit: incomeLimit.netMonthlyLimit,  // 100% of FPL
+  actual: netMonthlyIncome,
+  bypassedBy: undefined,
+};
+
+if (bypassNetIncomeTest) {
+  netIncomeTest.passed = true;
+} else if (netMonthlyIncome <= incomeLimit.netMonthlyLimit) {
+  netIncomeTest.passed = true;
+} else {
+  netIncomeTest.passed = false;
+  ineligibilityReasons.push(
+    `Net income ($${...}) exceeds limit ($${...})`
+  );
+}
+```
+
+**Net Income Test:**
+| Component | Requirement |
+|-----------|-------------|
+| Limit | 100% of Federal Poverty Level (FPL) |
+| No Exemptions | All households must pass (unless categorical eligibility) |
+| Bypass | Categorical eligibility only |
+
+**Example - Household of 4 (2024 FPL = $31,200):**
+```
+Net Income Limit: 100% × $31,200 = $31,200 / 12 = $2,600/month
+
+Example 1: $1,794 net income
+  Result: PASS ($1,794 ≤ $2,600)
+
+Example 2: $2,800 net income
+  Result: FAIL ($2,800 > $2,600)
+```
+
+---
+
+#### Step 7: Determine Eligibility (lines 398-399)
+
+```typescript
+const isEligible = grossIncomeTest.passed && netIncomeTest.passed;
+```
+
+**Eligibility Determination:**
+```
+ELIGIBLE if:
+  ✓ Asset test passes (or bypassed)
+  AND
+  ✓ Gross income test passes (or bypassed)
+  AND
+  ✓ Net income test passes (or bypassed)
+
+INELIGIBLE if ANY test fails
+```
+
+---
+
+#### Step 8: Calculate Benefit Amount (lines 401-430)
+
+**Federal Authority:** 7 CFR § 273.10 - Determining household eligibility and benefit levels
+
+```typescript
+if (isEligible) {
+  // SNAP benefit = Max Allotment - (30% of net income)
+  const thirtyPercentOfNetIncome = Math.floor(netMonthlyIncome * 30 / 100);
+  monthlyBenefit = Math.max(0, allotment.maxMonthlyBenefit - thirtyPercentOfNetIncome);
+
+  // Apply minimum benefit if applicable
+  if (allotment.minMonthlyBenefit && monthlyBenefit < allotment.minMonthlyBenefit) {
+    if (household.size <= 2 && (household.hasElderly || household.hasDisabled)) {
+      monthlyBenefit = allotment.minMonthlyBenefit;  // $23 minimum in 2024
+    }
+  }
+}
+```
+
+**SNAP Benefit Formula:**
+```
+Monthly Benefit = Max Allotment - (30% × Net Income)
+
+If benefit < minimum AND household size ≤ 2 AND elderly/disabled:
+  Monthly Benefit = Minimum Benefit ($23 in 2024)
+Else if benefit < $0:
+  Monthly Benefit = $0
+```
+
+**2024 Maximum Monthly Allotments:**
+| Household Size | Max Allotment |
+|----------------|---------------|
+| 1 | $291 |
+| 2 | $535 |
+| 3 | $766 |
+| 4 | $973 |
+| 5 | $1,155 |
+| 6 | $1,386 |
+| 7 | $1,532 |
+| 8 | $1,751 |
+| Each additional | +$219 |
+
+**Example - Household of 4:**
+```
+Net Monthly Income: $1,794
+Max Allotment: $973
+
+30% of Net Income: $1,794 × 30% = $538
+Monthly Benefit: $973 - $538 = $435
+
+SNAP Benefit: $435/month
+```
+
+**Citation:** 7 CFR § 273.10(e)
+
+---
+
+
+### 6.14.4 Policy Citations & Traceability (lines 432-513)
+
+**Purpose:** Link every calculation to specific policy manual sections for audit compliance
+
+```typescript
+const policyCitations: Array<{
+  sectionNumber: string;
+  sectionTitle: string;
+  ruleType: string;
+  description: string;
+}> = [];
+
+// Income limits citation
+policyCitations.push({
+  sectionNumber: '409',
+  sectionTitle: 'Income Eligibility',
+  ruleType: 'income',
+  description: `Maryland SNAP income limits for household size ${household.size}`
+});
+
+// Deductions citations
+if (deductionAmounts.standardDeduction > 0) {
+  policyCitations.push({
+    sectionNumber: '212',
+    sectionTitle: 'Deductions',
+    ruleType: 'deduction',
+    description: 'Standard deduction for SNAP households'
+  });
+}
+
+if (deductionAmounts.earnedIncomeDeduction > 0) {
+  policyCitations.push({
+    sectionNumber: '213',
+    sectionTitle: 'Determining Income Deductions',
+    ruleType: 'deduction',
+    description: '20% earned income deduction'
+  });
+}
+
+if (deductionAmounts.shelterDeduction > 0) {
+  policyCitations.push({
+    sectionNumber: '214',
+    sectionTitle: 'Utility Allowances',
+    ruleType: 'deduction',
+    description: 'Shelter and utility cost deductions'
+  });
+}
+
+// Categorical eligibility citation
+if (categoricalRule) {
+  policyCitations.push({
+    sectionNumber: '115',
+    sectionTitle: 'Categorical Eligibility',
+    ruleType: 'categorical',
+    description: `${categoricalRule.ruleName} categorical eligibility bypass`
+  });
+}
+
+// Allotment calculation citation
+policyCitations.push({
+  sectionNumber: '600',
+  sectionTitle: 'Standards for Income and Deductions',
+  ruleType: 'allotment',
+  description: 'Maximum SNAP allotment tables and benefit calculation'
+});
+```
+
+**Policy Citation Example:**
+```json
+{
+  "policyCitations": [
+    {
+      "sectionNumber": "409",
+      "sectionTitle": "Income Eligibility",
+      "ruleType": "income",
+      "description": "Maryland SNAP income limits for household size 4"
+    },
+    {
+      "sectionNumber": "212",
+      "sectionTitle": "Deductions",
+      "ruleType": "deduction",
+      "description": "Standard deduction for SNAP households"
+    },
+    {
+      "sectionNumber": "213",
+      "sectionTitle": "Determining Income Deductions",
+      "ruleType": "deduction",
+      "description": "20% earned income deduction"
+    },
+    {
+      "sectionNumber": "600",
+      "sectionTitle": "Standards for Income and Deductions",
+      "ruleType": "allotment",
+      "description": "Maximum SNAP allotment tables and benefit calculation"
+    }
+  ]
+}
+```
+
+**Audit Compliance:** Each citation links to Maryland SNAP Policy Manual section, enabling caseworkers to verify calculations against official policy
+
+---
+
+### 6.14.5 Document Checklist Generation (lines 519-575)
+
+#### getDocumentChecklist() - Dynamic Checklist (lines 519-575)
+
+**Purpose:** Generate personalized document requirements based on household circumstances
+
+```typescript
+async getDocumentChecklist(
+  benefitProgramId: string,
+  household: HouseholdInput
+): Promise<DocumentChecklistItem[]> {
+  const rules = await db
+    .select()
+    .from(documentRequirementRules)
+    .where(
+      and(
+        eq(documentRequirementRules.benefitProgramId, benefitProgramId),
+        eq(documentRequirementRules.isActive, true),
+        lte(documentRequirementRules.effectiveDate, new Date()),
+        or(
+          isNull(documentRequirementRules.endDate),
+          gte(documentRequirementRules.endDate, new Date())
+        )
+      )
+    );
+
+  const checklist: DocumentChecklistItem[] = [];
+
+  for (const rule of rules) {
+    const requiredWhen = rule.requiredWhen as any;
+    let isRequired = rule.isRequired;
+
+    // Simple condition evaluation
+    if (requiredWhen) {
+      if (requiredWhen.hasIncome && household.grossMonthlyIncome > 0) {
+        isRequired = true;
+      }
+      if (requiredWhen.hasEarnedIncome && household.earnedIncome > 0) {
+        isRequired = true;
+      }
+      if (requiredWhen.hasDependentCare && household.dependentCareExpenses) {
+        isRequired = true;
+      }
+      if (requiredWhen.hasMedicalExpenses && household.medicalExpenses) {
+        isRequired = true;
+      }
+      if (requiredWhen.hasShelterCosts && household.shelterCosts) {
+        isRequired = true;
+      }
+    }
+
+    checklist.push({
+      category: rule.documentType,
+      documentType: rule.requirementName,
+      required: isRequired,
+      acceptableDocuments: (rule.acceptableDocuments as string[]) || [],
+      validityDays: rule.validityPeriod || undefined,
+      notes: rule.notes || undefined,
+    });
+  }
+
+  return checklist;
+}
+```
+
+**Example Document Checklist:**
+```json
+[
+  {
+    "category": "identity",
+    "documentType": "Proof of Identity",
+    "required": true,
+    "acceptableDocuments": [
+      "Driver's license",
+      "State ID",
+      "Passport",
+      "Birth certificate"
+    ],
+    "validityDays": 90,
+    "notes": "Must be current and not expired"
+  },
+  {
+    "category": "income",
+    "documentType": "Proof of Earned Income",
+    "required": true,
+    "acceptableDocuments": [
+      "Pay stubs (last 30 days)",
+      "Employment verification letter",
+      "Self-employment records"
+    ],
+    "validityDays": 30,
+    "notes": "Required because household has earned income"
+  },
+  {
+    "category": "shelter",
+    "documentType": "Proof of Shelter Costs",
+    "required": true,
+    "acceptableDocuments": [
+      "Lease agreement",
+      "Rent receipt",
+      "Mortgage statement",
+      "Utility bills"
+    ],
+    "validityDays": 90,
+    "notes": "Required to verify shelter deduction"
+  },
+  {
+    "category": "dependent_care",
+    "documentType": "Proof of Dependent Care Expenses",
+    "required": true,
+    "acceptableDocuments": [
+      "Daycare invoice",
+      "Receipt from care provider",
+      "Written statement from provider"
+    ],
+    "validityDays": 30,
+    "notes": "Required because household claims dependent care deduction"
+  }
+]
+```
+
+**Conditional Logic:**
+- Documents only required if household claims relevant deduction
+- Example: Medical expense proof only required if elderly/disabled household claims medical deduction
+- Reduces applicant burden by excluding irrelevant documents
+
+---
+
+### 6.14.6 Calculation Logging & Audit Trail (lines 580-611)
+
+#### logCalculation() - Audit Trail (lines 580-611)
+
+**Purpose:** Log every eligibility calculation for audit compliance and case review
+
+```typescript
+async logCalculation(
+  benefitProgramId: string,
+  household: HouseholdInput,
+  result: EligibilityResult,
+  userId?: string,
+  ipAddress?: string,
+  userAgent?: string
+): Promise<string> {
+  const calculation: InsertEligibilityCalculation = {
+    userId,
+    benefitProgramId,
+    householdSize: household.size,
+    grossMonthlyIncome: household.grossMonthlyIncome,
+    netMonthlyIncome: result.netIncomeTest.actual,
+    deductions: result.deductions,
+    categoricalEligibility: household.categoricalEligibility || null,
+    isEligible: result.isEligible,
+    monthlyBenefit: result.monthlyBenefit,
+    ineligibilityReasons: result.ineligibilityReasons || null,
+    rulesSnapshot: result.rulesSnapshot,
+    calculatedBy: userId || null,
+    ipAddress: ipAddress || null,
+    userAgent: userAgent || null,
+  };
+
+  const [saved] = await db
+    .insert(eligibilityCalculations)
+    .values(calculation)
+    .returning();
+
+  return saved.id;
+}
+```
+
+**Audit Log Record:**
+```json
+{
+  "id": "calc_123456789",
+  "userId": "user_abc",
+  "benefitProgramId": "snap_maryland",
+  "householdSize": 4,
+  "grossMonthlyIncome": 350000,
+  "netMonthlyIncome": 179400,
+  "deductions": {
+    "standardDeduction": 20600,
+    "earnedIncomeDeduction": 60000,
+    "dependentCareDeduction": 60000,
+    "medicalExpenseDeduction": 0,
+    "shelterDeduction": 30000,
+    "total": 170600
+  },
+  "categoricalEligibility": null,
+  "isEligible": true,
+  "monthlyBenefit": 43500,
+  "ineligibilityReasons": null,
+  "rulesSnapshot": {
+    "incomeLimitId": "income_limit_2024_q3",
+    "deductionIds": ["std_deduct_2024", "earned_deduct_2024", "shelter_deduct_2024"],
+    "allotmentId": "allot_2024_q3",
+    "categoricalRuleId": null
+  },
+  "calculatedBy": "user_abc",
+  "ipAddress": "192.168.1.100",
+  "userAgent": "Mozilla/5.0...",
+  "timestamp": "2024-10-28T15:30:00.000Z"
+}
+```
+
+**Audit Trail Features:**
+- **Rules Snapshot:** Links to exact rules version used
+- **IP Address:** Security tracking
+- **User Agent:** Device/browser tracking
+- **Timestamp:** When calculation performed
+- **Calculation Breakdown:** Step-by-step trace
+
+**Compliance Value:**
+- QA reviews can replay calculations
+- Identify if outdated rules were used
+- Detect calculation errors or fraud
+- Support appeals and fair hearings
+
+---
+
+### 6.14 Summary - Maryland SNAP Rules Engine
+
+**Purpose:** PRIMARY Maryland-controlled SNAP eligibility and benefit calculator implementing federal regulations (7 CFR Part 273)
+
+**Critical Design Decision:** This is NOT a wrapper around PolicyEngine. PolicyEngine provides third-party verification only. This engine implements Maryland's interpretation of federal SNAP regulations.
+
+**8-Step Calculation Process:**
+1. **Get Active Rules** - Retrieve income limits, deductions, allotments
+2. **Categorical Eligibility** - Check SSI, TANF, GA, BBCE status
+3. **Asset Test** - $2,750 standard, $4,250 elderly/disabled
+4. **Gross Income Test** - 130% FPL (waived for elderly/disabled)
+5. **Deductions** - Standard, earned income (20%), dependent care, medical, shelter
+6. **Net Income** - Gross income minus deductions
+7. **Net Income Test** - 100% FPL
+8. **Benefit Calculation** - Max allotment - (30% × net income)
+
+**Federal Authorities:**
+- **7 CFR § 273.8** - Resource eligibility standards (asset limits)
+- **7 CFR § 273.9** - Income and deductions
+- **7 CFR § 273.10** - Determining household eligibility and benefit levels
+
+**Maryland Policy Manual Sections:**
+- **§ 115** - Categorical Eligibility
+- **§ 212** - Deductions (standard)
+- **§ 213** - Income Deductions (20% earned income)
+- **§ 214** - Utility Allowances (shelter deduction)
+- **§ 409** - Income Eligibility
+- **§ 600** - Standards for Income and Deductions (allotments)
+
+**Calculation Example - Family of 4:**
+```
+INPUT:
+  Household Size: 4
+  Gross Monthly Income: $3,500
+  Earned Income: $3,000
+  Assets: $1,500
+  Dependent Care: $600
+  Shelter Costs: $1,400
+
+CALCULATION:
+  Asset Test: $1,500 ≤ $2,750 ✓
+  Gross Income Test: $3,500 ≤ $3,380 ✗ (but waived if elderly)
+  
+  Deductions:
+    Standard: $206
+    Earned Income (20%): $600
+    Dependent Care: $600
+    Shelter: $300
+    Total: $1,706
+  
+  Net Income: $3,500 - $1,706 = $1,794
+  Net Income Test: $1,794 ≤ $2,600 ✓
+  
+  Benefit: $973 - (30% × $1,794) = $973 - $538 = $435
+  
+RESULT:
+  Eligible: Yes
+  Monthly Benefit: $435
+```
+
+**Key Features:**
+- **Rules as Code** - All rules in database, not hardcoded
+- **Version Tracking** - Rules snapshot for each calculation
+- **Policy Citations** - Every calc linked to manual sections
+- **Dynamic Checklists** - Documents based on household situation
+- **Audit Trail** - Full calculation log with user/IP/timestamp
+
+**Integration Points:**
+- **rulesAsCodeService** - Rules retrieval with versioning
+- **policyEngine** - Third-party verification (not primary calculator)
+- **storage.ts** - Persist calculations to `eligibilityCalculations` table
+- **crossEnrollmentEngine** - Automatic SNAP→Medicaid enrollment
+
+**Database Tables:**
+- `povertyLevels` - Federal Poverty Level by year/household size
+- `snapIncomeLimits` - 130% gross, 100% net FPL limits
+- `snapDeductions` - Standard, earned income, medical, shelter deductions
+- `snapAllotments` - Maximum monthly benefits by household size
+- `categoricalEligibilityRules` - SSI, TANF, BBCE bypass rules
+- `documentRequirementRules` - Dynamic document checklists
+- `eligibilityCalculations` - Calculation audit trail
+- `ruleChangeLogs` - Policy change history
+
+**Production Deployment:**
+- Used by Navigator Workspace for SNAP determinations
+- Generates Benefits Access Review (BAR) quality metrics
+- Supports Express Lane Enrollment (SNAP→Medicaid)
+- Enables Financial Opportunity Radar cross-enrollment detection
+
+**Compliance:**
+- ✅ **7 CFR Part 273** - Federal SNAP regulations
+- ✅ **Maryland SNAP Manual** - State-specific policies
+- ✅ **Audit Trail** - Complete calculation logging
+- ✅ **Rules Versioning** - Tracks which rules were used
+- ✅ **Policy Citations** - Links to manual sections
+
+---
+
