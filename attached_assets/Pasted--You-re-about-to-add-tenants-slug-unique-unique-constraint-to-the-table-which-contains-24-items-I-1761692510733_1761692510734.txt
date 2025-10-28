@@ -1,0 +1,33 @@
+· You're about to add tenants_slug_unique unique constraint to the table, which contains 24 items. If this statement fails, you will receive an error from the database. Do you want to truncate tenants table?
+
+· You're about to add tenants_domain_unique unique constraint to the table, which contains 24 items. If this statement fails, you will receive an error from the database. Do you want to truncate tenants table?
+
+· You're about to add tenant_branding_tenant_id_unique unique constraint to the table, which contains 4 items. If this statement fails, you will receive an error from the database. Do you want to truncate tenant_branding table?
+
+· You're about to add api_keys_key_unique unique constraint to the table, which contains 1 items. If this statement fails, you will receive an error from the database. Do you want to truncate api_keys table?
+
+· You're about to add scheduler_configs_source_name_unique unique constraint to the table, which contains 3 items. If this statement fails, you will receive an error from the database. Do you want to truncate scheduler_configs table?
+
+· You're about to add state_configurations_tenant_id_unique unique constraint to the table, which contains 20 items. If this statement fails, you will receive an error from the database. Do you want to truncate state_configurations table?
+
+· You're about to add state_configurations_state_code_unique unique constraint to the table, which contains 20 items. If this statement fails, you will receive an error from the database. Do you want to truncate state_configurations table?
+
+ Warning  Found data-loss statements:
+· You're about to delete session table with 3660 items
+· You're about to delete tenant_id column in search_queries table with 15 items
+· You're about to delete state_code column in notifications table with 542 items
+· You're about to delete quality_metrics column in documents table with 306 items
+· You're about to delete quality_flags column in documents table with 306 items
+· You're about to delete quality_suggestions column in documents table with 306 items
+· You're about to delete analyzed_at column in documents table with 306 items
+· You're about to delete enhancement_status column in documents table with 306 items
+· You're about to delete enhanced_object_path column in documents table with 306 items
+· You're about to delete enhancement_metadata column in documents table with 306 items
+· You're about to delete quality_improvement column in documents table with 306 items
+· You're about to delete state_code column in documents table with 306 items
+· You're about to delete mfa_method column in users table with 10 items
+· You're about to delete login_gov_sub column in users table with 10 items
+· You're about to delete login_gov_ial column in users table with 10 items
+· You're about to delete login_gov_aal column in users table with 10 items
+· You're about to delete login_gov_verified_at column in users table with 10 items
+· You're about to delete last_login_at column in users table with 10 items
