@@ -27385,3 +27385,1690 @@ TOTAL REFUND: $7,464 ($7,365 federal + $99 Maryland)
 
 ---
 
+
+---
+
+## 6.13 AI Orchestrator (server/services/aiOrchestrator.ts - 1,041 lines)
+
+**Purpose:** Unified AI orchestration layer providing centralized Gemini API management with rate limiting, cost tracking, priority queuing, and context caching
+
+**Critical Design:** This is the **single point of entry** for ALL AI operations in JAWN - the "central nervous system" coordinating text generation, vision analysis, code execution, embeddings, and document analysis
+
+**Architecture Pattern:** Singleton pattern with priority queue and exponential backoff retry logic
+
+**Cost Optimization:**
+- **Context Caching:** 90% cost reduction for repeated prompts (minimum 1,024 tokens)
+- **Embedding Cache:** 60-80% hit rate for document embeddings
+- **Smart Model Routing:** Automatic model selection based on task type
+
+**Rate Limiting:**
+- **50 requests per minute** (Gemini free tier limit)
+- **5 concurrent requests maximum**
+- **Priority queue:** critical > normal > background
+
+---
+
+### 6.13.1 Data Structures (lines 27-103)
+
+#### Core Interfaces (lines 27-92)
+
+**GenerateTextOptions** - Text generation configuration
+```typescript
+export interface GenerateTextOptions {
+  feature?: string;  // For cost tracking (e.g., 'intake_assistant', 'rag')
+  priority?: 'critical' | 'normal' | 'background';
+  maxRetries?: number;
+}
+```
+
+**AnalyzeImageOptions** - Vision analysis configuration
+```typescript
+export interface AnalyzeImageOptions {
+  feature?: string;
+  priority?: 'critical' | 'normal' | 'background';
+}
+```
+
+**CodeExecutionResult** - Code execution response
+```typescript
+export interface CodeExecutionResult {
+  code: string;          // Generated code
+  result: any;           // Execution result
+  explanation?: string;  // Reasoning explanation
+}
+```
+
+**MetricsReport** - Cost and usage tracking
+```typescript
+export interface MetricsReport {
+  totalCalls: number;
+  totalTokens: number;
+  estimatedCost: number;  // USD dollars
+  callsByFeature: Record<string, {
+    calls: number;
+    tokens: number;
+    cost: number;
+  }>;
+  callsByModel: Record<string, {
+    calls: number;
+    tokens: number;
+    cost: number;
+  }>;
+}
+```
+
+**CachedContentInfo** - Context cache metadata
+```typescript
+export interface CachedContentInfo {
+  name: string;           // Cache identifier (e.g., "cachedContents/abc123")
+  displayName: string;    // Human-readable name
+  model: string;          // Model version (must be versioned, e.g., "gemini-1.5-flash-001")
+  tokenCount: number;     // Cached tokens
+  expireTime: Date;       // Cache expiration
+  createTime: Date;       // Cache creation
+}
+```
+
+**CreateCacheOptions** - Cache creation parameters
+```typescript
+export interface CreateCacheOptions {
+  displayName: string;       // Cache name
+  systemInstruction?: string; // System prompt
+  contents: string[];        // Content to cache
+  ttlSeconds?: number;       // Time-to-live (default: 3600 = 1 hour)
+  model?: string;            // Default: gemini-1.5-flash-001
+}
+```
+
+**QueuedRequest** - Internal priority queue item
+```typescript
+interface QueuedRequest {
+  id: string;
+  priority: number;  // Higher = more urgent (100 for critical, 50 for normal, 10 for background)
+  execute: () => Promise<any>;
+  resolve: (value: any) => void;
+  reject: (error: any) => void;
+  retryCount: number;
+  feature: string;
+  model: string;
+}
+```
+
+---
+
+#### Model Pricing (lines 97-102)
+
+**Purpose:** Track estimated costs per 1,000 tokens
+
+```typescript
+const MODEL_PRICING = {
+  'gemini-2.0-flash': { input: 0.000075, output: 0.0003 },           // $0.075/$0.30 per 1M tokens
+  'gemini-2.0-flash-thinking': { input: 0.000075, output: 0.0003 }, // Same as 2.0-flash
+  'gemini-1.5-pro': { input: 0.00125, output: 0.005 },              // $1.25/$5.00 per 1M tokens
+  'text-embedding-004': { input: 0.00001, output: 0 },              // $0.01 per 1M tokens
+} as const;
+```
+
+**Model Cost Comparison:**
+| Model | Input Cost (per 1M tokens) | Output Cost (per 1M tokens) | Use Case |
+|-------|---------------------------|----------------------------|----------|
+| gemini-2.0-flash | $0.075 | $0.30 | Fast text, vision, code |
+| gemini-2.0-flash-thinking | $0.075 | $0.30 | Code execution with reasoning |
+| gemini-1.5-pro | $1.25 | $5.00 | Complex analysis (17x more expensive) |
+| text-embedding-004 | $0.01 | $0 | Document embeddings |
+
+**Example Cost Calculation:**
+```
+Input: 10,000 tokens
+Output: 2,000 tokens
+Model: gemini-2.0-flash
+
+Input Cost: (10,000 / 1,000,000) × $0.075 = $0.00075
+Output Cost: (2,000 / 1,000,000) × $0.30 = $0.00060
+Total: $0.00135 per request
+
+With 1,000 requests/day:
+Daily: $1.35
+Monthly: $40.50
+Yearly: $492.75
+```
+
+---
+
+### 6.13.2 Singleton Pattern & Client Management (lines 108-154)
+
+#### AIOrchestrator Class - Singleton (lines 108-140)
+
+**Purpose:** Single global instance managing all Gemini API operations
+
+```typescript
+class AIOrchestrator {
+  private static instance: AIOrchestrator;
+  private geminiClient: GoogleGenAI | null = null;
+  private requestQueue: QueuedRequest[] = [];
+  private isProcessingQueue = false;
+  
+  // Rate limiting configuration
+  private readonly MAX_CONCURRENT_REQUESTS = 5;
+  private readonly RATE_LIMIT_WINDOW_MS = 60000; // 1 minute
+  private readonly MAX_REQUESTS_PER_WINDOW = 50; // Gemini free tier limit
+  private requestTimestamps: number[] = [];
+  private activeRequests = 0;
+  
+  // Priority weights
+  private readonly PRIORITY_WEIGHTS = {
+    critical: 100, // Tax filing, time-sensitive operations
+    normal: 50,    // Standard AI operations
+    background: 10 // Non-urgent batch processing
+  };
+
+  private constructor() {
+    // Private constructor enforces singleton
+  }
+
+  public static getInstance(): AIOrchestrator {
+    if (!AIOrchestrator.instance) {
+      AIOrchestrator.instance = new AIOrchestrator();
+    }
+    return AIOrchestrator.instance;
+  }
+}
+```
+
+**Singleton Benefits:**
+1. **Single Gemini client** - Reuse across all features
+2. **Centralized rate limiting** - Prevent API quota exhaustion
+3. **Unified cost tracking** - Monitor all AI spending
+4. **Global priority queue** - Fair resource allocation
+
+---
+
+#### getGeminiClient() - Client Initialization (lines 145-154)
+
+**Purpose:** Lazy initialization of Gemini API client
+
+```typescript
+private getGeminiClient(): GoogleGenAI {
+  if (!this.geminiClient) {
+    const apiKey = process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY;
+    if (!apiKey) {
+      throw new Error('Gemini API key not configured');
+    }
+    this.geminiClient = new GoogleGenAI({ apiKey });
+  }
+  return this.geminiClient;
+}
+```
+
+**API Key Priority:**
+1. `GOOGLE_API_KEY` (primary)
+2. `GEMINI_API_KEY` (fallback)
+
+---
+
+### 6.13.3 Smart Model Routing (lines 159-172)
+
+#### selectModel() - Task-Based Model Selection (lines 159-172)
+
+**Purpose:** Automatically select optimal model based on task type
+
+```typescript
+private selectModel(taskType: 'text' | 'vision' | 'code' | 'embedding'): string {
+  switch (taskType) {
+    case 'vision':
+      return 'gemini-2.0-flash'; // Fast vision analysis
+    case 'code':
+      return 'gemini-2.0-flash-thinking'; // Code execution with reasoning
+    case 'text':
+      return 'gemini-2.0-flash'; // General chat/RAG
+    case 'embedding':
+      return 'text-embedding-004'; // Embeddings
+    default:
+      return 'gemini-2.0-flash';
+  }
+}
+```
+
+**Model Selection Strategy:**
+| Task Type | Model | Rationale |
+|-----------|-------|-----------|
+| vision | gemini-2.0-flash | Fast document OCR/analysis |
+| code | gemini-2.0-flash-thinking | Code execution with reasoning |
+| text | gemini-2.0-flash | General purpose (cheapest) |
+| embedding | text-embedding-004 | Specialized for embeddings (cheapest) |
+
+**Cost Impact:** Using gemini-2.0-flash instead of gemini-1.5-pro saves **94% on input tokens** ($0.075 vs $1.25 per 1M)
+
+---
+
+### 6.13.4 Rate Limiting & Queue Management (lines 214-294)
+
+#### canMakeRequest() - Rate Limit Check (lines 214-227)
+
+**Purpose:** Enforce Gemini API rate limits
+
+```typescript
+private canMakeRequest(): boolean {
+  const now = Date.now();
+  
+  // Remove timestamps outside the current window
+  this.requestTimestamps = this.requestTimestamps.filter(
+    ts => now - ts < this.RATE_LIMIT_WINDOW_MS
+  );
+  
+  // Check if we're under concurrent and rate limits
+  return (
+    this.activeRequests < this.MAX_CONCURRENT_REQUESTS &&
+    this.requestTimestamps.length < this.MAX_REQUESTS_PER_WINDOW
+  );
+}
+```
+
+**Rate Limits:**
+- **50 requests per minute** (rolling window)
+- **5 concurrent requests** (parallelism limit)
+
+**Example Scenario:**
+```
+Time: 10:00:00
+Active: 3 requests
+Window: 48 requests in last 60 seconds
+
+canMakeRequest() → true (3 < 5 AND 48 < 50)
+
+Time: 10:00:05
+Active: 5 requests (at max concurrency)
+Window: 49 requests
+
+canMakeRequest() → false (5 == 5, max concurrent reached)
+```
+
+---
+
+#### queueRequest() - Priority Queue Addition (lines 232-255)
+
+**Purpose:** Add request to priority queue
+
+```typescript
+private async queueRequest<T>(
+  feature: string,
+  model: string,
+  priority: 'critical' | 'normal' | 'background',
+  execute: () => Promise<T>
+): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const request: QueuedRequest = {
+      id: Math.random().toString(36).substring(7),
+      priority: this.PRIORITY_WEIGHTS[priority],  // 100/50/10
+      execute,
+      resolve,
+      reject,
+      retryCount: 0,
+      feature,
+      model,
+    };
+
+    this.requestQueue.push(request);
+    this.requestQueue.sort((a, b) => b.priority - a.priority); // Higher priority first
+    
+    this.processQueue();
+  });
+}
+```
+
+**Priority Weights:**
+- **Critical (100):** Tax filing, time-sensitive operations
+- **Normal (50):** Standard AI operations
+- **Background (10):** Batch processing, embeddings
+
+**Queue Example:**
+```
+Queue before sort:
+[
+  { feature: 'rag', priority: 50 },
+  { feature: 'tax_filing', priority: 100 },
+  { feature: 'embeddings', priority: 10 }
+]
+
+Queue after sort (descending):
+[
+  { feature: 'tax_filing', priority: 100 },  ← Processed first
+  { feature: 'rag', priority: 50 },
+  { feature: 'embeddings', priority: 10 }    ← Processed last
+]
+```
+
+---
+
+
+#### processQueue() - Queue Processing with Parallelism (lines 260-294)
+
+**Purpose:** Process queued requests with rate limiting and parallelism
+
+```typescript
+private processQueue(): void {
+  if (this.isProcessingQueue || this.requestQueue.length === 0) {
+    return;
+  }
+
+  this.isProcessingQueue = true;
+
+  while (this.requestQueue.length > 0 && this.activeRequests < this.MAX_CONCURRENT_REQUESTS) {
+    if (!this.canMakeRequest()) {
+      // Wait before checking again
+      setTimeout(() => {
+        this.isProcessingQueue = false;
+        this.processQueue();
+      }, 1000);
+      return;
+    }
+
+    const request = this.requestQueue.shift();
+    if (!request) continue;
+
+    this.activeRequests++;
+    this.requestTimestamps.push(Date.now());
+
+    // Start execution WITHOUT awaiting (enables parallelism)
+    this.executeWithRetry(request)
+      .then(result => request.resolve(result))
+      .catch(error => request.reject(error))
+      .finally(() => {
+        this.activeRequests--;
+        this.processQueue(); // Re-enter scheduler after completion
+      });
+  }
+
+  this.isProcessingQueue = false;
+}
+```
+
+**Parallelism Design:**
+- **Non-blocking execution** - Starts up to 5 requests without awaiting
+- **Re-entrant scheduler** - Calls `processQueue()` after each completion
+- **Backpressure handling** - Waits 1 second when rate limited
+
+**Example Flow:**
+```
+Request Queue: [req1(100), req2(100), req3(50), req4(10), req5(10), req6(10)]
+Active: 0
+
+Step 1: processQueue() starts req1, req2, req3, req4, req5 in parallel
+Active: 5 (at max concurrency)
+
+Step 2: req1 completes → activeRequests: 4 → processQueue() starts req6
+Active: 5 again
+
+Step 3: All requests complete
+Queue: []
+Active: 0
+```
+
+---
+
+#### executeWithRetry() - Exponential Backoff (lines 299-338)
+
+**Purpose:** Execute request with automatic retry on transient failures
+
+```typescript
+private async executeWithRetry(request: QueuedRequest): Promise<any> {
+  const MAX_RETRIES = 3;
+  const BASE_DELAY = 1000; // 1 second
+
+  try {
+    return await request.execute();
+  } catch (error: any) {
+    // Check if we should retry
+    const isRetryable = 
+      error?.message?.includes('429') || // Rate limit
+      error?.message?.includes('503') || // Service unavailable
+      error?.message?.includes('RESOURCE_EXHAUSTED');
+
+    if (isRetryable && request.retryCount < MAX_RETRIES) {
+      request.retryCount++;
+      const delay = BASE_DELAY * Math.pow(2, request.retryCount - 1);
+      
+      logger.info('Retrying request', {
+        attempt: request.retryCount,
+        maxRetries: MAX_RETRIES,
+        delayMs: delay,
+        feature: request.feature
+      });
+      
+      await new Promise(resolve => setTimeout(resolve, delay));
+      return this.executeWithRetry(request);
+    }
+
+    logger.error('AI request failed', {
+      feature: request.feature,
+      model: request.model,
+      error: PiiMaskingUtils.redactPII(String(error))
+    });
+    
+    throw error;
+  }
+}
+```
+
+**Retry Strategy:**
+| Attempt | Delay | Total Wait Time |
+|---------|-------|-----------------|
+| 1 (initial) | 0ms | 0s |
+| 2 | 1,000ms | 1s |
+| 3 | 2,000ms | 3s |
+| 4 (final) | 4,000ms | 7s |
+
+**Retryable Errors:**
+- **429** - Rate limit exceeded (too many requests)
+- **503** - Service unavailable (temporary outage)
+- **RESOURCE_EXHAUSTED** - Quota exceeded
+
+**Example Retry Sequence:**
+```
+Request: generateText("Explain SNAP eligibility")
+Attempt 1: ERROR 429 (rate limit)
+Wait: 1 second
+Attempt 2: ERROR 429 (rate limit)
+Wait: 2 seconds
+Attempt 3: SUCCESS
+Total Time: 3 seconds
+```
+
+---
+
+### 6.13.5 Cost Tracking (lines 177-209)
+
+#### estimateTokens() - Token Estimation (lines 177-180)
+
+**Purpose:** Rough token count estimation
+
+```typescript
+private estimateTokens(text: string): number {
+  // Rough estimate: 1 token ≈ 4 characters for English
+  return Math.ceil(text.length / 4);
+}
+```
+
+**Token Estimation Formula:**
+```
+Tokens ≈ Text Length / 4
+
+Examples:
+"Hello world" (11 chars) ≈ 3 tokens
+"Explain SNAP eligibility requirements..." (1,000 chars) ≈ 250 tokens
+```
+
+**Note:** Actual tokenization varies by language and special characters. This is a conservative estimate for cost tracking.
+
+---
+
+#### trackAIUsage() - Usage Logging (lines 185-209)
+
+**Purpose:** Log AI usage to `monitoring_metrics` table for cost tracking
+
+```typescript
+private async trackAIUsage(feature: string, model: string, tokens: number): Promise<void> {
+  try {
+    const pricing = MODEL_PRICING[model as keyof typeof MODEL_PRICING] || MODEL_PRICING['gemini-2.0-flash'];
+    const estimatedCost = (tokens / 1000) * (pricing.input + pricing.output) / 2; // Average
+
+    await db.insert(monitoringMetrics).values({
+      metricType: 'ai_api_call',
+      metricValue: tokens,
+      metadata: {
+        feature,
+        model,
+        tokens,
+        estimatedCost,
+        timestamp: new Date().toISOString(),
+      },
+    });
+  } catch (error) {
+    logger.error('Error tracking AI usage', {
+      error: PiiMaskingUtils.redactPII(String(error)),
+      feature,
+      model
+    });
+  }
+}
+```
+
+**Cost Calculation Example:**
+```typescript
+Feature: "intake_assistant"
+Model: "gemini-2.0-flash"
+Tokens: 5,000
+
+Pricing:
+  Input: $0.000075 per 1K tokens
+  Output: $0.0003 per 1K tokens
+  Average: ($0.000075 + $0.0003) / 2 = $0.0001875
+
+Estimated Cost:
+  (5,000 / 1,000) × $0.0001875 = $0.0009375 ≈ $0.00094
+```
+
+**Database Record:**
+```json
+{
+  "metricType": "ai_api_call",
+  "metricValue": 5000,
+  "metadata": {
+    "feature": "intake_assistant",
+    "model": "gemini-2.0-flash",
+    "tokens": 5000,
+    "estimatedCost": 0.0009375,
+    "timestamp": "2024-10-28T15:30:00.000Z"
+  }
+}
+```
+
+---
+
+### 6.13.6 Public API Methods (lines 344-505)
+
+#### generateText() - Text Generation (lines 347-376)
+
+**Purpose:** Generate text using Gemini with queue and cost tracking
+
+```typescript
+async generateText(
+  prompt: string,
+  options: GenerateTextOptions = {}
+): Promise<string> {
+  const { 
+    feature = 'general', 
+    priority = 'normal',
+  } = options;
+
+  const model = this.selectModel('text');
+  const estimatedTokens = this.estimateTokens(prompt);
+
+  const execute = async () => {
+    const ai = this.getGeminiClient();
+    const response = await ai.models.generateContent({
+      model,
+      contents: [{ role: 'user', parts: [{ text: prompt }] }]
+    });
+    
+    const result = response.text || "";
+    
+    // Track usage
+    const totalTokens = estimatedTokens + this.estimateTokens(result);
+    await this.trackAIUsage(feature, model, totalTokens);
+    
+    return result;
+  };
+
+  return this.queueRequest(feature, model, priority, execute);
+}
+```
+
+**Usage Example:**
+```typescript
+const response = await aiOrchestrator.generateText(
+  "Explain SNAP eligibility for a family of 4 in Maryland",
+  { feature: 'intake_assistant', priority: 'normal' }
+);
+
+// Response: "SNAP eligibility in Maryland for a household of 4..."
+// Tracked: feature=intake_assistant, tokens=500, cost=$0.00009
+```
+
+---
+
+#### analyzeImage() - Vision Analysis (lines 381-417)
+
+**Purpose:** Analyze images using Gemini Vision (OCR, document extraction)
+
+```typescript
+async analyzeImage(
+  base64Image: string,
+  prompt: string,
+  options: AnalyzeImageOptions = {}
+): Promise<string> {
+  const { 
+    feature = 'vision_analysis', 
+    priority = 'normal',
+  } = options;
+
+  const model = this.selectModel('vision');
+  const estimatedTokens = this.estimateTokens(prompt) + 258; // Image tokens (approx)
+
+  const execute = async () => {
+    const ai = this.getGeminiClient();
+    const response = await ai.models.generateContent({
+      model,
+      contents: [{
+        role: 'user',
+        parts: [
+          { text: prompt },
+          { inlineData: { mimeType: "image/jpeg", data: base64Image } }
+        ]
+      }]
+    });
+    
+    const result = response.text || "";
+    
+    // Track usage
+    const totalTokens = estimatedTokens + this.estimateTokens(result);
+    await this.trackAIUsage(feature, model, totalTokens);
+    
+    return result;
+  };
+
+  return this.queueRequest(feature, model, priority, execute);
+}
+```
+
+**Usage Example - W-2 OCR:**
+```typescript
+const w2Base64 = "..."; // Base64-encoded W-2 image
+
+const extractedData = await aiOrchestrator.analyzeImage(
+  w2Base64,
+  `Extract the following from this W-2:
+   - Employer name
+   - Wages (box 1)
+   - Federal income tax withheld (box 2)
+   - Social security wages (box 3)
+   
+   Respond in JSON format.`,
+  { feature: 'tax_document_ocr', priority: 'critical' }
+);
+
+// Response: {"employer": "ABC Corp", "wages": "45000.00", ...}
+```
+
+**Image Token Estimate:** ~258 tokens per image (approximate)
+
+---
+
+#### executeCode() - Code Execution with Reasoning (lines 422-468)
+
+**Purpose:** Execute code with reasoning explanation (new Gemini 2.0 capability)
+
+```typescript
+async executeCode(
+  prompt: string,
+  options: ExecuteCodeOptions = {}
+): Promise<CodeExecutionResult> {
+  const { 
+    feature = 'code_execution', 
+    priority = 'normal',
+  } = options;
+
+  const model = this.selectModel('code');
+  const estimatedTokens = this.estimateTokens(prompt);
+
+  const execute = async () => {
+    const ai = this.getGeminiClient();
+    
+    const enhancedPrompt = `${prompt}\n\nProvide your response in JSON format:
+{
+  "code": "the code to execute",
+  "result": the execution result,
+  "explanation": "brief explanation of the calculation"
+}`;
+
+    const response = await ai.models.generateContent({
+      model,
+      contents: [{ role: 'user', parts: [{ text: enhancedPrompt }] }]
+    });
+    
+    let responseText = response.text || "{}";
+    
+    // Parse JSON response (handle markdown code blocks)
+    if (responseText.includes('```json')) {
+      responseText = responseText.split('```json')[1].split('```')[0].trim();
+    } else if (responseText.includes('```')) {
+      responseText = responseText.split('```')[1].split('```')[0].trim();
+    }
+    
+    const result = JSON.parse(responseText) as CodeExecutionResult;
+    
+    // Track usage
+    const totalTokens = estimatedTokens + this.estimateTokens(responseText);
+    await this.trackAIUsage(feature, model, totalTokens);
+    
+    return result;
+  };
+
+  return this.queueRequest(feature, model, priority, execute);
+}
+```
+
+**Usage Example - Benefits Calculation:**
+```typescript
+const calculation = await aiOrchestrator.executeCode(
+  `Calculate 130% of FPL for a household of 4 in 2024. FPL is $31,200.`,
+  { feature: 'benefits_calculator', priority: 'normal' }
+);
+
+// Response:
+// {
+//   "code": "const fpl = 31200; const result = fpl * 1.3;",
+//   "result": 40560,
+//   "explanation": "130% of $31,200 FPL = $40,560 gross income limit"
+// }
+```
+
+**Model:** gemini-2.0-flash-thinking (with reasoning capabilities)
+
+---
+
+
+#### generateEmbedding() - Document Embeddings with Cache (lines 473-505)
+
+**Purpose:** Generate text embeddings with 60-80% cache hit rate
+
+```typescript
+async generateEmbedding(text: string): Promise<number[]> {
+  // Check cache first (60-80% hit rate!)
+  const cached = embeddingCache.get(text);
+  if (cached) {
+    return cached;
+  }
+
+  const feature = 'embeddings';
+  const model = this.selectModel('embedding');
+  const estimatedTokens = this.estimateTokens(text);
+
+  const execute = async () => {
+    const ai = this.getGeminiClient();
+    const response = await ai.models.embedContent({
+      model,
+      contents: [text]
+    });
+    
+    const embedding = response.embeddings?.[0]?.values || [];
+    
+    // Store in cache
+    if (embedding.length > 0) {
+      embeddingCache.set(text, embedding);
+    }
+    
+    // Track usage
+    await this.trackAIUsage(feature, model, estimatedTokens);
+    
+    return embedding;
+  };
+
+  return this.queueRequest(feature, model, 'background', execute);
+}
+```
+
+**Embedding Cache Benefits:**
+- **60-80% hit rate** - Most documents retrieved multiple times
+- **Instant response** - No API call for cached embeddings
+- **Cost savings** - $0.01 per 1M tokens adds up
+
+**Usage Example - Document Search:**
+```typescript
+// Generate embedding for search query
+const queryEmbedding = await aiOrchestrator.generateEmbedding(
+  "What are SNAP income limits for Maryland?"
+);
+
+// First call: API request (cache miss)
+// Subsequent calls with same query: Instant (cache hit)
+
+// Response: [0.023, -0.145, 0.678, ..., 0.012] (768-dimensional vector)
+```
+
+**Model:** text-embedding-004 (768 dimensions, $0.01 per 1M tokens)
+
+---
+
+### 6.13.7 Cost Metrics & Monitoring (lines 510-595)
+
+#### getCostMetrics() - Cost Analysis (lines 510-575)
+
+**Purpose:** Generate cost report by feature and model for time range
+
+```typescript
+async getCostMetrics(timeRange?: { start: Date; end: Date }): Promise<MetricsReport> {
+  try {
+    const conditions = [sql`${monitoringMetrics.metricType} = 'ai_api_call'`];
+    
+    if (timeRange) {
+      conditions.push(
+        gte(monitoringMetrics.timestamp, timeRange.start),
+        lte(monitoringMetrics.timestamp, timeRange.end)
+      );
+    }
+
+    const metrics = await db
+      .select()
+      .from(monitoringMetrics)
+      .where(and(...conditions));
+
+    const report: MetricsReport = {
+      totalCalls: metrics.length,
+      totalTokens: 0,
+      estimatedCost: 0,
+      callsByFeature: {},
+      callsByModel: {},
+    };
+
+    for (const metric of metrics) {
+      const metadata = metric.metadata as any;
+      const feature = metadata.feature || 'unknown';
+      const model = metadata.model || 'unknown';
+      const tokens = metadata.tokens || 0;
+      const cost = metadata.estimatedCost || 0;
+
+      report.totalTokens += tokens;
+      report.estimatedCost += cost;
+
+      // By feature
+      if (!report.callsByFeature[feature]) {
+        report.callsByFeature[feature] = { calls: 0, tokens: 0, cost: 0 };
+      }
+      report.callsByFeature[feature].calls++;
+      report.callsByFeature[feature].tokens += tokens;
+      report.callsByFeature[feature].cost += cost;
+
+      // By model
+      if (!report.callsByModel[model]) {
+        report.callsByModel[model] = { calls: 0, tokens: 0, cost: 0 };
+      }
+      report.callsByModel[model].calls++;
+      report.callsByModel[model].tokens += tokens;
+      report.callsByModel[model].cost += cost;
+    }
+
+    return report;
+  } catch (error) {
+    logger.error('Error getting cost metrics');
+    return {
+      totalCalls: 0,
+      totalTokens: 0,
+      estimatedCost: 0,
+      callsByFeature: {},
+      callsByModel: {},
+    };
+  }
+}
+```
+
+**Example Metrics Report:**
+```json
+{
+  "totalCalls": 1250,
+  "totalTokens": 1450000,
+  "estimatedCost": 0.27,
+  "callsByFeature": {
+    "intake_assistant": { "calls": 500, "tokens": 650000, "cost": 0.12 },
+    "tax_document_ocr": { "calls": 300, "tokens": 450000, "cost": 0.08 },
+    "rag": { "calls": 250, "tokens": 200000, "cost": 0.04 },
+    "embeddings": { "calls": 200, "tokens": 150000, "cost": 0.03 }
+  },
+  "callsByModel": {
+    "gemini-2.0-flash": { "calls": 1050, "tokens": 1300000, "cost": 0.24 },
+    "text-embedding-004": { "calls": 200, "tokens": 150000, "cost": 0.03 }
+  }
+}
+```
+
+**Usage Example - Monthly Cost Report:**
+```typescript
+const startOfMonth = new Date('2024-10-01');
+const endOfMonth = new Date('2024-10-31');
+
+const report = await aiOrchestrator.getCostMetrics({
+  start: startOfMonth,
+  end: endOfMonth
+});
+
+console.log(`Monthly AI Cost: $${report.estimatedCost.toFixed(2)}`);
+console.log(`Most expensive feature: ${
+  Object.entries(report.callsByFeature)
+    .sort((a, b) => b[1].cost - a[1].cost)[0][0]
+}`);
+```
+
+---
+
+#### getQueueStatus() - Queue Monitoring (lines 580-588)
+
+**Purpose:** Get current queue status for monitoring dashboard
+
+```typescript
+getQueueStatus() {
+  return {
+    queueLength: this.requestQueue.length,
+    activeRequests: this.activeRequests,
+    requestsInWindow: this.requestTimestamps.length,
+    maxRequestsPerWindow: this.MAX_REQUESTS_PER_WINDOW,
+    canMakeRequest: this.canMakeRequest(),
+  };
+}
+```
+
+**Example Response:**
+```json
+{
+  "queueLength": 3,
+  "activeRequests": 4,
+  "requestsInWindow": 45,
+  "maxRequestsPerWindow": 50,
+  "canMakeRequest": true
+}
+```
+
+**Monitoring Use Cases:**
+- **Dashboard display** - Real-time queue visualization
+- **Alerting** - Trigger alerts when queue > 10
+- **Capacity planning** - Identify bottlenecks
+
+---
+
+#### getEmbeddingCacheStats() - Cache Statistics (lines 593-595)
+
+**Purpose:** Get embedding cache hit rate
+
+```typescript
+getEmbeddingCacheStats() {
+  return embeddingCache.getStats();
+}
+```
+
+**Example Response:**
+```json
+{
+  "hits": 1600,
+  "misses": 400,
+  "hitRate": 0.80,
+  "size": 1024,
+  "maxSize": 10000
+}
+```
+
+**80% Hit Rate Impact:**
+- **API Calls:** 2,000 → 400 (80% reduction)
+- **Cost:** $0.02 → $0.004 (80% savings)
+- **Latency:** ~200ms → ~2ms (100x faster)
+
+---
+
+### 6.13.8 Gemini Context Caching (90% Cost Savings) - lines 606-854
+
+#### createContextCache() - Cache Creation (lines 606-674)
+
+**Purpose:** Create context cache for repeated prompts (90% cost reduction)
+
+```typescript
+async createContextCache(options: CreateCacheOptions): Promise<CachedContentInfo> {
+  const {
+    displayName,
+    systemInstruction,
+    contents,
+    ttlSeconds = 3600, // Default: 1 hour
+    model = 'gemini-1.5-flash-001' // Must use versioned model
+  } = options;
+
+  try {
+    const ai = this.getGeminiClient();
+    
+    // Combine all contents into single text for caching
+    const combinedContent = contents.join('\n\n');
+    
+    // Estimate token count (must be at least 1,024)
+    const estimatedTokens = this.estimateTokens(combinedContent);
+    if (estimatedTokens < 1024) {
+      logger.warn('Content too small for caching', {
+        estimatedTokens,
+        minimumRequired: 1024
+      });
+    }
+
+    // Create cache
+    const cache = await ai.caches.create({
+      model,
+      config: {
+        displayName,
+        systemInstruction: systemInstruction ? {
+          parts: [{ text: systemInstruction }]
+        } : undefined,
+        contents: [{
+          role: 'user',
+          parts: [{ text: combinedContent }]
+        }],
+        ttl: `${ttlSeconds}s`
+      }
+    });
+
+    logger.info('Context cache created', {
+      cacheName: cache.name,
+      displayName,
+      tokenCount: cache.usageMetadata?.totalTokenCount || estimatedTokens,
+      ttlSeconds
+    });
+
+    return {
+      name: cache.name || '',
+      displayName: cache.displayName || displayName,
+      model: cache.model || model,
+      tokenCount: cache.usageMetadata?.totalTokenCount || estimatedTokens,
+      expireTime: cache.expireTime ? new Date(cache.expireTime) : new Date(Date.now() + ttlSeconds * 1000),
+      createTime: cache.createTime ? new Date(cache.createTime) : new Date()
+    };
+  } catch (error) {
+    logger.error('Error creating context cache');
+    throw error;
+  }
+}
+```
+
+**Context Caching Requirements:**
+- **Minimum tokens:** 1,024 (Gemini limit)
+- **Model version:** Must use versioned model (e.g., gemini-1.5-flash-001)
+- **TTL:** Default 1 hour (configurable)
+
+**Cost Savings Example:**
+```
+Without Caching:
+  10 requests × 5,000 tokens = 50,000 tokens
+  Cost: 50,000 / 1,000 × $0.000075 = $0.00375
+
+With Caching (90% discount on cached content):
+  Initial: 5,000 tokens × $0.000075 = $0.000375
+  Subsequent 9: 9 × 5,000 × $0.0000075 = $0.0003375
+  Total: $0.0007125
+
+Savings: $0.00375 - $0.0007125 = $0.0030375 (81% reduction)
+```
+
+**Usage Example - SNAP Policy Manual Cache:**
+```typescript
+const snapManual = [
+  "SNAP Eligibility: Households must meet income and resource limits...",
+  "Income Limits: 130% of FPL for gross income, 100% for net income...",
+  "Deductions: Standard, earned income, dependent care, medical..."
+];
+
+const cache = await aiOrchestrator.createContextCache({
+  displayName: 'SNAP Policy Manual MD',
+  systemInstruction: 'You are an expert on Maryland SNAP policies.',
+  contents: snapManual,
+  ttlSeconds: 86400, // 24 hours
+  model: 'gemini-1.5-flash-001'
+});
+
+// Cache created: cachedContents/abc123xyz
+// Token count: 12,500
+// Expires: 2024-10-29T15:30:00Z
+```
+
+---
+
+#### generateTextWithCache() - Cached Generation (lines 679-723)
+
+**Purpose:** Generate text using cached content (90% cost savings on cached tokens)
+
+```typescript
+async generateTextWithCache(
+  prompt: string,
+  cachedContentName: string,
+  options: GenerateTextOptions = {}
+): Promise<string> {
+  const {
+    feature = 'cached_generation',
+    priority = 'normal',
+  } = options;
+
+  const model = 'gemini-1.5-flash-001'; // Must match cache model
+  const estimatedTokens = this.estimateTokens(prompt);
+
+  const execute = async () => {
+    const ai = this.getGeminiClient();
+    const response = await ai.models.generateContent({
+      model,
+      contents: [{ role: 'user', parts: [{ text: prompt }] }],
+      config: {
+        cachedContent: cachedContentName
+      }
+    });
+
+    const result = response.text || "";
+    
+    // Track usage with cache metrics
+    const cachedTokens = response.usageMetadata?.cachedContentTokenCount || 0;
+    const totalTokens = response.usageMetadata?.totalTokenCount || estimatedTokens + this.estimateTokens(result);
+    
+    logger.info('Cached content generation', {
+      feature,
+      cachedTokens,
+      totalTokens,
+      cacheHitRate: cachedTokens / totalTokens,
+      estimatedSavings: '90%'
+    });
+
+    await this.trackAIUsage(feature, model, totalTokens);
+    
+    return result;
+  };
+
+  return this.queueRequest(feature, model, priority, execute);
+}
+```
+
+**Usage Example:**
+```typescript
+// Use cached SNAP manual
+const response = await aiOrchestrator.generateTextWithCache(
+  "What are the income limits for a family of 4 in Maryland?",
+  "cachedContents/abc123xyz",
+  { feature: 'snap_eligibility', priority: 'normal' }
+);
+
+// Logs:
+// cachedTokens: 12,500 (from cache at 90% discount)
+// totalTokens: 12,550 (12,500 cached + 50 new)
+// cacheHitRate: 0.996 (99.6%)
+// estimatedSavings: 90%
+```
+
+---
+
+
+#### Cache Management Methods (lines 728-854)
+
+**listCaches()** - List all active caches (lines 728-749)
+```typescript
+async listCaches(): Promise<CachedContentInfo[]> {
+  const ai = this.getGeminiClient();
+  const caches = await ai.caches.list();
+  
+  return (caches.cachedContents || []).map((cache: any) => ({
+    name: cache.name || '',
+    displayName: cache.displayName || '',
+    model: cache.model || '',
+    tokenCount: cache.usageMetadata?.totalTokenCount || 0,
+    expireTime: cache.expireTime ? new Date(cache.expireTime) : new Date(),
+    createTime: cache.createTime ? new Date(cache.createTime) : new Date()
+  }));
+}
+```
+
+**getCache()** - Get specific cache details (lines 754-776)
+```typescript
+async getCache(cacheName: string): Promise<CachedContentInfo | null> {
+  const ai = this.getGeminiClient();
+  const cache = await ai.caches.get({ name: cacheName });
+  
+  return {
+    name: cache.name || '',
+    displayName: cache.displayName || '',
+    model: cache.model || '',
+    tokenCount: cache.usageMetadata?.totalTokenCount || 0,
+    expireTime: cache.expireTime ? new Date(cache.expireTime) : new Date(),
+    createTime: cache.createTime ? new Date(cache.createTime) : new Date()
+  };
+}
+```
+
+**updateCacheExpiration()** - Extend cache TTL (lines 781-811)
+```typescript
+async updateCacheExpiration(cacheName: string, newTtlSeconds: number): Promise<boolean> {
+  const ai = this.getGeminiClient();
+  const newExpireTime = new Date(Date.now() + newTtlSeconds * 1000);
+  
+  await ai.caches.update({
+    name: cacheName,
+    config: {
+      expireTime: newExpireTime
+    }
+  });
+
+  logger.info('Cache expiration updated', {
+    cacheName,
+    newTtlSeconds,
+    newExpireTime
+  });
+
+  return true;
+}
+```
+
+**deleteCache()** - Delete cache to avoid storage costs (lines 816-837)
+```typescript
+async deleteCache(cacheName: string): Promise<boolean> {
+  const ai = this.getGeminiClient();
+  await ai.caches.delete({ name: cacheName });
+
+  logger.info('Cache deleted', { cacheName });
+
+  return true;
+}
+```
+
+**Cache Lifecycle Example:**
+```typescript
+// 1. Create cache for SNAP manual
+const cache = await aiOrchestrator.createPolicyManualCache(
+  'SNAP',
+  snapManualSections,
+  86400 // 24 hours
+);
+
+// 2. Use cache for questions
+const answer1 = await aiOrchestrator.generateTextWithCache(
+  "What are income limits?",
+  cache.name
+);
+
+// 3. Extend cache if still needed
+await aiOrchestrator.updateCacheExpiration(cache.name, 172800); // 48 hours
+
+// 4. List all caches
+const allCaches = await aiOrchestrator.listCaches();
+
+// 5. Delete when done
+await aiOrchestrator.deleteCache(cache.name);
+```
+
+---
+
+#### Helper Methods for Common Use Cases (lines 842-871)
+
+**createPolicyManualCache()** - Cache policy manual (lines 842-854)
+```typescript
+async createPolicyManualCache(
+  programName: string,
+  manualSections: string[],
+  ttlSeconds: number = 86400 // 24 hours default
+): Promise<CachedContentInfo> {
+  return this.createContextCache({
+    displayName: `${programName} Policy Manual`,
+    systemInstruction: `You are an expert on ${programName} program policies and regulations. Answer questions based on the cached policy manual sections.`,
+    contents: manualSections,
+    ttlSeconds,
+    model: 'gemini-1.5-flash-001'
+  });
+}
+```
+
+**createFormTemplateCache()** - Cache form templates (lines 859-871)
+```typescript
+async createFormTemplateCache(
+  formType: string,
+  formTemplates: string[],
+  ttlSeconds: number = 86400 // 24 hours default
+): Promise<CachedContentInfo> {
+  return this.createContextCache({
+    displayName: `${formType} Form Templates`,
+    systemInstruction: `You are a form processing assistant. Help extract information from ${formType} forms using the cached templates.`,
+    contents: formTemplates,
+    ttlSeconds,
+    model: 'gemini-1.5-flash-001'
+  });
+}
+```
+
+**Usage Examples:**
+```typescript
+// Cache SNAP manual
+const snapCache = await aiOrchestrator.createPolicyManualCache(
+  'SNAP',
+  ['Section 1...', 'Section 2...', 'Section 3...']
+);
+
+// Cache W-2 form templates
+const w2Cache = await aiOrchestrator.createFormTemplateCache(
+  'W-2',
+  ['W-2 template 1...', 'W-2 template 2...']
+);
+```
+
+---
+
+### 6.13.9 Document Analysis Methods (lines 876-1034)
+
+#### analyzeDocumentForFieldExtraction() - Structured Field Extraction (lines 876-932)
+
+**Purpose:** Extract structured data from policy documents
+
+```typescript
+async analyzeDocumentForFieldExtraction(
+  text: string,
+  documentType: string,
+  options: GenerateTextOptions = {}
+) {
+  const { feature = 'document_field_extraction', priority = 'normal' } = options;
+  const model = this.selectModel('text');
+
+  const prompt = `You are an AI assistant specialized in extracting structured information from government publications, with an emphasis on public benefit programs and federal and state EITC and CTC
+      
+For the document type "${documentType}", extract relevant fields such as:
+- Eligibility requirements
+- Income limits
+- Asset limits
+- Application deadlines
+- Contact information
+- Effective dates
+- Program codes
+- Geographic restrictions
+
+Respond with JSON containing the extracted fields and their values.
+Use null for fields that cannot be determined.
+
+Format: {
+  "eligibilityRequirements": ["req1", "req2"],
+  "incomeLimits": {"1person": "amount", "2person": "amount"},
+  "assetLimits": "amount",
+  "applicationDeadline": "date or null",
+  "effectiveDate": "date or null",
+  "contactInfo": {"phone": "number", "website": "url"},
+  "programCodes": ["code1", "code2"],
+  "geographicScope": "federal|state|local|specific location",
+  "confidence": number
+}
+
+Document text: ${text}`;
+
+  const execute = async () => {
+    const ai = this.getGeminiClient();
+    const response = await ai.models.generateContent({
+      model: "gemini-1.5-pro",
+      contents: [{ role: 'user', parts: [{ text: prompt }] }]
+    });
+
+    const result = response.text || "{}";
+    const totalTokens = this.estimateTokens(prompt) + this.estimateTokens(result);
+    await this.trackAIUsage(feature, "gemini-1.5-pro", totalTokens);
+
+    try {
+      return JSON.parse(result);
+    } catch {
+      return { error: "Failed to parse extraction result", confidence: 0 };
+    }
+  };
+
+  return this.queueRequest(feature, model, priority, execute);
+}
+```
+
+**Usage Example - Extract SNAP Policy Data:**
+```typescript
+const policyText = `
+SNAP Eligibility in Maryland:
+- Gross income must not exceed 130% of FPL
+- Net income must not exceed 100% of FPL
+- For household of 4: $3,677/month gross, $2,829/month net
+- Asset limit: $2,750 ($4,250 if elderly/disabled)
+- Application deadline: None (rolling enrollment)
+- Effective: January 1, 2024
+- Contact: 1-800-332-6347, myDHR.maryland.gov
+`;
+
+const extracted = await aiOrchestrator.analyzeDocumentForFieldExtraction(
+  policyText,
+  'SNAP Policy Document'
+);
+
+// Response:
+// {
+//   "eligibilityRequirements": ["Income below 130% FPL", "Assets below limit"],
+//   "incomeLimits": {
+//     "1person": "$1,473/month gross",
+//     "4person": "$3,677/month gross"
+//   },
+//   "assetLimits": "$2,750 ($4,250 elderly/disabled)",
+//   "applicationDeadline": null,
+//   "effectiveDate": "2024-01-01",
+//   "contactInfo": {
+//     "phone": "1-800-332-6347",
+//     "website": "myDHR.maryland.gov"
+//   },
+//   "programCodes": ["SNAP"],
+//   "geographicScope": "Maryland",
+//   "confidence": 0.95
+// }
+```
+
+**Model:** gemini-1.5-pro (for complex extraction tasks)
+
+---
+
+#### generateDocumentSummary() - Document Summarization (lines 937-972)
+
+**Purpose:** Generate actionable summaries of policy documents
+
+```typescript
+async generateDocumentSummary(
+  text: string,
+  maxLength: number = 200,
+  options: GenerateTextOptions = {}
+): Promise<string> {
+  const { feature = 'document_summarization', priority = 'normal' } = options;
+  const model = this.selectModel('text');
+
+  const prompt = `Summarize the following government benefits document in ${maxLength} words or less.
+Focus on:
+- Main purpose of the document
+- Key eligibility requirements
+- Important dates or deadlines
+- Primary benefit amounts or limits
+- Application process overview
+
+Make the summary clear and actionable for benefits administrators.
+
+Document text: ${text}`;
+
+  const execute = async () => {
+    const ai = this.getGeminiClient();
+    const response = await ai.models.generateContent({
+      model: "gemini-1.5-pro",
+      contents: [{ role: 'user', parts: [{ text: prompt }] }]
+    });
+
+    const result = response.text || "Summary generation failed";
+    const totalTokens = this.estimateTokens(prompt) + this.estimateTokens(result);
+    await this.trackAIUsage(feature, "gemini-1.5-pro", totalTokens);
+
+    return result;
+  };
+
+  return this.queueRequest(feature, model, priority, execute);
+}
+```
+
+**Usage Example:**
+```typescript
+const longPolicyDoc = "... 5,000 word SNAP policy update ...";
+
+const summary = await aiOrchestrator.generateDocumentSummary(
+  longPolicyDoc,
+  200  // max words
+);
+
+// Response:
+// "Maryland SNAP policy update effective Oct 2024 increases gross income 
+//  limit to 130% FPL and net to 100% FPL. Asset limit raised to $2,750 
+//  ($4,250 for elderly/disabled). Simplified reporting for stable households. 
+//  Online application available at myDHR.maryland.gov. No application deadline."
+```
+
+---
+
+#### detectDocumentChanges() - Change Detection (lines 977-1034)
+
+**Purpose:** Compare document versions and identify policy changes
+
+```typescript
+async detectDocumentChanges(
+  oldText: string,
+  newText: string,
+  options: GenerateTextOptions = {}
+) {
+  const { feature = 'document_change_detection', priority = 'background' } = options;
+  const model = this.selectModel('text');
+
+  const prompt = `You are comparing two versions of a government benefits document to identify changes.
+
+Analyze the differences and categorize them as:
+- POLICY_CHANGE: Changes to eligibility, benefits amounts, or requirements
+- PROCEDURAL_CHANGE: Changes to application or administrative processes
+- DATE_CHANGE: Updates to effective dates or deadlines  
+- CONTACT_CHANGE: Updates to contact information
+- FORMATTING_CHANGE: Minor formatting or structural changes
+- OTHER: Any other type of change
+
+Respond with JSON:
+{
+  "hasChanges": boolean,
+  "changesSummary": "brief description of main changes",
+  "changes": [
+    {
+      "type": "POLICY_CHANGE|PROCEDURAL_CHANGE|etc",
+      "description": "specific change description",
+      "severity": "HIGH|MEDIUM|LOW",
+      "oldValue": "previous value if applicable",
+      "newValue": "new value if applicable"
+    }
+  ],
+  "confidence": number
+}
+
+Old version: ${oldText}
+
+New version: ${newText}`;
+
+  const execute = async () => {
+    const ai = this.getGeminiClient();
+    const response = await ai.models.generateContent({
+      model: "gemini-1.5-pro",
+      contents: [{ role: 'user', parts: [{ text: prompt }] }]
+    });
+
+    const result = response.text || "{}";
+    const totalTokens = this.estimateTokens(prompt) + this.estimateTokens(result);
+    await this.trackAIUsage(feature, "gemini-1.5-pro", totalTokens);
+
+    try {
+      return JSON.parse(result);
+    } catch {
+      return { hasChanges: false, changesSummary: "Failed to detect changes", changes: [], confidence: 0 };
+    }
+  };
+
+  return this.queueRequest(feature, model, priority, execute);
+}
+```
+
+**Usage Example - Track SNAP Policy Updates:**
+```typescript
+const oldPolicy = "SNAP asset limit: $2,500 for all households";
+const newPolicy = "SNAP asset limit: $2,750 ($4,250 for elderly/disabled)";
+
+const changes = await aiOrchestrator.detectDocumentChanges(
+  oldPolicy,
+  newPolicy
+);
+
+// Response:
+// {
+//   "hasChanges": true,
+//   "changesSummary": "Asset limits increased for all households, with higher limit for elderly/disabled",
+//   "changes": [
+//     {
+//       "type": "POLICY_CHANGE",
+//       "description": "Standard asset limit increased",
+//       "severity": "MEDIUM",
+//       "oldValue": "$2,500",
+//       "newValue": "$2,750"
+//     },
+//     {
+//       "type": "POLICY_CHANGE",
+//       "description": "New elderly/disabled asset limit added",
+//       "severity": "HIGH",
+//       "oldValue": null,
+//       "newValue": "$4,250"
+//     }
+//   ],
+//   "confidence": 0.98
+// }
+```
+
+---
+
+### 6.13 Summary - AI Orchestrator
+
+**Purpose:** Central AI coordination layer managing ALL Gemini API operations
+
+**Architecture:**
+- **Singleton Pattern** - Single global instance
+- **Priority Queue** - Critical (100) > Normal (50) > Background (10)
+- **Rate Limiting** - 50 requests/min, 5 concurrent
+- **Exponential Backoff** - 1s, 2s, 4s retry delays
+
+**Cost Optimization:**
+- **Context Caching:** 90% savings for repeated prompts (minimum 1,024 tokens)
+- **Embedding Cache:** 60-80% hit rate for document embeddings
+- **Smart Model Routing:** Automatic selection (flash vs pro)
+
+**Core Capabilities:**
+1. **Text Generation** - General AI chat, RAG, policy Q&A
+2. **Vision Analysis** - OCR, W-2 extraction, document analysis
+3. **Code Execution** - Calculations with reasoning
+4. **Embeddings** - Document search with caching
+5. **Document Analysis** - Field extraction, summarization, change detection
+
+**Model Selection:**
+| Task | Model | Cost (per 1M tokens) | Use Case |
+|------|-------|---------------------|----------|
+| Text | gemini-2.0-flash | $0.075 input / $0.30 output | Chat, RAG |
+| Vision | gemini-2.0-flash | $0.075 input / $0.30 output | OCR, documents |
+| Code | gemini-2.0-flash-thinking | $0.075 input / $0.30 output | Calculations |
+| Embeddings | text-embedding-004 | $0.01 input | Document search |
+| Complex | gemini-1.5-pro | $1.25 input / $5.00 output | Field extraction |
+
+**Rate Limits:**
+- **Per Minute:** 50 requests (Gemini free tier)
+- **Concurrent:** 5 requests
+- **Window:** 60 seconds rolling
+
+**Priority Levels:**
+| Priority | Weight | Use Cases |
+|----------|--------|-----------|
+| Critical | 100 | Tax filing, real-time chat |
+| Normal | 50 | Document analysis, RAG |
+| Background | 10 | Embeddings, batch processing |
+
+**Cost Tracking:**
+- Database: `monitoring_metrics` table
+- Metrics: Total calls, tokens, cost by feature/model
+- Reports: Time-range cost analysis
+
+**Context Caching:**
+- **Requirements:** 1,024 tokens minimum, versioned model
+- **TTL:** Default 1 hour (configurable)
+- **Savings:** 90% on cached content
+- **Use Cases:** Policy manuals, form templates
+
+**Integration Points:**
+- **policySourceScraper** - Document analysis
+- **aiIntakeAssistant** - Conversational AI
+- **ragService** - Document search
+- **vitaTaxRulesEngine** - Tax calculations
+- **metricsService** - Cost tracking
+
+**Database Tables:**
+- `monitoring_metrics` - AI usage tracking
+
+**Production Deployment:**
+- All AI operations flow through this singleton
+- Prevents quota exhaustion via rate limiting
+- Tracks costs across all features
+- Enables context caching for policy manuals
+
+**Compliance:**
+- ✅ **PII Masking** - Error logs redact sensitive data
+- ✅ **Cost Transparency** - All usage tracked and reportable
+- ✅ **Rate Limiting** - Prevents quota exhaustion
+- ✅ **Retry Logic** - Handles transient failures
+
+---
+
