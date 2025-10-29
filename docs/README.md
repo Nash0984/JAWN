@@ -1,6 +1,10 @@
 # JAWN Documentation Hub
 **Joint Access Welfare Network** - Production-Ready Multi-State Benefits Platform  
-Generated: 2025-01-01
+Generated: 2025-10-29
+
+> **📖 Primary Documentation**: See **[../replit.md](../replit.md)** for the authoritative single source of truth on system architecture, features, and preferences.
+
+---
 
 ## 📋 Documentation Structure
 
@@ -15,18 +19,13 @@ docs/
 │   ├── deployment/        # Deployment & operations guides
 │   └── operations/        # Monitoring & maintenance
 │
-├── supplemental/          # White-label tenant resources
-│   ├── tenant-reporting/  # Custom report templates
-│   ├── legislative/       # Compliance reporting modules
-│   └── operational/       # Dashboard specifications
-│
-└── archive/              # Historical documentation
-    ├── 2024-12/          # Initial development phase
-    ├── 2025-01/          # LIHEAP refactor period
-    ├── 2025-10/          # Pre-production docs
-    ├── assessments/      # Point-in-time audits
-    └── ARCHIVE_MANIFEST.md
+└── supplemental/          # White-label tenant resources
+    ├── tenant-reporting/  # Custom report templates
+    ├── legislative/       # Compliance reporting modules
+    └── operational/       # Dashboard specifications
 ```
+
+---
 
 ## 🎯 Quick Navigation
 
@@ -47,6 +46,8 @@ docs/
 ### For Government Partners
 - [Funder Report Template](supplemental/tenant-reporting/FUNDER_REPORT_TEMPLATE.md) - Grant compliance reporting
 
+---
+
 ## 🏗️ System Overview
 
 ### What is JAWN?
@@ -64,6 +65,8 @@ JAWN (Joint Access Welfare Network) is a production-ready, white-label multi-sta
 - **Government Tenants**: Subscription for custom reporting and dashboards
 - **Revenue Streams**: Funder reports, legislative compliance, operational analytics
 
+---
+
 ## 📊 Technical Architecture
 
 ### Core Technologies
@@ -79,6 +82,8 @@ JAWN (Joint Access Welfare Network) is a production-ready, white-label multi-sta
 - **Rules as Code**: Automated policy implementation
 - **Immutable Audit**: Blockchain-style hash chains
 - **Circuit Breakers**: Resilient external service integration
+
+---
 
 ## 🔒 Compliance & Security
 
@@ -102,6 +107,8 @@ JAWN (Joint Access Welfare Network) is a production-ready, white-label multi-sta
 - **IRS Pub 1075**: 80% Ready (encryption complete)
 - **HIPAA**: 85% Ready (technical controls strong)
 
+---
+
 ## 📈 Current Status
 
 ### Maryland Production (100% Ready)
@@ -122,6 +129,8 @@ JAWN (Joint Access Welfare Network) is a production-ready, white-label multi-sta
 - Tenant isolation tested
 - KMS hierarchy designed
 - Pending policy integration
+
+---
 
 ## 🚀 Getting Started
 
@@ -146,18 +155,24 @@ SESSION_SECRET=        # Cookie signing
 GOOGLE_APPLICATION_CREDENTIALS=  # GCS
 ```
 
+---
+
 ## 📚 Documentation Philosophy
+
+### Single Source of Truth
+**[replit.md](../replit.md)** is the authoritative documentation for all system architecture, features, and user preferences. All other documentation supplements this core document.
 
 ### "Assume Nothing" Approach
 All documentation is generated from actual code inspection, not aspirational features. This ensures accuracy and prevents documentation drift.
 
-### Three-Tier Documentation
-1. **Official**: Current, maintained, code-verified
-2. **Supplemental**: Revenue-generating tenant resources
-3. **Archive**: Historical context and decisions
+### Two-Tier Documentation
+1. **Official**: Current, maintained, code-verified compliance and architecture docs
+2. **Supplemental**: Revenue-generating tenant resources and white-label materials
 
 ### NIST Compliance Focus
 Documentation structure follows NIST SP 800-218 (SSDF) and SP 800-218A (AI) frameworks for regulatory alignment.
+
+---
 
 ## 🔄 Update Schedule
 
@@ -173,8 +188,10 @@ Documentation structure follows NIST SP 800-218 (SSDF) and SP 800-218A (AI) fram
 
 ### Quarterly Audits
 - Full documentation verification
-- Archive old documentation
 - Update compliance frameworks
+- Sync with replit.md
+
+---
 
 ## 📞 Support & Contact
 
@@ -184,7 +201,7 @@ Documentation structure follows NIST SP 800-218 (SSDF) and SP 800-218A (AI) fram
 - Contact DevOps team
 
 ### For Compliance Questions
-- See [Compliance Framework](official/NIST_COMPLIANCE_FRAMEWORK.md)
+- See [Compliance Framework](official/compliance/NIST_COMPLIANCE_FRAMEWORK.md)
 - Review [Audit Logs](official/compliance/AUDIT_LOGGING.md)
 - Contact Security team
 
@@ -192,6 +209,8 @@ Documentation structure follows NIST SP 800-218 (SSDF) and SP 800-218A (AI) fram
 - Read [White-Label Guide](supplemental/WHITE_LABEL_GUIDE.md)
 - Review [Pricing Model](supplemental/PRICING_MODEL.md)
 - Contact Partnership team
+
+---
 
 ## 🗺️ Roadmap
 
@@ -217,4 +236,4 @@ Documentation structure follows NIST SP 800-218 (SSDF) and SP 800-218A (AI) fram
 
 ---
 
-**Note**: This is living documentation. All content is generated from actual code inspection to ensure accuracy. For historical context, see the [Archive Manifest](archive/ARCHIVE_MANIFEST.md).
+**Note**: This is living documentation. For the authoritative single source of truth on system architecture and preferences, see [replit.md](../replit.md). For historical context, consult git history.
