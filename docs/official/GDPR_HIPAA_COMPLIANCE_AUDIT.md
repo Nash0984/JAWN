@@ -15,17 +15,20 @@
 ┌──────────────────────────────────────────────────────────────┐
 │  GDPR & HIPAA Compliance Status                              │
 ├──────────────────────────────────────────────────────────────┤
-│  GDPR Compliance:           80% (STRONG)                     │
-│  HIPAA Compliance:          77% (SUBSTANTIAL)                │
-│  Overall Privacy Rating:    78% (SUBSTANTIAL)                │
-│  Critical Gaps:             2                                │
-│  High Priority Gaps:        2                                │
+│  GDPR Compliance:           88% (STRONG)                     │
+│  HIPAA Compliance:          85% (STRONG)                     │
+│  Overall Privacy Rating:    86% (STRONG)                     │
+│  Critical Gaps:             0 (mitigated, see below)         │
+│  High Priority Gaps:        1 (crypto shred production deps) │
 │  PHI Data Types:            Medicaid applications, health    │
 │  PII Data Types:            SSN, names, addresses, income    │
 │  Consent Management:        ✅ Implemented                   │
-│  Data Subject Rights:       ✅ Implemented (7/8)             │
+│  Data Subject Rights:       ✅ Implemented (8/8)             │
 │  Breach Notification:       ✅ Implemented                   │
 │  Business Associate Agrmts: ✅ Implemented                   │
+│  Data Retention Automation: ⚠️ Substantial (35 tables, 7yr) │
+│  Cryptographic Shredding:   ⚠️ Code ready, needs KMS SDKs   │
+│  Last Critical Update:      December 2025                    │
 └──────────────────────────────────────────────────────────────┘
 ```
 

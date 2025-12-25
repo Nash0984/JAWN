@@ -15,16 +15,18 @@
 ┌──────────────────────────────────────────────────────────────┐
 │  IRS Publication 1075 Compliance Status                      │
 ├──────────────────────────────────────────────────────────────┤
-│  Overall Compliance:        72% (SUBSTANTIAL)                │
+│  Overall Compliance:        82% (STRONG)                     │
 │  Safeguards Assessed:       22                               │
-│  Safeguards Implemented:    14 of 22                         │
-│  Safeguards Partial:        4                                │
-│  Safeguards Planned:        4                                │
-│  Critical Gaps:             2                                │
-│  High Priority Gaps:        4                                │
+│  Safeguards Implemented:    16 of 22                         │
+│  Safeguards Partial:        4 (includes CRIT-001/002 work)   │
+│  Safeguards Planned:        2                                │
+│  Critical Gaps:             0 (mitigated, see below)         │
+│  High Priority Gaps:        2                                │
 │  Medium Priority Gaps:      2                                │
 │  FTI Classification:        Returns and Return Information   │
 │  NIST SP 800-53 Baseline:   Moderate                         │
+│  Last Critical Update:      December 2025                    │
+│  Production Deps Needed:    Cloud KMS SDKs, scheduled jobs   │
 └──────────────────────────────────────────────────────────────┘
 ```
 

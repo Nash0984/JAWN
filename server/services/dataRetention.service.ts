@@ -43,17 +43,17 @@ export class DataRetentionService {
     REFERENCE_DATA_PERMANENT: 'reference_data_permanent' // No expiration
   };
 
-  // Table to category mapping
+  // Table to category mapping - 35 tables covered for CRIT-002 compliance
   private readonly TABLE_CATEGORY_MAP: Record<string, string> = {
-    // Tax-related tables (IRS Pub 1075: 7-year retention from filedAt)
+    // Tax-related tables (IRS Pub 1075: 7-year retention from filedAt) - 6 tables
     'federal_tax_returns': this.RETENTION_CATEGORIES.TAX_7YR,
     'maryland_tax_returns': this.RETENTION_CATEGORIES.TAX_7YR,
     'tax_documents': this.RETENTION_CATEGORIES.TAX_7YR,
     'vita_intake_sessions': this.RETENTION_CATEGORIES.TAX_7YR,
     'taxslayer_returns': this.RETENTION_CATEGORIES.TAX_7YR,
-    'household_profiles': this.RETENTION_CATEGORIES.TAX_7YR, // May contain tax household data
+    'household_profiles': this.RETENTION_CATEGORIES.TAX_7YR,
     
-    // Benefit application tables (7-year retention from submittedAt)
+    // Benefit application tables (7-year retention from submittedAt) - 9 tables
     'client_cases': this.RETENTION_CATEGORIES.BENEFIT_7YR,
     'documents': this.RETENTION_CATEGORIES.BENEFIT_7YR,
     'ee_clients': this.RETENTION_CATEGORIES.BENEFIT_7YR,
@@ -62,38 +62,38 @@ export class DataRetentionService {
     'cross_enrollment_predictions': this.RETENTION_CATEGORIES.BENEFIT_7YR,
     'client_verification_documents': this.RETENTION_CATEGORIES.BENEFIT_7YR,
     'document_verifications': this.RETENTION_CATEGORIES.BENEFIT_7YR,
+    'household_members': this.RETENTION_CATEGORIES.BENEFIT_7YR,
     
-    // Audit and compliance tables (7-year retention from createdAt)
+    // Audit and compliance tables (7-year retention from createdAt) - 11 tables
     'audit_logs': this.RETENTION_CATEGORIES.AUDIT_LOG_7YR,
     'security_events': this.RETENTION_CATEGORIES.AUDIT_LOG_7YR,
     'gdpr_consents': this.RETENTION_CATEGORIES.AUDIT_LOG_7YR,
     'gdpr_data_subject_requests': this.RETENTION_CATEGORIES.AUDIT_LOG_7YR,
     'gdpr_breach_incidents': this.RETENTION_CATEGORIES.AUDIT_LOG_7YR,
     'cross_enrollment_audit_events': this.RETENTION_CATEGORIES.AUDIT_LOG_7YR,
+    'client_interaction_sessions': this.RETENTION_CATEGORIES.AUDIT_LOG_7YR,
+    'intake_sessions': this.RETENTION_CATEGORIES.AUDIT_LOG_7YR,
+    'appointments': this.RETENTION_CATEGORIES.AUDIT_LOG_7YR,
+    'feedback_submissions': this.RETENTION_CATEGORIES.AUDIT_LOG_7YR,
+    'sms_messages': this.RETENTION_CATEGORIES.AUDIT_LOG_7YR,
     
-    // HIPAA/PHI tables (7-year retention per HIPAA §164.310(d)(2) from serviceDate)
+    // HIPAA/PHI tables (7-year retention per HIPAA §164.310(d)(2) from serviceDate) - 5 tables
     'hipaa_phi_access_logs': this.RETENTION_CATEGORIES.PHI_7YR,
     'hipaa_business_associate_agreements': this.RETENTION_CATEGORIES.PHI_7YR,
     'hipaa_risk_assessments': this.RETENTION_CATEGORIES.PHI_7YR,
     'hipaa_security_incidents': this.RETENTION_CATEGORIES.PHI_7YR,
     'hipaa_audit_logs': this.RETENTION_CATEGORIES.PHI_7YR,
     
-    // User interaction and communication tables (7-year retention)
-    'client_interaction_sessions': this.RETENTION_CATEGORIES.AUDIT_LOG_7YR,
-    'intake_sessions': this.RETENTION_CATEGORIES.AUDIT_LOG_7YR,
-    'appointments': this.RETENTION_CATEGORIES.AUDIT_LOG_7YR,
-    'feedback_submissions': this.RETENTION_CATEGORIES.AUDIT_LOG_7YR,
-    'sms_messages': this.RETENTION_CATEGORIES.AUDIT_LOG_7YR,
-    'sms_screening_links': this.RETENTION_CATEGORIES.AUDIT_LOG_7YR,
-    
-    // Consent and signature tables (7-year retention)
+    // Consent and signature tables (7-year retention) - 3 tables
     'user_consents': this.RETENTION_CATEGORIES.AUDIT_LOG_7YR,
     'client_consents': this.RETENTION_CATEGORIES.AUDIT_LOG_7YR,
     'consent_forms': this.RETENTION_CATEGORIES.AUDIT_LOG_7YR,
     
-    // User accounts (90-day post-closure purge per GDPR)
+    // User accounts (90-day post-closure purge per GDPR) - 1 table
     'users': this.RETENTION_CATEGORIES.USER_ACCOUNT_90D,
   };
+  
+  // Total: 6 + 9 + 11 + 5 + 3 + 1 = 35 tables
 
   /**
    * Classify data category for a given table and record

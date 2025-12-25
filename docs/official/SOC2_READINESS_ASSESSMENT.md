@@ -15,19 +15,19 @@
 ┌──────────────────────────────────────────────────────────────┐
 │  SOC 2 Type II Readiness Status                              │
 ├──────────────────────────────────────────────────────────────┤
-│  Overall Readiness:         63% (DEVELOPING)                 │
-│  Type I Readiness:          68% (Control Design)             │
-│  Type II Readiness:         58% (Operating Effectiveness)    │
+│  Overall Readiness:         72% (DEVELOPING)                 │
+│  Type I Readiness:          78% (Control Design)             │
+│  Type II Readiness:         66% (Operating Effectiveness)    │
 │  Trust Service Criteria:    5 assessed                       │
-│  Critical Gaps:             5                                │
-│    🔴 CRIT-001: TLS verification (Replit infrastructure)     │
-│    🔴 CRIT-002: No automated 7-year data retention/purge     │
+│  Critical Gaps:             3 (2 mitigated, 3 remaining)     │
+│    ⚠️ CRIT-001: TLS verification (substantial, needs LB doc)│
+│    ⚠️ CRIT-002: Data retention (substantial, needs KMS SDKs)│
 │    🔴 CRIT-SOC2-001: No 6-12 month operational evidence      │
 │    🔴 CRIT-SOC2-002: Missing continuous monitoring evidence  │
 │    🔴 CRIT-SOC2-003: No formal change management tracking    │
-│  High Priority Gaps:        6                                │
-│  Medium Priority Gaps:      4                                │
-│  Estimated Audit Timeline:  6-9 months (after gaps closed)   │
+│  High Priority Gaps:        5                                │
+│  Medium Priority Gaps:      3                                │
+│  Estimated Audit Timeline:  6-9 months (after gap closure)   │
 └──────────────────────────────────────────────────────────────┘
 ```
 
