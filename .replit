@@ -100,7 +100,7 @@ args = "npm run dev"
 waitForPort = 5000
 
 [agent]
-integrations = ["javascript_object_storage:1.0.0", "javascript_database:1.0.0", "javascript_openai:1.0.0", "javascript_gemini:1.0.0", "google-calendar:1.0.0"]
+integrations = ["javascript_object_storage:1.0.0", "javascript_database:1.0.0", "javascript_openai:1.0.0", "javascript_gemini:1.0.0", "google-calendar:1.0.0", "github:1.0.0"]
 
 [objectStorage]
 defaultBucketID = "replit-objstore-b4ecfa39-f52a-4d52-96db-a130c34e3d80"
