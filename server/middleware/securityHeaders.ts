@@ -44,15 +44,16 @@ export const helmetConfig = helmet({
         ? ["'self'", "'unsafe-inline'", "'unsafe-eval'"]
         : ["'self'"],
       // Style sources - unsafe-inline only in development for Vite HMR
+      // Google Fonts stylesheets allowed in all environments
       styleSrc: isDevelopment
-        ? ["'self'", "'unsafe-inline'"]
-        : ["'self'"],
+        ? ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"]
+        : ["'self'", "https://fonts.googleapis.com"],
       imgSrc: ["'self'", "data:", "https:", "blob:"],
       // Connect sources - WebSocket support for Vite HMR (dev) and real-time notifications (prod)
       connectSrc: isDevelopment
         ? ["'self'", "https:", "ws:", "wss:"] 
         : ["'self'", "https:", "wss:"],
-      fontSrc: ["'self'", "data:"],
+      fontSrc: ["'self'", "data:", "https://fonts.gstatic.com", "https://fonts.googleapis.com"],
       objectSrc: ["'none'"],
       mediaSrc: ["'self'"],
       frameSrc: ["'none'"],

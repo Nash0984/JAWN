@@ -5,6 +5,7 @@
  * with graceful degradation when packages are not available
  */
 
+import * as React from "react";
 import { useState, useEffect, ComponentType, ReactNode } from "react";
 
 let Sentry: any = null;
