@@ -393,10 +393,45 @@ export async function tlsHealthCheck(req: Request, res: Response): Promise<void>
  * - Azure Application Gateway - TLS 1.2+ with Azure Gov compliance
  * - On-premises nginx/F5 with signed attestation
  * 
- * @returns 200 OK with attestation status, 400 if invalid attestation format
+ * Security:
+ * - GET requests are public (returns requirements and current status)
+ * - POST requests require API key authentication (TLS_ATTESTATION_API_KEY env var)
+ * - All POST requests are logged for audit trail
+ * 
+ * @returns 200 OK with attestation status, 400 if invalid attestation format, 401 if unauthorized
  */
 export async function tlsAttestationEndpoint(req: Request, res: Response): Promise<void> {
   const timestamp = new Date().toISOString();
+  
+  // For POST requests, require API key authentication
+  if (req.method === 'POST') {
+    const apiKey = req.headers['x-attestation-api-key'] as string || 
+                   req.headers['authorization']?.replace('Bearer ', '');
+    const expectedKey = process.env.TLS_ATTESTATION_API_KEY;
+    
+    // Require API key in production or when configured
+    if (expectedKey && apiKey !== expectedKey) {
+      console.log(`[TLS-ATTESTATION] Unauthorized attempt from ${req.ip} at ${timestamp}`);
+      res.status(401).json({
+        status: 'unauthorized',
+        timestamp,
+        message: 'Invalid or missing API key. Set X-Attestation-API-Key header.',
+        hint: 'Configure TLS_ATTESTATION_API_KEY environment variable for production attestation submission'
+      });
+      return;
+    }
+    
+    // In production without API key configured, reject attestation submissions
+    if (process.env.NODE_ENV === 'production' && !expectedKey) {
+      res.status(403).json({
+        status: 'forbidden',
+        timestamp,
+        message: 'TLS_ATTESTATION_API_KEY not configured. Cannot accept attestation in production without authentication.',
+        configuration: 'Set TLS_ATTESTATION_API_KEY environment variable to enable attestation submission'
+      });
+      return;
+    }
+  }
   
   interface AttestationResult {
     status: 'valid' | 'invalid' | 'pending';

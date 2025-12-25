@@ -619,6 +619,178 @@ export class DataRetentionService {
       ...policies[category],
     };
   }
+
+  /**
+   * Execute disposal sweep for records past retention period
+   * 
+   * This is the main compliance workflow that:
+   * 1. Finds records where retention_until has passed
+   * 2. Checks for legal holds before any deletion
+   * 3. Soft deletes eligible records with audit trail
+   * 4. Returns metrics for compliance reporting
+   * 
+   * @param tableName - The table to sweep for expired records
+   * @returns Metrics on records processed
+   */
+  async executeDisposalSweep(tableName: string): Promise<{
+    tableName: string;
+    eligibleCount: number;
+    processedCount: number;
+    skippedDueToHolds: number;
+    errors: number;
+  }> {
+    const metrics = {
+      tableName,
+      eligibleCount: 0,
+      processedCount: 0,
+      skippedDueToHolds: 0,
+      errors: 0,
+    };
+
+    try {
+      // Get records eligible for deletion
+      const eligibleRecords = await this.getRecordsEligibleForDeletion(tableName);
+      metrics.eligibleCount = eligibleRecords.length;
+
+      if (eligibleRecords.length === 0) {
+        logger.debug('No records eligible for disposal', { tableName });
+        return metrics;
+      }
+
+      logger.info('Starting disposal sweep', {
+        tableName,
+        eligibleCount: eligibleRecords.length,
+      });
+
+      // Process each eligible record
+      for (const record of eligibleRecords) {
+        try {
+          const recordId = record.id?.toString();
+          if (!recordId) {
+            metrics.errors++;
+            continue;
+          }
+
+          // Check legal holds first
+          const legalHolds = await this.checkLegalHolds(tableName, recordId);
+          if (legalHolds.length > 0) {
+            metrics.skippedDueToHolds++;
+            logger.info('Record skipped due to legal hold', {
+              tableName,
+              recordId,
+              holds: legalHolds,
+            });
+            continue;
+          }
+
+          // Perform soft delete with retention reason
+          const retentionCategory = record.retention_category || this.TABLE_CATEGORY_MAP[tableName];
+          const reason = `Automated retention disposal - ${retentionCategory} expired (retention_until: ${record.retention_until})`;
+
+          await this.softDeleteRecord(tableName, recordId, 'system:retention-automation', reason);
+          metrics.processedCount++;
+
+        } catch (recordError) {
+          metrics.errors++;
+          logger.error('Error processing record in disposal sweep', {
+            tableName,
+            recordId: record.id,
+            error: recordError,
+          });
+        }
+      }
+
+      logger.info('Disposal sweep completed', {
+        tableName,
+        ...metrics,
+      });
+
+      return metrics;
+
+    } catch (error) {
+      logger.error('Error executing disposal sweep', {
+        tableName,
+        error,
+      });
+      throw error;
+    }
+  }
+
+  /**
+   * Execute full retention workflow for all managed tables
+   * 
+   * This runs both backfill and disposal operations for CRIT-002 compliance.
+   * Designed to be called by the scheduled job.
+   * 
+   * @returns Summary of all operations
+   */
+  async executeFullRetentionWorkflow(): Promise<{
+    backfillResults: { tableName: string; count: number }[];
+    disposalResults: { tableName: string; eligible: number; processed: number; skipped: number; errors: number }[];
+    totalBackfilled: number;
+    totalProcessed: number;
+    totalSkipped: number;
+    totalErrors: number;
+  }> {
+    const tables = Object.keys(this.TABLE_CATEGORY_MAP);
+    const backfillResults: { tableName: string; count: number }[] = [];
+    const disposalResults: { tableName: string; eligible: number; processed: number; skipped: number; errors: number }[] = [];
+
+    let totalBackfilled = 0;
+    let totalProcessed = 0;
+    let totalSkipped = 0;
+    let totalErrors = 0;
+
+    // Phase 1: Backfill retention metadata
+    for (const tableName of tables) {
+      try {
+        const count = await this.backfillRetentionMetadata(tableName);
+        backfillResults.push({ tableName, count });
+        totalBackfilled += count;
+      } catch (error) {
+        logger.warn('Backfill skipped for table', { tableName, error });
+        backfillResults.push({ tableName, count: 0 });
+      }
+    }
+
+    // Phase 2: Execute disposal sweeps
+    for (const tableName of tables) {
+      try {
+        const result = await this.executeDisposalSweep(tableName);
+        disposalResults.push({
+          tableName,
+          eligible: result.eligibleCount,
+          processed: result.processedCount,
+          skipped: result.skippedDueToHolds,
+          errors: result.errors,
+        });
+        totalProcessed += result.processedCount;
+        totalSkipped += result.skippedDueToHolds;
+        totalErrors += result.errors;
+      } catch (error) {
+        logger.warn('Disposal sweep skipped for table', { tableName, error });
+        disposalResults.push({ tableName, eligible: 0, processed: 0, skipped: 0, errors: 1 });
+        totalErrors++;
+      }
+    }
+
+    logger.info('Full retention workflow completed', {
+      totalBackfilled,
+      totalProcessed,
+      totalSkipped,
+      totalErrors,
+      tablesProcessed: tables.length,
+    });
+
+    return {
+      backfillResults,
+      disposalResults,
+      totalBackfilled,
+      totalProcessed,
+      totalSkipped,
+      totalErrors,
+    };
+  }
 }
 
 export const dataRetentionService = new DataRetentionService();

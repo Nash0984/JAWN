@@ -313,6 +313,13 @@ app.use([
   return next();
 });
 
+// TLS attestation endpoint bypasses CSRF (API-key authenticated, used by deployment pipelines)
+app.use("/api/health/tls/attestation", (req, res, next) => {
+  // Mark request to skip CSRF protection - this endpoint has its own API key auth
+  (req as any).skipCsrf = true;
+  return next();
+});
+
 // Apply CSRF protection to all other state-changing routes
 app.use("/api/", (req, res, next) => {
   // Skip CSRF for GET, HEAD, OPTIONS

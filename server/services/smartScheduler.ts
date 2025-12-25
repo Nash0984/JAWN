@@ -179,47 +179,29 @@ export class SmartScheduler {
         description: 'Data retention backfill and disposal (CRIT-002 compliance - IRS Pub 1075, HIPAA, GDPR)',
         enabled: true,
         checkFunction: async () => {
-          log('📅 Smart Scheduler: Running data retention workflow...');
+          log('📅 Smart Scheduler: Running full data retention workflow (backfill + disposal)...');
           try {
             const { dataRetentionService } = await import('./dataRetention.service');
             
-            // Tables requiring retention metadata backfill (35 tables total)
-            const retentionTables = [
-              // Tax tables (IRS Pub 1075: 7-year from filedAt)
-              'federal_tax_returns', 'maryland_tax_returns', 'tax_documents',
-              'vita_intake_sessions', 'taxslayer_returns', 'household_profiles',
-              // Benefit tables (7-year from submittedAt)
-              'client_cases', 'documents', 'ee_clients', 'ee_export_batches',
-              'cross_enrollment_opportunities', 'cross_enrollment_predictions',
-              'client_verification_documents', 'document_verifications', 'household_members',
-              // Audit tables (7-year from createdAt)
-              'audit_logs', 'security_events', 'gdpr_consents', 'gdpr_data_subject_requests',
-              'gdpr_breach_incidents', 'cross_enrollment_audit_events', 'client_interaction_sessions',
-              'intake_sessions', 'appointments', 'feedback_submissions', 'sms_messages',
-              // HIPAA/PHI tables (7-year from serviceDate)
-              'hipaa_phi_access_logs', 'hipaa_business_associate_agreements',
-              'hipaa_risk_assessments', 'hipaa_security_incidents', 'hipaa_audit_logs',
-              // Consent tables (7-year)
-              'user_consents', 'client_consents', 'consent_forms',
-              // User accounts (90-day post-closure)
-              'users'
-            ];
+            // Execute the complete retention workflow: backfill + disposal
+            const result = await dataRetentionService.executeFullRetentionWorkflow();
             
-            let totalBackfilled = 0;
-            for (const tableName of retentionTables) {
-              try {
-                const count = await dataRetentionService.backfillRetentionMetadata(tableName);
-                if (count > 0) {
-                  totalBackfilled += count;
-                  log(`✅ Data Retention: Backfilled ${count} records in ${tableName}`);
-                }
-              } catch (tableError) {
-                // Some tables may not exist yet - continue with others
-                log(`⚠️  Data Retention: Skipped ${tableName} (may not exist)`);
-              }
+            log(`📊 Data Retention Workflow Complete:`);
+            log(`   - Tables processed: ${result.backfillResults.length}`);
+            log(`   - Records backfilled: ${result.totalBackfilled}`);
+            log(`   - Records disposed (soft-deleted): ${result.totalProcessed}`);
+            log(`   - Records skipped (legal holds): ${result.totalSkipped}`);
+            log(`   - Errors encountered: ${result.totalErrors}`);
+            
+            // Log disposal summary if any records were processed
+            if (result.totalProcessed > 0) {
+              log(`✅ Data Retention: Compliance disposal completed - ${result.totalProcessed} expired records marked for deletion`);
             }
             
-            log(`📊 Data Retention: Total backfilled ${totalBackfilled} records across ${retentionTables.length} tables`);
+            if (result.totalSkipped > 0) {
+              log(`⚠️  Data Retention: ${result.totalSkipped} records skipped due to active legal holds`);
+            }
+            
           } catch (error) {
             log(`❌ Data retention workflow failed: ${error}`);
           }
