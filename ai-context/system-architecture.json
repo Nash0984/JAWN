@@ -1,0 +1,715 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "systemName": "Maryland Multi-Program Benefits Navigator",
+  "version": "1.0.0",
+  "description": "AI-powered platform assisting users in understanding government benefit policies across 6 major Maryland programs using RAG + Rules as Code technology",
+  "lastUpdated": "2025-10-11",
+  
+  "architectureType": "full-stack-monolith",
+  "deploymentModel": "replit-cloud",
+  
+  "technologyStack": {
+    "runtime": {
+      "backend": "Node.js 20",
+      "frontend": "Browser (ES2020+)"
+    },
+    "languages": {
+      "primary": "TypeScript",
+      "secondary": ["Python 3.11 (PolicyEngine)"]
+    },
+    "frameworks": {
+      "backend": {
+        "name": "Express.js",
+        "version": "^4.18.0",
+        "description": "RESTful API server with middleware support"
+      },
+      "frontend": {
+        "name": "React",
+        "version": "^18.2.0",
+        "description": "Component-based UI framework",
+        "buildTool": "Vite 5.x"
+      },
+      "routing": {
+        "name": "Wouter",
+        "version": "^3.0.0",
+        "description": "Client-side routing"
+      }
+    },
+    "database": {
+      "type": "PostgreSQL",
+      "provider": "Neon Database",
+      "orm": "Drizzle ORM",
+      "migrations": "Drizzle Kit (push-based, no manual SQL)"
+    },
+    "ai": {
+      "provider": "Google Gemini",
+      "models": {
+        "text": "gemini-2.5-flash",
+        "embeddings": "text-embedding-004",
+        "vision": "gemini-2.5-flash (multimodal)"
+      },
+      "capabilities": ["RAG", "Document Analysis", "Chat", "Rules Extraction", "Semantic Search"]
+    },
+    "storage": {
+      "files": "Google Cloud Storage",
+      "sessions": "PostgreSQL (connect-pg-simple)",
+      "vectors": "PostgreSQL (embedded in document_chunks table)"
+    },
+    "uiLibrary": {
+      "name": "shadcn/ui",
+      "base": "Radix UI primitives",
+      "styling": "Tailwind CSS",
+      "icons": ["lucide-react", "react-icons/si"]
+    }
+  },
+  
+  "architectureLayers": {
+    "frontend": {
+      "location": "client/src/",
+      "responsibilities": [
+        "User interface rendering",
+        "Client-side routing (Wouter)",
+        "State management (TanStack Query)",
+        "Form validation (react-hook-form + Zod)",
+        "Real-time updates (WebSocket client)"
+      ],
+      "keyDirectories": {
+        "pages": "client/src/pages/ - Route components",
+        "components": "client/src/components/ - Reusable UI components",
+        "lib": "client/src/lib/ - Utilities and API client",
+        "hooks": "client/src/hooks/ - Custom React hooks"
+      },
+      "stateManagement": {
+        "server": "TanStack Query (React Query v5)",
+        "local": "React useState/useReducer",
+        "forms": "react-hook-form with zodResolver"
+      }
+    },
+    "backend": {
+      "location": "server/",
+      "responsibilities": [
+        "RESTful API endpoints",
+        "Authentication (Passport.js LocalStrategy)",
+        "Session management (PostgreSQL sessions)",
+        "Business logic orchestration",
+        "AI service integration",
+        "Document processing pipeline",
+        "PolicyEngine integration"
+      ],
+      "keyFiles": {
+        "routes": "server/routes.ts - API endpoint definitions",
+        "storage": "server/storage.ts - Data access layer (IStorage interface)",
+        "auth": "server/auth.ts - Passport authentication setup",
+        "vite": "server/vite.ts - Vite dev server integration"
+      },
+      "services": {
+        "gemini": "server/services/gemini.service.ts - Google Gemini API integration",
+        "email": "server/services/email.service.ts - Email notifications (inline templates)",
+        "policyEngine": "server/services/policyengine.service.ts - Python subprocess wrapper",
+        "notifications": "server/services/notification.service.ts - Real-time notifications",
+        "websocket": "server/services/websocket.service.ts - WebSocket server"
+      }
+    },
+    "database": {
+      "location": "shared/schema.ts",
+      "orm": "Drizzle ORM",
+      "tables": 57,
+      "keySchemas": [
+        "users - User accounts with role-based access",
+        "documents - Policy documents with metadata",
+        "document_chunks - Chunked documents with embeddings (vector storage)",
+        "rules - Rules as Code (structured policy rules)",
+        "client_interaction_sessions - Navigator workspace sessions",
+        "ee_export_batches - E&E export tracking",
+        "notifications - In-app notification system",
+        "policy_change_diffs - Version control for policy documents",
+        "compliance_rules - Regulatory compliance validation",
+        "intake_sessions - Adaptive intake copilot sessions",
+        "screening_sessions - Anonymous benefit screener",
+        "scenario_workspaces - Household scenario modeling",
+        "evaluation_test_cases - Accuracy testing framework"
+      ],
+      "relationships": "Foreign keys with CASCADE delete, indexed queries",
+      "vectorStorage": "Embeddings stored as REAL[] in document_chunks.embedding column"
+    },
+    "ai": {
+      "provider": "Google Gemini API",
+      "integration": "@google/genai SDK",
+      "workflows": {
+        "rag": {
+          "description": "Retrieval-Augmented Generation for policy queries",
+          "steps": [
+            "1. Client sends question to /api/chat/query",
+            "2. Backend generates embedding (Gemini text-embedding-004)",
+            "3. PostgreSQL cosine similarity search in document_chunks",
+            "4. Retrieve top-k relevant chunks",
+            "5. Construct prompt with context + question",
+            "6. Gemini generates answer with citations",
+            "7. Return response to client"
+          ],
+          "endpoint": "/api/chat/query"
+        },
+        "documentProcessing": {
+          "description": "Multi-stage document ingestion pipeline",
+          "steps": [
+            "1. Client uploads file via Uppy to /api/documents/upload",
+            "2. Backend stores file in GCS",
+            "3. OCR extraction (Tesseract + Gemini Vision)",
+            "4. Document classification (Gemini)",
+            "5. Quality assessment (Gemini)",
+            "6. Semantic chunking (sentence-based)",
+            "7. Embedding generation (Gemini text-embedding-004)",
+            "8. Store in PostgreSQL (documents + document_chunks)",
+            "9. Return document metadata to client"
+          ],
+          "endpoint": "/api/documents/upload"
+        },
+        "rulesExtraction": {
+          "description": "Extract structured Rules as Code from policy documents",
+          "steps": [
+            "1. Analyze document text (Gemini)",
+            "2. Identify rules (eligibility, calculation, procedure)",
+            "3. Extract metadata (effective dates, citations)",
+            "4. Store in rules table",
+            "5. Link to source document"
+          ],
+          "endpoint": "/api/admin/extract-rules"
+        },
+        "intakeCopilot": {
+          "description": "Conversational intake assistant with structured data extraction",
+          "steps": [
+            "1. Multi-turn dialogue (Gemini)",
+            "2. Extract structured fields from conversation",
+            "3. Track session progress",
+            "4. PolicyEngine benefit calculation",
+            "5. Generate application form when complete"
+          ],
+          "endpoint": "/api/intake/*"
+        },
+        "complianceValidation": {
+          "description": "AI-powered regulatory compliance checking",
+          "steps": [
+            "1. Load compliance rules (WCAG, LEP, federal regs)",
+            "2. Analyze document/rule against requirements (Gemini)",
+            "3. Identify violations with severity scoring",
+            "4. Generate remediation recommendations",
+            "5. Store validation results"
+          ],
+          "endpoint": "/api/admin/compliance/validate"
+        }
+      }
+    },
+    "policyEngine": {
+      "description": "Python-based benefit calculation engine",
+      "package": "policyengine-us",
+      "integration": "Python subprocess via child_process.spawn",
+      "status": "BLOCKED - libstdc++.so.6 dependency issue",
+      "capabilities": {
+        "federal": ["SNAP", "Medicaid", "EITC", "CTC", "SSI"],
+        "state": ["Maryland SNAP", "Maryland Medicaid", "Maryland TANF"]
+      },
+      "inputFormat": "JSON household situation (income, expenses, composition)",
+      "outputFormat": "JSON benefit amounts per program",
+      "workaround": "PolicyEngine REST API (unauthenticated endpoint returns empty results, paid endpoint requires Client ID/Secret)"
+    }
+  },
+  
+  "benefitPrograms": [
+    {
+      "id": "snap",
+      "name": "Maryland SNAP (Food Supplement Program)",
+      "description": "Supplemental nutrition assistance with PolicyEngine validation",
+      "ragEnabled": true,
+      "rulesAsCodeEnabled": true,
+      "policyEngineEnabled": true
+    },
+    {
+      "id": "medicaid",
+      "name": "Maryland Medicaid",
+      "description": "Health coverage through Maryland Medical Assistance Program",
+      "ragEnabled": true,
+      "rulesAsCodeEnabled": true,
+      "policyEngineEnabled": true
+    },
+    {
+      "id": "tanf",
+      "name": "Maryland TCA (TANF)",
+      "description": "Temporary Cash Assistance with PolicyEngine integration",
+      "ragEnabled": true,
+      "rulesAsCodeEnabled": true,
+      "policyEngineEnabled": true
+    },
+    {
+      "id": "ohep",
+      "name": "Maryland OHEP (Energy Assistance)",
+      "description": "Home energy programs (MEAP, EUSP)",
+      "ragEnabled": true,
+      "rulesAsCodeEnabled": true,
+      "policyEngineEnabled": false
+    },
+    {
+      "id": "tax_credits",
+      "name": "Maryland Tax Credits and Property Tax Relief",
+      "description": "Property tax credits (Renters', Homeowners', Homestead) and state income tax credits via SDAT and Maryland Comptroller",
+      "ragEnabled": true,
+      "rulesAsCodeEnabled": true,
+      "policyEngineEnabled": true,
+      "sources": [
+        "SDAT Tax Credit Programs Portal",
+        "Renters' Tax Credit Program",
+        "Homeowners' Property Tax Credit Program",
+        "Maryland Comptroller Tax Credits",
+        "OneStop Tax Credit Forms Portal"
+      ],
+      "creditTypes": ["property_tax_renters", "property_tax_homeowners", "homestead", "income_tax"]
+    },
+    {
+      "id": "vita",
+      "name": "IRS VITA Tax Assistance",
+      "description": "Federal tax help with EITC/CTC verification",
+      "ragEnabled": true,
+      "rulesAsCodeEnabled": true,
+      "policyEngineEnabled": true,
+      "knowledgeBase": "IRS Publication 4012",
+      "searchLayers": ["RAG semantic search", "Extracted federal tax rules", "IRS Pub 4012 citations"]
+    }
+  ],
+  
+  "coreFeatures": {
+    "documentManagement": {
+      "upload": "Multi-file upload with Uppy.js",
+      "storage": "Google Cloud Storage (GCS)",
+      "processing": "OCR + Gemini Vision + Classification",
+      "search": "Semantic search via embeddings + cosine similarity",
+      "versioning": "Policy change diff tracking"
+    },
+    "navigatorWorkspace": {
+      "description": "Case management for benefit navigators",
+      "capabilities": [
+        "Client interaction tracking",
+        "Session notes and outcomes",
+        "E&E export (CSV/JSON/XML)",
+        "Document verification",
+        "Multi-benefit screening"
+      ],
+      "exportFormats": ["CSV", "JSON", "XML"],
+      "eeIntegration": "Batch export to existing DHS E&E systems"
+    },
+    "publicPortal": {
+      "anonymousScreener": {
+        "route": "/screener",
+        "description": "No-login benefit eligibility check using PolicyEngine",
+        "sessionTracking": "Anonymous session management",
+        "saveResults": "Migrate data when user creates account"
+      },
+      "documentChecklist": "Generate required documents list per program",
+      "noticeLetterExplain": "AI-powered explanation of official notices",
+      "simplifiedSearch": "Dual mode: Smart (AI) vs Simple (manual)"
+    },
+    "intakeCopilot": {
+      "route": "/intake",
+      "description": "Gemini-powered conversational SNAP application assistant",
+      "features": [
+        "Multi-turn dialogue for data collection",
+        "Structured field extraction from conversation",
+        "Session progress visualization",
+        "Real-time PolicyEngine benefit calculations",
+        "Application form generation at threshold"
+      ]
+    },
+    "scenarioWorkspace": {
+      "route": "/scenarios",
+      "description": "What-if modeling for household benefit optimization",
+      "features": [
+        "Multiple scenario creation (vary income/expenses/composition)",
+        "PolicyEngine benefit calculations per scenario",
+        "Recharts visualization for side-by-side comparison",
+        "PDF export for client counseling",
+        "Data-driven benefit counseling support"
+      ]
+    },
+    "complianceSuite": {
+      "route": "/admin/compliance",
+      "description": "Gemini-powered regulatory compliance validation",
+      "features": [
+        "Create compliance rules (WCAG, LEP, federal regulations)",
+        "AI document/rule validation against requirements",
+        "Violation management with severity scoring",
+        "Impact prioritization",
+        "Remediation tracking"
+      ]
+    },
+    "vitaTaxAssistant": {
+      "route": "/admin/vita",
+      "description": "Federal tax assistance knowledge base using IRS Pub 4012",
+      "architecture": "Hybrid three-layer",
+      "layers": [
+        "RAG semantic search (Gemini embeddings + cosine similarity)",
+        "Extracted federal tax rules (formatted blocks by type)",
+        "IRS Pub 4012 citations with relevance scores"
+      ],
+      "applicability": "Federal program for all Maryland residents"
+    },
+    "evaluationFramework": {
+      "description": "Maryland accuracy testing adapted from Propel snap-eval",
+      "tables": [
+        "evaluation_test_cases - Test scenarios with MD-specific tags",
+        "evaluation_runs - Execution records with pass@1 scoring",
+        "evaluation_results - Individual results with variance tracking"
+      ],
+      "testStructure": "25 cases: 8 eligibility, 12 calculations, 5 edge cases",
+      "varianceTolerance": "2% for PolicyEngine validation",
+      "mdTags": ["md_asset_limit", "md_drug_felony", "bbce", "md_recertification"],
+      "benchmarks": {
+        "columnTax": {
+          "gpt5Strict": "41%",
+          "gpt5Lenient": "61%",
+          "source": "Industry research baseline"
+        }
+      }
+    },
+    "policyChangeDiffMonitor": {
+      "description": "Track policy document versions with automated change detection",
+      "capabilities": [
+        "Automated diff generation on document updates",
+        "Impact analysis with AI-powered assessment",
+        "Role-based notifications (staff, navigators, admins)",
+        "Review workflow (assign, assess, resolve)",
+        "Integration with notification system"
+      ]
+    },
+    "notifications": {
+      "delivery": ["In-app", "Email (fallback for offline users)"],
+      "types": ["Policy updates", "Feedback responses", "System alerts", "Workflow events"],
+      "preferences": "User-configurable per notification type",
+      "ui": "Notification center with unread badges"
+    },
+    "feedback": {
+      "collection": "User-reported issues with AI responses",
+      "admin": "Feedback management interface",
+      "workflow": "Review → Respond → Resolve",
+      "integration": "Linked to audit logs for DHS compliance"
+    },
+    "auditLog": {
+      "tracking": [
+        "User actions (login, document access, rule changes)",
+        "System events (exports, policy updates, notifications)",
+        "Admin operations (compliance checks, feedback responses)"
+      ],
+      "retention": "Permanent for regulatory compliance",
+      "access": "Admin-only audit log viewer"
+    }
+  },
+  
+  "security": {
+    "authentication": {
+      "strategy": "Passport.js LocalStrategy",
+      "passwordHashing": "bcrypt (10 rounds)",
+      "sessionStorage": "PostgreSQL (connect-pg-simple)",
+      "sessionExpiry": "7 days (rolling)"
+    },
+    "authorization": {
+      "model": "Role-Based Access Control (RBAC)",
+      "roles": ["user", "admin", "super_admin"],
+      "enforcement": "Middleware checks on protected routes"
+    },
+    "csrf": {
+      "implementation": "csrf-csrf (double-submit cookie)",
+      "tokenGeneration": "Per-request CSRF tokens",
+      "validation": "Middleware verification"
+    },
+    "rateLimiting": {
+      "implementation": "express-rate-limit (IP-based only)",
+      "tiers": {
+        "general": "100 requests per 15 minutes per IP",
+        "auth": "5 login attempts per 15 minutes per IP",
+        "api": "200 requests per 15 minutes per IP"
+      },
+      "response": "Plain text 'Too many requests' (not JSON)"
+    },
+    "headers": {
+      "library": "Helmet",
+      "csp": "Environment-aware Content Security Policy",
+      "hsts": "Strict-Transport-Security enabled in production",
+      "frameGuard": "X-Frame-Options: DENY"
+    },
+    "objectStorage": {
+      "acl": "Custom ACLs per document",
+      "publicDir": "public/ - Public assets",
+      "privateDir": ".private/ - User uploaded files"
+    }
+  },
+  
+  "dataFlow": {
+    "ragQuery": {
+      "input": "User question (string)",
+      "steps": [
+        "1. Client sends question to /api/chat/query",
+        "2. Backend generates embedding (Gemini text-embedding-004)",
+        "3. PostgreSQL cosine similarity search in document_chunks",
+        "4. Retrieve top-k chunks (k=5 default)",
+        "5. Construct prompt with context + question",
+        "6. Gemini generates answer with citations",
+        "7. Return response to client"
+      ],
+      "output": "Answer (string) + Citations (array)"
+    },
+    "documentUpload": {
+      "input": "PDF/Image file",
+      "steps": [
+        "1. Client uploads file via Uppy to /api/documents/upload",
+        "2. Backend stores file in GCS",
+        "3. OCR extraction (Tesseract + Gemini Vision)",
+        "4. Document classification (Gemini)",
+        "5. Quality assessment (Gemini)",
+        "6. Semantic chunking (sentence-based)",
+        "7. Embedding generation (Gemini text-embedding-004)",
+        "8. Store in PostgreSQL (documents + document_chunks)",
+        "9. Return document metadata to client"
+      ],
+      "output": "Document record + Processing status"
+    },
+    "benefitCalculation": {
+      "input": "Household situation (JSON)",
+      "steps": [
+        "1. Client sends household data to /api/policyengine/calculate",
+        "2. Backend spawns Python subprocess",
+        "3. Python PolicyEngine calculates benefits",
+        "4. Return benefit amounts per program",
+        "5. (BLOCKED: libstdc++.so.6 dependency issue)"
+      ],
+      "output": "Benefit amounts (object) per program",
+      "status": "Currently non-functional due to Python library dependency"
+    },
+    "eeExport": {
+      "input": "Export request (navigator/caseworker)",
+      "steps": [
+        "1. Admin selects sessions to export",
+        "2. Backend queries client_interaction_sessions",
+        "3. Generate export file (CSV/JSON/XML)",
+        "4. Create ee_export_batches record",
+        "5. Store file in GCS",
+        "6. Mark sessions as exported_to_ee=true",
+        "7. Return download link"
+      ],
+      "output": "Export file (CSV/JSON/XML) + Batch record"
+    }
+  },
+  
+  "externalDependencies": {
+    "geminiApi": {
+      "provider": "Google Cloud",
+      "service": "Generative AI API",
+      "authentication": "API Key (GEMINI_API_KEY secret)",
+      "models": ["gemini-2.5-flash", "text-embedding-004"],
+      "rateLimit": "Per Google Cloud quota",
+      "cost": "Pay-per-token"
+    },
+    "policyEngine": {
+      "provider": "PolicyEngine",
+      "service": "policyengine-us Python package",
+      "status": "BLOCKED",
+      "issue": "libstdc++.so.6 dependency missing in NixOS environment",
+      "workaround": "PolicyEngine REST API (requires paid authentication)",
+      "alternatives": [
+        "Custom SNAP calculator using USDA FY 2026 tables",
+        "mRelief open-source logic (SNAP, Medicaid, WIC, TANF)",
+        "OpenFisca framework (long-term custom engine)"
+      ]
+    },
+    "googleCloudStorage": {
+      "provider": "Google Cloud",
+      "service": "Cloud Storage",
+      "authentication": "Service Account JSON (via @google-cloud/storage)",
+      "buckets": {
+        "default": "repl-default-bucket-$REPL_ID",
+        "directories": ["public/", ".private/"]
+      }
+    },
+    "neonDatabase": {
+      "provider": "Neon",
+      "service": "Serverless PostgreSQL",
+      "connection": "DATABASE_URL environment variable",
+      "features": ["Auto-scaling", "Branching", "Point-in-time recovery"]
+    }
+  },
+  
+  "integrationPoints": {
+    "dhsEESystem": {
+      "description": "Maryland DHS Eligibility & Enrollment systems",
+      "exportFormats": ["CSV", "JSON", "XML"],
+      "batchTracking": "ee_export_batches table",
+      "sessionFields": ["client_name", "case_number", "benefit_types", "outcomes"],
+      "replaceability": "All components swappable with existing DHS systems"
+    },
+    "marylandBenefitsGov": {
+      "description": "Integration target for public portal",
+      "compatibility": "Maryland Digital Style Guide compliance",
+      "embedding": "Widget-based integration for policy search"
+    },
+    "irsPublications": {
+      "description": "IRS Publication 4012 for VITA tax assistance",
+      "format": "PDF document processed via RAG pipeline",
+      "updates": "Annual refresh for new tax year"
+    }
+  },
+  
+  "complianceStandards": {
+    "accessibility": {
+      "standard": "WCAG 2.1 AA",
+      "requirements": [
+        "4.5:1 contrast ratio minimum (text)",
+        "3:1 contrast ratio minimum (UI components)",
+        "Keyboard navigation support",
+        "Screen reader compatibility (ARIA)",
+        "Focus indicators (2px solid Maryland Red)",
+        "Touch targets ≥44x44px (mobile)"
+      ],
+      "testing": "Automated compliance validation via Gemini AI"
+    },
+    "plainLanguage": {
+      "standard": "Federal Plain Language Guidelines",
+      "application": "All user-facing content, notices, policy explanations"
+    },
+    "lep": {
+      "standard": "Limited English Proficiency (LEP) compliance",
+      "requirement": "Multi-language support readiness"
+    },
+    "marylandDigitalStyleGuide": {
+      "colors": {
+        "primary": "#0D4F8B (Maryland DHS Blue)",
+        "accent": "#C5203A (Maryland DHS Red)",
+        "secondary": "#FFB81C (Maryland DHS Gold)"
+      },
+      "typography": "Montserrat (Google Fonts)",
+      "brandElements": ["Maryland flag", "State of Maryland" text"]
+    }
+  },
+  
+  "performanceOptimizations": {
+    "caching": {
+      "server": "NodeCache with TTL and invalidation",
+      "client": "TanStack Query cache",
+      "targets": ["Frequently accessed documents", "Benefit program metadata", "User preferences"]
+    },
+    "indexing": {
+      "database": "Strategic indexes on foreign keys and query columns",
+      "vector": "Cosine similarity computed on-demand (no vector index yet)"
+    },
+    "lazyLoading": {
+      "status": "pending",
+      "target": "React.lazy() for route components"
+    },
+    "pagination": {
+      "status": "pending",
+      "target": "Large datasets (review queue, document lists)"
+    }
+  },
+  
+  "developmentWorkflow": {
+    "codeStructure": {
+      "shared": "shared/ - TypeScript types shared between frontend/backend",
+      "client": "client/ - React frontend",
+      "server": "server/ - Express backend",
+      "docs": "docs/ - Human-readable documentation",
+      "aiContext": "ai-context/ - Machine-readable specs for AI agents"
+    },
+    "packageManagement": "npm (Node.js), packager_tool (system dependencies)",
+    "buildTool": "Vite (frontend bundler + HMR)",
+    "typeChecking": "TypeScript strict mode",
+    "linting": "ESLint (configuration in project)",
+    "testing": {
+      "unit": "Vitest",
+      "component": "@testing-library/react",
+      "api": "supertest",
+      "e2e": "Manual testing (no automated E2E yet)"
+    },
+    "migrations": "Drizzle Kit push (npm run db:push, --force for data-loss warnings)",
+    "deployment": "Replit autoscale deployment (suggest_deploy tool)"
+  },
+  
+  "demoEnvironment": {
+    "description": "Pre-seeded demo users for instant testing",
+    "users": [
+      {
+        "username": "demo.applicant",
+        "password": "Demo2024!",
+        "role": "user",
+        "description": "Applicant perspective for public portal features"
+      },
+      {
+        "username": "demo.navigator",
+        "password": "Demo2024!",
+        "role": "user",
+        "description": "Navigator workspace, client sessions, E&E exports"
+      },
+      {
+        "username": "demo.caseworker",
+        "password": "Demo2024!",
+        "role": "admin",
+        "description": "Case management, document verification, scenario workspace"
+      },
+      {
+        "username": "demo.admin",
+        "password": "Demo2024!",
+        "role": "super_admin",
+        "description": "Full system access, compliance, audit logs, feedback management"
+      }
+    ],
+    "displayLocation": "Login page with collapsible 'Use Demo Account' helper"
+  },
+  
+  "knownIssues": [
+    {
+      "id": "policyengine-dependency",
+      "severity": "CRITICAL",
+      "status": "BLOCKED",
+      "component": "PolicyEngine integration",
+      "description": "libstdc++.so.6 shared library missing for numpy C-extensions",
+      "impact": "All PolicyEngine benefit calculations unavailable (SNAP, Medicaid, TANF, EITC, CTC, SSI)",
+      "affectedFeatures": [
+        "Benefit Calculations",
+        "Scenario Workspace",
+        "Benefit Screener",
+        "Intake Copilot",
+        "Evaluation Framework"
+      ],
+      "workarounds": [
+        "PolicyEngine REST API (free endpoint returns empty results, paid requires auth)",
+        "Custom SNAP calculator using USDA tables",
+        "mRelief open-source logic",
+        "OpenFisca framework (long-term)"
+      ],
+      "resolution": "Environment-level fix required (NixOS library dependencies) or alternative deployment strategy"
+    }
+  ],
+  
+  "futureEnhancements": [
+    "Multi-language support (Spanish, other LEP languages)",
+    "Mobile app (React Native or PWA)",
+    "Advanced analytics dashboard for DHS administrators",
+    "AI-powered form pre-fill using historical data",
+    "Integration with additional Maryland benefit programs",
+    "Real-time eligibility change notifications",
+    "Chatbot for 24/7 basic inquiries"
+  ],
+  
+  "documentation": {
+    "api": "docs/API.md - OpenAPI/Swagger spec",
+    "architecture": "docs/ARCHITECTURE.md - System diagrams, data flow",
+    "database": "docs/DATABASE.md - ERD, schema documentation",
+    "security": "docs/SECURITY.md - Auth, CSRF, rate limiting",
+    "deployment": "docs/DEPLOYMENT.md - Production runbook",
+    "integration": "docs/INTEGRATION.md - DHS E&E export, replaceability",
+    "designSystem": "docs/DESIGN-SYSTEM.md - Maryland style guide, components",
+    "codePatterns": "ai-context/code-patterns.md - Reusable code patterns (pending)",
+    "apiContracts": "ai-context/api-contracts.ts - TypeScript interfaces (pending)",
+    "taskTemplates": "ai-context/task-templates.md - AI agent task strategies (pending)"
+  },
+  
+  "maintainers": {
+    "primary": "Maryland Department of Human Services (DHS)",
+    "technical": "Benefits Navigator Development Team",
+    "contact": "design@maryland.gov"
+  }
+}

@@ -1,0 +1,404 @@
+═══════════════════════════════════════════════════════════════════════════════
+FSA BEST PRACTICES GUIDE v1.0
+Maryland VITA Program - Free Self-Assisted Tax Preparation
+Last Updated: October 2025
+═══════════════════════════════════════════════════════════════════════════════
+
+This guide provides proven strategies for VITA sites offering Free Self-Assisted
+(FSA) tax preparation, including taxpayer screening, remote support protocols,
+quality assurance, and troubleshooting common challenges.
+
+═══════════════════════════════════════════════════════════════════════════════
+SECTION 1: WHEN TO RECOMMEND FSA vs IN-PERSON VITA
+═══════════════════════════════════════════════════════════════════════════════
+
+IDEAL FSA CANDIDATES (Encourage Self-Prep)
+✓ Income $67,000 or less (IRS VITA threshold)
+✓ W-2 wage income only (no self-employment)
+✓ Standard deduction (not itemizing)
+✓ Single or married filing jointly (simple filing status)
+✓ Basic dependents (children, no complex custody)
+✓ Comfortable with computers and online forms
+✓ Has reliable internet access
+✓ Strong English literacy (or language support available)
+✓ Organized documents (W-2s, 1099s ready)
+✓ Motivated to learn about their taxes
+
+RECOMMEND IN-PERSON VITA (Higher Complexity)
+⚠ Self-employment or business income (Schedule C)
+⚠ Rental property income (Schedule E)
+⚠ Stock sales, capital gains/losses (Schedule D)
+⚠ Itemized deductions (mortgage interest, charity, medical)
+⚠ Multiple states or foreign income
+⚠ Complex family situations (divorce, custody, support)
+⚠ Prior year issues or IRS notices
+⚠ Limited computer skills or no internet access
+⚠ Language barriers without translation support
+⚠ Special credits requiring documentation (education, adoption)
+
+SCREENING QUESTIONS AT INTAKE:
+1. "What types of income did you receive?" (W-2, 1099, self-employment?)
+2. "Will you take the standard deduction or itemize?" (Most don't itemize)
+3. "How comfortable are you using a computer?" (Scale 1-5)
+4. "Do you have internet access at home?" (If no, offer on-site FSA)
+5. "Have you filed taxes before? Any IRS letters?" (Prior issues?)
+
+═══════════════════════════════════════════════════════════════════════════════
+SECTION 2: REMOTE SUPPORT PROTOCOLS
+═══════════════════════════════════════════════════════════════════════════════
+
+COMMUNICATION CHANNELS
+Phone Support: Primary method for quick questions
+- Toll-free number: 1-800-MD-TAXES (1-800-638-2937)
+- Answer within 3 rings during posted hours
+- Professional greeting: "Maryland VITA FSA Support, this is [Name]. How can I help you today?"
+
+Video/Screen Sharing: For complex issues requiring visual guidance
+- Platforms: Zoom, Microsoft Teams, or Google Meet
+- Schedule 30-minute slots to avoid rushing
+- Send calendar invite with meeting link in advance
+- Test screen sharing before taxpayer session
+
+Email Support: For non-urgent questions or document review
+- Response time: Within 4 hours during business hours
+- Use secure email for any tax documents (encrypted)
+- Template responses for common questions (see Appendix)
+
+REMOTE SUPPORT BEST PRACTICES
+✓ Build Rapport First
+   - "Thank you for using FSA! I'm here to help."
+   - Ask open-ended questions: "What step are you working on?"
+   - Patience is key - many taxpayers are nervous about taxes
+
+✓ Active Listening
+   - Paraphrase their concern: "So you're unsure about entering your W-2 Box 1?"
+   - Avoid jargon - use plain language: "gross income" = "total pay before taxes"
+   - Let them finish speaking before jumping in
+
+✓ Guide, Don't Do
+   - "Let me walk you through it" (not "let me do it for you")
+   - Ask: "Do you see the button that says 'Add W-2'?" (interactive)
+   - Empower them: "You're doing great! That's exactly right."
+
+✓ Screen Sharing Etiquette
+   - Ask permission: "Would you mind sharing your screen so I can see what you see?"
+   - Respect privacy: "I'll only look at the tax form, not other windows"
+   - Annotate carefully: Use screen pointer/arrows, not mouse control
+   - End sharing when done: "You can stop sharing now, thank you!"
+
+✓ Document Interactions
+   - Log each support session: Date, time, issue, resolution
+   - Note if follow-up needed or complex case flagged
+   - Track common issues for training improvements
+
+═══════════════════════════════════════════════════════════════════════════════
+SECTION 3: QUALITY REVIEW PROCEDURES FOR SELF-PREPARED RETURNS
+═══════════════════════════════════════════════════════════════════════════════
+
+All FSA returns should undergo quality review BEFORE filing (taxpayer's choice).
+
+QUALITY REVIEW CHECKLIST
+Navigator should verify:
+
+☐ TAXPAYER INFORMATION
+   ☐ Name spelling matches SSN card
+   ☐ SSN entered correctly (no transpositions)
+   ☐ Address current and complete (impacts refund)
+   ☐ Bank account/routing numbers accurate (if direct deposit)
+
+☐ FILING STATUS
+   ☐ Appropriate for marital status on Dec 31
+   ☐ Head of Household requirements met (if used)
+   ☐ Married Filing Separately justified (if applicable)
+
+☐ DEPENDENTS
+   ☐ All qualifying children/relatives listed
+   ☐ SSNs correct for each dependent
+   ☐ Relationship and months lived together accurate
+   ☐ No double-claiming (divorced parents, etc.)
+
+☐ INCOME
+   ☐ All W-2s entered (cross-check with copies)
+   ☐ Box amounts match (Wages, Federal/State withholding)
+   ☐ 1099 income included (INT, DIV, MISC, NEC, etc.)
+   ☐ Unemployment, Social Security entered if applicable
+
+☐ DEDUCTIONS & ADJUSTMENTS
+   ☐ Standard vs Itemized choice correct
+   ☐ Student loan interest deduction (if applicable)
+   ☐ IRA/HSA contributions verified
+   ☐ Educator expenses (if teacher, up to $300)
+
+☐ CREDITS
+   ☐ Earned Income Credit (EIC) calculated correctly
+   ☐ Child Tax Credit / Other Dependent Credit verified
+   ☐ Education credits (AOTC, LLC) with Form 1098-T
+   ☐ Child & Dependent Care Credit (if childcare costs)
+
+☐ TAX CALCULATION
+   ☐ Federal tax withheld matches W-2 total
+   ☐ State tax withheld accurate
+   ☐ Estimated payments entered (if made)
+   ☐ Prior year overpayment applied (if applicable)
+
+☐ FINAL CHECKS
+   ☐ Refund/balance due amount reasonable
+   ☐ Direct deposit info verified (if refund)
+   ☐ Payment plan setup (if balance due)
+   ☐ No math errors flagged by software
+
+REVIEW DELIVERY METHODS
+1. Virtual Review (most common):
+   - Taxpayer shares screen via Zoom/Teams
+   - Navigator walks through return page by page
+   - Takes 20-30 minutes on average
+
+2. Appointment Review:
+   - Taxpayer brings printed return to site
+   - Navigator reviews in person
+   - Good for complex cases or elderly taxpayers
+
+3. Email Review (use cautiously):
+   - Taxpayer emails PDF of return (password-protected)
+   - Navigator reviews and calls with feedback
+   - Only for simple returns, no sensitive data via email
+
+QUALITY ASSURANCE OUTCOMES
+✓ APPROVED: Return is accurate, ready to file
+   - Navigator signs off (digital signature or log entry)
+   - Taxpayer proceeds to e-file
+
+⚠ MINOR CORRECTIONS: Small issues found
+   - Navigator explains corrections needed
+   - Taxpayer makes changes, then re-submits for quick check
+
+❌ REFER TO IN-PERSON: Return too complex for FSA
+   - Politely explain limitations: "Your situation needs specialized help"
+   - Schedule in-person VITA appointment
+   - Transfer case notes to in-person preparer
+
+═══════════════════════════════════════════════════════════════════════════════
+SECTION 4: DOCUMENTATION REQUIREMENTS
+═══════════════════════════════════════════════════════════════════════════════
+
+TAXPAYER DOCUMENTATION (Checklist)
+Ensure taxpayers have these before starting FSA:
+
+Essential Documents:
+☐ Photo ID (driver's license, state ID, passport)
+☐ Social Security cards for self, spouse, dependents
+☐ W-2 forms from ALL employers
+☐ 1099 forms (INT, DIV, MISC, NEC, G, R, etc.)
+☐ Prior year tax return (helpful, not required)
+☐ Bank account info for direct deposit (routing & account number)
+
+Additional Documents (as applicable):
+☐ 1098 forms (mortgage interest, student loan interest, tuition)
+☐ Childcare provider info (name, address, EIN or SSN)
+☐ Health insurance form 1095-A, B, or C
+☐ IRA/retirement contribution receipts
+☐ Proof of estimated tax payments
+☐ IRS letters or notices (if applicable)
+
+NAVIGATOR DOCUMENTATION
+Navigators must maintain records for IRS/state compliance:
+
+☐ Support Log:
+   - Date and time of each interaction
+   - Taxpayer first name + last 4 of SSN (no full SSN!)
+   - Issue/question summary
+   - Resolution or referral
+   - Navigator initials
+
+☐ Quality Review Log:
+   - Return reviewed (identifier, not full return)
+   - Review outcome: Approved / Corrections / Referred
+   - Time spent on review
+   - Navigator signature
+
+☐ Consent Forms:
+   - Taxpayer consent for FSA assistance
+   - Privacy notice acknowledgment
+   - Photo/video consent (if virtual sessions recorded for training)
+
+☐ Case Escalation Notes:
+   - Complex cases referred to in-person VITA
+   - Issues beyond FSA scope
+   - Follow-up required
+
+RETENTION POLICY
+- Support logs: Retain for 3 years (IRS audit requirement)
+- Taxpayer consent forms: 3 years
+- No copies of tax returns (taxpayer responsibility to save)
+- Shred/delete all taxpayer documents at end of season
+
+═══════════════════════════════════════════════════════════════════════════════
+SECTION 5: COMMON ISSUES & TROUBLESHOOTING
+═══════════════════════════════════════════════════════════════════════════════
+
+ISSUE 1: TaxSlayer FSA Login Problems
+Symptoms: Taxpayer can't log in, forgot password, account locked
+Solutions:
+✓ Verify they're using FSA link with SIDN (not regular TaxSlayer)
+✓ Check email for account activation link (may be in spam)
+✓ Reset password via "Forgot Password" (use personal email)
+✓ If account locked: Contact TaxSlayer support 1-706-922-6741
+✓ Create new account if persistent issues (use different email)
+
+ISSUE 2: Missing or Incorrect W-2 Information
+Symptoms: W-2 amounts don't make sense, boxes blank, employer name wrong
+Solutions:
+✓ Ask taxpayer to physically look at W-2 (not memory)
+✓ Box 1 (Wages) should match or be less than gross pay
+✓ Box 2 (Federal tax withheld) check paystubs match annual total
+✓ If W-2 incorrect: Employer must issue corrected W-2c
+✓ If employer won't provide W-2: File Form 4852 (Substitute W-2)
+
+ISSUE 3: Dependents Not Qualifying
+Symptoms: EIC or CTC denied, "dependent already claimed" error
+Solutions:
+✓ Verify relationship: Child, stepchild, sibling, etc.
+✓ Check residency: Lived with taxpayer >6 months (or all year)
+✓ Age limits: Child <17 for CTC, <19 (or <24 if student) for EIC
+✓ Support test: Taxpayer provided >50% support
+✓ If claimed elsewhere: May need IRS Form 8862 (prior EIC disallowance)
+
+ISSUE 4: Maryland State Tax Issues
+Symptoms: State refund much different than expected, county tax confusion
+Solutions:
+✓ Verify correct Maryland county (impacts local tax rate)
+✓ Part-year residents: Prorate income to Maryland months
+✓ State withholding on W-2: Box 17 (check for multiple states)
+✓ Maryland credits: Earned Income, Child Tax, Poverty Level
+✓ If discrepancy: Recalculate manually or consult tax table
+
+ISSUE 5: Direct Deposit Errors
+Symptoms: Refund delayed, sent to wrong account, check issued instead
+Solutions:
+✓ Double-check routing number (9 digits, first digit 0-1-2-3)
+✓ Account number (savings vs checking - clarify with taxpayer)
+✓ Account in taxpayer's name (joint account ok if spouse)
+✓ No prepaid cards (Netspend, etc. - may be rejected)
+✓ If error after filing: IRS will mail check (can't change direct deposit)
+
+ISSUE 6: Taxpayer Overwhelmed or Frustrated
+Symptoms: "This is too confusing", wants to give up, anxious
+Solutions:
+✓ Empathize: "I understand, taxes can be stressful. Let's take it step by step."
+✓ Simplify: Break into small tasks: "Let's just enter your W-2 first, then we'll move on."
+✓ Offer break: "Would you like to save and come back tomorrow?"
+✓ Transition to in-person: "It might be easier if you come to our site. Would you prefer that?"
+✓ Celebrate progress: "You've already completed the hardest part!"
+
+ISSUE 7: Software Glitches or Errors
+Symptoms: TaxSlayer freezes, errors submitting, calculations wrong
+Solutions:
+✓ Clear browser cache and cookies, restart browser
+✓ Try different browser (Chrome if using Edge, etc.)
+✓ Check internet connection stability
+✓ Log out and log back in
+✓ Screenshot error message, report to TaxSlayer support
+✓ If critical bug: Switch taxpayer to in-person as workaround
+
+ESCALATION PROCEDURES
+When to escalate beyond navigator support:
+
+⬆ TIER 1 (Lead Navigator): Complex tax questions, software bugs
+⬆ TIER 2 (Site Coordinator): Taxpayer complaints, system-wide issues
+⬆ TIER 3 (IRS/TaxSlayer): Technical failures, compliance questions
+⬆ EMERGENCY (Coordinator): Data breach, taxpayer distress, legal issues
+
+═══════════════════════════════════════════════════════════════════════════════
+SECTION 6: NAVIGATOR WELL-BEING & BURNOUT PREVENTION
+═══════════════════════════════════════════════════════════════════════════════
+
+FSA support can be intense during peak season. Protect navigator mental health:
+
+✓ Limit Consecutive Sessions: Max 3-4 support calls/hours without break
+✓ Rotate Difficult Cases: Share challenging taxpayers across team
+✓ Debrief After Hard Calls: Talk to supervisor if emotionally taxing
+✓ Set Boundaries: No personal phone numbers to taxpayers
+✓ Encourage Breaks: 10 min every hour, 30 min lunch (enforced!)
+✓ Recognize Volunteers: Thank navigators weekly, celebrate milestones
+✓ End-of-Season Appreciation: Party, certificates, LinkedIn recommendations
+
+Warning Signs of Burnout:
+- Irritability with taxpayers
+- Mistakes increasing
+- Dreading shifts
+- Physical exhaustion
+
+Response: Reduce hours, provide backup, or reassign to non-taxpayer tasks.
+
+═══════════════════════════════════════════════════════════════════════════════
+SECTION 7: SUCCESS METRICS & CONTINUOUS IMPROVEMENT
+═══════════════════════════════════════════════════════════════════════════════
+
+Track these metrics to evaluate FSA program effectiveness:
+
+KEY PERFORMANCE INDICATORS (KPIs)
+□ Total FSA returns started (SIDN tracking)
+□ Total FSA returns successfully filed
+□ Completion rate: Filed ÷ Started (target: >80%)
+□ Navigator intervention rate: % needing help (benchmark: 40-60%)
+□ Average support time per taxpayer (target: <30 min)
+□ Quality review pass rate (target: >90%)
+□ Referrals to in-person (should be <20% of total)
+□ Taxpayer satisfaction (post-filing survey, target: >4.5/5)
+
+CONTINUOUS IMPROVEMENT
+✓ Weekly Team Meetings: Share common issues, update FAQs
+✓ Mid-Season Review: Analyze metrics, adjust processes
+✓ Post-Season Retrospective: "What worked? What didn't?"
+✓ Training Updates: Add new scenarios based on real cases
+✓ Technology Upgrades: Better screen-sharing tools, chatbots, etc.
+
+═══════════════════════════════════════════════════════════════════════════════
+APPENDIX: QUICK REFERENCE & TEMPLATES
+═══════════════════════════════════════════════════════════════════════════════
+
+EMAIL TEMPLATE: FSA Welcome
+Subject: Welcome to Maryland VITA Free Self-Assisted Tax Prep!
+
+Hi [First Name],
+
+Thank you for choosing FSA! Here's what you need to know:
+
+1. Start your taxes: [TaxSlayer FSA link with SIDN]
+2. Need help? Call 1-800-MD-TAXES or email vitasupport@maryland.gov
+3. Have your documents ready (W-2, ID, bank info)
+
+We're here to support you every step of the way!
+
+Maryland VITA Team
+
+---
+
+PHONE SCRIPT: Screening Taxpayer for FSA
+"Hi, I'm [Name] with Maryland VITA. I'll ask a few questions to see if FSA is right for you:
+
+1. What's your total household income? (If >$67k, explain VITA limit)
+2. Do you have W-2 income or self-employment? (If self-emp, recommend in-person)
+3. Are you comfortable using a computer? (If no, offer in-person)
+4. Any IRS issues or prior-year problems? (If yes, may need in-person)
+
+Based on your answers, [FSA is great for you! / I'd recommend in-person VITA]."
+
+---
+
+RED FLAGS POSTER (for taxpayer workstations)
+🚩 WHEN TO ASK FOR HELP:
+- You're unsure which box on W-2 to enter
+- You have income other than W-2 (self-employment, rental, etc.)
+- You received an IRS letter or notice
+- You're claiming education credits
+- Your refund seems way too high or too low
+- The software shows an error you don't understand
+
+📞 Call a Navigator: 1-800-MD-TAXES
+
+═══════════════════════════════════════════════════════════════════════════════
+Document Prepared By: Maryland VITA Leadership Team
+Questions or Feedback: coordinator@marylandvita.org
+Version History: v1.0 (October 2025) - Initial release
+═══════════════════════════════════════════════════════════════════════════════

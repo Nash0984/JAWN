@@ -1,0 +1,392 @@
+/**
+ * Sentry Service - Enterprise Error Tracking & Performance Monitoring
+ * 
+ * Initializes and configures Sentry for:
+ * - Error tracking and stack traces
+ * - Performance monitoring and tracing
+ * - User and tenant context
+ * - Graceful degradation when Sentry is not configured
+ */
+
+import type { Express, Request, Response, NextFunction } from "express";
+import { logger } from "./logger.service";
+
+let Sentry: any = null;
+let sentryEnabled = false;
+let sentryConfigured = false;
+
+// Try to import Sentry packages - gracefully handle if not installed
+async function initializeSentry() {
+  try {
+    const sentryModule = await import("@sentry/node");
+    Sentry = sentryModule.default || sentryModule;
+    const profilingModule = await import("@sentry/profiling-node");
+    const nodeProfilingIntegration = profilingModule.nodeProfilingIntegration;
+    
+    // Check if DSN is configured
+    const dsn = process.env.SENTRY_DSN;
+    
+    if (dsn) {
+      const environment = process.env.SENTRY_ENVIRONMENT || process.env.NODE_ENV || "development";
+      const tracesSampleRate = parseFloat(process.env.SENTRY_TRACES_SAMPLE_RATE || "0.1");
+      const profilesSampleRate = parseFloat(process.env.SENTRY_PROFILES_SAMPLE_RATE || "0.1");
+      
+      // Get release version from package.json
+      let release = "unknown";
+      try {
+        const packageJson = await import("../../package.json");
+        release = (packageJson as any).version || "unknown";
+      } catch (e) {
+        logger.warn("Could not read package.json for Sentry release version", {
+          service: 'SentryService',
+          error: e instanceof Error ? e.message : 'Unknown error'
+        });
+      }
+      
+      Sentry.init({
+        dsn,
+        environment,
+        release,
+        
+        // Performance monitoring
+        tracesSampleRate, // Capture 10% of transactions by default
+        profilesSampleRate, // Profile 10% of transactions
+        
+        // Integrations
+        integrations: [
+          // Enable HTTP instrumentation
+          new Sentry.Integrations.Http({ tracing: true }),
+          // Enable Express.js middleware instrumentation
+          new Sentry.Integrations.Express({ app: undefined as any }),
+          // Enable profiling
+          nodeProfilingIntegration(),
+        ],
+        
+        // PII filtering - never send sensitive data
+        beforeSend(event: any, hint: any) {
+          // Remove PII from error messages and stack traces
+          if (event.exception?.values) {
+            event.exception.values.forEach((exception: any) => {
+              if (exception.value) {
+                // Scrub SSN patterns
+                exception.value = exception.value.replace(/\b\d{3}-\d{2}-\d{4}\b/g, "[SSN REDACTED]");
+                // Scrub email addresses
+                exception.value = exception.value.replace(/\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/g, "[EMAIL REDACTED]");
+                // Scrub phone numbers
+                exception.value = exception.value.replace(/\b\d{3}[-.]?\d{3}[-.]?\d{4}\b/g, "[PHONE REDACTED]");
+              }
+            });
+          }
+          
+          // Remove sensitive request data
+          if (event.request) {
+            // Remove cookies that might contain session tokens
+            delete event.request.cookies;
+            // Remove authorization headers
+            if (event.request.headers) {
+              delete event.request.headers.authorization;
+              delete event.request.headers.cookie;
+            }
+            // Remove query params that might contain sensitive data
+            if (event.request.query_string) {
+              const sensitiveParams = ['ssn', 'password', 'token', 'api_key'];
+              sensitiveParams.forEach(param => {
+                if (event.request?.query_string) {
+                  event.request.query_string = event.request.query_string.replace(
+                    new RegExp(`${param}=[^&]*`, 'gi'),
+                    `${param}=[REDACTED]`
+                  );
+                }
+              });
+            }
+          }
+          
+          return event;
+        },
+        
+        // Don't report errors from certain paths
+        ignoreErrors: [
+          // Browser extensions
+          'top.GLOBALS',
+          // Random plugins/extensions
+          'originalCreateNotification',
+          'canvas.contentDocument',
+          'MyApp_RemoveAllHighlights',
+          // Facebook borked
+          'fb_xd_fragment',
+          // ISP "optimizing" proxy - `Cache-Control: no-transform` seems to reduce this. (thanks @acdha)
+          'bmi_SafeAddOnload',
+          'EBCallBackMessageReceived',
+          // See http://toolbar.conduit.com/Developer/HtmlAndGadget/Methods/JSInjection.aspx
+          'conduitPage',
+        ],
+      });
+      
+      sentryEnabled = true;
+      sentryConfigured = true;
+      logger.info('Sentry initialized', {
+        service: 'SentryService',
+        environment,
+        release,
+        tracesSampleRate: `${tracesSampleRate * 100}%`,
+        profilesSampleRate: `${profilesSampleRate * 100}%`
+      });
+    } else {
+      logger.warn("Sentry DSN not configured - error tracking disabled", {
+        service: 'SentryService',
+        suggestion: 'Add SENTRY_DSN to environment variables to enable Sentry monitoring'
+      });
+    }
+  } catch (error) {
+    logger.warn("Sentry packages not installed - error tracking disabled", {
+      service: 'SentryService',
+      suggestion: 'Run: npm install @sentry/node @sentry/react @sentry/profiling-node'
+    });
+    sentryEnabled = false;
+  }
+}
+
+/**
+ * Setup Sentry - Call this async function during server bootstrap
+ * BEFORE attaching any middleware
+ */
+export async function setupSentry() {
+  await initializeSentry();
+}
+
+/**
+ * Get Sentry request handler middleware
+ * Must be used before any other request handlers
+ * Must call setupSentry() first!
+ */
+export function getSentryRequestHandler() {
+  if (sentryEnabled && Sentry?.Handlers?.requestHandler) {
+    return Sentry.Handlers.requestHandler();
+  }
+  return (req: Request, res: Response, next: NextFunction) => next();
+}
+
+/**
+ * Get Sentry tracing middleware
+ * Enables performance monitoring for requests
+ * Must call setupSentry() first!
+ */
+export function getSentryTracingHandler() {
+  if (sentryEnabled && Sentry?.Handlers?.tracingHandler) {
+    return Sentry.Handlers.tracingHandler();
+  }
+  return (req: Request, res: Response, next: NextFunction) => next();
+}
+
+/**
+ * Get Sentry error handler middleware
+ * Must be used after all other request handlers but before error handlers
+ * Must call setupSentry() first!
+ */
+export function getSentryErrorHandler() {
+  if (sentryEnabled && Sentry?.Handlers?.errorHandler) {
+    return Sentry.Handlers.errorHandler();
+  }
+  return (req: Request, res: Response, next: NextFunction) => next();
+}
+
+/**
+ * Start a new transaction for performance tracking
+ */
+export function startTransaction(name: string, op: string, data?: Record<string, any>) {
+  if (!sentryEnabled) return null;
+  
+  try {
+    return Sentry.startTransaction({
+      name,
+      op,
+      data,
+    });
+  } catch (error) {
+    logger.error("Failed to start Sentry transaction", {
+      error: error instanceof Error ? error.message : 'Unknown error',
+      errorDetails: error,
+      service: 'SentryService'
+    });
+    return null;
+  }
+}
+
+/**
+ * Set user context for error tracking
+ */
+export function setUserContext(user: { id: string; username?: string; email?: string; role?: string }) {
+  if (!sentryEnabled) return;
+  
+  try {
+    Sentry.setUser({
+      id: user.id,
+      username: user.username,
+      email: user.email,
+      role: user.role,
+    });
+  } catch (error) {
+    logger.error("Failed to set Sentry user context", {
+      error: error instanceof Error ? error.message : 'Unknown error',
+      errorDetails: error,
+      service: 'SentryService'
+    });
+  }
+}
+
+/**
+ * Set tenant context for multi-tenant error tracking
+ */
+export function setTenantContext(tenantId: string, tenantName?: string) {
+  if (!sentryEnabled) return;
+  
+  try {
+    Sentry.setContext("tenant", {
+      id: tenantId,
+      name: tenantName,
+    });
+  } catch (error) {
+    logger.error("Failed to set Sentry tenant context", {
+      error: error instanceof Error ? error.message : 'Unknown error',
+      errorDetails: error,
+      service: 'SentryService'
+    });
+  }
+}
+
+/**
+ * Add breadcrumb for tracking user actions
+ */
+export function addBreadcrumb(message: string, category: string, data?: Record<string, any>) {
+  if (!sentryEnabled) return;
+  
+  try {
+    Sentry.addBreadcrumb({
+      message,
+      category,
+      data,
+      level: 'info',
+      timestamp: Date.now() / 1000,
+    });
+  } catch (error) {
+    logger.error("Failed to add Sentry breadcrumb", {
+      error: error instanceof Error ? error.message : 'Unknown error',
+      errorDetails: error,
+      service: 'SentryService'
+    });
+  }
+}
+
+/**
+ * Capture an exception with additional context
+ */
+export function captureException(error: Error, context?: {
+  level?: 'fatal' | 'error' | 'warning' | 'info' | 'debug';
+  tags?: Record<string, string>;
+  extra?: Record<string, any>;
+  user?: { id: string; username?: string };
+  tenant?: { id: string; name?: string };
+  request?: any;
+}) {
+  if (!sentryEnabled) {
+    // Fallback to logger
+    logger.error("Error captured (Sentry not enabled)", {
+      error: error instanceof Error ? error.message : 'Unknown error',
+      errorDetails: error,
+      context: context?.extra,
+      service: 'SentryService'
+    });
+    return null;
+  }
+  
+  try {
+    // Build contexts object with tenant info if provided
+    const contexts: any = {};
+    if (context?.request) {
+      contexts.request = context.request;
+    }
+    if (context?.tenant) {
+      contexts.tenant = {
+        id: context.tenant.id,
+        name: context.tenant.name,
+      };
+    }
+    
+    return Sentry.captureException(error, {
+      level: context?.level || 'error',
+      tags: context?.tags,
+      extra: context?.extra,
+      user: context?.user,
+      contexts: Object.keys(contexts).length > 0 ? contexts : undefined,
+    });
+  } catch (err) {
+    logger.error("Failed to capture exception in Sentry", {
+      error: err instanceof Error ? err.message : 'Unknown error',
+      errorDetails: err,
+      service: 'SentryService'
+    });
+    return null;
+  }
+}
+
+/**
+ * Capture a message with context
+ */
+export function captureMessage(message: string, level: 'fatal' | 'error' | 'warning' | 'info' | 'debug' = 'info', context?: Record<string, any>) {
+  if (!sentryEnabled) {
+    const logFn = level === 'fatal' || level === 'error' ? logger.error : level === 'warning' ? logger.warn : logger.info;
+    logFn(message, {
+      level: level.toUpperCase(),
+      context,
+      service: 'SentryService'
+    });
+    return null;
+  }
+  
+  try {
+    return Sentry.captureMessage(message, {
+      level,
+      extra: context,
+    });
+  } catch (error) {
+    logger.error("Failed to capture message in Sentry", {
+      error: error instanceof Error ? error.message : 'Unknown error',
+      errorDetails: error,
+      service: 'SentryService'
+    });
+    return null;
+  }
+}
+
+/**
+ * Check if Sentry is enabled and configured
+ */
+export function isSentryEnabled(): boolean {
+  return sentryEnabled && sentryConfigured;
+}
+
+/**
+ * Get Sentry status for health checks
+ */
+export function getSentryStatus() {
+  return {
+    enabled: sentryEnabled,
+    configured: sentryConfigured,
+    dsn_set: !!process.env.SENTRY_DSN,
+    environment: process.env.SENTRY_ENVIRONMENT || process.env.NODE_ENV || "development",
+  };
+}
+
+export default {
+  isSentryEnabled,
+  getSentryStatus,
+  getSentryRequestHandler,
+  getSentryTracingHandler,
+  getSentryErrorHandler,
+  startTransaction,
+  setUserContext,
+  setTenantContext,
+  addBreadcrumb,
+  captureException,
+  captureMessage,
+};

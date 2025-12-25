@@ -1,0 +1,576 @@
+═══════════════════════════════════════════════════════════════════════════════
+FSA REMOTE SUPPORT PLAYBOOK v1.0
+Maryland VITA Program - Free Self-Assisted Tax Preparation
+Last Updated: October 2025
+═══════════════════════════════════════════════════════════════════════════════
+
+This playbook provides detailed protocols for navigators providing remote
+support to FSA taxpayers via phone, video, email, and screen sharing, including
+troubleshooting guides, conversion criteria, and documentation procedures.
+
+═══════════════════════════════════════════════════════════════════════════════
+SECTION 1: PHONE SUPPORT BEST PRACTICES
+═══════════════════════════════════════════════════════════════════════════════
+
+SETTING UP PHONE SUPPORT
+Equipment Needed:
+✓ Headset with microphone (hands-free for note-taking)
+✓ Computer with TaxSlayer access (to reference software)
+✓ Call logging system (spreadsheet or CRM)
+✓ Quiet environment (minimal background noise)
+
+Phone System:
+- Toll-free number: 1-800-MD-TAXES (1-800-638-2937)
+- Call forwarding to navigator cell (if mobile support)
+- Voicemail with expected response time
+- Call recording (optional, with notice: "This call may be recorded for training")
+
+ANSWERING THE CALL
+Professional Greeting (within 3 rings):
+"Good [morning/afternoon], Maryland VITA FSA support, this is [Your Name]. How
+can I help you with your taxes today?"
+
+Avoid:
+❌ "Yeah?" or "Hello?"
+❌ Eating/drinking during call
+❌ Putting caller on hold without asking permission
+
+ACTIVE LISTENING TECHNIQUES
+✓ Let taxpayer finish speaking before responding
+✓ Paraphrase to confirm understanding:
+   "So you're having trouble entering your W-2, is that right?"
+✓ Ask open-ended questions:
+   "Can you describe what's on your screen right now?"
+✓ Avoid interrupting, even if you know the answer
+✓ Take notes (helps you remember and document)
+
+TROUBLESHOOTING WITHOUT SEEING SCREEN
+Challenge: Taxpayer describes what they see, but you can't visualize it.
+
+Strategies:
+1. Mirror on Your Screen
+   "I'm going to open TaxSlayer on my end so we're looking at the same thing.
+   Are you on the page that says 'Enter W-2 Information'? Ok, I see it too."
+
+2. Use Specific Landmarks
+   "Do you see a blue button in the bottom right corner? What does it say?"
+   (Not: "Click the button" - too vague)
+
+3. Step-by-Step Narration
+   "I want you to click 'Personal Information' on the left sidebar. Do you see
+   that? Great. Now look in the main area - is your name showing correctly?"
+
+4. Patience with Technology Novices
+   "Let's go slowly. Move your mouse to the top left corner of the screen.
+   Do you see the word 'File'? That's a menu..."
+
+COMMON PHONE SUPPORT SCENARIOS
+
+SCENARIO 1: "I can't log in"
+Questions to ask:
+- "Are you using the FSA link we provided, or the regular TaxSlayer website?"
+  (Common mistake: wrong URL)
+- "What happens when you try to log in? Do you get an error message?"
+- "Did you create an account already, or is this your first time?"
+- "Can you check your email for the account activation link?"
+
+Solutions:
+✓ Send correct FSA link via email (with SIDN)
+✓ Password reset via "Forgot Password"
+✓ Check spam folder for activation email
+✓ If persistent: Create new account with different email
+
+SCENARIO 2: "I don't understand this question"
+Example: "It's asking 'Did you make any estimated tax payments?' I don't know
+what that means."
+
+Response:
+"Great question! Estimated tax payments are when you send money to the IRS
+ahead of time during the year, usually if you're self-employed or have
+investment income. Did you mail any checks to the IRS or pay online on IRS.gov
+during 2024?"
+[Taxpayer: No]
+"Then just click 'No' for that question. Most people who have jobs don't make
+estimated payments - it's automatically taken from your paycheck."
+
+Key: Explain in plain language, relate to their situation
+
+SCENARIO 3: "My refund seems wrong"
+Taxpayer: "It says I'm getting $4,500 back. That seems too high!"
+
+Questions:
+- "How many children do you have?" (Child Tax Credit)
+- "Did you work all year?" (income level affects Earned Income Credit)
+- "What was your total income from all jobs?"
+
+Response:
+"Let me help you check. A $4,500 refund could be right if you have 2 kids and
+earned around $30,000. You'd get the Earned Income Credit plus Child Tax Credit.
+But let's double-check your W-2 entries to make sure everything is accurate.
+Would you be able to share your screen so I can take a look?"
+
+→ Transition to video/screen share for verification
+
+HANDLING DIFFICULT CALLS
+
+SCENARIO: Frustrated/Angry Taxpayer
+"This is ridiculous! I've been trying for an hour and nothing works!"
+
+Response (Calm, Empathetic):
+"I'm really sorry you're having a frustrating experience. Taxes can be stressful,
+and technical issues make it worse. I'm here to help you get through this. Let's
+take a step back - can you tell me where you're stuck, and we'll solve it
+together?"
+
+✓ Acknowledge emotion: "I understand your frustration"
+✓ Apologize (even if not your fault): "I'm sorry this has been difficult"
+✓ Focus on solution: "Let's fix this together"
+✓ Offer alternative if needed: "If this isn't working, would you prefer to come
+  in for an in-person appointment?"
+
+SCENARIO: Taxpayer Expects You to Do It For Them
+"Can you just log in and do it for me? I'll give you my password."
+
+Response (Firm but Kind):
+"I appreciate your trust, but for security reasons, I can't log into your account.
+Plus, the whole point of FSA is for you to prepare your own taxes so you
+understand them. What I CAN do is guide you through every single step - it's
+like I'm sitting next to you. I promise, it's easier than it seems! Where are
+you stuck right now?"
+
+✓ Do NOT accept passwords or log in as taxpayer (IRS violation)
+✓ Redirect to coaching role
+✓ Offer to stay on phone as long as needed
+
+ENDING THE CALL
+Summarize and Confirm Next Steps:
+"Ok, so we fixed the W-2 entry issue, and you're going to continue entering your
+other W-2. Once you're done, call us back at this number and we'll do a quality
+review before you file. Does that sound good? Do you have any other questions?
+...Great! Good luck, and we're here if you need us!"
+
+Follow-Up (if needed):
+"I'm going to send you an email with the link and a summary of what we discussed.
+Check your inbox in about 5 minutes."
+
+═══════════════════════════════════════════════════════════════════════════════
+SECTION 2: VIDEO SUPPORT & SCREEN SHARING PROTOCOLS
+═══════════════════════════════════════════════════════════════════════════════
+
+VIDEO PLATFORMS
+Recommended: Zoom, Microsoft Teams, Google Meet
+- Free accounts available
+- Screen sharing built-in
+- Recording option (with consent)
+- Mobile-friendly (taxpayers can join from phone)
+
+SCHEDULING VIDEO SESSIONS
+Appointment-Based (Preferred):
+- Taxpayer calls/emails to request video support
+- Navigator sends calendar invite with meeting link
+- 30-minute time slots (allows buffer between sessions)
+- Reminder sent 1 hour before appointment
+
+Walk-In Video (On-Demand):
+- Taxpayer calls, navigator starts video immediately
+- Good for urgent issues
+- May have wait time if navigators busy
+
+STARTING THE VIDEO SESSION
+Navigator Setup (Before Taxpayer Joins):
+✓ Test camera and microphone
+✓ Professional appearance (visible to taxpayer)
+✓ Neutral background (or virtual background)
+✓ Close unnecessary tabs/programs (privacy)
+✓ Have TaxSlayer open in separate window (for reference)
+
+Greeting (When Taxpayer Joins):
+"Hi [Name], thanks for joining! Can you see and hear me ok? Great. I'm [Navigator]
+with Maryland VITA, and I'm here to help you with FSA. Before we start, I want
+to let you know that for quality purposes, this session may be recorded - is that
+ok with you? [Consent] Perfect. Can you share your screen so I can see TaxSlayer?"
+
+SCREEN SHARING BEST PRACTICES
+
+TAXPAYER SHARES THEIR SCREEN (Most Common)
+Why: Taxpayer maintains control, navigator sees exactly what they see
+
+How to Guide:
+1. "Look at the bottom of your Zoom window - do you see a button that says
+   'Share Screen'? Click that."
+2. "Now you'll see all your open windows. Click on the TaxSlayer window, then
+   click the blue 'Share' button at the bottom."
+3. "Perfect! I can see your screen now. You still have control - I'll tell you
+   what to click."
+
+Privacy Protection:
+- "Before you share, close any windows with personal info you don't want me to
+  see - like your email or bank account."
+- "I'll only look at the TaxSlayer window - if you need to check something else,
+  you can stop sharing."
+
+NAVIGATOR SHARES THEIR SCREEN (Educational)
+When: Demonstrating how to do something step-by-step
+
+Example:
+"I'm going to share my screen and show you how to enter a W-2. Watch what I do,
+then you'll do the same on your screen. Ready?"
+[Navigator shares, demonstrates]
+"Ok, now it's your turn. Stop my sharing and share yours, then try what I just
+showed you."
+
+ANNOTATING DURING SCREEN SHARE
+Tools: Pointer, arrows, highlights (Zoom annotation features)
+
+✓ Use pointer to indicate where to click: "See where my arrow is pointing?"
+✓ Highlight text: "I'm circling the Box 1 amount - that's what you enter"
+✓ Avoid taking control of taxpayer's mouse (let them click)
+
+TROUBLESHOOTING SCREEN SHARE ISSUES
+Problem: "I don't see the 'Share Screen' button"
+Solution: Taxpayer may need to grant permissions, or update Zoom/Teams app
+
+Problem: Screen is frozen or laggy
+Solution: Check internet connection, close other programs, reduce video quality
+
+Problem: Taxpayer uncomfortable sharing screen (privacy concern)
+Solution: "No problem! We can do this over the phone. Just describe what you see,
+and I'll guide you verbally."
+
+CONDUCTING QUALITY REVIEW VIA VIDEO
+Process:
+1. Taxpayer shares screen showing TaxSlayer "Review" page
+2. Navigator goes through quality review checklist (see Navigator Training)
+3. Taxpayer scrolls through each section (Personal Info, Income, Credits, etc.)
+4. Navigator verifies accuracy: "Your name looks good. SSN correct? Great."
+5. If errors found: "Let's go back to the W-2 section and fix that typo"
+6. Final approval: "Everything looks perfect! You're ready to e-file."
+
+Time: 15-20 minutes for average return
+
+ENDING VIDEO SESSION
+"We're all set! You can stop sharing your screen now. Do you know how to e-file,
+or do you want me to walk you through that too?"
+[If they need help filing: Stay on call]
+[If they're good: End call]
+
+"Great job today! You should receive your refund in 10-21 days. Save a copy of
+your return for your records. If you have any questions, call us back at
+1-800-MD-TAXES. Take care!"
+
+═══════════════════════════════════════════════════════════════════════════════
+SECTION 3: TROUBLESHOOTING COMMON FSA ISSUES
+═══════════════════════════════════════════════════════════════════════════════
+
+ISSUE 1: SOFTWARE WON'T CALCULATE REFUND
+Symptoms: "It says 'calculating...' but nothing happens" or "Refund shows $0"
+
+Diagnosis:
+- Missing information (red flags on sidebar)
+- Income not entered
+- Browser issue (cache, outdated version)
+
+Solution:
+1. "Let's check if all sections are complete. Do you see any red marks or
+   exclamation points on the left sidebar?"
+2. "Click 'Review' at the bottom - it will highlight what's missing"
+3. If nothing missing: "Try refreshing the page (F5) or log out and back in"
+4. If still broken: "Let's try a different browser - do you have Chrome or Edge?"
+
+ISSUE 2: E-FILE REJECTED BY IRS
+Common Rejection Codes:
+- IND-031: SSN already used on another return (identity theft or duplicate filing)
+- F1040-502: Dependent claimed on another return (divorced parents)
+- SEIC-F1040-502: EIC qualifying child claimed elsewhere
+- IND-117: Name/SSN mismatch (doesn't match IRS records)
+
+Solution:
+1. Explain rejection: "The IRS computer rejected your return because [reason]"
+2. Verify data: "Let's double-check your SSN entry - does it match your card?"
+3. If identity theft suspected: "This could be ID theft. You need to file Form
+   14039 with the IRS. I'll help you with that."
+4. If dependent dispute: "Have you talked to your ex-spouse about who's claiming
+   the kids this year? You may need to resolve that first."
+5. Resubmit after fixing, or paper file if necessary
+
+ISSUE 3: DIRECT DEPOSIT REFUND NOT ARRIVING
+Timeline: 10-21 days for federal, 4-6 weeks for state
+
+Taxpayer: "It's been 3 weeks and I haven't gotten my refund!"
+
+Response:
+1. "Let's check the status. Go to IRS.gov/refunds and enter your info"
+2. Possible reasons for delay:
+   - Return still processing (normal, especially if filed on paper)
+   - Offset for debt (student loans, child support, back taxes)
+   - Additional review needed (IRS requesting documentation)
+3. If beyond 21 days with no update: "Call IRS at 1-800-829-1040 with your
+   return handy. They can tell you what's happening."
+
+ISSUE 4: TAXPAYER MADE MISTAKE AFTER FILING
+"I just realized I forgot to include a W-2! I already filed!"
+
+Solution:
+- If within 3 days of filing: May be able to cancel e-file (rare)
+- If already accepted: Must file Form 1040-X (Amended Return)
+  "You'll need to file an amendment. That's more complex, so I recommend coming
+  in for an in-person appointment. Can I schedule you?"
+
+ISSUE 5: MARYLAND STATE RETURN ISSUES
+Common Maryland-Specific Problems:
+- Wrong county selected (impacts local tax rate)
+- Part-year resident didn't prorate income
+- State tax withheld doesn't match W-2 Box 17
+
+Solution:
+1. Verify correct county: "Which Maryland county do you live in?"
+2. Check W-2 Box 15: "Does it say 'MD' or another state?"
+3. If worked in multiple states: "Did you work in Maryland all year, or did you
+   move partway through?"
+4. If complex multi-state: "This might need in-person help. Let me transfer you
+   to a specialist."
+
+═══════════════════════════════════════════════════════════════════════════════
+SECTION 4: WHEN TO CONVERT TO IN-PERSON APPOINTMENT
+═══════════════════════════════════════════════════════════════════════════════
+
+NOT EVERY TAXPAYER IS FSA-APPROPRIATE
+Navigators must recognize when remote support isn't enough.
+
+CONVERSION CRITERIA (Refer to In-Person VITA)
+
+COMPLEXITY INDICATORS
+🚩 Self-employment income (Schedule C required)
+🚩 Rental property income (Schedule E)
+🚩 Stock sales / capital gains (Schedule D)
+🚩 Itemized deductions (mortgage, charity, medical)
+🚩 Multiple states (income in 2+ states)
+🚩 Foreign income or assets
+🚩 Business expenses / depreciation
+🚩 Prior year issues (IRS notices, audit, identity theft)
+🚩 Amended return needed (Form 1040-X)
+
+TECHNICAL BARRIERS
+🚩 Taxpayer has no computer / smartphone
+🚩 No internet access at home
+🚩 Severe computer illiteracy (can't use mouse, navigate)
+🚩 Language barrier without translation support
+🚩 Disability preventing self-prep (vision, motor skills)
+
+EMOTIONAL/SITUATIONAL INDICATORS
+🚩 Extreme tax anxiety (panic, crying, overwhelmed)
+🚩 Repeated calls without progress (stuck for days)
+🚩 Elderly taxpayer preferring in-person interaction
+🚩 Taxpayer specifically requests in-person help
+
+CONVERSION SCRIPT
+"I want to make sure you get the best service possible. Based on what you've
+described [reason], I think you'd be better served by our in-person VITA program.
+A volunteer preparer will do the return for you, and it's still 100% free. Would
+you like me to schedule an appointment for you?"
+
+[If yes]
+"Great! Let me find a time that works. Our nearest site is [location]. Does
+[day/time] work for you? Perfect. I'll send you a confirmation email with the
+address and what to bring. See you then!"
+
+[If resistant]
+"I understand you'd prefer to do it yourself. If you want to keep trying FSA,
+you can, but if you get stuck again, we're here to help however works best for
+you."
+
+DOCUMENTATION
+Log conversion:
+- Date/time of FSA attempt
+- Reason for conversion (complexity, technical, etc.)
+- In-person appointment scheduled (date/time/site)
+- Case notes for in-person preparer
+
+═══════════════════════════════════════════════════════════════════════════════
+SECTION 5: DOCUMENTATION & FOLLOW-UP PROCEDURES
+═══════════════════════════════════════════════════════════════════════════════
+
+WHY DOCUMENTATION MATTERS
+- Continuity of care (if taxpayer calls back, next navigator has context)
+- Quality assurance (supervisor can review interactions)
+- IRS compliance (VITA grant reporting)
+- Continuous improvement (identify common issues)
+
+WHAT TO DOCUMENT
+Every support interaction should be logged with:
+
+Required Fields:
+- Date and time of contact
+- Contact method (phone, video, email)
+- Taxpayer first name + last 4 of SSN (never log full SSN!)
+- Issue/question summary (1-2 sentences)
+- Resolution or next steps
+- Navigator initials
+
+Optional Fields (for complex cases):
+- Return status (not started, in progress, filed)
+- Escalation (referred to lead navigator, in-person, etc.)
+- Follow-up needed (yes/no, when)
+
+DOCUMENTATION TOOLS
+Option 1: Spreadsheet (Google Sheets, Excel)
+Simple format:
+| Date | Time | Name (Last 4 SSN) | Issue | Resolution | Navigator |
+
+Option 2: CRM System (Salesforce, Zoho, etc.)
+- More robust tracking
+- Automated follow-up reminders
+- Reporting dashboards
+
+Option 3: Paper Log (if no technology)
+- Binder with daily log sheets
+- Transcribe to digital weekly
+
+SAMPLE LOG ENTRIES
+
+Good Entry:
+"3/15/2025 2:30pm | John D. (1234) | Phone | Couldn't log into FSA, forgot
+password. Guided through password reset. Successfully logged in. | Navigator: SM"
+
+Bad Entry (Too Vague):
+"3/15 | Some guy called about login issue | Fixed it"
+
+Why bad?: No time, no identifier, no details, no navigator
+
+FOLLOW-UP PROCEDURES
+
+WHEN TO FOLLOW UP
+✓ Taxpayer said they'd call back but didn't (after 1 week)
+✓ Navigator promised to send info (email link, forms)
+✓ Complex case requiring multi-day assistance
+✓ Quality review revealed issues - taxpayer fixing and resubmitting
+✓ E-file rejected - waiting for taxpayer to resolve
+
+FOLLOW-UP METHODS
+1. Phone Call (if you have permission)
+   "Hi [Name], this is [Navigator] from Maryland VITA. I wanted to check in -
+   were you able to finish entering that W-2 we talked about last week?"
+
+2. Email (preferred for non-urgent)
+   Subject: Maryland VITA FSA Follow-Up
+   "Hi [Name], I'm following up on your FSA tax prep. Let me know if you have
+   questions or need more help. Call us at 1-800-MD-TAXES anytime!"
+
+3. No Follow-Up (if taxpayer doesn't want it)
+   Some taxpayers prefer to work independently - respect that.
+
+RETENTION & PRIVACY
+Data Retention Policy:
+- Keep logs for 3 years (IRS audit requirement)
+- After 3 years: Securely delete/shred
+
+Privacy Protection:
+- Never log full SSN, bank account, or other sensitive data
+- Store logs in password-protected system
+- Limit access to authorized navigators only
+- No sharing outside VITA program
+
+═══════════════════════════════════════════════════════════════════════════════
+SECTION 6: NAVIGATOR SELF-ASSESSMENT & PERFORMANCE IMPROVEMENT
+═══════════════════════════════════════════════════════════════════════════════
+
+ONGOING SKILL DEVELOPMENT
+Remote support is a skill that improves with practice.
+
+SELF-ASSESSMENT QUESTIONS (After Each Shift)
+✓ Did I actively listen without interrupting?
+✓ Did I explain things clearly in plain language?
+✓ Did I maintain patience, even with difficult taxpayers?
+✓ Did I escalate appropriately (not too soon, not too late)?
+✓ Did I document each interaction thoroughly?
+
+PERFORMANCE METRICS TO TRACK
+- Average call duration (target: 15-20 min)
+- Resolution rate (% solved on first call, target: >70%)
+- Escalation rate (% referred to lead/in-person, target: <30%)
+- Taxpayer satisfaction (ask: "Did I answer your question?" at end of call)
+
+CONTINUOUS IMPROVEMENT
+✓ Weekly team debriefs: Share challenging cases, learn from peers
+✓ Shadow experienced navigators: Listen to their calls, observe techniques
+✓ Role-play difficult scenarios: Practice with fellow navigators
+✓ Solicit feedback: Ask lead navigator to review your log entries
+✓ Stay updated: Tax law changes, TaxSlayer updates, new procedures
+
+═══════════════════════════════════════════════════════════════════════════════
+APPENDIX: QUICK REFERENCE TOOLS
+═══════════════════════════════════════════════════════════════════════════════
+
+PHONE SUPPORT QUICK START GUIDE
+1. Answer: "Maryland VITA FSA, this is [Name], how can I help?"
+2. Listen & Note: What's the issue? Where are they stuck?
+3. Verify: "Can you tell me what screen you're on?"
+4. Guide: Step-by-step instructions, checking understanding
+5. Confirm: "Did that work? Great!"
+6. Next Steps: "What will you do next? Call us if you need more help."
+7. Document: Log call details immediately
+
+VIDEO SESSION CHECKLIST
+☐ Test camera/mic before taxpayer joins
+☐ Professional appearance/background
+☐ Greet taxpayer warmly
+☐ Obtain consent if recording
+☐ Request screen share (taxpayer shares theirs)
+☐ Use annotations to guide (pointer, arrows)
+☐ Perform quality review if requested
+☐ Summarize next steps before ending
+☐ End video professionally
+☐ Document session in log
+
+EMAIL TEMPLATE: REMOTE SUPPORT FOLLOW-UP
+Subject: Maryland VITA FSA - Following Up on Your Taxes
+
+Hi [First Name],
+
+Thank you for contacting Maryland VITA FSA support! I'm following up on our
+[phone/video] session from [date].
+
+As discussed, your next steps are:
+1. [Summary of what they need to do]
+2. [Any links or resources mentioned]
+
+If you have questions or need more help, please call us at 1-800-MD-TAXES
+(1-800-638-2937) or reply to this email.
+
+We're here to support you!
+
+[Navigator Name]
+Maryland VITA FSA Support
+
+ESCALATION DECISION TREE
+Issue encountered
+   ↓
+Can I solve this with knowledge I have?
+   ├─ Yes → Guide taxpayer, document, done
+   └─ No ↓
+Is this a technical issue (software bug, login failure)?
+   ├─ Yes → Escalate to TIER 1 (Lead Navigator / IT Support)
+   └─ No ↓
+Is this beyond FSA scope (self-employment, complex return)?
+   ├─ Yes → Refer to In-Person VITA
+   └─ No ↓
+Is taxpayer distressed or situation urgent?
+   ├─ Yes → Escalate to TIER 2 (Site Coordinator)
+   └─ No → Consult with Lead Navigator for guidance
+
+═══════════════════════════════════════════════════════════════════════════════
+FEEDBACK & CONTINUOUS IMPROVEMENT
+═══════════════════════════════════════════════════════════════════════════════
+
+This playbook is a living document. Navigators: Please share feedback on:
+- What worked well in remote support
+- Challenges not covered in this guide
+- Additional scenarios to document
+- Suggestions for improvement
+
+Contact: marylandvita@coordinator.org
+
+═══════════════════════════════════════════════════════════════════════════════
+Version: v1.0 (October 2025)
+Prepared by: Maryland VITA Remote Support Team
+═══════════════════════════════════════════════════════════════════════════════
