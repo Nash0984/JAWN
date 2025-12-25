@@ -1,7 +1,6 @@
 import { log } from '../vite';
 import { govInfoVersionChecker } from './govInfoVersionChecker';
 import { ecfrBulkDownloader } from './ecfrBulkDownloader';
-import { irsDirectDownloader } from './irsDirectDownloader';
 import { fnsStateOptionsParser } from './fnsStateOptionsParser';
 import { marylandLegislatureScraper } from './marylandLegislatureScraper';
 
@@ -65,17 +64,8 @@ export class SmartScheduler {
           }
         },
       },
-      {
-        name: 'irs_publications',
-        cronExpression: '0 0 * * 0', // Weekly on Sunday at 2am
-        description: 'IRS VITA publications (weekly - updated annually Oct-Dec)',
-        enabled: true,
-        checkFunction: async () => {
-          log('📅 Smart Scheduler: Checking IRS publications...');
-          // Download all VITA publications - they handle version checking internally
-          await irsDirectDownloader.downloadAllVITAPublications();
-        },
-      },
+      // REMOVED - Benefits-only version (VITA/IRS publications disabled)
+      // IRS publications scheduler was removed for benefits-only deployment
       {
         name: 'federal_bills',
         cronExpression: '0 0 * * *', // Check daily, adjust frequency inside checkFunction

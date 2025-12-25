@@ -1,6 +1,8 @@
 # Overview
 
-The Maryland Universal Financial Navigator (JAWN) is an AI-powered platform designed to optimize financial well-being by integrating public benefits eligibility with federal and state tax preparation. Transformed into a white-label multi-state system (Joint Access Welfare Network - JAWN), it supports Maryland, Pennsylvania, Virginia, Utah, Indiana, and Michigan. The platform acts as a universal financial command center, leveraging Retrieval-Augmented Generation (RAG), Rules as Code, and the Google Gemini API to provide comprehensive financial optimization through a single conversational interface. A key innovation is the use of a single household profile for both benefit calculations and tax preparation, combined with AI-driven cross-enrollment intelligence. It is fully operational, including GDPR/HIPAA compliance, production-grade infrastructure, an E-Filing Dashboard, and an autonomous Benefits Access Review system, deployed as a single unified application for Maryland LDSS offices with multi-tenant architecture.
+**BENEFITS-ONLY VERSION** - This is a standalone benefits eligibility platform with all tax preparation features removed.
+
+The Joint Access Welfare Network (JAWN) Benefits Edition is an AI-powered platform designed to optimize public benefits access. It focuses exclusively on benefits eligibility screening (SNAP, Medicaid, TANF, OHEP, SSI) with cross-enrollment intelligence, navigator workspace, and compliance features (HIPAA, GDPR). This is a cleaner white-label offering for states without tax preparation needs, eliminating the need for IRS Pub 1075 compliance. It supports Maryland, Pennsylvania, Virginia, Utah, Indiana, and Michigan using RAG, Rules as Code, and the Google Gemini API. The platform is deployed as a single unified application for Maryland LDSS offices with multi-tenant architecture.
 
 # User Preferences
 
@@ -15,16 +17,13 @@ The frontend is built with React 18, TypeScript, Vite, shadcn/ui (Radix UI), and
 The backend uses Express.js with TypeScript and PostgreSQL via Drizzle ORM on Neon Database. It features a multi-stage document processing pipeline (OCR, classification, semantic chunking, embedding generation). The Google Gemini API is central for AI analysis, query processing, and RAG. A "Living Policy Manual" and "Rules Extraction Pipeline" convert policy text into structured "Rules as Code." Google Cloud Storage handles document storage. AI orchestration is unified with a strategy pattern, centralized rate limiting, cost tracking, exponential backoff, and Gemini context caching.
 
 ## Feature Specifications
-### Core Platform Features
--   **Navigator Workspace**: Client management.
--   **Financial Opportunity Radar**: Real-time cross-program eligibility and dynamic benefit calculations.
+### Core Platform Features (Benefits-Only)
+-   **Navigator Workspace**: Client management and case tracking.
+-   **Benefits Eligibility Radar**: Real-time cross-program eligibility and dynamic benefit calculations for SNAP, Medicaid, TANF, OHEP, SSI.
 -   **Adaptive Intake Copilot**: Conversational AI assistant for application guidance.
 -   **PolicyEngine Integration**: Accurate multi-benefit calculations.
--   **Tax Preparation System**: Integrates federal/state tax preparation with public benefits eligibility, including Gemini Vision for tax document extraction, VITA document upload, PolicyEngine tax calculation, Form 1040/Maryland Form 502 PDF generation, and prior year support.
--   **E-Filing Dashboard**: Production-ready e-filing management with real-time WebSocket status updates, validation, XML generation, and submission tracking.
 -   **Cross-Enrollment Intelligence Engine**: AI-powered recommendations for unclaimed benefits.
 -   **Google Calendar Appointments**: OAuth2-integrated scheduling.
--   **IRS Use & Disclosure Consent Form**: IRS Publication 4299 compliant consent form with electronic signature.
 -   **Unified Monitoring & Analytics Platform**: 7 observability domains and an admin dashboard.
 -   **Benefits Access Review (BAR)**: Autonomous case quality monitoring with AI assessment, blind supervisor review, and automated notifications.
 -   **AI Document Intelligence Pipeline**: Gemini Vision API for OCR and smart field extraction.
@@ -32,6 +31,14 @@ The backend uses Express.js with TypeScript and PostgreSQL via Drizzle ORM on Ne
 -   **Smart RAG System**: Semantic search across policy documents using Gemini embeddings.
 -   **Fraud Detection Pipeline**: Pattern analysis for unusual applications.
 -   **Smart Workflow Automation**: AI-driven task prioritization and automated case routing.
+
+### Removed Features (Benefits-Only Version)
+The following tax-related features have been removed from this benefits-only deployment:
+-   Tax Preparation System (VITA, Form 1040, Form 502)
+-   E-Filing Dashboard (IRS and Maryland iFile)
+-   IRS Use & Disclosure Consent Form
+-   Tax document extraction and processing
+-   VITA certification validation
 
 ## System Design Choices
 -   **Data Management**: PostgreSQL for core data, Google Cloud Storage for files.
@@ -57,14 +64,15 @@ The backend uses Express.js with TypeScript and PostgreSQL via Drizzle ORM on Ne
 - **CRIT-001 (TLS Verification)**: `/api/health/tls` endpoint validates HTTPS/HSTS/CSP; `/api/health/tls/attestation` accepts load balancer TLS attestation with API key authentication; `enforceHttpsProduction` middleware blocks HTTP (426 Upgrade Required).
 - **CRIT-002 (Data Retention)**: 35-table retention coverage; `executeFullRetentionWorkflow()` runs nightly via smartScheduler with backfill + legal-hold-aware disposal; multi-cloud KMS SDKs installed (@aws-sdk/client-kms, @google-cloud/kms, @azure/keyvault-keys).
 
-### Compliance Scores (December 2025)
+### Compliance Scores (December 2025) - Benefits-Only
 | Framework | Score | Status |
 |-----------|-------|--------|
 | NIST 800-53 | 88% | STRONG |
-| IRS Pub 1075 | 85% | STRONG |
 | GDPR | 90% | STRONG |
 | HIPAA | 88% | STRONG |
 | SOC 2 Type II | 75% | DEVELOPING |
+
+**Note**: IRS Pub 1075 compliance is not required for this benefits-only version since tax data is not processed.
 
 ### Pennsylvania Q1 2026 Readiness
 - All critical compliance gaps closed

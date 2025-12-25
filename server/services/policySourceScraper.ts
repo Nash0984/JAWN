@@ -5,7 +5,8 @@ import { storage } from '../storage';
 import type { InsertPolicySource, InsertDocument } from '../../shared/schema';
 import { unifiedDocumentService as documentProcessor } from './unified/UnifiedDocumentService';
 import { ecfrBulkDownloader } from './ecfrBulkDownloader';
-import { irsDirectDownloader } from './irsDirectDownloader';
+// REMOVED - Benefits-only version: irsDirectDownloader import removed
+// import { irsDirectDownloader } from './irsDirectDownloader';
 import { createLogger } from './logger.service';
 
 const logger = createLogger('PolicySourceScraper');
@@ -1943,41 +1944,8 @@ export class PolicySourceScraper {
         } else {
           throw new Error(result.error || 'eCFR bulk download failed');
         }
-      } else if (config?.scrapeType === 'irs_direct_download') {
-        logger.info('Using IRS Direct Download Service');
-        
-        // Construct publication object from config
-        const publicationNumber = config.publicationNumber || config.formNumber;
-        if (!publicationNumber) {
-          throw new Error('Publication number not found in config');
-        }
-        
-        const publication = {
-          number: publicationNumber.toLowerCase(),
-          name: source.name,
-          url: source.url || `https://www.irs.gov/pub/irs-pdf/${publicationNumber.toLowerCase()}.pdf`,
-          type: config.formNumber ? 'form' : 'publication',
-          minRevisionYear: config.minRevisionYear,
-          revisionMonth: config.revisionMonth,
-          description: source.description || ''
-        };
-        
-        const documentIds = await irsDirectDownloader.downloadPublication(
-          publication as any,
-          source.benefitProgramId || ''
-        );
-        
-        await storage.updatePolicySource(policySourceId, {
-          syncStatus: 'success',
-          lastSuccessfulSyncAt: new Date(),
-          documentCount: documentIds.length,
-          syncError: null
-        });
-        logger.info('IRS Direct Download complete', {
-          documentsCount: documentIds.length
-        });
-        return documentIds.length;
       }
+      // REMOVED - Benefits-only version: IRS Direct Download disabled
       
       // Route to appropriate scraper based on scrapeType
       if (config?.scrapeType === 'md_transmittals') {

@@ -1,6 +1,11 @@
-import type { TaxCalculationResult, TaxHouseholdInput } from './policyEngineTaxCalculation';
-import { policyEngineTaxCalculationService } from './policyEngineTaxCalculation';
+// REMOVED - Benefits-only version: Tax calculation imports removed
+// import type { TaxCalculationResult, TaxHouseholdInput } from './policyEngineTaxCalculation';
+// import { policyEngineTaxCalculationService } from './policyEngineTaxCalculation';
 import { GoogleGenAI } from '@google/genai';
+
+// Stub types for benefits-only version
+type TaxCalculationResult = any;
+type TaxHouseholdInput = any;
 import { cacheService } from './cacheService';
 import { logger } from './logger.service';
 

@@ -32,7 +32,6 @@ import AuditLogs from "@/pages/AuditLogs";
 import MAIVEDashboard from "@/pages/MAIVEDashboard";
 import ApiDocs from "@/pages/ApiDocs";
 import Monitoring from "@/pages/admin/Monitoring";
-import EFileMonitoring from "@/pages/admin/EFileMonitoring";
 import DeveloperPortal from "@/pages/DeveloperPortal";
 import FeedbackManagement from "@/pages/FeedbackManagement";
 import NotificationCenter from "@/pages/NotificationCenter";
@@ -64,27 +63,17 @@ import FNSStateOptionsManager from "@/pages/admin/FNSStateOptionsManager";
 import FederalLawTracker from "@/pages/admin/FederalLawTracker";
 import StateLawTracker from "@/pages/admin/StateLawTracker";
 import SmartScheduler from "@/pages/admin/SmartScheduler";
-import CountyTaxRates from "@/pages/admin/CountyTaxRates";
 import WebhookManagement from "@/pages/admin/WebhookManagement";
 import DocumentReviewQueue from "@/pages/DocumentReviewQueue";
-import TaxPreparation from "@/pages/TaxPreparation";
 import CountyManagement from "@/pages/CountyManagement";
 import NavigatorPerformance from "@/pages/NavigatorPerformance";
 import Leaderboard from "@/pages/Leaderboard";
 import CountyAnalytics from "@/pages/CountyAnalytics";
-import VitaKnowledgeBase from "@/pages/VitaKnowledgeBase";
 import EvaluationFramework from "@/pages/EvaluationFramework";
 import HouseholdProfiler from "@/pages/HouseholdProfiler";
-import VitaIntake from "@/pages/VitaIntake";
 import Analytics from "@/pages/Analytics";
-import VitaDocuments from "@/pages/VitaDocuments";
 import AppointmentsCalendar from "@/pages/AppointmentsCalendar";
 import { IntakeAssistant } from "@/pages/IntakeAssistant";
-import TaxpayerDashboard from "@/pages/TaxpayerDashboard";
-import TaxpayerDocumentRequests from "@/pages/TaxpayerDocumentRequests";
-import TaxpayerMessaging from "@/pages/TaxpayerMessaging";
-import TaxpayerSignature from "@/pages/TaxpayerSignature";
-import { TaxpayerLayout } from "@/components/TaxpayerLayout";
 import MobileBottomNav from "@/components/MobileBottomNav";
 import { BrandingProvider } from "@/contexts/BrandingContext";
 import { CountyHeader } from "@/components/CountyHeader";
@@ -96,7 +85,6 @@ import Footer from "@/components/Footer";
 import Demo from "@/pages/Demo";
 import APIExplorer from "@/pages/APIExplorer";
 import Developers from "@/pages/Developers";
-import EFileDashboard from "@/pages/EFileDashboard";
 import SupervisorReviewDashboard from "@/pages/SupervisorReviewDashboard";
 // COMMENTED OUT DURING SCHEMA ROLLBACK
 // import MobileScreening from "@/pages/MobileScreening";
@@ -274,83 +262,10 @@ function Router() {
               </ProtectedRoute>
             )}
           </Route>
-          <Route path="/tax">
-            {() => (
-              <ProtectedRoute>
-                <TaxPreparation />
-              </ProtectedRoute>
-            )}
-          </Route>
-          <Route path="/efile">
-            {() => (
-              <ProtectedRoute>
-                <EFileDashboard />
-              </ProtectedRoute>
-            )}
-          </Route>
-          <Route path="/vita">
-            {() => (
-              <ProtectedRoute>
-                <VitaKnowledgeBase />
-              </ProtectedRoute>
-            )}
-          </Route>
-          <Route path="/vita-intake">
-            {() => (
-              <ProtectedRoute>
-                <VitaIntake />
-              </ProtectedRoute>
-            )}
-          </Route>
-          <Route path="/vita-documents/:sessionId">
-            {() => (
-              <ProtectedRoute>
-                <VitaDocuments />
-              </ProtectedRoute>
-            )}
-          </Route>
           <Route path="/appointments">
             {() => (
               <ProtectedRoute requireStaff>
                 <AppointmentsCalendar />
-              </ProtectedRoute>
-            )}
-          </Route>
-          
-          {/* Taxpayer Self-Service Portal - Protected routes for taxpayers */}
-          <Route path="/taxpayer">
-            {() => (
-              <ProtectedRoute>
-                <TaxpayerLayout>
-                  <TaxpayerDashboard />
-                </TaxpayerLayout>
-              </ProtectedRoute>
-            )}
-          </Route>
-          <Route path="/taxpayer/documents">
-            {() => (
-              <ProtectedRoute>
-                <TaxpayerLayout>
-                  <TaxpayerDocumentRequests />
-                </TaxpayerLayout>
-              </ProtectedRoute>
-            )}
-          </Route>
-          <Route path="/taxpayer/messages">
-            {() => (
-              <ProtectedRoute>
-                <TaxpayerLayout>
-                  <TaxpayerMessaging />
-                </TaxpayerLayout>
-              </ProtectedRoute>
-            )}
-          </Route>
-          <Route path="/taxpayer/signature">
-            {() => (
-              <ProtectedRoute>
-                <TaxpayerLayout>
-                  <TaxpayerSignature />
-                </TaxpayerLayout>
               </ProtectedRoute>
             )}
           </Route>
@@ -439,13 +354,6 @@ function Router() {
             {() => (
               <ProtectedRoute requireAdmin>
                 <Monitoring />
-              </ProtectedRoute>
-            )}
-          </Route>
-          <Route path="/admin/efile-monitoring">
-            {() => (
-              <ProtectedRoute requireAdmin>
-                <EFileMonitoring />
               </ProtectedRoute>
             )}
           </Route>
@@ -580,13 +488,6 @@ function Router() {
             {() => (
               <ProtectedRoute requireAdmin>
                 <SmartScheduler />
-              </ProtectedRoute>
-            )}
-          </Route>
-          <Route path="/admin/county-tax-rates">
-            {() => (
-              <ProtectedRoute requireAdmin>
-                <CountyTaxRates />
               </ProtectedRoute>
             )}
           </Route>

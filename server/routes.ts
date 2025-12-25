@@ -66,7 +66,6 @@ import {
   verifyTaxDocumentOwnership,
   verifyNotificationOwnership 
 } from "./middleware/ownership";
-import { vitaCertificationValidationService } from "./services/vitaCertificationValidation.service";
 import { db } from "./db";
 import { sql, eq, and, desc, gte, lte, or, ilike, count } from "drizzle-orm";
 import { 
@@ -181,33 +180,9 @@ async function generateTextWithGemini(prompt: string): Promise<string> {
 }
 
 // ============================================================================
-// VITA CERTIFICATION VALIDATION MIDDLEWARE
+// VITA CERTIFICATION VALIDATION MIDDLEWARE (REMOVED - Benefits-only version)
 // ============================================================================
-const requireVitaCertification = (minimumLevel: 'basic' | 'advanced' | 'military' = 'basic') => {
-  return asyncHandler(async (req: Request, res: Response, next: NextFunction) => {
-    // Get tax return data from request body or session
-    const taxReturnData = req.body.taxReturnData || req.body;
-    
-    // Determine required certification
-    const requirement = vitaCertificationValidationService.determineCertificationRequirement(taxReturnData);
-    
-    // Validate user's certification
-    const validation = await vitaCertificationValidationService.updateCertification(req.user!.id, requirement);
-    
-    if (!validation.isValid) {
-      return res.status(403).json({
-        error: "Insufficient VITA certification",
-        message: validation.errorMessage || "You do not have the required VITA certification to approve this tax return",
-        required: validation.requiredCertification,
-        current: validation.reviewerCertification,
-        certificationExpired: validation.certificationExpired,
-        warnings: validation.warnings
-      });
-    }
-    
-    next();
-  });
-};
+// Tax preparation features removed - this is a benefits-only deployment
 
 export async function registerRoutes(app: Express, sessionMiddleware?: any): Promise<Server> {
   
@@ -3396,21 +3371,8 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
     });
   }));
 
-  // Trigger IRS Direct Download (Official - replaces web scraping)
-  app.post("/api/vita/download-irs-publications", requireAdmin, asyncHandler(async (req: Request, res: Response) => {
-    const { irsDirectDownloader } = await import("./services/irsDirectDownloader");
-    
-    logger.info("Starting IRS Direct Download Service...");
-    
-    const documentIds = await irsDirectDownloader.downloadAllVITAPublications();
-    
-    res.json({
-      success: true,
-      message: "IRS VITA publications downloaded successfully",
-      documentsProcessed: documentIds.length,
-      documentIds
-    });
-  }));
+  // REMOVED - Benefits-only version (Tax features disabled)
+  // IRS Direct Download was removed for benefits-only deployment
 
   // Get VITA documents status
   app.get("/api/vita/documents", requireAuth, asyncHandler(async (req: Request, res: Response) => {
@@ -3432,59 +3394,8 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
     });
   }));
 
-  // Search VITA knowledge base with semantic similarity
-  app.post("/api/vita/search", requireAuth, asyncHandler(async (req: Request, res: Response) => {
-    const { VitaSearchService } = await import("./services/vitaSearch.service");
-    const vitaSearch = new VitaSearchService(storage);
-
-    const searchSchema = z.object({
-      query: z.string().min(1, "Query is required"),
-      topK: z.number().optional().default(5),
-      minScore: z.number().optional().default(0.7),
-      topics: z.array(z.string()).optional(),
-      ruleTypes: z.array(z.string()).optional(),
-      includeAnswer: z.boolean().optional().default(true)
-    });
-
-    const validated = searchSchema.parse(req.body);
-
-    // Perform semantic search
-    const searchResults = await vitaSearch.searchVitaKnowledge(validated.query, {
-      topK: validated.topK,
-      minScore: validated.minScore,
-      topics: validated.topics,
-      ruleTypes: validated.ruleTypes
-    });
-
-    // Generate AI answer with citations if requested
-    let answer = null;
-    if (validated.includeAnswer && searchResults.length > 0) {
-      const answerResult = await vitaSearch.answerWithCitations(validated.query, searchResults);
-      answer = answerResult.answer;
-    }
-
-    res.json({
-      success: true,
-      query: validated.query,
-      answer,
-      results: searchResults,
-      count: searchResults.length
-    });
-  }));
-
-  // Get available VITA topics from knowledge base
-  app.get("/api/vita/topics", requireAuth, asyncHandler(async (req: Request, res: Response) => {
-    const { VitaSearchService } = await import("./services/vitaSearch.service");
-    const vitaSearch = new VitaSearchService(storage);
-
-    const topics = await vitaSearch.getAvailableTopics();
-
-    res.json({
-      success: true,
-      topics,
-      count: topics.length
-    });
-  }));
+  // REMOVED - Benefits-only version (Tax features disabled)
+  // VITA search and topics routes were removed for benefits-only deployment
 
   // ============================================================================
   // LIVING POLICY MANUAL - Text generation from Rules as Code
@@ -6388,10 +6299,9 @@ If the question cannot be answered with the available information, say so clearl
     });
   }));
 
-  // Cross-Eligibility Radar - Real-time multi-program eligibility tracking
+  // Cross-Eligibility Radar - Real-time multi-program eligibility tracking (Benefits-only)
   app.post("/api/eligibility/radar", asyncHandler(async (req: Request, res: Response) => {
     const { policyEngineService } = await import("./services/policyEngine.service");
-    const { policyEngineTaxCalculationService } = await import("./services/policyEngineTaxCalculation");
     
     const inputSchema = z.object({
       // Household composition
@@ -6649,337 +6559,11 @@ If the question cannot be answered with the available information, say so clearl
     });
   }));
 
-  // Run tax calculations using PolicyEngine
-  app.post("/api/tax/calculate", requireAuth, asyncHandler(async (req: Request, res: Response) => {
-    const { policyEngineTaxCalculationService } = await import("./services/policyEngineTaxCalculation");
-    
-    const schema = z.object({
-      taxYear: z.number(),
-      filingStatus: z.enum(['single', 'married_joint', 'married_separate', 'head_of_household', 'qualifying_widow']),
-      stateCode: z.string().default('MD'),
-      taxpayer: z.object({
-        age: z.number(),
-        isBlind: z.boolean().default(false),
-        isDisabled: z.boolean().default(false)
-      }),
-      spouse: z.object({
-        age: z.number(),
-        isBlind: z.boolean().default(false),
-        isDisabled: z.boolean().default(false)
-      }).optional(),
-      dependents: z.array(z.object({
-        age: z.number(),
-        relationship: z.string(),
-        isStudent: z.boolean().default(false),
-        disabilityStatus: z.boolean().default(false)
-      })).optional(),
-      w2Income: z.object({
-        taxpayerWages: z.number().default(0),
-        taxpayerWithholding: z.number().default(0),
-        spouseWages: z.number().default(0),
-        spouseWithholding: z.number().default(0)
-      }).optional(),
-      form1099Income: z.object({
-        miscIncome: z.number().default(0),
-        necIncome: z.number().default(0),
-        interestIncome: z.number().default(0),
-        dividendIncome: z.number().default(0)
-      }).optional(),
-      healthInsurance: z.object({
-        monthsOfCoverage: z.number(),
-        slcspPremium: z.number(),
-        aptcReceived: z.number()
-      }).optional(),
-      adjustments: z.object({
-        studentLoanInterest: z.number().default(0),
-        hsaContributions: z.number().default(0),
-        iraContributions: z.number().default(0)
-      }).optional(),
-      itemizedDeductions: z.object({
-        medicalExpenses: z.number().default(0),
-        stateTaxesPaid: z.number().default(0),
-        mortgageInterest: z.number().default(0),
-        charitableContributions: z.number().default(0)
-      }).optional(),
-      childcareCosts: z.number().optional(),
-      medicalExpenses: z.number().optional()
-    });
+  // REMOVED - Benefits-only version (Tax features disabled)
+  // Tax calculation and Form 1040 generation routes were removed for benefits-only deployment
 
-    const validated = schema.parse(req.body);
-
-    const result = await policyEngineTaxCalculationService.calculateTaxes(validated);
-
-    res.json(result);
-  }));
-
-  // Generate Form 1040 PDF
-  app.post("/api/tax/form1040/generate", requireAuth, asyncHandler(async (req: Request, res: Response) => {
-    const { form1040Generator } = await import("./services/form1040Generator");
-    
-    const schema = z.object({
-      taxReturnId: z.string()
-    });
-
-    const validated = schema.parse(req.body);
-
-    // Get tax return data
-    const taxReturn = await storage.getFederalTaxReturn(validated.taxReturnId);
-    if (!taxReturn) {
-      return res.status(404).json({ error: "Tax return not found" });
-    }
-
-    // Extract data from tax return
-    const form1040Data = taxReturn.form1040Data as any;
-    
-    // Generate PDF
-    const pdfBuffer = await form1040Generator.generateForm1040(
-      form1040Data.personalInfo,
-      form1040Data.taxInput,
-      form1040Data.taxResult,
-      {
-        taxYear: taxReturn.taxYear,
-        preparerName: req.user?.username,
-        preparationDate: new Date(),
-        includeWatermark: true
-      }
-    );
-
-    res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `attachment; filename="Form-1040-${taxReturn.taxYear}.pdf"`);
-    res.send(pdfBuffer);
-  }));
-
-  // Generate Maryland Form 502 PDF (from saved tax return)
-  app.post("/api/tax/form502/generate", requireAuth, asyncHandler(async (req: Request, res: Response) => {
-    const { Form502Generator } = await import("./services/form502Generator");
-    
-    const schema = z.object({
-      federalTaxReturnId: z.string().optional(),
-      personalInfo: z.object({
-        taxpayerFirstName: z.string(),
-        taxpayerLastName: z.string(),
-        taxpayerSSN: z.string(),
-        spouseFirstName: z.string().optional(),
-        spouseLastName: z.string().optional(),
-        spouseSSN: z.string().optional(),
-        streetAddress: z.string(),
-        city: z.string(),
-        state: z.string(),
-        county: z.string(),
-        zipCode: z.string(),
-        filingStatus: z.string()
-      }).optional(),
-      calculationResult: z.object({
-        adjustedGrossIncome: z.number(),
-        taxableIncome: z.number(),
-        totalTax: z.number(),
-        eitcAmount: z.number(),
-        childTaxCredit: z.number(),
-        deduction: z.number().optional(),
-        marylandTax: z.object({
-          marylandAGI: z.number(),
-          marylandStateTax: z.number(),
-          countyTax: z.number(),
-          totalMarylandTax: z.number(),
-          marylandEITC: z.number(),
-          marylandRefund: z.number()
-        }).optional()
-      }).optional(),
-      taxYear: z.number().optional()
-    });
-
-    const validated = schema.parse(req.body);
-
-    const form502Generator = new Form502Generator();
-
-    // Use provided data or fetch from database
-    if (validated.federalTaxReturnId) {
-      const federalTaxReturn = await storage.getFederalTaxReturn(validated.federalTaxReturnId);
-      if (!federalTaxReturn) {
-        return res.status(404).json({ error: "Federal tax return not found" });
-      }
-
-      const result = await form502Generator.generateForm502(
-        federalTaxReturn.form1040Data.personalInfo,
-        federalTaxReturn.form1040Data.taxInput,
-        federalTaxReturn.form1040Data.taxResult,
-        federalTaxReturn.form1040Data.marylandInput || {},
-        {
-          taxYear: federalTaxReturn.taxYear,
-          preparerName: req.user?.username,
-          preparationDate: new Date(),
-          includeWatermark: true
-        }
-      );
-
-      res.setHeader('Content-Type', 'application/pdf');
-      res.setHeader('Content-Disposition', `attachment; filename="Form-502-MD-${federalTaxReturn.taxYear}.pdf"`);
-      res.send(result.pdf);
-    } else if (validated.personalInfo && validated.calculationResult && validated.taxYear) {
-      // Direct generation from provided data
-      const personalInfoForForm = {
-        ...validated.personalInfo,
-        county: validated.personalInfo.county
-      };
-
-      const taxInput = {
-        filingStatus: validated.personalInfo.filingStatus as any
-      };
-
-      const taxResult = {
-        adjustedGrossIncome: validated.calculationResult.adjustedGrossIncome,
-        taxableIncome: validated.calculationResult.taxableIncome,
-        incomeTax: validated.calculationResult.totalTax,
-        eitc: validated.calculationResult.eitcAmount,
-        childTaxCredit: validated.calculationResult.childTaxCredit,
-        deductionBreakdown: {
-          standardDeduction: validated.calculationResult.deduction || 0,
-          itemizedDeduction: 0
-        }
-      } as any;
-
-      const result = await form502Generator.generateForm502(
-        personalInfoForForm,
-        taxInput,
-        taxResult,
-        {},
-        {
-          taxYear: validated.taxYear,
-          preparerName: req.user?.username,
-          preparationDate: new Date(),
-          includeWatermark: true
-        }
-      );
-
-      res.setHeader('Content-Type', 'application/pdf');
-      res.setHeader('Content-Disposition', `attachment; filename="Form-502-MD-${validated.taxYear}.pdf"`);
-      res.send(result.pdf);
-    } else {
-      return res.status(400).json({ error: "Either federalTaxReturnId or complete form data must be provided" });
-    }
-  }));
-
-  // Calculate Maryland tax from federal AGI
-  app.post("/api/tax/maryland/calculate", requireAuth, asyncHandler(async (req: Request, res: Response) => {
-    const { Form502Generator } = await import("./services/form502Generator");
-    
-    const schema = z.object({
-      federalAGI: z.number(),
-      federalEITC: z.number().default(0),
-      filingStatus: z.enum(['single', 'married_joint', 'married_separate', 'head_of_household', 'qualifying_widow']),
-      county: z.string(),
-      marylandInput: z.object({
-        stateTaxRefund: z.number().optional(),
-        socialSecurityBenefits: z.number().optional(),
-        railroadRetirement: z.number().optional(),
-        pensionIncome: z.number().optional(),
-        propertyTaxPaid: z.number().optional(),
-        rentPaid: z.number().optional(),
-        childcareExpenses: z.number().optional(),
-        marylandWithholding: z.number().optional()
-      }).optional(),
-      federalDeduction: z.number().default(0),
-      federalItemizedDeduction: z.number().default(0)
-    });
-
-    const validated = schema.parse(req.body);
-
-    const form502Generator = new Form502Generator();
-
-    // Create minimal tax result for Maryland calculation
-    const federalTaxResult = {
-      adjustedGrossIncome: validated.federalAGI,
-      eitc: validated.federalEITC,
-      deductionBreakdown: {
-        standardDeduction: validated.federalDeduction,
-        itemizedDeduction: validated.federalItemizedDeduction
-      }
-    } as any;
-
-    const taxInput = {
-      filingStatus: validated.filingStatus
-    } as any;
-
-    // Calculate Maryland tax
-    const marylandTaxResult = form502Generator.calculateMarylandTax(
-      federalTaxResult,
-      taxInput,
-      validated.marylandInput || {},
-      validated.county
-    );
-
-    res.json({ marylandTax: marylandTaxResult });
-  }));
-
-  // Get cross-enrollment opportunities from tax data
-  app.post("/api/tax/cross-enrollment/analyze", requireAuth, asyncHandler(async (req: Request, res: Response) => {
-    const { crossEnrollmentIntelligenceService } = await import("./services/crossEnrollmentIntelligence");
-    const { policyEngineTaxCalculationService } = await import("./services/policyEngineTaxCalculation");
-    
-    const schema = z.object({
-      taxInput: z.object({
-        taxYear: z.number(),
-        filingStatus: z.enum(['single', 'married_joint', 'married_separate', 'head_of_household', 'qualifying_widow']),
-        stateCode: z.string().default('MD'),
-        taxpayer: z.object({
-          age: z.number(),
-          isBlind: z.boolean().default(false),
-          isDisabled: z.boolean().default(false)
-        }),
-        spouse: z.object({
-          age: z.number(),
-          isBlind: z.boolean().default(false),
-          isDisabled: z.boolean().default(false)
-        }).optional(),
-        dependents: z.array(z.object({
-          age: z.number(),
-          relationship: z.string(),
-          isStudent: z.boolean().default(false),
-          disabilityStatus: z.boolean().default(false)
-        })).optional(),
-        w2Income: z.object({
-          taxpayerWages: z.number().default(0),
-          taxpayerWithholding: z.number().default(0),
-          spouseWages: z.number().default(0),
-          spouseWithholding: z.number().default(0)
-        }).optional(),
-        form1099Income: z.object({
-          miscIncome: z.number().default(0),
-          necIncome: z.number().default(0),
-          interestIncome: z.number().default(0),
-          dividendIncome: z.number().default(0)
-        }).optional(),
-        healthInsurance: z.object({
-          monthsOfCoverage: z.number(),
-          slcspPremium: z.number(),
-          aptcReceived: z.number()
-        }).optional(),
-        medicalExpenses: z.number().optional(),
-        childcareCosts: z.number().optional()
-      }),
-      benefitData: z.object({
-        childcareExpenses: z.number().optional(),
-        educationExpenses: z.number().optional(),
-        medicalExpenses: z.number().optional(),
-        dependents: z.number().optional(),
-        agi: z.number().optional()
-      }).optional()
-    });
-
-    const validated = schema.parse(req.body);
-
-    // Calculate tax first
-    const taxResult = await policyEngineTaxCalculationService.calculateTaxes(validated.taxInput);
-
-    // Analyze for cross-enrollment opportunities
-    const analysis = await crossEnrollmentIntelligenceService.generateFullAnalysis(
-      validated.taxInput,
-      taxResult,
-      validated.benefitData
-    );
-
-    res.json(analysis);
-  }));
+  // REMOVED - Benefits-only version (Tax features disabled)
+  // Form 502 PDF generation, Maryland tax calculation, and tax cross-enrollment routes were removed
 
   // Create federal tax return
   app.post("/api/tax/federal", requireAuth, asyncHandler(async (req: Request, res: Response) => {
@@ -7757,31 +7341,8 @@ If the question cannot be answered with the available information, say so clearl
     res.json({ success: true });
   }));
 
-  // Calculate VITA tax preview
-  app.post("/api/vita-intake/calculate-tax", requireStaff, asyncHandler(async (req: Request, res: Response) => {
-    const schema = z.object({
-      filingStatus: z.enum(["single", "married_joint", "married_separate", "head_of_household"]),
-      taxYear: z.number(),
-      wages: z.number(),
-      otherIncome: z.number(),
-      selfEmploymentIncome: z.number().optional(),
-      businessExpenses: z.number().optional(),
-      numberOfQualifyingChildren: z.number(),
-      dependents: z.number(),
-      qualifiedEducationExpenses: z.number().optional(),
-      numberOfStudents: z.number().optional(),
-      marylandCounty: z.string(),
-      marylandResidentMonths: z.number()
-    });
-
-    const validated = schema.parse(req.body);
-    
-    // Import vitaTaxRulesEngine service
-    const { vitaTaxRulesEngine } = await import("./services/vitaTaxRulesEngine");
-    
-    const taxResult = await vitaTaxRulesEngine.calculateTax(validated);
-    res.json(taxResult);
-  }));
+  // REMOVED - Benefits-only version (VITA tax calculation disabled)
+  // VITA tax preview route was removed for benefits-only deployment
 
   // ==========================================
   // Google Calendar Appointment Routes
@@ -11678,17 +11239,8 @@ If the question cannot be answered with the available information, say so clearl
   // ============================================================================
   registerCrossStateRulesRoutes(app);
 
-  // ============================================================================
-  // Mount E-File Routes - IRS Electronic Filing Infrastructure
-  // ============================================================================
-  const { registerEFileRoutes } = await import('./api/efile.routes');
-  registerEFileRoutes(app);
-  
-  // ============================================================================
-  // Mount Maryland E-File Routes - Maryland iFile Infrastructure
-  // ============================================================================
-  const marylandEFileRouter = (await import('./api/marylandEfile.routes')).default;
-  app.use('/api/maryland/efile', marylandEFileRouter);
+  // REMOVED - Benefits-only version: E-File routes disabled
+  // IRS and Maryland E-File routes were removed for benefits-only deployment
 
   // ============================================================================
   // Mount GDPR Compliance Routes - Data Subject Rights & Privacy
