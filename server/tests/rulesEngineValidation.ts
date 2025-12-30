@@ -2,8 +2,7 @@ import { logger } from "../services/logger.service";
 import { ohepRulesEngine } from "../services/ohepRulesEngine";
 import { tanfRulesEngine } from "../services/tanfRulesEngine";
 import { medicaidRulesEngine } from "../services/medicaidRulesEngine";
-// REMOVED - Benefits-only version: vitaTaxRulesEngine import removed
-// import { vitaTaxRulesEngine } from "../services/vitaTaxRulesEngine";
+import { vitaTaxRulesEngine } from "../services/vitaTaxRulesEngine";
 
 /**
  * Validation tests for OHEP and TANF Rules Engines

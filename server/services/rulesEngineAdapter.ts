@@ -9,8 +9,7 @@ import { rulesEngine } from './rulesEngine';
 import { ohepRulesEngine } from './ohepRulesEngine';
 import { tanfRulesEngine } from './tanfRulesEngine';
 import { medicaidRulesEngine } from './medicaidRulesEngine';
-// REMOVED - Benefits-only version: vitaTaxRulesEngine import removed
-// import { vitaTaxRulesEngine } from './vitaTaxRulesEngine';
+import { vitaTaxRulesEngine } from './vitaTaxRulesEngine';
 import { cacheService, CACHE_KEYS, generateHouseholdHash } from './cacheService';
 import { logger } from './logger.service';
 
@@ -89,12 +88,13 @@ type RulesEngineAdapter = (
 ) => Promise<HybridCalculationResult | null>;
 
 class RulesEngineAdapterService {
-  // Benefits-only version: Removed MD_VITA_TAX and TAX_CREDITS adapters
   private adapters: Record<string, RulesEngineAdapter> = {
     'MD_SNAP': this.snapAdapter.bind(this),
     'MD_OHEP': this.ohepAdapter.bind(this),
     'MD_TANF': this.tanfAdapter.bind(this),
     'MEDICAID': this.medicaidAdapter.bind(this),
+    'MD_VITA_TAX': this.vitaTaxAdapter.bind(this),
+    'TAX_CREDITS': this.taxCreditsAdapter.bind(this), // Not implemented yet
   };
 
   /**
@@ -286,8 +286,57 @@ class RulesEngineAdapterService {
     };
   }
 
-  // REMOVED - Benefits-only version: VITA Tax Adapter and Tax Credits Adapter removed
-  // Tax calculations are not available in benefits-only deployment
+  /**
+   * VITA Tax Adapter
+   */
+  private async vitaTaxAdapter(input: HybridEligibilityPayload): Promise<HybridCalculationResult | null> {
+    if (!input.wages || !input.filingStatus) {
+      return null; // Missing required tax parameters
+    }
+
+    const taxInput = {
+      wages: input.wages,
+      otherIncome: 0, // Would need to extract
+      filingStatus: input.filingStatus,
+      numberOfQualifyingChildren: input.numberOfQualifyingChildren || 0,
+      dependents: input.numberOfQualifyingChildren || 0,
+      taxYear: input.taxYear || 2024,
+      marylandCounty: 'baltimore_city', // Default - could extract from location data
+      marylandResidentMonths: 12, // Full year default
+    };
+
+    const result = await vitaTaxRulesEngine.calculateTax(taxInput);
+
+    const refund = result.totalRefund || 0;
+    const taxOwed = result.totalTaxLiability > 0 ? result.totalTaxLiability : 0;
+
+    return {
+      eligible: true, // Tax calculations are always "eligible"
+      estimatedBenefit: refund,
+      reason: refund > 0 
+        ? `Eligible for tax refund of $${(refund / 100).toFixed(2)}`
+        : taxOwed > 0
+          ? `Tax owed: $${(taxOwed / 100).toFixed(2)}`
+          : 'No tax owed or refund',
+      breakdown: result.calculationBreakdown,
+      citations: result.policyCitations,
+      federalTax: result.federalTax.totalFederalTax,
+      stateTax: result.marylandTax.totalMarylandTax,
+      totalTax: result.totalTaxLiability,
+      refund,
+      programCode: 'MD_VITA_TAX',
+      calculationType: 'tax'
+    };
+  }
+
+  /**
+   * Tax Credits Adapter (not implemented yet)
+   */
+  private async taxCreditsAdapter(input: HybridEligibilityPayload): Promise<HybridCalculationResult | null> {
+    // Tax Credits calculation not yet implemented
+    // Will return null to trigger RAG fallback
+    return null;
+  }
 
   /**
    * Get supported program codes
