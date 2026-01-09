@@ -11726,6 +11726,18 @@ If the question cannot be answered with the available information, say so clearl
   const z3SolverRouter = (await import('./api/z3Solver.routes')).default;
   app.use('/api/z3-solver', z3SolverRouter);
 
+  // ============================================================================
+  // Mount Violation Trace Routes - Neuro-Symbolic AI Appeal-Ready Explanations
+  // ============================================================================
+  const violationTraceRouter = (await import('./api/violationTrace.routes')).default;
+  app.use('/api/violation-traces', violationTraceRouter);
+
+  // ============================================================================
+  // Mount Neuro-Symbolic Verification Routes - Complete TBox→ABox→Solver→Trace Pipeline
+  // ============================================================================
+  const neuroSymbolicRouter = (await import('./api/neuroSymbolicVerification.routes')).default;
+  app.use('/api/neuro-symbolic', neuroSymbolicRouter);
+
   const httpServer = createServer(app);
   
   // Initialize WebSocket service for real-time notifications

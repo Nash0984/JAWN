@@ -6,6 +6,7 @@ import {
 import { eq, and, sql, desc, inArray } from "drizzle-orm";
 import { caseAssertionService } from "./caseAssertionService";
 import { init as initZ3 } from "z3-solver";
+import { violationTraceService, ViolationTraceResult } from "./violationTraceService";
 
 export type SolverResult = "SAT" | "UNSAT" | "UNKNOWN" | "ERROR";
 export type VerificationStatus = "eligible" | "ineligible" | "needs_review" | "error";
@@ -37,6 +38,7 @@ interface SolverRunResult {
   unsatCore: string[];
   solverOutput: string;
   executionTimeMs: number;
+  violationTraces?: ViolationTraceResult[];
 }
 
 class Z3SolverService {
@@ -98,6 +100,16 @@ class Z3SolverService {
       solverTrace: { output, violations, status }
     }).returning();
 
+    let violationTraces: ViolationTraceResult[] = [];
+    if (result === "UNSAT" && violations.length > 0) {
+      try {
+        violationTraces = await violationTraceService.generateViolationTraces(solverRun.id);
+        console.log(`[Z3Solver] Generated ${violationTraces.length} violation traces for run ${solverRun.id}`);
+      } catch (traceError) {
+        console.warn("[Z3Solver] Failed to generate violation traces:", traceError);
+      }
+    }
+
     return {
       runId: solverRun.id,
       caseId,
@@ -107,7 +119,8 @@ class Z3SolverService {
       violations,
       unsatCore,
       solverOutput: output,
-      executionTimeMs
+      executionTimeMs,
+      violationTraces
     };
   }
 
