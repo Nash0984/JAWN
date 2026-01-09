@@ -11708,6 +11708,12 @@ If the question cannot be answered with the available information, say so clearl
   const legalOntologyRouter = (await import('./api/legalOntology.routes')).default;
   app.use('/api/legal-ontology', legalOntologyRouter);
 
+  // ============================================================================
+  // Mount Rule Extraction Routes - Neuro-Symbolic AI Rule Formalization Pipeline
+  // ============================================================================
+  const ruleExtractionRouter = (await import('./api/ruleExtraction.routes')).default;
+  app.use('/api/rule-extraction', ruleExtractionRouter);
+
   const httpServer = createServer(app);
   
   // Initialize WebSocket service for real-time notifications
