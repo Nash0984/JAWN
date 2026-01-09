@@ -9,7 +9,8 @@ import { logger } from './logger.service';
  * We force GEMINI_API_KEY by temporarily setting process.env.GOOGLE_API_KEY to ensure correct key is used
  */
 export function getGeminiClient() {
-  const apiKey = process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY;
+  // Prefer GEMINI_API_KEY (39 chars, AIzaSy prefix) for Gemini AI Studio
+  const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
   if (!apiKey) {
     throw new Error("Gemini API key not configured");
   }
@@ -66,8 +67,8 @@ export async function generateEmbedding(text: string): Promise<number[]> {
     }
     
     // Cache miss - generate new embedding
-    const apiKey = process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY;
-    console.log(`[Embedding] API Key present: ${!!apiKey}, length: ${apiKey?.length || 0}`);
+    // Prefer GEMINI_API_KEY (39 chars, AIzaSy prefix) for embeddings over GOOGLE_API_KEY
+    const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
     
     const ai = new GoogleGenAI({ apiKey: apiKey || '' });
     const response = await ai.models.embedContent({
