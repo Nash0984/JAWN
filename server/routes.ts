@@ -11702,6 +11702,12 @@ If the question cannot be answered with the available information, say so clearl
   const hipaaRouter = (await import('./routes/hipaa.routes')).default;
   app.use('/api/hipaa', hipaaRouter);
 
+  // ============================================================================
+  // Mount Legal Ontology Routes - Neuro-Symbolic AI TBox Management
+  // ============================================================================
+  const legalOntologyRouter = (await import('./api/legalOntology.routes')).default;
+  app.use('/api/legal-ontology', legalOntologyRouter);
+
   const httpServer = createServer(app);
   
   // Initialize WebSocket service for real-time notifications

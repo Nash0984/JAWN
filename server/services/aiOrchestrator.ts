@@ -98,7 +98,7 @@ const MODEL_PRICING = {
   'gemini-2.0-flash': { input: 0.000075, output: 0.0003 },
   'gemini-2.0-flash-thinking': { input: 0.000075, output: 0.0003 },
   'gemini-1.5-pro': { input: 0.00125, output: 0.005 },
-  'text-embedding-004': { input: 0.00001, output: 0 },
+  'gemini-embedding-001': { input: 0.00001, output: 0 },
 } as const;
 
 // ============================================================================
@@ -165,7 +165,7 @@ class AIOrchestrator {
       case 'text':
         return 'gemini-2.0-flash'; // General chat/RAG
       case 'embedding':
-        return 'text-embedding-004'; // Embeddings
+        return 'gemini-embedding-001'; // Embeddings
       default:
         return 'gemini-2.0-flash';
     }

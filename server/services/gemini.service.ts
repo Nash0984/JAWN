@@ -48,41 +48,55 @@ export async function analyzeImageWithGemini(base64Image: string, prompt: string
 }
 
 /**
- * Generate embeddings for text using Gemini text-embedding-004
+ * Generate embeddings for text using Gemini gemini-embedding-001
  * 
  * OPTIMIZED: Uses embedding cache to reduce API calls by 60-80%
  * Embeddings are deterministic - same text always produces same embedding
  * 
- * FIXED: Uses correct @google/genai API format
- * - API expects 'contents' (plural) as an array of strings
- * - Response has 'embeddings' array, access first element with [0]
+ * UPDATED: Migrated from deprecated text-embedding-004 to gemini-embedding-001
+ * - gemini-embedding-001 outputs 3072 dimensions by default (can be reduced to 768)
+ * - Better performance on MTEB benchmarks, supports 100+ languages
  */
 export async function generateEmbedding(text: string): Promise<number[]> {
   try {
-    // Check cache first
-    const cached = embeddingCache.get(text);
+    // Check cache first (async cache supports L1+L2)
+    const cached = await embeddingCache.get(text);
     if (cached) {
       return cached;
     }
     
     // Cache miss - generate new embedding
-    const ai = getGeminiClient();
+    const apiKey = process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY;
+    console.log(`[Embedding] API Key present: ${!!apiKey}, length: ${apiKey?.length || 0}`);
+    
+    const ai = new GoogleGenAI({ apiKey: apiKey || '' });
     const response = await ai.models.embedContent({
-      model: "text-embedding-004",
-      contents: [text]  // Correct format: array of strings
+      model: "gemini-embedding-001",
+      contents: text,
+      config: {
+        outputDimensionality: 768  // Use 768 dims for compatibility with existing schema
+      }
     });
     
     // Response has embeddings array, get first (and only) embedding
     const embedding = response.embeddings?.[0]?.values || [];
     
-    // Store in cache for future use
+    // Store in cache for future use (async)
     if (embedding.length > 0) {
-      embeddingCache.set(text, embedding);
+      await embeddingCache.set(text, embedding);
     }
     
     return embedding;
-  } catch (error) {
-    logger.error('Error generating embedding', { error, textLength: text.length });
+  } catch (error: any) {
+    const errorDetails = {
+      name: error?.name,
+      message: error?.message,
+      status: error?.status,
+      statusText: error?.statusText,
+      textLength: text.length
+    };
+    logger.error('Error generating embedding', errorDetails);
+    console.error('Embedding API Error Details:', JSON.stringify(errorDetails, null, 2));
     return new Array(768).fill(0);
   }
 }
