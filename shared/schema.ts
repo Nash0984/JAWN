@@ -8161,6 +8161,408 @@ export const insertDataDisposalLogSchema = createInsertSchema(dataDisposalLogs).
 export type DataDisposalLog = typeof dataDisposalLogs.$inferSelect;
 export type InsertDataDisposalLog = z.infer<typeof insertDataDisposalLogSchema>;
 
+// ============================================================================
+// NEURO-SYMBOLIC AI FRAMEWORK - Legal Ontology & SMT Verification
+// Based on: "A Neuro-Symbolic Framework for Accountability in Public-Sector AI"
+// ============================================================================
+
+// Statutory Sources - Policy manuals and regulatory documents (TBox foundation)
+export const statutorySources = pgTable("statutory_sources", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  stateCode: text("state_code").notNull(), // MD, PA, VA, UT, IN, MI
+  programCode: text("program_code").notNull(), // SNAP, MEDICAID, TANF, OHEP, TAX_CREDITS, SSI
+  sourceType: text("source_type").notNull(), // policy_manual, comar, cfr, statute, guidance
+  citation: text("citation").notNull(), // e.g., "MPP 63-401.1", "COMAR 07.03.03.01", "7 CFR 273.2"
+  title: text("title").notNull(),
+  fullText: text("full_text").notNull(),
+  effectiveDate: date("effective_date"),
+  expirationDate: date("expiration_date"),
+  parentCitation: text("parent_citation"), // hierarchical reference
+  crossReferences: text("cross_references").array(), // related citations
+  sourceUrl: text("source_url"),
+  documentHash: text("document_hash"), // SHA-256 for version tracking
+  version: text("version").notNull().default("1.0"),
+  isActive: boolean("is_active").default(true).notNull(),
+  lastScrapedAt: timestamp("last_scraped_at"),
+  metadata: jsonb("metadata"), // jurisdiction-specific metadata
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  stateCodeIdx: index("statutory_sources_state_code_idx").on(table.stateCode),
+  programCodeIdx: index("statutory_sources_program_code_idx").on(table.programCode),
+  citationIdx: index("statutory_sources_citation_idx").on(table.citation),
+  effectiveDateIdx: index("statutory_sources_effective_date_idx").on(table.effectiveDate),
+  isActiveIdx: index("statutory_sources_is_active_idx").on(table.isActive),
+}));
+
+// Ontology Terms - TBox: Legal concepts extracted from policy manuals
+export const ontologyTerms = pgTable("ontology_terms", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  stateCode: text("state_code").notNull(), // MD, PA, VA, UT, IN, MI
+  programCode: text("program_code").notNull(), // SNAP, MEDICAID, TANF, OHEP, TAX_CREDITS, SSI
+  termName: text("term_name").notNull(), // e.g., "GrossIncome", "ResidencyRequirement"
+  canonicalName: text("canonical_name").notNull(), // Normalized form: "Income_GrossIncome"
+  domain: text("domain").notNull(), // income, residency, citizenship, resources, work_requirement, student_status
+  definition: text("definition"),
+  statutoryCitation: text("statutory_citation"), // MPP section, COMAR reference
+  statutorySourceId: varchar("statutory_source_id").references(() => statutorySources.id),
+  parentTermId: varchar("parent_term_id"), // Hierarchical relationship (self-reference)
+  synonyms: text("synonyms").array(), // Alternative terms
+  embedding: real("embedding").array(), // e5-large-v2 embedding vector (1024 dimensions)
+  embeddingModel: text("embedding_model").default("e5-large-v2"),
+  version: text("version").notNull().default("1.0"),
+  isActive: boolean("is_active").default(true).notNull(),
+  createdBy: varchar("created_by"), // system, admin user, or AI extraction
+  approvedBy: varchar("approved_by").references(() => users.id),
+  approvedAt: timestamp("approved_at"),
+  metadata: jsonb("metadata"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  stateCodeIdx: index("ontology_terms_state_code_idx").on(table.stateCode),
+  programCodeIdx: index("ontology_terms_program_code_idx").on(table.programCode),
+  domainIdx: index("ontology_terms_domain_idx").on(table.domain),
+  canonicalNameIdx: index("ontology_terms_canonical_name_idx").on(table.canonicalName),
+  parentTermIdx: index("ontology_terms_parent_term_idx").on(table.parentTermId),
+  isActiveIdx: index("ontology_terms_is_active_idx").on(table.isActive),
+  stateProgramIdx: index("ontology_terms_state_program_idx").on(table.stateCode, table.programCode),
+}));
+
+// Ontology Relationships - Edges between ontology terms (knowledge graph)
+export const ontologyRelationships = pgTable("ontology_relationships", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  fromTermId: varchar("from_term_id").references(() => ontologyTerms.id).notNull(),
+  toTermId: varchar("to_term_id").references(() => ontologyTerms.id).notNull(),
+  relationshipType: text("relationship_type").notNull(), // depends_on, constrains, requires, implies, excludes
+  statutoryCitation: text("statutory_citation"),
+  description: text("description"),
+  weight: real("weight").default(1.0), // relationship strength
+  isActive: boolean("is_active").default(true).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  fromTermIdx: index("ontology_relationships_from_term_idx").on(table.fromTermId),
+  toTermIdx: index("ontology_relationships_to_term_idx").on(table.toTermId),
+  relationshipTypeIdx: index("ontology_relationships_type_idx").on(table.relationshipType),
+}));
+
+// Rule Fragments - Clauses extracted from statutory text before formalization
+export const ruleFragments = pgTable("rule_fragments", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  statutorySourceId: varchar("statutory_source_id").references(() => statutorySources.id).notNull(),
+  clauseText: text("clause_text").notNull(), // Original statutory clause
+  clauseNumber: integer("clause_number"), // Position within source
+  extractedConcepts: text("extracted_concepts").array(), // Ontology term references
+  eligibilityDomain: text("eligibility_domain").notNull(), // income, residency, citizenship, etc.
+  ruleType: text("rule_type").notNull(), // requirement, exception, threshold, verification
+  extractionMethod: text("extraction_method").notNull(), // manual, llm_extraction, nlp_pipeline
+  extractionModel: text("extraction_model"), // gemini-1.5-pro, gpt-4o, etc.
+  confidenceScore: real("confidence_score"), // 0.0 to 1.0
+  needsReview: boolean("needs_review").default(true).notNull(),
+  reviewedBy: varchar("reviewed_by").references(() => users.id),
+  reviewedAt: timestamp("reviewed_at"),
+  metadata: jsonb("metadata"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  statutorySourceIdx: index("rule_fragments_statutory_source_idx").on(table.statutorySourceId),
+  eligibilityDomainIdx: index("rule_fragments_eligibility_domain_idx").on(table.eligibilityDomain),
+  ruleTypeIdx: index("rule_fragments_rule_type_idx").on(table.ruleType),
+  needsReviewIdx: index("rule_fragments_needs_review_idx").on(table.needsReview),
+}));
+
+// Formal Rules - Z3-compatible logical rules derived from rule fragments
+export const formalRules = pgTable("formal_rules", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  ruleFragmentId: varchar("rule_fragment_id").references(() => ruleFragments.id),
+  stateCode: text("state_code").notNull(),
+  programCode: text("program_code").notNull(),
+  ruleName: text("rule_name").notNull(), // Human-readable rule identifier
+  eligibilityDomain: text("eligibility_domain").notNull(),
+  // Z3 SMT Solver logic
+  z3Logic: text("z3_logic").notNull(), // e.g., "Implies(And(GrossIncome <= IncomeThreshold), Applicant_Eligible)"
+  ontologyTermsUsed: text("ontology_terms_used").array(), // References to ontology_terms
+  statutoryCitation: text("statutory_citation").notNull(),
+  // Versioning and validation
+  version: text("version").notNull().default("1.0"),
+  previousVersionId: varchar("previous_version_id"), // For version history
+  isValid: boolean("is_valid").default(true).notNull(), // Passes Z3 syntax validation
+  validationErrors: text("validation_errors").array(),
+  // Extraction metadata
+  extractionPrompt: text("extraction_prompt"), // LLM prompt used
+  extractionModel: text("extraction_model"), // gemini-1.5-pro, gpt-o1, etc.
+  promptStrategy: text("prompt_strategy"), // vanilla, undirected, directed_symbolic
+  extractionConfidence: real("extraction_confidence"),
+  // Approval workflow
+  status: text("status").notNull().default("draft"), // draft, pending_review, approved, deprecated
+  approvedBy: varchar("approved_by").references(() => users.id),
+  approvedAt: timestamp("approved_at"),
+  deprecatedAt: timestamp("deprecated_at"),
+  deprecationReason: text("deprecation_reason"),
+  // Audit
+  createdBy: varchar("created_by"),
+  metadata: jsonb("metadata"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  stateCodeIdx: index("formal_rules_state_code_idx").on(table.stateCode),
+  programCodeIdx: index("formal_rules_program_code_idx").on(table.programCode),
+  eligibilityDomainIdx: index("formal_rules_eligibility_domain_idx").on(table.eligibilityDomain),
+  statusIdx: index("formal_rules_status_idx").on(table.status),
+  isValidIdx: index("formal_rules_is_valid_idx").on(table.isValid),
+  stateProgramIdx: index("formal_rules_state_program_idx").on(table.stateCode, table.programCode),
+}));
+
+// Rule Extraction Audit Logs - Track LLM prompting attempts for rules
+export const ruleExtractionLogs = pgTable("rule_extraction_logs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  ruleFragmentId: varchar("rule_fragment_id").references(() => ruleFragments.id),
+  formalRuleId: varchar("formal_rule_id").references(() => formalRules.id),
+  extractionModel: text("extraction_model").notNull(),
+  promptStrategy: text("prompt_strategy").notNull(), // vanilla, undirected, directed_symbolic
+  prompt: text("prompt").notNull(),
+  response: text("response").notNull(),
+  extractedLogic: text("extracted_logic"),
+  isSuccess: boolean("is_success").notNull(),
+  errorMessage: text("error_message"),
+  z3ValidationResult: text("z3_validation_result"), // valid, syntax_error, semantic_error
+  inputTokens: integer("input_tokens"),
+  outputTokens: integer("output_tokens"),
+  latencyMs: integer("latency_ms"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+  ruleFragmentIdx: index("rule_extraction_logs_rule_fragment_idx").on(table.ruleFragmentId),
+  extractionModelIdx: index("rule_extraction_logs_model_idx").on(table.extractionModel),
+  promptStrategyIdx: index("rule_extraction_logs_strategy_idx").on(table.promptStrategy),
+  isSuccessIdx: index("rule_extraction_logs_success_idx").on(table.isSuccess),
+}));
+
+// Case Assertions - ABox: Case-level facts instantiated from household profiles
+export const caseAssertions = pgTable("case_assertions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  caseId: varchar("case_id").references(() => clientCases.id).notNull(),
+  householdProfileId: varchar("household_profile_id"), // References household_profiles
+  stateCode: text("state_code").notNull(),
+  programCode: text("program_code").notNull(),
+  // Assertion content
+  assertionType: text("assertion_type").notNull(), // fact, claim, explanation_derived
+  ontologyTermId: varchar("ontology_term_id").references(() => ontologyTerms.id),
+  predicateName: text("predicate_name").notNull(), // e.g., "GrossIncome", "HouseholdSize"
+  predicateValue: text("predicate_value"), // Actual value (e.g., "45000", "3", "true")
+  predicateOperator: text("predicate_operator"), // =, <, >, <=, >=, !=
+  comparisonValue: text("comparison_value"), // For threshold comparisons
+  // Z3 assertion
+  z3Assertion: text("z3_assertion"), // Z3-compatible format
+  // Source tracking
+  sourceField: text("source_field"), // Field in household profile
+  sourceValue: text("source_value"), // Original value before normalization
+  extractionMethod: text("extraction_method"), // direct_mapping, llm_extraction, calculation
+  // Verification
+  isVerified: boolean("is_verified").default(false).notNull(),
+  verificationDocumentId: varchar("verification_document_id"),
+  // Multi-tenancy
+  tenantId: varchar("tenant_id"),
+  // Data retention
+  retentionCategory: text("retention_category"),
+  retentionUntil: timestamp("retention_until"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  caseIdIdx: index("case_assertions_case_id_idx").on(table.caseId),
+  stateCodeIdx: index("case_assertions_state_code_idx").on(table.stateCode),
+  programCodeIdx: index("case_assertions_program_code_idx").on(table.programCode),
+  assertionTypeIdx: index("case_assertions_assertion_type_idx").on(table.assertionType),
+  predicateNameIdx: index("case_assertions_predicate_name_idx").on(table.predicateName),
+  tenantIdIdx: index("case_assertions_tenant_id_idx").on(table.tenantId),
+}));
+
+// Explanation Clauses - Individual claims from decision explanations (for verification)
+export const explanationClauses = pgTable("explanation_clauses", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  caseId: varchar("case_id").references(() => clientCases.id).notNull(),
+  eligibilityCalculationId: varchar("eligibility_calculation_id").references(() => eligibilityCalculations.id),
+  clauseNumber: integer("clause_number").notNull(),
+  clauseText: text("clause_text").notNull(), // Original explanation text
+  normalizedClause: text("normalized_clause"), // Canonical form
+  // Ontology mapping
+  mappedOntologyTerms: text("mapped_ontology_terms").array(), // Ontology term IDs
+  mappedPredicates: text("mapped_predicates").array(), // Extracted predicates
+  z3Assertion: text("z3_assertion"), // Z3-compatible assertion
+  // Mapping confidence
+  mappingConfidence: real("mapping_confidence"),
+  mappingModel: text("mapping_model"), // LLM used for mapping
+  // Verification result (filled after solver run)
+  verificationResult: text("verification_result"), // satisfied, violated, unknown
+  violatedRuleIds: text("violated_rule_ids").array(), // References to formal_rules
+  // Source
+  explanationType: text("explanation_type").notNull(), // denial, approval, reduction, termination
+  sourceSystem: text("source_system"), // rules_engine, policyengine, ai_copilot
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  caseIdIdx: index("explanation_clauses_case_id_idx").on(table.caseId),
+  eligibilityCalcIdx: index("explanation_clauses_eligibility_calc_idx").on(table.eligibilityCalculationId),
+  verificationResultIdx: index("explanation_clauses_verification_result_idx").on(table.verificationResult),
+  explanationTypeIdx: index("explanation_clauses_explanation_type_idx").on(table.explanationType),
+}));
+
+// Solver Runs - SMT solver execution records
+export const solverRuns = pgTable("solver_runs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  caseId: varchar("case_id").references(() => clientCases.id).notNull(),
+  stateCode: text("state_code").notNull(),
+  programCode: text("program_code").notNull(),
+  // Solver input
+  tboxRuleIds: text("tbox_rule_ids").array(), // formal_rules used
+  aboxAssertionIds: text("abox_assertion_ids").array(), // case_assertions used
+  explanationClauseIds: text("explanation_clause_ids").array(), // explanation_clauses checked
+  // Solver output
+  solverResult: text("solver_result").notNull(), // SAT, UNSAT, UNKNOWN, TIMEOUT
+  isSatisfied: boolean("is_satisfied"), // true if SAT (legally valid)
+  unsatCore: text("unsat_core").array(), // Minimal unsatisfiable constraint set
+  violatedRuleIds: text("violated_rule_ids").array(), // formal_rules violated
+  violatedCitations: text("violated_citations").array(), // Statutory citations violated
+  satisfiedRuleIds: text("satisfied_rule_ids").array(), // Rules that passed
+  // Performance
+  solverVersion: text("solver_version"), // z3 version
+  solverTimeMs: integer("solver_time_ms"),
+  constraintCount: integer("constraint_count"),
+  variableCount: integer("variable_count"),
+  // Execution context
+  triggeredBy: text("triggered_by").notNull(), // eligibility_calculation, appeal_review, manual_check
+  userId: varchar("user_id").references(() => users.id),
+  tenantId: varchar("tenant_id"),
+  // Full solver trace (for debugging)
+  solverTrace: jsonb("solver_trace"),
+  metadata: jsonb("metadata"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+  caseIdIdx: index("solver_runs_case_id_idx").on(table.caseId),
+  stateCodeIdx: index("solver_runs_state_code_idx").on(table.stateCode),
+  programCodeIdx: index("solver_runs_program_code_idx").on(table.programCode),
+  solverResultIdx: index("solver_runs_solver_result_idx").on(table.solverResult),
+  isSatisfiedIdx: index("solver_runs_is_satisfied_idx").on(table.isSatisfied),
+  triggeredByIdx: index("solver_runs_triggered_by_idx").on(table.triggeredBy),
+  tenantIdIdx: index("solver_runs_tenant_id_idx").on(table.tenantId),
+  createdAtIdx: index("solver_runs_created_at_idx").on(table.createdAt),
+}));
+
+// Violation Traces - Detailed statutory violation records with citation links
+export const violationTraces = pgTable("violation_traces", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  solverRunId: varchar("solver_run_id").references(() => solverRuns.id).notNull(),
+  caseId: varchar("case_id").references(() => clientCases.id).notNull(),
+  // Violated rule details
+  formalRuleId: varchar("formal_rule_id").references(() => formalRules.id).notNull(),
+  ruleName: text("rule_name").notNull(),
+  eligibilityDomain: text("eligibility_domain").notNull(),
+  // Statutory citation
+  statutoryCitation: text("statutory_citation").notNull(),
+  statutorySourceId: varchar("statutory_source_id").references(() => statutorySources.id),
+  statutoryText: text("statutory_text"), // Relevant excerpt
+  // Violation details
+  violationType: text("violation_type").notNull(), // threshold_exceeded, requirement_missing, condition_failed
+  violationDescription: text("violation_description").notNull(), // Human-readable explanation
+  // Conflicting assertions
+  conflictingAssertionIds: text("conflicting_assertion_ids").array(),
+  conflictingPredicates: jsonb("conflicting_predicates"), // {predicate, expected, actual}
+  // Appeal support
+  appealRecommendation: text("appeal_recommendation"), // AI-generated appeal guidance
+  requiredDocumentation: text("required_documentation").array(), // Documents needed to contest
+  // UI display
+  severityLevel: text("severity_level").notNull().default("high"), // low, medium, high, critical
+  displayOrder: integer("display_order"), // Order in violation trace visualization
+  metadata: jsonb("metadata"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+  solverRunIdx: index("violation_traces_solver_run_idx").on(table.solverRunId),
+  caseIdIdx: index("violation_traces_case_id_idx").on(table.caseId),
+  formalRuleIdx: index("violation_traces_formal_rule_idx").on(table.formalRuleId),
+  eligibilityDomainIdx: index("violation_traces_eligibility_domain_idx").on(table.eligibilityDomain),
+  violationTypeIdx: index("violation_traces_violation_type_idx").on(table.violationType),
+  severityLevelIdx: index("violation_traces_severity_level_idx").on(table.severityLevel),
+}));
+
+// Insert schemas for neuro-symbolic tables
+export const insertStatutorySourceSchema = createInsertSchema(statutorySources).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertOntologyTermSchema = createInsertSchema(ontologyTerms).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertOntologyRelationshipSchema = createInsertSchema(ontologyRelationships).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertRuleFragmentSchema = createInsertSchema(ruleFragments).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertFormalRuleSchema = createInsertSchema(formalRules).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertRuleExtractionLogSchema = createInsertSchema(ruleExtractionLogs).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertCaseAssertionSchema = createInsertSchema(caseAssertions).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertExplanationClauseSchema = createInsertSchema(explanationClauses).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertSolverRunSchema = createInsertSchema(solverRuns).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertViolationTraceSchema = createInsertSchema(violationTraces).omit({
+  id: true,
+  createdAt: true,
+});
+
+// Types for neuro-symbolic tables
+export type StatutorySource = typeof statutorySources.$inferSelect;
+export type InsertStatutorySource = z.infer<typeof insertStatutorySourceSchema>;
+export type OntologyTerm = typeof ontologyTerms.$inferSelect;
+export type InsertOntologyTerm = z.infer<typeof insertOntologyTermSchema>;
+export type OntologyRelationship = typeof ontologyRelationships.$inferSelect;
+export type InsertOntologyRelationship = z.infer<typeof insertOntologyRelationshipSchema>;
+export type RuleFragment = typeof ruleFragments.$inferSelect;
+export type InsertRuleFragment = z.infer<typeof insertRuleFragmentSchema>;
+export type FormalRule = typeof formalRules.$inferSelect;
+export type InsertFormalRule = z.infer<typeof insertFormalRuleSchema>;
+export type RuleExtractionLog = typeof ruleExtractionLogs.$inferSelect;
+export type InsertRuleExtractionLog = z.infer<typeof insertRuleExtractionLogSchema>;
+export type CaseAssertion = typeof caseAssertions.$inferSelect;
+export type InsertCaseAssertion = z.infer<typeof insertCaseAssertionSchema>;
+export type ExplanationClause = typeof explanationClauses.$inferSelect;
+export type InsertExplanationClause = z.infer<typeof insertExplanationClauseSchema>;
+export type SolverRun = typeof solverRuns.$inferSelect;
+export type InsertSolverRun = z.infer<typeof insertSolverRunSchema>;
+export type ViolationTrace = typeof violationTraces.$inferSelect;
+export type InsertViolationTrace = z.infer<typeof insertViolationTraceSchema>;
+
 // Export tax return tables from taxReturnSchema
 // COMMENTED OUT DURING SCHEMA ROLLBACK - taxReturnSchema.ts moved to backup
 // export * from './taxReturnSchema';

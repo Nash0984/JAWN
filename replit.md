@@ -42,6 +42,17 @@ The backend uses Express.js with TypeScript and PostgreSQL via Drizzle ORM on Ne
 -   **Unified Household Profiler**: Single profile for benefits and tax workflows.
 -   **Performance Optimization**: Server-side caching, extensive database indexing, non-blocking initialization.
 -   **Rules-as-Code Architecture**: Maryland rules engines are primary, with PolicyEngine as a verifier.
+-   **Neuro-Symbolic AI Architecture**: Production-grade implementation based on research paper "A Neuro-Symbolic Framework for Accountability in Public-Sector AI" (97.7% accuracy matching judicial determinations). 10 database tables deployed:
+    - `statutory_sources`: Legal text storage with citations and effective dates
+    - `ontology_terms`: TBox (legal ontology) with e5-large-v2 embeddings for semantic similarity
+    - `ontology_relationships`: Knowledge graph edges (is_a, has_property, requires, implies)
+    - `rule_fragments`: Extracted clause-level rule text from statutes
+    - `formal_rules`: Z3 SMT solver logic with prompt strategy tracking
+    - `rule_extraction_logs`: LLM extraction audit trail with tokens/latency
+    - `case_assertions`: ABox (case facts) linked to ontology terms
+    - `explanation_clauses`: Denial reason mapping to formal predicates
+    - `solver_runs`: Z3 verification results with UNSAT core analysis
+    - `violation_traces`: Appeal-ready violation records with statutory citations
 -   **Testing**: Vitest, @testing-library/react, and supertest.
 -   **Distributed Caching System**: Production-ready cache with Redis/Upstash.
 -   **Scalable Connection Pooling**: Neon Pooled Connections.

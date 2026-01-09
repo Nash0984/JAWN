@@ -15,6 +15,13 @@
       "when": 1761225579765,
       "tag": "0001_crit002_retention_tracking",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1767942479035,
+      "tag": "0002_neuro_symbolic_schema",
+      "breakpoints": true
     }
   ]
 }
