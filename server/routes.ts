@@ -11714,6 +11714,18 @@ If the question cannot be answered with the available information, say so clearl
   const ruleExtractionRouter = (await import('./api/ruleExtraction.routes')).default;
   app.use('/api/rule-extraction', ruleExtractionRouter);
 
+  // ============================================================================
+  // Mount Case Assertion Routes - Neuro-Symbolic AI ABox Case Facts
+  // ============================================================================
+  const caseAssertionRouter = (await import('./api/caseAssertion.routes')).default;
+  app.use('/api/case-assertions', caseAssertionRouter);
+
+  // ============================================================================
+  // Mount Z3 Solver Routes - Neuro-Symbolic AI Formal Verification
+  // ============================================================================
+  const z3SolverRouter = (await import('./api/z3Solver.routes')).default;
+  app.use('/api/z3-solver', z3SolverRouter);
+
   const httpServer = createServer(app);
   
   // Initialize WebSocket service for real-time notifications
