@@ -8483,6 +8483,267 @@ export const violationTraces = pgTable("violation_traces", {
   severityLevelIdx: index("violation_traces_severity_level_idx").on(table.severityLevel),
 }));
 
+// ============================================================================
+// PAYMENT ERROR REDUCTION (PER) MODULE TABLES
+// SNAP Payment Error Rate Reduction per Arnold Ventures/MD DHS Blueprint
+// ============================================================================
+
+// PER Income Verifications - W-2 wage data matching against reported income
+export const perIncomeVerifications = pgTable("per_income_verifications", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  caseId: varchar("case_id").references(() => clientCases.id).notNull(),
+  householdMemberId: varchar("household_member_id"),
+  // Reported income from application
+  reportedGrossIncome: integer("reported_gross_income"), // Monthly
+  reportedIncomeSource: text("reported_income_source"),
+  reportedEmployer: text("reported_employer"),
+  // Verified income from external sources
+  verifiedGrossIncome: integer("verified_gross_income"),
+  verifiedIncomeSource: text("verified_income_source"), // w2, state_wage_db, ssa, employer_direct
+  verifiedEmployer: text("verified_employer"),
+  verificationQuarter: text("verification_quarter"), // e.g., "2025-Q1"
+  verificationDate: timestamp("verification_date"),
+  // Discrepancy analysis
+  discrepancyAmount: integer("discrepancy_amount"), // Difference in dollars
+  discrepancyPercent: real("discrepancy_percent"),
+  discrepancyType: text("discrepancy_type"), // underreported, overreported, unreported_employer, missing_income
+  // Error classification
+  isPaymentError: boolean("is_payment_error").default(false),
+  errorType: text("error_type"), // overpayment, underpayment, none
+  estimatedErrorAmount: integer("estimated_error_amount"), // Impact on benefit calculation
+  // Resolution
+  resolutionStatus: text("resolution_status").default("pending"), // pending, resolved, escalated, waived
+  resolutionAction: text("resolution_action"),
+  resolvedBy: varchar("resolved_by").references(() => users.id),
+  resolvedAt: timestamp("resolved_at"),
+  // Audit trail
+  stateCode: text("state_code").notNull().default("MD"),
+  tenantId: varchar("tenant_id"),
+  createdBy: varchar("created_by").references(() => users.id),
+  metadata: jsonb("metadata"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull().$onUpdate(() => new Date()),
+}, (table) => ({
+  caseIdIdx: index("per_income_verifications_case_id_idx").on(table.caseId),
+  stateCodeIdx: index("per_income_verifications_state_code_idx").on(table.stateCode),
+  isPaymentErrorIdx: index("per_income_verifications_is_payment_error_idx").on(table.isPaymentError),
+  errorTypeIdx: index("per_income_verifications_error_type_idx").on(table.errorType),
+  resolutionStatusIdx: index("per_income_verifications_resolution_status_idx").on(table.resolutionStatus),
+  verificationQuarterIdx: index("per_income_verifications_quarter_idx").on(table.verificationQuarter),
+  tenantIdIdx: index("per_income_verifications_tenant_id_idx").on(table.tenantId),
+}));
+
+// PER Consistency Checks - Pre-submission validation before case approval
+export const perConsistencyChecks = pgTable("per_consistency_checks", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  caseId: varchar("case_id").references(() => clientCases.id).notNull(),
+  checkType: text("check_type").notNull(), // income_total, household_composition, documentation_complete, duplicate_person, income_source_match
+  checkName: text("check_name").notNull(),
+  checkDescription: text("check_description"),
+  // Check results
+  checkStatus: text("check_status").notNull(), // passed, failed, warning, skipped
+  riskScore: integer("risk_score"), // 0-100
+  riskLevel: text("risk_level"), // low, medium, high, critical
+  // Specific findings
+  expectedValue: text("expected_value"),
+  actualValue: text("actual_value"),
+  discrepancyDetails: text("discrepancy_details"),
+  affectedFields: text("affected_fields").array(),
+  // Impact assessment
+  potentialErrorType: text("potential_error_type"), // overpayment, underpayment, none
+  estimatedImpact: integer("estimated_impact"), // Dollar amount if not corrected
+  // Caseworker guidance
+  recommendedAction: text("recommended_action"),
+  documentationNeeded: text("documentation_needed").array(),
+  // Resolution tracking
+  wasAddressed: boolean("was_addressed").default(false),
+  addressedBy: varchar("addressed_by").references(() => users.id),
+  addressedAt: timestamp("addressed_at"),
+  addressedAction: text("addressed_action"),
+  // Execution context
+  triggeredBy: text("triggered_by").notNull(), // pre_submission, periodic_review, qc_sample, manual
+  stateCode: text("state_code").notNull().default("MD"),
+  tenantId: varchar("tenant_id"),
+  metadata: jsonb("metadata"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull().$onUpdate(() => new Date()),
+}, (table) => ({
+  caseIdIdx: index("per_consistency_checks_case_id_idx").on(table.caseId),
+  checkTypeIdx: index("per_consistency_checks_check_type_idx").on(table.checkType),
+  checkStatusIdx: index("per_consistency_checks_check_status_idx").on(table.checkStatus),
+  riskLevelIdx: index("per_consistency_checks_risk_level_idx").on(table.riskLevel),
+  wasAddressedIdx: index("per_consistency_checks_was_addressed_idx").on(table.wasAddressed),
+  triggeredByIdx: index("per_consistency_checks_triggered_by_idx").on(table.triggeredBy),
+  stateCodeIdx: index("per_consistency_checks_state_code_idx").on(table.stateCode),
+  tenantIdIdx: index("per_consistency_checks_tenant_id_idx").on(table.tenantId),
+}));
+
+// PER Duplicate Claims - Detect individuals/children on multiple SNAP applications
+export const perDuplicateClaims = pgTable("per_duplicate_claims", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  // Primary case (the one being reviewed)
+  primaryCaseId: varchar("primary_case_id").references(() => clientCases.id).notNull(),
+  primaryHouseholdId: varchar("primary_household_id").references(() => householdProfiles.id),
+  // Duplicate case (the conflicting case)
+  duplicateCaseId: varchar("duplicate_case_id").references(() => clientCases.id),
+  duplicateHouseholdId: varchar("duplicate_household_id").references(() => householdProfiles.id),
+  // Person details
+  personFirstName: text("person_first_name"),
+  personLastName: text("person_last_name"),
+  personDob: date("person_dob"),
+  personSsn4: text("person_ssn_4"), // Last 4 digits only for matching
+  personRelationship: text("person_relationship"), // child, spouse, parent, other
+  // Match analysis
+  matchType: text("match_type").notNull(), // exact_ssn, name_dob, name_address, fuzzy
+  matchConfidence: real("match_confidence"), // 0.0-1.0
+  matchingFields: text("matching_fields").array(), // Which fields matched
+  // Duplicate classification
+  duplicateType: text("duplicate_type").notNull(), // same_person_multiple_households, child_claimed_twice, identity_mismatch
+  isPotentialFraud: boolean("is_potential_fraud").default(false),
+  // Impact
+  impactedBenefitAmount: integer("impacted_benefit_amount"),
+  impactedProgram: text("impacted_program").default("SNAP"),
+  // Resolution
+  resolutionStatus: text("resolution_status").default("pending"), // pending, confirmed_duplicate, false_positive, resolved
+  resolutionAction: text("resolution_action"), // merged, removed_from_primary, removed_from_duplicate, referred_fraud
+  resolvedBy: varchar("resolved_by").references(() => users.id),
+  resolvedAt: timestamp("resolved_at"),
+  resolutionNotes: text("resolution_notes"),
+  // Detection context
+  detectedBy: text("detected_by").notNull(), // pre_submission, batch_scan, qc_review, external_match
+  stateCode: text("state_code").notNull().default("MD"),
+  tenantId: varchar("tenant_id"),
+  metadata: jsonb("metadata"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull().$onUpdate(() => new Date()),
+}, (table) => ({
+  primaryCaseIdx: index("per_duplicate_claims_primary_case_idx").on(table.primaryCaseId),
+  duplicateCaseIdx: index("per_duplicate_claims_duplicate_case_idx").on(table.duplicateCaseId),
+  matchTypeIdx: index("per_duplicate_claims_match_type_idx").on(table.matchType),
+  duplicateTypeIdx: index("per_duplicate_claims_duplicate_type_idx").on(table.duplicateType),
+  resolutionStatusIdx: index("per_duplicate_claims_resolution_status_idx").on(table.resolutionStatus),
+  isPotentialFraudIdx: index("per_duplicate_claims_is_potential_fraud_idx").on(table.isPotentialFraud),
+  stateCodeIdx: index("per_duplicate_claims_state_code_idx").on(table.stateCode),
+  tenantIdIdx: index("per_duplicate_claims_tenant_id_idx").on(table.tenantId),
+}));
+
+// PER Caseworker Nudges - Explainable AI guidance for caseworkers (XAI)
+export const perCaseworkerNudges = pgTable("per_caseworker_nudges", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  caseId: varchar("case_id").references(() => clientCases.id).notNull(),
+  caseworkerId: varchar("caseworker_id").references(() => users.id),
+  // Risk scoring context
+  riskScore: integer("risk_score").notNull(), // 0-100
+  riskLevel: text("risk_level").notNull(), // low, medium, high, critical
+  riskFactors: text("risk_factors").array(), // List of contributing factors
+  // Plain language explanation (XAI)
+  nudgeTitle: text("nudge_title").notNull(),
+  nudgeDescription: text("nudge_description").notNull(), // Plain language explanation of why flagged
+  // Specific guidance
+  primaryAction: text("primary_action").notNull(), // What the caseworker should do first
+  additionalActions: text("additional_actions").array(),
+  documentationToReview: text("documentation_to_review").array(),
+  questionsToAsk: text("questions_to_ask").array(), // Suggested verification questions
+  // Source data citations
+  dataSourcesUsed: text("data_sources_used").array(), // w2_data, household_history, case_patterns
+  evidenceSummary: jsonb("evidence_summary"), // Structured evidence for the nudge
+  // Confidence and reasoning
+  confidenceScore: real("confidence_score"), // AI confidence in this nudge
+  reasoningTrace: text("reasoning_trace"), // Step-by-step logic (for audit)
+  modelVersion: text("model_version"),
+  // Caseworker interaction
+  nudgeStatus: text("nudge_status").default("pending"), // pending, viewed, acted_upon, dismissed
+  viewedAt: timestamp("viewed_at"),
+  actionTaken: text("action_taken"),
+  actionTakenAt: timestamp("action_taken_at"),
+  caseworkerFeedback: text("caseworker_feedback"), // Was this nudge helpful?
+  feedbackRating: integer("feedback_rating"), // 1-5 stars
+  // Outcome tracking
+  outcomeType: text("outcome_type"), // error_prevented, error_found, false_positive, no_action_needed
+  actualErrorAmount: integer("actual_error_amount"),
+  // Context
+  nudgeType: text("nudge_type").notNull(), // income_discrepancy, duplicate_claim, documentation_gap, pattern_alert
+  programType: text("program_type").default("SNAP"),
+  stateCode: text("state_code").notNull().default("MD"),
+  tenantId: varchar("tenant_id"),
+  metadata: jsonb("metadata"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull().$onUpdate(() => new Date()),
+}, (table) => ({
+  caseIdIdx: index("per_caseworker_nudges_case_id_idx").on(table.caseId),
+  caseworkerIdIdx: index("per_caseworker_nudges_caseworker_id_idx").on(table.caseworkerId),
+  riskLevelIdx: index("per_caseworker_nudges_risk_level_idx").on(table.riskLevel),
+  nudgeStatusIdx: index("per_caseworker_nudges_nudge_status_idx").on(table.nudgeStatus),
+  nudgeTypeIdx: index("per_caseworker_nudges_nudge_type_idx").on(table.nudgeType),
+  outcomeTypeIdx: index("per_caseworker_nudges_outcome_type_idx").on(table.outcomeType),
+  stateCodeIdx: index("per_caseworker_nudges_state_code_idx").on(table.stateCode),
+  tenantIdIdx: index("per_caseworker_nudges_tenant_id_idx").on(table.tenantId),
+  createdAtIdx: index("per_caseworker_nudges_created_at_idx").on(table.createdAt),
+}));
+
+// PER PERM Samples - FNS Payment Error Rate Measurement sampling and reporting
+export const perPermSamples = pgTable("per_perm_samples", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  caseId: varchar("case_id").references(() => clientCases.id).notNull(),
+  // Sample metadata
+  samplePeriod: text("sample_period").notNull(), // e.g., "FY2025-Q2"
+  sampleType: text("sample_type").notNull(), // active_case, negative_case
+  sampleStratum: text("sample_stratum"), // Stratification category
+  sampleWeight: real("sample_weight"), // Statistical weight for extrapolation
+  selectionDate: timestamp("selection_date").notNull(),
+  // Case snapshot at selection
+  benefitAmount: integer("benefit_amount"), // Monthly SNAP benefit at selection
+  householdSize: integer("household_size"),
+  grossIncome: integer("gross_income"),
+  netIncome: integer("net_income"),
+  certificationPeriod: text("certification_period"),
+  // Review findings
+  reviewStatus: text("review_status").default("pending"), // pending, in_review, completed, unable_to_review
+  reviewStartDate: timestamp("review_start_date"),
+  reviewCompletedDate: timestamp("review_completed_date"),
+  reviewerId: varchar("reviewer_id").references(() => users.id),
+  // Error findings
+  hasError: boolean("has_error").default(false),
+  errorType: text("error_type"), // overpayment, underpayment, none
+  errorAmount: integer("error_amount"), // Dollar amount of error
+  correctBenefitAmount: integer("correct_benefit_amount"),
+  // Error classification per FNS
+  errorCategory: text("error_category"), // agency_error, client_error, both
+  errorCause: text("error_cause"), // income, deductions, household_comp, resources, other
+  errorSubcause: text("error_subcause"), // More specific cause
+  errorResponsibility: text("error_responsibility"), // state_agency, local_office, client, other
+  // Variance analysis
+  incomeVariance: integer("income_variance"),
+  deductionVariance: integer("deduction_variance"),
+  householdVariance: integer("household_variance"),
+  // Documentation
+  reviewNotes: text("review_notes"),
+  findingsSummary: text("findings_summary"),
+  correctiveActions: text("corrective_actions").array(),
+  // FNS reporting fields
+  fnsReportingStatus: text("fns_reporting_status").default("pending"), // pending, submitted, accepted, rejected
+  fnsSubmissionDate: timestamp("fns_submission_date"),
+  fnsReferenceNumber: text("fns_reference_number"),
+  // State tracking
+  stateCode: text("state_code").notNull().default("MD"),
+  countyCode: text("county_code"),
+  tenantId: varchar("tenant_id"),
+  metadata: jsonb("metadata"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull().$onUpdate(() => new Date()),
+}, (table) => ({
+  caseIdIdx: index("per_perm_samples_case_id_idx").on(table.caseId),
+  samplePeriodIdx: index("per_perm_samples_sample_period_idx").on(table.samplePeriod),
+  sampleTypeIdx: index("per_perm_samples_sample_type_idx").on(table.sampleType),
+  reviewStatusIdx: index("per_perm_samples_review_status_idx").on(table.reviewStatus),
+  hasErrorIdx: index("per_perm_samples_has_error_idx").on(table.hasError),
+  errorTypeIdx: index("per_perm_samples_error_type_idx").on(table.errorType),
+  errorCategoryIdx: index("per_perm_samples_error_category_idx").on(table.errorCategory),
+  fnsReportingStatusIdx: index("per_perm_samples_fns_reporting_status_idx").on(table.fnsReportingStatus),
+  stateCodeIdx: index("per_perm_samples_state_code_idx").on(table.stateCode),
+  tenantIdIdx: index("per_perm_samples_tenant_id_idx").on(table.tenantId),
+}));
+
 // Insert schemas for neuro-symbolic tables
 export const insertStatutorySourceSchema = createInsertSchema(statutorySources).omit({
   id: true,
@@ -8541,6 +8802,37 @@ export const insertViolationTraceSchema = createInsertSchema(violationTraces).om
   createdAt: true,
 });
 
+// Insert schemas for PER (Payment Error Reduction) tables
+export const insertPerIncomeVerificationSchema = createInsertSchema(perIncomeVerifications).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertPerConsistencyCheckSchema = createInsertSchema(perConsistencyChecks).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertPerDuplicateClaimSchema = createInsertSchema(perDuplicateClaims).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertPerCaseworkerNudgeSchema = createInsertSchema(perCaseworkerNudges).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertPerPermSampleSchema = createInsertSchema(perPermSamples).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
 // Types for neuro-symbolic tables
 export type StatutorySource = typeof statutorySources.$inferSelect;
 export type InsertStatutorySource = z.infer<typeof insertStatutorySourceSchema>;
@@ -8562,6 +8854,18 @@ export type SolverRun = typeof solverRuns.$inferSelect;
 export type InsertSolverRun = z.infer<typeof insertSolverRunSchema>;
 export type ViolationTrace = typeof violationTraces.$inferSelect;
 export type InsertViolationTrace = z.infer<typeof insertViolationTraceSchema>;
+
+// Types for PER (Payment Error Reduction) tables
+export type PerIncomeVerification = typeof perIncomeVerifications.$inferSelect;
+export type InsertPerIncomeVerification = z.infer<typeof insertPerIncomeVerificationSchema>;
+export type PerConsistencyCheck = typeof perConsistencyChecks.$inferSelect;
+export type InsertPerConsistencyCheck = z.infer<typeof insertPerConsistencyCheckSchema>;
+export type PerDuplicateClaim = typeof perDuplicateClaims.$inferSelect;
+export type InsertPerDuplicateClaim = z.infer<typeof insertPerDuplicateClaimSchema>;
+export type PerCaseworkerNudge = typeof perCaseworkerNudges.$inferSelect;
+export type InsertPerCaseworkerNudge = z.infer<typeof insertPerCaseworkerNudgeSchema>;
+export type PerPermSample = typeof perPermSamples.$inferSelect;
+export type InsertPerPermSample = z.infer<typeof insertPerPermSampleSchema>;
 
 // Export tax return tables from taxReturnSchema
 // COMMENTED OUT DURING SCHEMA ROLLBACK - taxReturnSchema.ts moved to backup

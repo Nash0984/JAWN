@@ -32,6 +32,15 @@ The backend uses Express.js with TypeScript and PostgreSQL via Drizzle ORM on Ne
 -   **Smart RAG System**: Semantic search across policy documents using Gemini embeddings.
 -   **Fraud Detection Pipeline**: Pattern analysis for unusual applications.
 -   **Smart Workflow Automation**: AI-driven task prioritization and automated case routing.
+-   **Payment Error Reduction (PER) Module**: Comprehensive SNAP payment error prevention system per Arnold Ventures/MD DHS Blueprint with "predict and prevent" strategy. Includes:
+    - **Income Verification Service**: Quarterly W-2/wage data matching against reported income with discrepancy detection and severity scoring
+    - **Pre-Submission Validator**: 7 consistency check types (income totals, household composition, documentation, resource limits, work requirements) before case approval
+    - **Duplicate Claim Detector**: SSN/name/DOB matching to identify individuals claimed on multiple SNAP applications
+    - **Explainable Nudge Service (XAI)**: AI-powered caseworker guidance with plain-language (Grade 6) explanations of risk factors using Gemini
+    - **PERM Reporting Service**: FNS-compliant sampling (180 active/80 negative cases per quarter) and federal payment error rate reporting
+    - **5 Database Tables**: `per_income_verifications`, `per_consistency_checks`, `per_duplicate_claims`, `per_caseworker_nudges`, `per_perm_samples`
+    - **25+ API Endpoints**: Full REST API at `/api/per/*` for assessment, verification, validation, nudges, and PERM compliance
+    - **PER Dashboard**: Real-time error prevention metrics, high-priority nudge display, PERM compliance status at `/admin/per`
 
 ## System Design Choices
 -   **Data Management**: PostgreSQL for core data, Google Cloud Storage for files.

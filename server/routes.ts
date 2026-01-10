@@ -11738,6 +11738,13 @@ If the question cannot be answered with the available information, say so clearl
   const neuroSymbolicRouter = (await import('./api/neuroSymbolicVerification.routes')).default;
   app.use('/api/neuro-symbolic', neuroSymbolicRouter);
 
+  // ============================================================================
+  // Mount Payment Error Reduction (PER) Routes - SNAP Error Prevention Module
+  // Per Arnold Ventures/MD DHS Blueprint for SNAP Payment Error Rate Reduction
+  // ============================================================================
+  const perRouter = (await import('./api/per.routes')).default;
+  app.use('/api/per', perRouter);
+
   const httpServer = createServer(app);
   
   // Initialize WebSocket service for real-time notifications

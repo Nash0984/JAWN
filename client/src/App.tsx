@@ -66,6 +66,7 @@ import StateLawTracker from "@/pages/admin/StateLawTracker";
 import SmartScheduler from "@/pages/admin/SmartScheduler";
 import CountyTaxRates from "@/pages/admin/CountyTaxRates";
 import WebhookManagement from "@/pages/admin/WebhookManagement";
+import PerDashboard from "@/pages/admin/PerDashboard";
 import DocumentReviewQueue from "@/pages/DocumentReviewQueue";
 import TaxPreparation from "@/pages/TaxPreparation";
 import CountyManagement from "@/pages/CountyManagement";
@@ -523,6 +524,13 @@ function Router() {
             {() => (
               <ProtectedRoute requireStaff>
                 <CrossEnrollmentAdmin />
+              </ProtectedRoute>
+            )}
+          </Route>
+          <Route path="/admin/per">
+            {() => (
+              <ProtectedRoute requireStaff>
+                <PerDashboard />
               </ProtectedRoute>
             )}
           </Route>
