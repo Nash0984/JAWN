@@ -11745,6 +11745,13 @@ If the question cannot be answered with the available information, say so clearl
   const perRouter = (await import('./api/per.routes')).default;
   app.use('/api/per', perRouter);
 
+  // ============================================================================
+  // Mount Research API Routes - Public-Facing API for External Researchers
+  // Provides PII-stripped, aggregated data with API key authentication
+  // ============================================================================
+  const researchRouter = (await import('./api/research.routes')).default;
+  app.use('/api/research', researchRouter);
+
   const httpServer = createServer(app);
   
   // Initialize WebSocket service for real-time notifications

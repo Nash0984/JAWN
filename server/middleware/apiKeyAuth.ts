@@ -159,6 +159,16 @@ export const availableScopes = {
   'tax:read': 'Access tax calculation results',
   'tax:write': 'Create tax calculations',
   
+  // Research API scopes (read-only, aggregated, PII-stripped)
+  'research:eligibility': 'Access aggregated eligibility statistics (PII-stripped)',
+  'research:outcomes': 'Access program outcome data (PII-stripped)',
+  'research:demographics': 'Access aggregated demographic distributions',
+  'research:perm': 'Access PERM sampling and error rate data',
+  'research:all': 'Access all research endpoints',
+  
+  // Limited write access for research submissions
+  'research:submit': 'Submit research findings and data exports',
+  
   // Wildcard
   '*': 'Full access to all API endpoints',
 };
