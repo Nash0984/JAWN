@@ -1,4 +1,6 @@
-import { readingLevelService } from "./readingLevelService";
+import { ReadingLevelService } from "./readingLevelService";
+
+const readingLevelService = new ReadingLevelService();
 import { logger } from "./logger.service";
 
 export interface Z3ProofNarrative {
