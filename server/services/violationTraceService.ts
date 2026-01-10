@@ -80,20 +80,6 @@ const STATE_CONTACTS: Record<string, StateContactInfo> = {
     hearingsOffice: "Appeals and Fair Hearings Unit",
     website: "https://www.dss.virginia.gov"
   },
-  UT: {
-    agencyName: "Utah Department of Workforce Services",
-    phone: "1-866-435-7414",
-    address: "P.O. Box 45244, Salt Lake City, UT 84145",
-    hearingsOffice: "Appeals Section",
-    website: "https://jobs.utah.gov"
-  },
-  IN: {
-    agencyName: "Indiana Family and Social Services Administration",
-    phone: "1-800-403-0864",
-    address: "402 W. Washington Street, Indianapolis, IN 46204",
-    hearingsOffice: "Office of Administrative Law Proceedings",
-    website: "https://www.in.gov/fssa"
-  },
   MI: {
     agencyName: "Michigan Department of Health and Human Services",
     phone: "1-844-799-9876",

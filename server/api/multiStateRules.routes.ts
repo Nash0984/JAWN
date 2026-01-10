@@ -6,6 +6,9 @@
 
 import { Router, Request, Response } from 'express';
 import { multiStateRulesService } from '../services/multiStateRules.service';
+import { multiStateRulesSeeder } from '../services/multiStateRulesSeeder';
+import { llmsTxtAdapter } from '../services/ingestion/llmsTxtAdapter';
+import { narrativeAgent } from '../services/narrativeAgent';
 import { requireAuth } from '../middleware/auth';
 
 const router = Router();
@@ -157,6 +160,87 @@ router.post('/post-move-checklist', requireAuth, asyncHandler(async (req: Reques
   res.json({
     success: true,
     checklist: analysis.postMoveChecklist
+  });
+}));
+
+// Seed multi-state rules data (admin only)
+router.post('/seed', requireAuth, asyncHandler(async (req: Request, res: Response) => {
+  const result = await multiStateRulesSeeder.seedAll();
+  
+  res.json({
+    success: result.success,
+    message: result.success ? 'Multi-state rules seeded successfully' : 'Seeding failed',
+    results: result.results
+  });
+}));
+
+// Fetch and parse llms.txt for dynamic policy discovery
+router.get('/llms-txt/:stateCode', asyncHandler(async (req: Request, res: Response) => {
+  const { stateCode } = req.params;
+  
+  const content = await llmsTxtAdapter.fetchAndParse(stateCode.toUpperCase());
+  
+  if (!content) {
+    return res.status(404).json({
+      success: false,
+      error: `llms.txt not available for state: ${stateCode}`
+    });
+  }
+  
+  res.json({
+    success: true,
+    stateCode: stateCode.toUpperCase(),
+    content
+  });
+}));
+
+// Discover policy manuals from llms.txt
+router.get('/policy-sources/:stateCode', asyncHandler(async (req: Request, res: Response) => {
+  const { stateCode } = req.params;
+  
+  const sources = await llmsTxtAdapter.discoverPolicyManuals(stateCode.toUpperCase());
+  
+  res.json({
+    success: true,
+    stateCode: stateCode.toUpperCase(),
+    sources,
+    supportedStates: llmsTxtAdapter.getSupportedStates()
+  });
+}));
+
+// Check for policy updates via llms.txt
+router.get('/policy-updates/:stateCode', requireAuth, asyncHandler(async (req: Request, res: Response) => {
+  const { stateCode } = req.params;
+  
+  const updates = await llmsTxtAdapter.checkForPolicyUpdates(stateCode.toUpperCase());
+  
+  res.json({
+    success: true,
+    stateCode: stateCode.toUpperCase(),
+    ...updates
+  });
+}));
+
+// Translate Z3 proof to plain language (Narrative Agent / Mercy Module)
+router.post('/narrative', requireAuth, asyncHandler(async (req: Request, res: Response) => {
+  const { z3Logic, factors, targetReadingLevel } = req.body;
+  
+  if (!factors) {
+    return res.status(400).json({
+      success: false,
+      error: 'factors object is required'
+    });
+  }
+  
+  const narrative = narrativeAgent.translateZ3Proof(
+    z3Logic || '',
+    factors,
+    targetReadingLevel || 6
+  );
+  
+  res.json({
+    success: true,
+    narrative
   });
 }));
 
