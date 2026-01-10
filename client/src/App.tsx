@@ -67,6 +67,7 @@ import SmartScheduler from "@/pages/admin/SmartScheduler";
 import CountyTaxRates from "@/pages/admin/CountyTaxRates";
 import WebhookManagement from "@/pages/admin/WebhookManagement";
 import PerDashboard from "@/pages/admin/PerDashboard";
+import ResearcherManagement from "@/pages/admin/ResearcherManagement";
 import DocumentReviewQueue from "@/pages/DocumentReviewQueue";
 import TaxPreparation from "@/pages/TaxPreparation";
 import CountyManagement from "@/pages/CountyManagement";
@@ -531,6 +532,13 @@ function Router() {
             {() => (
               <ProtectedRoute requireStaff>
                 <PerDashboard />
+              </ProtectedRoute>
+            )}
+          </Route>
+          <Route path="/admin/researchers">
+            {() => (
+              <ProtectedRoute requireAdmin>
+                <ResearcherManagement />
               </ProtectedRoute>
             )}
           </Route>

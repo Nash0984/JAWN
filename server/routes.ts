@@ -11058,18 +11058,13 @@ If the question cannot be answered with the available information, say so clearl
     });
   }));
   
-  // List API keys for tenant (admin only)
+  // List API keys (admin only) - optionally filtered by tenantId
   app.get("/api/admin/api-keys", requireAuth, requireAdmin, asyncHandler(async (req: Request, res: Response) => {
     const { tenantId } = req.query;
     
-    if (!tenantId) {
-      return res.status(400).json({
-        error: 'Bad Request',
-        message: 'tenantId query parameter is required',
-      });
-    }
-    
-    const keys = await apiKeyService.getApiKeysByTenant(tenantId as string);
+    const keys = tenantId 
+      ? await apiKeyService.getApiKeysByTenant(tenantId as string)
+      : await apiKeyService.getAllApiKeys();
     
     // Don't return the actual hashed keys
     const sanitizedKeys = keys.map(k => ({

@@ -93,19 +93,13 @@ class ResearchAggregationService {
       .where(whereClause)
       .groupBy(eligibilityCalculations.programType, eligibilityCalculations.stateCode);
       
-      const safeStats = stats.map(row => {
-        const result = { ...row };
-        
-        if (row.totalCalculations < MINIMUM_SAMPLE_THRESHOLD) {
-          suppressedFields.push(`${row.program}_${row.stateCode}`);
-          result.avgBenefitAmount = null;
-          result.medianBenefitAmount = null;
-          result.eligibleCount = this.roundToNearestFive(row.eligibleCount);
-          result.ineligibleCount = this.roundToNearestFive(row.ineligibleCount);
-        }
-        
-        return result;
-      });
+      const suppressedGroups = stats
+        .filter(row => row.totalCalculations < MINIMUM_SAMPLE_THRESHOLD)
+        .map(r => `${r.program}_${r.stateCode}`);
+      suppressedFields.push(...suppressedGroups);
+      
+      const safeStats = stats
+        .filter(row => row.totalCalculations >= MINIMUM_SAMPLE_THRESHOLD);
       
       await this.logResearchAccess(params.apiKeyId, 'eligibility_stats', {
         params,
@@ -185,17 +179,13 @@ class ResearchAggregationService {
       .where(whereClause)
       .groupBy(clientCases.stateCode, clientCases.status, clientCases.programType);
       
-      const safeStats = outcomeStats.map(row => {
-        const result = { ...row };
-        
-        if (row.totalCases < MINIMUM_SAMPLE_THRESHOLD) {
-          suppressedFields.push(`${row.program}_${row.stateCode}_${row.status}`);
-          result.totalCases = this.roundToNearestFive(row.totalCases);
-          result.avgProcessingDays = null;
-        }
-        
-        return result;
-      });
+      const suppressedGroups = outcomeStats
+        .filter(row => row.totalCases < MINIMUM_SAMPLE_THRESHOLD)
+        .map(r => `${r.program}_${r.stateCode}_${r.status}`);
+      suppressedFields.push(...suppressedGroups);
+      
+      const safeStats = outcomeStats
+        .filter(row => row.totalCases >= MINIMUM_SAMPLE_THRESHOLD);
       
       await this.logResearchAccess(params.apiKeyId, 'outcome_stats', {
         params,
@@ -273,16 +263,13 @@ class ResearchAggregationService {
       .where(whereClause)
       .groupBy(householdProfiles.stateCode, householdProfiles.householdSize);
       
-      const safeSizeStats = householdSizeStats.map(row => {
-        if (row.count < MINIMUM_SAMPLE_THRESHOLD) {
-          suppressedFields.push(`household_size_${row.householdSize}_${row.stateCode}`);
-          return {
-            ...row,
-            count: this.roundToNearestFive(row.count)
-          };
-        }
-        return row;
-      });
+      const suppressedSizeGroups = householdSizeStats
+        .filter(row => row.count < MINIMUM_SAMPLE_THRESHOLD)
+        .map(r => `household_size_${r.householdSize}_${r.stateCode}`);
+      suppressedFields.push(...suppressedSizeGroups);
+      
+      const safeSizeStats = householdSizeStats
+        .filter(row => row.count >= MINIMUM_SAMPLE_THRESHOLD);
       
       const incomeStats = await db.select({
         stateCode: householdProfiles.stateCode,
@@ -305,16 +292,13 @@ class ResearchAggregationService {
         else 'over_5000'
       end`);
       
-      const safeIncomeStats = incomeStats.map(row => {
-        if (row.count < MINIMUM_SAMPLE_THRESHOLD) {
-          suppressedFields.push(`income_${row.incomeBracket}_${row.stateCode}`);
-          return {
-            ...row,
-            count: this.roundToNearestFive(row.count)
-          };
-        }
-        return row;
-      });
+      const suppressedIncomeGroups = incomeStats
+        .filter(row => row.count < MINIMUM_SAMPLE_THRESHOLD)
+        .map(r => `income_${r.incomeBracket}_${r.stateCode}`);
+      suppressedFields.push(...suppressedIncomeGroups);
+      
+      const safeIncomeStats = incomeStats
+        .filter(row => row.count >= MINIMUM_SAMPLE_THRESHOLD);
       
       await this.logResearchAccess(params.apiKeyId, 'demographic_distribution', {
         params,
@@ -406,19 +390,13 @@ class ResearchAggregationService {
         perPermSamples.fiscalQuarter
       );
       
-      const safeStats = permStats.map(row => {
-        const result = { ...row };
-        
-        if (row.totalSamples < MINIMUM_SAMPLE_THRESHOLD) {
-          suppressedFields.push(`perm_${row.stateCode}_${row.fiscalQuarter}`);
-          result.avgErrorAmount = null;
-          result.errorCount = this.roundToNearestFive(row.errorCount);
-          result.agencyErrorCount = this.roundToNearestFive(row.agencyErrorCount);
-          result.clientErrorCount = this.roundToNearestFive(row.clientErrorCount);
-        }
-        
-        return result;
-      });
+      const suppressedPermGroups = permStats
+        .filter(row => row.totalSamples < MINIMUM_SAMPLE_THRESHOLD)
+        .map(r => `perm_${r.stateCode}_${r.fiscalQuarter}`);
+      suppressedFields.push(...suppressedPermGroups);
+      
+      const safeStats = permStats
+        .filter(row => row.totalSamples >= MINIMUM_SAMPLE_THRESHOLD);
       
       const errorRateSummary = await db.select({
         stateCode: perPermSamples.stateCode,
@@ -564,24 +542,53 @@ class ResearchAggregationService {
       .where(nudgeWhereClause)
       .groupBy(perCaseworkerNudges.stateCode, perCaseworkerNudges.priority);
       
+      const suppressedFields: string[] = [];
+      
+      const suppressedVerifications = incomeVerificationStats
+        .filter(row => row.totalVerifications < MINIMUM_SAMPLE_THRESHOLD)
+        .map(r => `income_verification_${r.stateCode}`);
+      suppressedFields.push(...suppressedVerifications);
+      
+      const safeIncomeVerification = incomeVerificationStats
+        .filter(row => row.totalVerifications >= MINIMUM_SAMPLE_THRESHOLD);
+      
+      const suppressedChecks = consistencyCheckStats
+        .filter(row => row.totalChecks < MINIMUM_SAMPLE_THRESHOLD)
+        .map(r => `consistency_check_${r.checkType}_${r.stateCode}`);
+      suppressedFields.push(...suppressedChecks);
+      
+      const safeConsistencyChecks = consistencyCheckStats
+        .filter(row => row.totalChecks >= MINIMUM_SAMPLE_THRESHOLD);
+      
+      const suppressedNudges = nudgeStats
+        .filter(row => row.totalNudges < MINIMUM_SAMPLE_THRESHOLD)
+        .map(r => `nudge_${r.priority}_${r.stateCode}`);
+      suppressedFields.push(...suppressedNudges);
+      
+      const safeNudgeStats = nudgeStats
+        .filter(row => row.totalNudges >= MINIMUM_SAMPLE_THRESHOLD);
+      
       await this.logResearchAccess(params.apiKeyId, 'per_research_metrics', {
         params,
-        recordCount: incomeVerificationStats.length + consistencyCheckStats.length + nudgeStats.length
+        recordCount: safeIncomeVerification.length + safeConsistencyChecks.length + safeNudgeStats.length
       });
       
       return {
         success: true,
         data: {
-          incomeVerification: incomeVerificationStats,
-          consistencyChecks: consistencyCheckStats,
-          caseworkerNudges: nudgeStats
+          incomeVerification: safeIncomeVerification,
+          consistencyChecks: safeConsistencyChecks,
+          caseworkerNudges: safeNudgeStats
         },
         metadata: {
           queryTime: Date.now() - startTime,
-          recordCount: incomeVerificationStats.length + consistencyCheckStats.length + nudgeStats.length,
-          suppressedFields: [],
+          recordCount: safeIncomeVerification.length + safeConsistencyChecks.length + safeNudgeStats.length,
+          suppressedFields,
           aggregationLevel: 'state',
-          dataFreshness: new Date().toISOString()
+          dataFreshness: new Date().toISOString(),
+          warning: suppressedFields.length > 0 
+            ? `${suppressedFields.length} groups suppressed due to small sample size` 
+            : undefined
         }
       };
       

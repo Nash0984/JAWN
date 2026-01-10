@@ -19,19 +19,28 @@ import { logger } from '../services/logger.service';
 
 const router = Router();
 
-const researchRateLimiter = createCustomRateLimiter(
-  60 * 60 * 1000,
-  100,
-  'Research API rate limit exceeded. Please wait before retrying.'
-);
-
-router.use(researchRateLimiter);
 router.use(trackApiUsage());
 
 const researchQuerySchema = z.object({
-  stateCode: z.string().optional(),
-  startDate: z.string().optional().transform(val => val ? new Date(val) : undefined),
-  endDate: z.string().optional().transform(val => val ? new Date(val) : undefined),
+  stateCode: z.string().min(2).max(2).optional(),
+  startDate: z.string().optional().transform((val, ctx) => {
+    if (!val) return undefined;
+    const date = new Date(val);
+    if (isNaN(date.getTime())) {
+      ctx.addIssue({ code: 'custom', message: 'Invalid date format for startDate' });
+      return z.NEVER;
+    }
+    return date;
+  }),
+  endDate: z.string().optional().transform((val, ctx) => {
+    if (!val) return undefined;
+    const date = new Date(val);
+    if (isNaN(date.getTime())) {
+      ctx.addIssue({ code: 'custom', message: 'Invalid date format for endDate' });
+      return z.NEVER;
+    }
+    return date;
+  }),
   programType: z.string().optional(),
 });
 
@@ -245,10 +254,10 @@ router.get('/per-metrics', requireApiKey('research:perm'), async (req: Request, 
 
 /**
  * GET /api/research/all
- * Comprehensive research data export (all metrics combined)
- * Requires research:all scope
+ * Comprehensive research data export - returns data only for scopes the API key has
+ * Uses requireApiKey() without scope param to just authenticate, then checks scopes in handler
  */
-router.get('/all', requireApiKey('research:all'), async (req: Request, res: Response) => {
+router.get('/all', requireApiKey(), async (req: Request, res: Response) => {
   try {
     const parseResult = researchQuerySchema.safeParse(req.query);
     
@@ -265,33 +274,92 @@ router.get('/all', requireApiKey('research:all'), async (req: Request, res: Resp
       apiKeyId: req.apiKey!.id
     };
     
-    const [eligibility, outcomes, demographics, perm, perMetrics] = await Promise.all([
-      researchAggregationService.getEligibilityStats(params),
-      researchAggregationService.getOutcomeStats(params),
-      researchAggregationService.getDemographicDistribution(params),
-      researchAggregationService.getPermResearchData(params),
-      researchAggregationService.getPerResearchMetrics(params)
-    ]);
+    const apiKeyScopes = req.apiKey!.scopes || [];
+    const hasAllScope = apiKeyScopes.includes('research:all');
+    
+    const hasEligibility = hasAllScope || apiKeyScopes.includes('research:eligibility');
+    const hasOutcomes = hasAllScope || apiKeyScopes.includes('research:outcomes');
+    const hasDemographics = hasAllScope || apiKeyScopes.includes('research:demographics');
+    const hasPerm = hasAllScope || apiKeyScopes.includes('research:perm');
+    
+    if (!hasEligibility && !hasOutcomes && !hasDemographics && !hasPerm) {
+      return res.status(403).json({
+        error: 'Forbidden',
+        message: 'At least one research scope required (research:eligibility, research:outcomes, research:demographics, research:perm, or research:all)',
+        code: 'INSUFFICIENT_SCOPE',
+        availableScopes: apiKeyScopes
+      });
+    }
+    
+    const results: {
+      eligibility?: any;
+      outcomes?: any;
+      demographics?: any;
+      perm?: any;
+      perMetrics?: any;
+    } = {};
+    const queryTimes: number[] = [];
+    const includedScopes: string[] = [];
+    
+    const promises: Promise<void>[] = [];
+    
+    if (hasEligibility) {
+      promises.push(
+        researchAggregationService.getEligibilityStats(params).then(r => {
+          results.eligibility = r.data;
+          queryTimes.push(r.metadata.queryTime);
+          includedScopes.push('eligibility');
+        })
+      );
+    }
+    
+    if (hasOutcomes) {
+      promises.push(
+        researchAggregationService.getOutcomeStats(params).then(r => {
+          results.outcomes = r.data;
+          queryTimes.push(r.metadata.queryTime);
+          includedScopes.push('outcomes');
+        })
+      );
+    }
+    
+    if (hasDemographics) {
+      promises.push(
+        researchAggregationService.getDemographicDistribution(params).then(r => {
+          results.demographics = r.data;
+          queryTimes.push(r.metadata.queryTime);
+          includedScopes.push('demographics');
+        })
+      );
+    }
+    
+    if (hasPerm) {
+      promises.push(
+        researchAggregationService.getPermResearchData(params).then(r => {
+          results.perm = r.data;
+          queryTimes.push(r.metadata.queryTime);
+          includedScopes.push('perm');
+        }),
+        researchAggregationService.getPerResearchMetrics(params).then(r => {
+          results.perMetrics = r.data;
+          queryTimes.push(r.metadata.queryTime);
+        })
+      );
+    }
+    
+    await Promise.all(promises);
     
     res.json({
       success: true,
-      data: {
-        eligibility: eligibility.data,
-        outcomes: outcomes.data,
-        demographics: demographics.data,
-        perm: perm.data,
-        perMetrics: perMetrics.data
-      },
+      data: results,
       metadata: {
-        queryTime: Math.max(
-          eligibility.metadata.queryTime,
-          outcomes.metadata.queryTime,
-          demographics.metadata.queryTime,
-          perm.metadata.queryTime,
-          perMetrics.metadata.queryTime
-        ),
+        queryTime: Math.max(...queryTimes, 0),
         dataFreshness: new Date().toISOString(),
-        aggregationLevel: 'comprehensive'
+        aggregationLevel: 'comprehensive',
+        includedScopes,
+        note: includedScopes.length < 4 
+          ? 'Some datasets excluded due to API key scope restrictions' 
+          : undefined
       }
     });
     

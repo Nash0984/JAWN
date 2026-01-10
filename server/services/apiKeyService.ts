@@ -231,6 +231,16 @@ class ApiKeyService {
   }
   
   /**
+   * Get all API keys (admin only)
+   * @returns Array of all API keys
+   */
+  async getAllApiKeys(): Promise<ApiKey[]> {
+    return await db.select()
+      .from(apiKeys)
+      .orderBy(desc(apiKeys.createdAt));
+  }
+  
+  /**
    * Get usage statistics for an API key
    * @param apiKeyId - API key ID
    * @param days - Number of days to look back (default: 30)
