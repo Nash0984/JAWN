@@ -306,7 +306,10 @@ app.use([
   "/api/policyengine/calculate", 
   "/api/policyengine/summary",
   "/api/benefits/calculate-hybrid",  // Quick Screener public endpoint
-  "/api/benefits/calculate-hybrid-summary"  // Benefit Screener public endpoint
+  "/api/benefits/calculate-hybrid-summary",  // Benefit Screener public endpoint
+  "/api/state-rules/calculate",  // State rules engine - read-only eligibility calculations
+  "/api/state-rules/batch-calculate",  // State rules engine batch calculations
+  "/api/state-rules/supported-states"  // State rules engine metadata
 ], (req, res, next) => {
   // Mark request to skip CSRF protection
   (req as any).skipCsrf = true;

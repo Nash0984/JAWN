@@ -431,6 +431,65 @@ const stateBenefitData = [
       childIncomeLimit: 200,
       pregnantIncomeLimit: 156
     }
+  },
+  {
+    stateCode: "UT",
+    snap: {
+      incomeLimitPercent: 130, // Utah uses federal limits, no BBCE expansion
+      hasAssetTest: true,
+      assetLimit: 2750,
+      elderlyDisabledAssetLimit: 4250,
+      workRequirementAges: "18-54",
+      hasBBCE: false,
+      notes: "Utah does not use BBCE for SNAP; strict federal guidelines apply"
+    },
+    tanf: {
+      maxBenefitFamily3: 498, // Family Employment Program (FEP)
+      timeLimitMonths: 36, // State limit more restrictive
+      timeLimitLifetime: 36,
+      workHoursRequired: 30,
+      assetLimit: 2000,
+      vehicleExemption: 8000,
+      notes: "Utah's Family Employment Program (FEP) has 36-month lifetime limit"
+    },
+    medicaid: {
+      isExpanded: true,
+      expansionYear: 2020,
+      adultIncomeLimit: 138,
+      childIncomeLimit: 200,
+      pregnantIncomeLimit: 141,
+      notes: "Utah expanded Medicaid via ballot initiative in 2018, implemented 2020"
+    }
+  },
+  {
+    stateCode: "IN",
+    snap: {
+      incomeLimitPercent: 130, // Indiana uses federal limits
+      hasAssetTest: true,
+      assetLimit: 2750,
+      elderlyDisabledAssetLimit: 4250,
+      workRequirementAges: "18-54",
+      hasBBCE: false,
+      notes: "Indiana does not use BBCE; strict federal SNAP guidelines"
+    },
+    tanf: {
+      maxBenefitFamily3: 288, // TANF Assistance Grant
+      timeLimitMonths: 24, // Consecutive limit
+      timeLimitLifetime: 60,
+      workHoursRequired: 30,
+      assetLimit: 1000,
+      vehicleExemption: 10500,
+      notes: "Indiana TANF has 24-month consecutive limit, 60-month lifetime"
+    },
+    medicaid: {
+      isExpanded: true,
+      expansionYear: 2015,
+      adultIncomeLimit: 138,
+      childIncomeLimit: 255,
+      pregnantIncomeLimit: 204,
+      hasHIPProgram: true,
+      notes: "Indiana uses Healthy Indiana Plan (HIP) 2.0 for expansion population"
+    }
   }
 ];
 

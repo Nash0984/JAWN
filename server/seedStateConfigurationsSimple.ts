@@ -22,7 +22,9 @@ const stateData = [
   { name: 'Massachusetts', code: 'MA', region: 'Northeast', agency: 'Massachusetts DTA', color: '#14558F' },
   { name: 'Washington', code: 'WA', region: 'West', agency: 'Washington State DSHS', color: '#002F5D' },
   { name: 'Colorado', code: 'CO', region: 'West', agency: 'Colorado Department of Human Services', color: '#2E3192' },
-  { name: 'Arizona', code: 'AZ', region: 'West', agency: 'Arizona Department of Economic Security', color: '#CE5C17' }
+  { name: 'Arizona', code: 'AZ', region: 'West', agency: 'Arizona Department of Economic Security', color: '#CE5C17' },
+  { name: 'Utah', code: 'UT', region: 'West', agency: 'Utah Department of Workforce Services', color: '#BE0000' },
+  { name: 'Indiana', code: 'IN', region: 'Midwest', agency: 'Indiana Family and Social Services Administration', color: '#B89D2E' }
 ];
 
 async function seedSimple() {

@@ -11754,6 +11754,13 @@ If the question cannot be answered with the available information, say so clearl
   app.use('/api/per', perRouter);
 
   // ============================================================================
+  // Mount State Rules Engine Routes - UT/IN/MI Eligibility Calculations
+  // Implements state-specific SNAP/TANF/Medicaid rules for expansion states
+  // ============================================================================
+  const stateRulesEngineRouter = (await import('./api/stateRulesEngine.routes')).default;
+  app.use('/api/state-rules', stateRulesEngineRouter);
+
+  // ============================================================================
   // Mount Research API Routes - Public-Facing API for External Researchers
   // Provides PII-stripped, aggregated data with API key authentication
   // ============================================================================
