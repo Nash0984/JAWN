@@ -595,19 +595,31 @@ class ExplainableNudgeService {
     }
 
     try {
+      const statutoryCitation = this.getStatutoryCitationForType(type);
+      
       const prompt = `
-        Generate a clear, plain-language explanation for a caseworker about the following ${type} issue:
+        Generate a clear, plain-language explanation for a caseworker about the following ${type} issue.
         
+        CRITICAL REQUIREMENTS:
+        1. Write at a 6th-grade reading level (Flesch-Kincaid Grade Level 6)
+        2. Use short sentences (15 words or fewer per sentence)
+        3. Use simple words (avoid jargon like "discrepancy" - say "difference" instead)
+        4. Be direct and action-focused
+        5. Maximum 3 sentences total
+        
+        Issue Data:
         ${JSON.stringify(data, null, 2)}
         
-        Requirements:
-        1. Use simple, non-technical language
-        2. Explain what was found and why it matters
-        3. Be concise (2-3 sentences max)
-        4. Focus on actionable information
+        Statutory Basis:
+        ${statutoryCitation}
         
-        Example for income discrepancy:
-        "The income reported on this application ($X) doesn't match what we found in state wage records ($Y). This $Z difference could affect the benefit amount. Please verify the client's current income before approving."
+        Good Example (Grade 6 level):
+        "The income on this form does not match our records. We show $X but the form says $Y. Please ask for new pay stubs to check the right amount."
+        
+        Bad Example (too complex):
+        "A significant discrepancy has been identified between the reported gross income and the verified wage data from state records, potentially affecting benefit determination calculations."
+        
+        Generate ONLY the explanation text, no labels or formatting.
       `;
 
       const response = await gemini.models.generateContent({
@@ -623,6 +635,20 @@ class ExplainableNudgeService {
       });
       return this.generateFallbackExplanation(type, data);
     }
+  }
+
+  private getStatutoryCitationForType(type: string): string {
+    const citations: Record<string, string> = {
+      income_discrepancy: '7 CFR 273.10(c) requires accurate income determination. 7 CFR 273.2(f)(4) requires wage matching verification.',
+      consistency_check: '7 CFR 273.2(f) requires verification of application information before eligibility determination.',
+      duplicate_claim: '7 CFR 273.3 prohibits duplicate SNAP participation and requires investigation of potential dual participation.',
+      documentation_gap: '7 CFR 273.2(f)(1) requires verification of identity, residency, and household composition.',
+      pattern_alert: 'FNS Handbook 310 requires quality control review of cases showing unusual patterns.',
+      resource_limit: '7 CFR 273.8 establishes resource limits that must be verified.',
+      household_change: '7 CFR 273.12 requires timely reporting of household changes affecting eligibility.',
+      work_requirement: '7 CFR 273.7 establishes ABAWD work requirements that must be monitored.'
+    };
+    return citations[type] || '7 CFR 273 - SNAP Regulations';
   }
 
   private generateFallbackExplanation(type: string, data: Record<string, any>): string {

@@ -50,6 +50,10 @@ import {
   Activity,
   Target,
   AlertCircle,
+  Gauge,
+  ListOrdered,
+  Brain,
+  Scale,
 } from "lucide-react";
 import { format } from "date-fns";
 
@@ -95,6 +99,35 @@ interface SystemHealth {
   systemStatus: "healthy" | "degraded" | "offline";
 }
 
+interface RiskQueueItem {
+  caseId: string;
+  clientName?: string;
+  riskScore: number;
+  riskLevel: "low" | "medium" | "high" | "critical";
+  predictedErrorAmount?: number;
+  predictedErrorProbability?: number;
+  priority: number;
+  primaryRiskFactor?: string;
+  daysSinceLastReview?: number;
+  assignedCaseworker?: string;
+}
+
+interface RiskQueueResponse {
+  cases: RiskQueueItem[];
+  totalCases: number;
+  byRiskLevel: Record<string, number>;
+  avgRiskScore: number;
+}
+
+interface RiskStats {
+  totalAssessments: number;
+  avgRiskScore: number;
+  highRiskCount: number;
+  criticalRiskCount: number;
+  byRiskLevel: Record<string, number>;
+  modelVersion: string;
+}
+
 const COLORS = ["#22c55e", "#f59e0b", "#ef4444", "#8b5cf6", "#06b6d4"];
 
 export default function PerDashboard() {
@@ -113,11 +146,21 @@ export default function PerDashboard() {
     queryKey: ["/api/per/health", refreshKey],
   });
 
+  const { data: riskQueue, isLoading: riskQueueLoading } = useQuery<{ success: boolean; data: RiskQueueResponse }>({
+    queryKey: ["/api/per/risk-scores/queue", stateCode, refreshKey],
+  });
+
+  const { data: riskStats, isLoading: riskStatsLoading } = useQuery<{ success: boolean; data: RiskStats }>({
+    queryKey: ["/api/per/risk-scores/stats", stateCode, refreshKey],
+  });
+
   const handleRefresh = () => setRefreshKey(prev => prev + 1);
 
   const dashboardData = metrics?.data;
   const nudges = highPriorityNudges?.data || [];
   const health = systemHealth?.data;
+  const riskQueueData = riskQueue?.data;
+  const riskStatsData = riskStats?.data;
 
   const errorTypeData = dashboardData?.errorsByType 
     ? Object.entries(dashboardData.errorsByType).map(([name, value]) => ({ name, value }))
@@ -340,12 +383,177 @@ export default function PerDashboard() {
         </div>
 
         {/* Main Content Tabs */}
-        <Tabs defaultValue="nudges" className="space-y-4">
+        <Tabs defaultValue="riskQueue" className="space-y-4">
           <TabsList>
+            <TabsTrigger value="riskQueue">Risk Queue</TabsTrigger>
             <TabsTrigger value="nudges">High Priority Nudges</TabsTrigger>
             <TabsTrigger value="errors">Error Breakdown</TabsTrigger>
             <TabsTrigger value="perm">PERM Compliance</TabsTrigger>
           </TabsList>
+
+          {/* Risk Queue Tab - ML-Based Case Prioritization */}
+          <TabsContent value="riskQueue">
+            <div className="space-y-6">
+              {/* Risk Stats Summary */}
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <Card>
+                  <CardHeader className="pb-2">
+                    <CardDescription className="flex items-center gap-1">
+                      <Brain className="h-4 w-4" /> ML Model Version
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-xl font-semibold">
+                      {riskStatsData?.modelVersion || "PER-LR-v2.1.0"}
+                    </div>
+                    <p className="text-xs text-muted-foreground">10-feature weighted scoring</p>
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader className="pb-2">
+                    <CardDescription className="flex items-center gap-1">
+                      <Gauge className="h-4 w-4" /> Avg Risk Score
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-2xl font-bold">
+                      {(riskStatsData?.avgRiskScore || riskQueueData?.avgRiskScore || 0).toFixed(1)}
+                    </div>
+                    <Progress 
+                      value={(riskStatsData?.avgRiskScore || riskQueueData?.avgRiskScore || 0)} 
+                      className="mt-2"
+                    />
+                  </CardContent>
+                </Card>
+
+                <Card className="border-orange-500/50">
+                  <CardHeader className="pb-2">
+                    <CardDescription>High Risk Cases</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-2xl font-bold text-orange-600">
+                      {riskStatsData?.highRiskCount || riskQueueData?.byRiskLevel?.high || 0}
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <Card className="border-red-500/50">
+                  <CardHeader className="pb-2">
+                    <CardDescription>Critical Risk Cases</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-2xl font-bold text-red-600">
+                      {riskStatsData?.criticalRiskCount || riskQueueData?.byRiskLevel?.critical || 0}
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+
+              {/* Prioritized Case Queue */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <ListOrdered className="h-5 w-5 text-blue-500" />
+                    Prioritized Case Review Queue
+                  </CardTitle>
+                  <CardDescription>
+                    Cases ranked by ML-predicted error risk. Higher priority = higher likelihood of payment error.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {riskQueueLoading ? (
+                    <div className="space-y-4">
+                      {[1, 2, 3, 4, 5].map(i => (
+                        <Skeleton key={i} className="h-20 w-full" />
+                      ))}
+                    </div>
+                  ) : !riskQueueData?.cases?.length ? (
+                    <div className="text-center py-8 text-muted-foreground">
+                      <CheckCircle className="h-12 w-12 mx-auto mb-4 text-green-500" />
+                      <p>No cases in the risk queue</p>
+                      <p className="text-sm">Run case assessments to populate the queue</p>
+                    </div>
+                  ) : (
+                    <ScrollArea className="h-[400px]">
+                      <div className="space-y-3">
+                        {riskQueueData.cases.map((item, index) => (
+                          <Card key={item.caseId} className={`border-l-4 ${
+                            item.riskLevel === 'critical' ? 'border-l-red-500' :
+                            item.riskLevel === 'high' ? 'border-l-orange-500' :
+                            item.riskLevel === 'medium' ? 'border-l-yellow-500' :
+                            'border-l-green-500'
+                          }`}>
+                            <CardContent className="py-3">
+                              <div className="flex items-start justify-between">
+                                <div className="flex items-center gap-3">
+                                  <div className="text-2xl font-bold text-muted-foreground w-8">
+                                    #{index + 1}
+                                  </div>
+                                  <div>
+                                    <div className="flex items-center gap-2">
+                                      <span className="font-semibold">Case: {item.caseId}</span>
+                                      <Badge variant={getRiskBadgeVariant(item.riskLevel)}>
+                                        {item.riskLevel.toUpperCase()}
+                                      </Badge>
+                                    </div>
+                                    {item.clientName && (
+                                      <p className="text-sm text-muted-foreground">{item.clientName}</p>
+                                    )}
+                                    {item.primaryRiskFactor && (
+                                      <div className="mt-2 flex flex-wrap gap-1">
+                                        <Badge variant="outline" className="text-xs">
+                                          {item.primaryRiskFactor}
+                                        </Badge>
+                                        {item.predictedErrorProbability !== undefined && (
+                                          <Badge variant="secondary" className="text-xs">
+                                            {(item.predictedErrorProbability * 100).toFixed(0)}% error prob.
+                                          </Badge>
+                                        )}
+                                      </div>
+                                    )}
+                                    {item.assignedCaseworker && (
+                                      <p className="text-xs text-muted-foreground mt-1">
+                                        Assigned: {item.assignedCaseworker}
+                                      </p>
+                                    )}
+                                  </div>
+                                </div>
+                                <div className="text-right">
+                                  <div className="flex items-center gap-2">
+                                    <Gauge className="h-4 w-4 text-muted-foreground" />
+                                    <span className="text-2xl font-bold">{item.riskScore.toFixed(0)}</span>
+                                  </div>
+                                  <div className="text-xs text-muted-foreground">Risk Score</div>
+                                  {item.predictedErrorAmount !== undefined && item.predictedErrorAmount > 0 && (
+                                    <div className="text-sm text-red-600 mt-1">
+                                      Est. Error: ${item.predictedErrorAmount.toLocaleString()}
+                                    </div>
+                                  )}
+                                  {item.daysSinceLastReview !== undefined && (
+                                    <div className="text-xs text-muted-foreground mt-1">
+                                      {item.daysSinceLastReview} days since review
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                              <div className="mt-3 flex gap-2">
+                                <Button size="sm" variant="default">
+                                  <Scale className="h-3 w-3 mr-1" />
+                                  Review Case
+                                </Button>
+                                <Button size="sm" variant="outline">Generate Nudge</Button>
+                              </div>
+                            </CardContent>
+                          </Card>
+                        ))}
+                      </div>
+                    </ScrollArea>
+                  )}
+                </CardContent>
+              </Card>
+            </div>
+          </TabsContent>
 
           {/* High Priority Nudges Tab */}
           <TabsContent value="nudges">

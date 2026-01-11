@@ -14,6 +14,8 @@ import {
   duplicateClaimDetectorService,
   explainableNudgeService,
   permReportingService,
+  predictiveRiskScoringService,
+  perComplianceAuditService,
   type WageDataRecord
 } from '../services/per';
 import { logger } from '../services/logger.service';
@@ -214,6 +216,7 @@ router.post('/income-verification/:caseId', async (req: Request, res: Response) 
   try {
     const { caseId } = req.params;
     const parseResult = incomeVerificationBodySchema.safeParse(req.body);
+    const userId = (req.user as any)?.id;
     
     if (!parseResult.success) {
       return res.status(400).json({
@@ -225,11 +228,29 @@ router.post('/income-verification/:caseId', async (req: Request, res: Response) 
     
     const { wageData, stateCode, tenantId } = parseResult.data;
 
+    await perComplianceAuditService.logWageDataAccess(
+      caseId,
+      userId,
+      'SNAP income eligibility verification',
+      wageData.length,
+      req
+    );
+
     const result = await incomeVerificationService.verifyCaseIncome(caseId, wageData, {
       stateCode,
       tenantId,
       createdBy: req.user?.id
     });
+
+    await perComplianceAuditService.logIncomeVerification(
+      { operationType: 'income_verification', caseId, userId, stateCode, tenantId, req },
+      {
+        discrepancyFound: result.hasDiscrepancy,
+        discrepancyAmount: result.discrepancy?.amount,
+        verificationSource: 'w2_wage_data',
+        success: true
+      }
+    );
 
     res.json({
       success: true,
@@ -955,6 +976,147 @@ router.get('/perm/progress', async (req: Request, res: Response) => {
 });
 
 // ============================================================================
+// PREDICTIVE RISK SCORING ENDPOINTS
+// ============================================================================
+
+/**
+ * GET /api/per/risk-scores/:caseId
+ * Get predictive risk score for a specific case
+ */
+router.get('/risk-scores/:caseId', async (req: Request, res: Response) => {
+  try {
+    const { caseId } = req.params;
+    const stateCode = (req.query.stateCode as string) || 'MD';
+    const tenantId = req.query.tenantId as string;
+    const userId = (req.user as any)?.id;
+
+    const riskScore = await predictiveRiskScoringService.calculateRiskScore(caseId, {
+      stateCode,
+      tenantId
+    });
+
+    await perComplianceAuditService.logRiskScoreCalculation(
+      { operationType: 'risk_score_calculation', caseId, userId, stateCode, tenantId, req },
+      {
+        riskScore: riskScore.riskScore,
+        riskLevel: riskScore.riskLevel,
+        factorsAnalyzed: riskScore.factors.length,
+        success: true
+      }
+    );
+
+    res.json({
+      success: true,
+      data: riskScore
+    });
+  } catch (error) {
+    logger.error('Risk score calculation failed', {
+      route: 'GET /api/per/risk-scores/:caseId',
+      error: error instanceof Error ? error.message : 'Unknown error'
+    });
+    res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : 'Risk score calculation failed'
+    });
+  }
+});
+
+/**
+ * GET /api/per/risk-scores/queue
+ * Get prioritized case queue by risk score
+ */
+router.get('/risk-scores/queue', async (req: Request, res: Response) => {
+  try {
+    const stateCode = (req.query.stateCode as string) || 'MD';
+    const tenantId = req.query.tenantId as string;
+    const riskLevelFilter = req.query.riskLevel 
+      ? (req.query.riskLevel as string).split(',') as ('low' | 'medium' | 'high' | 'critical')[]
+      : undefined;
+    const limit = parseInt(req.query.limit as string) || 50;
+    const offset = parseInt(req.query.offset as string) || 0;
+    const sortBy = (req.query.sortBy as 'riskScore' | 'predictedErrorAmount' | 'priority') || 'priority';
+    const sortDirection = (req.query.sortDirection as 'asc' | 'desc') || 'desc';
+
+    const result = await predictiveRiskScoringService.getPrioritizedCaseQueue({
+      stateCode,
+      tenantId,
+      riskLevelFilter,
+      limit,
+      offset,
+      sortBy,
+      sortDirection
+    });
+
+    res.json({
+      success: true,
+      data: result
+    });
+  } catch (error) {
+    logger.error('Risk queue fetch failed', {
+      route: 'GET /api/per/risk-scores/queue',
+      error: error instanceof Error ? error.message : 'Unknown error'
+    });
+    res.status(500).json({
+      success: false,
+      error: 'Failed to get risk queue'
+    });
+  }
+});
+
+/**
+ * GET /api/per/risk-scores/high-risk
+ * Get high-risk cases requiring immediate review
+ */
+router.get('/risk-scores/high-risk', async (req: Request, res: Response) => {
+  try {
+    const stateCode = (req.query.stateCode as string) || 'MD';
+    const limit = parseInt(req.query.limit as string) || 20;
+
+    const cases = await predictiveRiskScoringService.getHighRiskCases(stateCode, limit);
+
+    res.json({
+      success: true,
+      data: cases
+    });
+  } catch (error) {
+    logger.error('High risk cases fetch failed', {
+      route: 'GET /api/per/risk-scores/high-risk',
+      error: error instanceof Error ? error.message : 'Unknown error'
+    });
+    res.status(500).json({
+      success: false,
+      error: 'Failed to get high risk cases'
+    });
+  }
+});
+
+/**
+ * GET /api/per/risk-scores/stats
+ * Get risk score statistics for dashboard
+ */
+router.get('/risk-scores/stats', async (req: Request, res: Response) => {
+  try {
+    const stateCode = (req.query.stateCode as string) || 'MD';
+
+    const stats = await predictiveRiskScoringService.getRiskScoreStats(stateCode);
+
+    res.json({
+      success: true,
+      data: stats
+    });
+  } catch (error) {
+    logger.error('Risk stats fetch failed', {
+      route: 'GET /api/per/risk-scores/stats',
+      error: error instanceof Error ? error.message : 'Unknown error'
+    });
+    res.status(500).json({
+      success: false,
+      error: 'Failed to get risk statistics'
+    });
+  }
+});
+
+// ============================================================================
 // DASHBOARD & SYSTEM ENDPOINTS
 // ============================================================================
 
@@ -1032,6 +1194,55 @@ router.get('/report', async (req: Request, res: Response) => {
     res.status(500).json({
       success: false,
       error: 'Failed to generate report'
+    });
+  }
+});
+
+// ============================================================================
+// COMPLIANCE AUDIT ENDPOINTS
+// ============================================================================
+
+/**
+ * GET /api/per/compliance/report
+ * Get HIPAA/IRS 1075 compliance audit report for PER operations
+ */
+router.get('/compliance/report', requireAdmin, async (req: Request, res: Response) => {
+  try {
+    const stateCode = (req.query.stateCode as string) || 'MD';
+    const days = parseInt(req.query.days as string) || 30;
+    
+    const endDate = new Date();
+    const startDate = new Date();
+    startDate.setDate(startDate.getDate() - days);
+
+    const report = await perComplianceAuditService.getComplianceReport(
+      stateCode,
+      startDate,
+      endDate
+    );
+
+    res.json({
+      success: true,
+      data: {
+        ...report,
+        reportPeriod: {
+          startDate: startDate.toISOString(),
+          endDate: endDate.toISOString(),
+          days
+        },
+        stateCode,
+        generatedAt: new Date().toISOString(),
+        complianceFrameworks: ['HIPAA', 'IRS Publication 1075', 'FNS SNAP QC']
+      }
+    });
+  } catch (error) {
+    logger.error('Get compliance report failed', {
+      route: 'GET /api/per/compliance/report',
+      error: error instanceof Error ? error.message : 'Unknown error'
+    });
+    res.status(500).json({
+      success: false,
+      error: 'Failed to get compliance report'
     });
   }
 });

@@ -17,3 +17,17 @@ export { duplicateClaimDetectorService, type PersonIdentifier, type DuplicateMat
 export { explainableNudgeService, type CaseworkerNudge, type NudgeType, type RiskFactor, type NudgeGenerationResult } from './explainableNudge.service';
 export { permReportingService, type PermSampleSelection, type PermReviewFinding, type PermRateReport } from './permReporting.service';
 export { paymentErrorReductionService, type CaseRiskAssessment, type PerDashboardMetrics, type PerSystemHealth } from './paymentErrorReduction.service';
+export { 
+  predictiveRiskScoringService, 
+  type RiskFeatures, 
+  type PredictiveRiskScore, 
+  type RiskFactor as PredictiveRiskFactor,
+  type CaseRiskQueueItem,
+  type RiskQueueRequest 
+} from './predictiveRiskScoring.service';
+export { 
+  perComplianceAuditService, 
+  type PerOperationType, 
+  type PerAuditContext, 
+  type Irs1075AccessContext 
+} from './perComplianceAudit.service';
