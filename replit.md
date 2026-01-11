@@ -52,9 +52,29 @@ The backend uses Express.js with TypeScript and PostgreSQL via Drizzle ORM on Ne
 -   **Performance Optimization**: Server-side caching, extensive database indexing, non-blocking initialization.
 -   **Rules-as-Code Architecture**: Maryland/tenant rules engines are the ONLY decision-makers. PolicyEngine is used for verification/validation only, NOT as a co-decision maker.
 -   **Neuro-Symbolic Hybrid Gateway (CRITICAL FOUNDATION)**: Production-grade implementation based on research paper "A Neuro-Symbolic Framework for Accountability in Public-Sector AI" (97.7% accuracy matching judicial determinations). ALL eligibility decisions MUST route through this gateway.
-    - **Neural Layer (Gemini)**: Used ONLY for extraction and translation of unstructured data. NEVER makes eligibility decisions. Provides confidence scores for audit trail.
-    - **Symbolic Layer (Z3 SMT Solver)**: Makes ALL eligibility determinations via formal verification. Generates UNSAT cores with statutory citations when rules are violated.
-    - **Rules-as-Code Layer**: Formal rules extracted from statute (7 CFR 273, COMAR, state-specific regulations). Versioned, validated, and traceable.
+    
+    **Three-Layer Architecture** (distinct layers, not interchangeable):
+    
+    1. **Neural Layer (Gemini)** - *Extraction Only*
+       - Used ONLY for extraction and translation of unstructured data
+       - NEVER makes eligibility decisions
+       - Provides confidence scores for audit trail
+       - Examples: OCR text extraction, document classification, natural language parsing
+    
+    2. **Rules-as-Code (RaC) Layer** - *Legal Knowledge Base* ("What the law says")
+       - Transforms statutes into machine-verifiable SMT-LIB artifacts
+       - Sources: 7 CFR 273, COMAR, state-specific regulations
+       - Maintains provenance to legal citations and ontology terms
+       - Authoritative source of encoded law - versioned, validated, traceable
+       - Modifications to eligibility logic MUST enter via RaC pipelines
+    
+    3. **Symbolic/Z3 Solver Layer** - *Proof Engine* ("How to verify")
+       - Ingests case assertions + RaC-produced constraints
+       - Runs satisfiability checks (SAT/UNSAT)
+       - Generates UNSAT cores with statutory citations when rules are violated
+       - Never invents law - only evaluates RaC logic against case data
+    
+    **Layer Relationship**: RaC feeds Z3. RaC is the rulebook; Z3 is the referee applying those rules to a specific case. Together they form the "symbolic side" of the hybrid gateway.
     - **Service Integrations**: All core services route through hybrid gateway:
       - `rulesEngine.calculateEligibilityWithHybridVerification()` - SNAP eligibility with Z3 verification
       - PER Income Verification - Income discrepancies verified against formal income rules
