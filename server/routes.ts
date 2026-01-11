@@ -10,38 +10,21 @@ import { unifiedExportService } from "./services/unified/UnifiedExportService";
 import { unifiedIngestionService } from "./services/unified/UnifiedIngestionService";
 // Cross-State Rules
 import { registerCrossStateRulesRoutes } from "./api/crossStateRules.routes";
-// SMS Screening Service - COMMENTED OUT DURING SCHEMA ROLLBACK
-// import { 
-//   generateScreeningLink, 
-//   validateScreeningLink, 
-//   saveScreeningProgress,
-//   completeScreening, 
-//   getScreeningStatus,
-//   hashPhoneNumber,
-//   getScreeningLinkAnalytics
-// } from "./services/smsScreeningService";
-// SMS Rate Limiting - COMMENTED OUT DURING SCHEMA ROLLBACK
-// import { 
-//   smsScreeningRateLimit, 
-//   smsGeneralRateLimit,
-//   ipRateLimit,
-//   getRateLimitStatus
-// } from "./middleware/smsRateLimiter";
 
-// Legacy services (to be gradually migrated)
-const documentProcessor = unifiedDocumentService; // Alias for backward compatibility
-const documentIngestionService = unifiedIngestionService; // Alias for backward compatibility
-const automatedIngestionService = unifiedIngestionService; // Alias for backward compatibility  
-const manualIngestionService = unifiedIngestionService; // Alias for backward compatibility
-const documentVerificationService = unifiedDocumentService; // Alias for backward compatibility
-const taxDocExtractor = unifiedDocumentService; // Alias for backward compatibility
+// Service aliases - unified services handle all document processing
+const documentProcessor = unifiedDocumentService;
+const documentIngestionService = unifiedIngestionService;
+const automatedIngestionService = unifiedIngestionService;
+const manualIngestionService = unifiedIngestionService;
+const documentVerificationService = unifiedDocumentService;
+const taxDocExtractor = unifiedDocumentService;
 
-// Export aliases for backward compatibility
+// Export functions
 const exportToPDF = (returnId: string) => unifiedExportService.exportTaxSlayerReturn(returnId, { format: 'pdf', type: 'taxslayer_worksheet' });
 const exportToCSV = (returnId: string) => unifiedExportService.exportTaxSlayerReturn(returnId, { format: 'csv', type: 'taxslayer_worksheet' });
-const exportChecklist = exportToPDF; // Use same PDF export for now
-const exportVarianceReport = exportToPDF; // Use same PDF export for now
-const exportFieldGuide = exportToPDF; // Use same PDF export for now
+const exportChecklist = exportToPDF;
+const exportVarianceReport = exportToPDF;
+const exportFieldGuide = exportToPDF;
 
 // Other services
 import { ObjectStorageService, objectStorageClient, parseObjectPath } from "./objectStorage";
