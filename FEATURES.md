@@ -2194,21 +2194,20 @@ This document provides a comprehensive catalog of all 110 features implemented i
 **Purpose:** Reusable testing infrastructure for continuous compliance monitoring
 
 **Features:**
-- Automated violation detection
+- Automated violation detection via Playwright
 - JSON export for programmatic analysis
 - CI/CD pipeline integration support
-- Puppeteer-based audit engine
+- Playwright-based audit engine with axe-core
 - Configurable test execution
 - Historical comparison capabilities
 
 **Technical Details:**
-- Scripts: `scripts/accessibility-audit-puppeteer.ts`, `scripts/run-accessibility-audit.ts`
-- Engine: Puppeteer + axe-core
+- Engine: Playwright + @axe-core/playwright
 - Output: JSON, Markdown, HTML reports
-- Automation: Scheduled audits and on-demand execution
+- Automation: Scheduled audits and on-demand execution via run_test tool
 
 **Production Status**: ✅ Production Ready  
-**Completion Notes**: Reusable accessibility audit infrastructure fully operational with automated violation detection, JSON export for programmatic analysis, and CI/CD pipeline integration support.
+**Completion Notes**: Reusable accessibility audit infrastructure fully operational with automated violation detection via Playwright, JSON export for programmatic analysis, and CI/CD pipeline integration support.
 
 ---
 

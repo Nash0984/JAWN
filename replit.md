@@ -66,13 +66,13 @@ The backend uses Express.js with TypeScript and PostgreSQL via Drizzle ORM on Ne
 -   **PM2 Production Deployment**: Cluster mode deployment.
 -   **Multi-tenant Architecture**: Single unified application for all 24 Maryland LDSS offices.
 
-## Compliance Status (December 2025) - PRODUCTION READY
+## Compliance Status (January 2026) - PRODUCTION READY
 
 ### Critical Gaps CLOSED
 - **CRIT-001 (TLS Verification)**: `/api/health/tls` endpoint validates HTTPS/HSTS/CSP; `/api/health/tls/attestation` accepts load balancer TLS attestation with API key authentication; `enforceHttpsProduction` middleware blocks HTTP (426 Upgrade Required).
 - **CRIT-002 (Data Retention)**: 35-table retention coverage; `executeFullRetentionWorkflow()` runs nightly via smartScheduler with backfill + legal-hold-aware disposal; multi-cloud KMS SDKs installed (@aws-sdk/client-kms, @google-cloud/kms, @azure/keyvault-keys).
 
-### Compliance Scores (December 2025)
+### Compliance Scores (January 2026)
 | Framework | Score | Status |
 |-----------|-------|--------|
 | NIST 800-53 | 88% | STRONG |
@@ -99,5 +99,5 @@ The backend uses Express.js with TypeScript and PostgreSQL via Drizzle ORM on Ne
 -   **PDF Generation**: jsPDF and jspdf-autotable.
 -   **Legislative Data**: Congress.gov API, GovInfo API, Maryland General Assembly website.
 -   **Monitoring & Alerts**: Sentry error tracking.
--   **Communication**: Twilio SMS API.
+-   **Communication**: Email service (Nodemailer).
 -   **Caching**: Redis/Upstash.

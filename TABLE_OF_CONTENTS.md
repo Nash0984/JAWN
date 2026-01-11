@@ -234,14 +234,13 @@ maive.service.ts                     // Maryland AI Virtual Employee
 textGenerationService.ts             // Content generation
 ```
 
-### Document Processing Services (8 files)
+### Document Processing Services (7 files)
 
 ```typescript
 // Document Intelligence
 unified/UnifiedDocumentService.ts    // Main document processor
 documentAnalysisCache.ts             // Document analysis caching
 documentVersioning.ts                // Version control for documents
-manualDocumentExtractor.ts           // Manual extraction fallback
 embeddingCache.ts                    // Vector embedding storage
 queryClassifier.ts                   // Query intent classification
 readingLevelService.ts               // Reading level analysis
@@ -299,7 +298,7 @@ sentryService.ts                     // Error tracking
 websocket.service.ts                 // Real-time updates
 ```
 
-### Security & Compliance (6 files)
+### Security & Compliance (5 files)
 
 ```typescript
 // Enterprise Compliance
@@ -307,7 +306,6 @@ encryption.service.ts                // Field-level encryption (AES-256-GCM)
 passwordSecurity.service.ts          // Password hashing (bcrypt)
 gdpr.service.ts                      // GDPR compliance
 hipaa.service.ts                     // HIPAA compliance
-compliance.service.ts                // General compliance
 auditLog.service.ts                  // Security audit trail
 ```
 

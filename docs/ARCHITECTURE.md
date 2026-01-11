@@ -171,7 +171,8 @@ server/
 │   ├── documentProcessor   # Document pipeline
 │   ├── policyEngine        # PolicyEngine client
 │   ├── intakeCopilot       # Conversational intake
-│   ├── compliance.service  # Compliance validation
+│   ├── gdpr.service        # GDPR compliance
+│   ├── hipaa.service       # HIPAA compliance
 │   ├── notification        # Notification system
 │   ├── email.service       # Email backup
 │   └── websocket.service   # Real-time updates
