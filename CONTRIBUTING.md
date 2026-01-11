@@ -247,6 +247,13 @@ For feature requests, please include:
 - Aim for meaningful test coverage
 - Follow Arrange-Act-Assert pattern
 
+**Regression Gate Requirements:**
+- All pull requests MUST pass the full integration test suite (192+ tests minimum)
+- Run `npm run test:integration` before submitting PRs
+- The test suite covers: Research API (32), Benefit Screening (24), Tax Workflow (36), PER Module (29), Tax Calculations (26), IRS Consent (18), State Rules Engine (23+)
+- Use `X-Test-Bypass: integration-test` header for rate limiter bypass in tests
+- No merges permitted if test count drops below baseline (192 tests)
+
 ### Security
 
 - Never commit secrets or API keys

@@ -57,7 +57,7 @@ The backend uses Express.js with TypeScript and PostgreSQL via Drizzle ORM on Ne
     - **Phase 3 - ABox (Case Assertions)**: `case_assertions` linked to ontology terms via embedding-based semantic similarity (0.70+ threshold). Maps household data to Z3 SMT-LIB assertions.
     - **Phase 4 - Z3 Solver Integration**: Real Z3 SMT solver via z3-solver npm package. `solver_runs` stores verification results with UNSAT core analysis. Rule constraint building, SAT/UNSAT detection, statutory citation tracking. API endpoints: `/api/z3-solver/verify`, `/api/z3-solver/stats`.
     - **Phase 5 - Violation Trace Generator (COMPLETE)**: Appeal-ready explanations with statutory citations. `violation_traces` stores detailed violation records with legal citations, due process notices, and appeal guidance for all 6 states. `explanation_clauses` maps NOA clauses to formal predicates. API endpoints: `/api/violation-traces/*`, `/api/neuro-symbolic/verify`, `/api/neuro-symbolic/research-paper-alignment`. Goldberg v. Kelly (397 U.S. 254) compliance with notice, explanation, legal basis, contest rights, and hearing availability.
--   **Testing**: Vitest, @testing-library/react, and supertest.
+-   **Testing**: Vitest, @testing-library/react, and supertest. **Regression Gate: 192+ integration tests required** covering Research API (32), Benefit Screening (24), Tax Workflow (36), PER Module (29), Tax Calculations (26), IRS Consent (18), State Rules Engine (23+).
 -   **Distributed Caching System**: Production-ready cache with Redis/Upstash.
 -   **Scalable Connection Pooling**: Neon Pooled Connections.
 -   **WebSocket Real-Time Service**: Session-based authenticated WebSocket service.
