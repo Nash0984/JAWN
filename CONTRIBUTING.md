@@ -249,7 +249,7 @@ For feature requests, please include:
 
 **Regression Gate Requirements:**
 - All pull requests MUST pass the full integration test suite (192+ tests minimum)
-- Run `npm run test:integration` before submitting PRs
+- Run `npx vitest run tests/integration --config vitest.integration.config.ts` before submitting PRs
 - The test suite covers: Research API (32), Benefit Screening (24), Tax Workflow (36), PER Module (29), Tax Calculations (26), IRS Consent (18), State Rules Engine (23+)
 - Use `X-Test-Bypass: integration-test` header for rate limiter bypass in tests
 - No merges permitted if test count drops below baseline (192 tests)
