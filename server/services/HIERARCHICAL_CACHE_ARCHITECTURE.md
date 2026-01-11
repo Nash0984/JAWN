@@ -2,7 +2,7 @@
 
 ## Overview
 
-The Maryland Benefits Platform implements a 3-tier hierarchical caching strategy to optimize performance, reduce API costs, and improve scalability.
+The JAWN (Joint Access Welfare Network) multi-state benefits-tax platform implements a 3-tier hierarchical caching strategy to optimize performance, reduce API costs, and improve scalability.
 
 ## Architecture Layers
 
