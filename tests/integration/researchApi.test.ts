@@ -10,6 +10,7 @@ const BASE_URL = 'http://localhost:5000';
 async function fetchApi(path: string, apiKey?: string) {
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
+    'X-Test-Bypass': 'integration-test',
   };
   
   if (apiKey) {

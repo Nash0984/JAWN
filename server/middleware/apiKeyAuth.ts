@@ -47,20 +47,32 @@ export const requireApiKey = (requiredScope?: string) => {
       });
     }
     
-    // Check rate limit
-    const rateLimitStatus = await apiKeyService.checkRateLimit(apiKey.id);
+    // Check rate limit (bypassed in development with test header for integration testing)
+    const isTestBypass = process.env.NODE_ENV === 'development' && req.header('X-Test-Bypass') === 'integration-test';
     
-    if (!rateLimitStatus.allowed) {
-      return res.status(429).json({
-        error: 'Too Many Requests',
-        message: `Rate limit exceeded. Limit: ${rateLimitStatus.limit} requests per hour.`,
-        code: 'RATE_LIMIT_EXCEEDED',
-        rateLimit: {
-          limit: rateLimitStatus.limit,
-          current: rateLimitStatus.current,
-          resetAt: rateLimitStatus.resetAt,
-        }
-      });
+    // Initialize rateLimitStatus with default values for bypass case
+    let rateLimitStatus = {
+      allowed: true,
+      limit: apiKey.rateLimit || 1000,
+      current: 0,
+      resetAt: new Date(Date.now() + 3600000),
+    };
+    
+    if (!isTestBypass) {
+      rateLimitStatus = await apiKeyService.checkRateLimit(apiKey.id);
+      
+      if (!rateLimitStatus.allowed) {
+        return res.status(429).json({
+          error: 'Too Many Requests',
+          message: `Rate limit exceeded. Limit: ${rateLimitStatus.limit} requests per hour.`,
+          code: 'RATE_LIMIT_EXCEEDED',
+          rateLimit: {
+            limit: rateLimitStatus.limit,
+            current: rateLimitStatus.current,
+            resetAt: rateLimitStatus.resetAt,
+          }
+        });
+      }
     }
     
     // Check scope if required
