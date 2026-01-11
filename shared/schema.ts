@@ -8744,6 +8744,66 @@ export const perPermSamples = pgTable("per_perm_samples", {
   tenantIdIdx: index("per_perm_samples_tenant_id_idx").on(table.tenantId),
 }));
 
+// ============================================================================
+// NEURO-SYMBOLIC HYBRID GATEWAY AUDIT LOGS
+// Comprehensive audit trail for all decisions routed through the hybrid engine
+// ============================================================================
+
+export const hybridGatewayAuditLogs = pgTable("hybrid_gateway_audit_logs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  gatewayRunId: varchar("gateway_run_id").notNull(), // Unique identifier for this gateway invocation
+  caseId: varchar("case_id").references(() => clientCases.id),
+  stateCode: text("state_code").notNull(),
+  programCode: text("program_code").notNull(),
+  // Operation context
+  operationType: text("operation_type").notNull(), // eligibility_verification, income_discrepancy_check, consistency_validation, etc.
+  triggeredBy: text("triggered_by").notNull(), // manual, per_service, intake_copilot, benefit_screening, rag_service
+  // Neural layer metrics
+  neuralExtractionConfidence: real("neural_extraction_confidence"), // 0-1 confidence from LLM extraction
+  neuralProcessingTimeMs: integer("neural_processing_time_ms"),
+  extractedFactCount: integer("extracted_fact_count"),
+  // Symbolic layer metrics  
+  solverRunId: varchar("solver_run_id").references(() => solverRuns.id),
+  solverResult: text("solver_result"), // SAT, UNSAT, UNKNOWN, ERROR
+  solverTimeMs: integer("solver_time_ms"),
+  constraintCount: integer("constraint_count"),
+  // Ontology/TBox metrics
+  ontologyTermsMatched: jsonb("ontology_terms_matched"), // Array of matched term IDs
+  formalRulesEvaluated: jsonb("formal_rules_evaluated"), // Array of rule IDs used
+  // UNSAT core analysis (for ineligible determinations)
+  unsatCore: jsonb("unsat_core"), // Minimal unsatisfiable constraint set
+  violatedRuleIds: jsonb("violated_rule_ids"), // Rules that were violated
+  // Statutory grounding
+  statutoryCitations: jsonb("statutory_citations"), // Array of citations backing the decision
+  isLegallyGrounded: boolean("is_legally_grounded").default(false).notNull(),
+  // Processing trace
+  processingPath: jsonb("processing_path"), // Array of processing steps taken
+  totalProcessingTimeMs: integer("total_processing_time_ms"),
+  // Decision output
+  determination: text("determination"), // eligible, ineligible, needs_review, error
+  appealReady: boolean("appeal_ready").default(false),
+  violationTraceCount: integer("violation_trace_count"),
+  // Error tracking
+  errorMessage: text("error_message"),
+  errorStack: text("error_stack"),
+  // Tenant isolation
+  tenantId: varchar("tenant_id"),
+  userId: varchar("user_id").references(() => users.id),
+  metadata: jsonb("metadata"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+  gatewayRunIdIdx: index("hybrid_gateway_audit_logs_gateway_run_id_idx").on(table.gatewayRunId),
+  caseIdIdx: index("hybrid_gateway_audit_logs_case_id_idx").on(table.caseId),
+  stateCodeIdx: index("hybrid_gateway_audit_logs_state_code_idx").on(table.stateCode),
+  programCodeIdx: index("hybrid_gateway_audit_logs_program_code_idx").on(table.programCode),
+  operationTypeIdx: index("hybrid_gateway_audit_logs_operation_type_idx").on(table.operationType),
+  solverResultIdx: index("hybrid_gateway_audit_logs_solver_result_idx").on(table.solverResult),
+  determinationIdx: index("hybrid_gateway_audit_logs_determination_idx").on(table.determination),
+  isLegallyGroundedIdx: index("hybrid_gateway_audit_logs_is_legally_grounded_idx").on(table.isLegallyGrounded),
+  tenantIdIdx: index("hybrid_gateway_audit_logs_tenant_id_idx").on(table.tenantId),
+  createdAtIdx: index("hybrid_gateway_audit_logs_created_at_idx").on(table.createdAt),
+}));
+
 // Insert schemas for neuro-symbolic tables
 export const insertStatutorySourceSchema = createInsertSchema(statutorySources).omit({
   id: true,
@@ -8833,6 +8893,12 @@ export const insertPerPermSampleSchema = createInsertSchema(perPermSamples).omit
   updatedAt: true,
 });
 
+// Insert schema for hybrid gateway audit logs
+export const insertHybridGatewayAuditLogSchema = createInsertSchema(hybridGatewayAuditLogs).omit({
+  id: true,
+  createdAt: true,
+});
+
 // Types for neuro-symbolic tables
 export type StatutorySource = typeof statutorySources.$inferSelect;
 export type InsertStatutorySource = z.infer<typeof insertStatutorySourceSchema>;
@@ -8866,6 +8932,10 @@ export type PerCaseworkerNudge = typeof perCaseworkerNudges.$inferSelect;
 export type InsertPerCaseworkerNudge = z.infer<typeof insertPerCaseworkerNudgeSchema>;
 export type PerPermSample = typeof perPermSamples.$inferSelect;
 export type InsertPerPermSample = z.infer<typeof insertPerPermSampleSchema>;
+
+// Types for hybrid gateway audit logs
+export type HybridGatewayAuditLog = typeof hybridGatewayAuditLogs.$inferSelect;
+export type InsertHybridGatewayAuditLog = z.infer<typeof insertHybridGatewayAuditLogSchema>;
 
 // Export tax return tables from taxReturnSchema
 // COMMENTED OUT DURING SCHEMA ROLLBACK - taxReturnSchema.ts moved to backup

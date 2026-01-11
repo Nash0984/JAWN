@@ -19,6 +19,10 @@ import {
 } from '@shared/schema';
 import { eq, and, desc, sql } from 'drizzle-orm';
 import { logger } from '../logger.service';
+import { 
+  neuroSymbolicHybridGateway,
+  type ConsistencyCheckInput
+} from '../neuroSymbolicHybridGateway';
 
 // Check types for pre-submission validation
 export type CheckType = 
@@ -49,6 +53,14 @@ export interface ValidationCheck {
   documentationNeeded?: string[];
 }
 
+export interface HybridConsistencyContext {
+  gatewayRunId?: string;
+  isConsistent: boolean;
+  statutoryCitations: string[];
+  ontologyTermsViolated: string[];
+  grade6Explanation: string;
+}
+
 export interface ValidationResult {
   caseId: string;
   overallStatus: 'passed' | 'failed' | 'needs_review';
@@ -62,6 +74,7 @@ export interface ValidationResult {
   criticalIssues: string[];
   recommendedActions: string[];
   readyForApproval: boolean;
+  hybridVerification?: HybridConsistencyContext;
 }
 
 class PreSubmissionValidatorService {
@@ -141,6 +154,76 @@ class PreSubmissionValidatorService {
         }
       }
 
+      let hybridVerification: HybridConsistencyContext | undefined;
+      
+      if (checksFailed > 0 || checksWarning > 0) {
+        for (const failedCheck of checks.filter(c => c.status === 'failed' || c.status === 'warning')) {
+          try {
+            const checkTypeToConsistencyType: Record<string, 'income_totals' | 'household_composition' | 'documentation' | 'resource_limits' | 'work_requirements' | 'citizenship' | 'residency'> = {
+              'income_total': 'income_totals',
+              'household_composition': 'household_composition',
+              'documentation_complete': 'documentation',
+              'resource_limits': 'resource_limits',
+              'work_requirements': 'work_requirements',
+              'citizenship_status': 'citizenship',
+              'income_source_match': 'income_totals',
+              'expense_deductions': 'income_totals',
+              'duplicate_person': 'household_composition'
+            };
+
+            const consistencyInput: ConsistencyCheckInput = {
+              caseId,
+              checkType: checkTypeToConsistencyType[failedCheck.type] || 'documentation',
+              fieldValues: {
+                expectedValue: failedCheck.expectedValue,
+                actualValue: failedCheck.actualValue,
+                discrepancy: failedCheck.discrepancyDetails,
+                affectedFields: failedCheck.affectedFields
+              }
+            };
+
+            const hybridResult = await neuroSymbolicHybridGateway.validateConsistency(
+              consistencyInput,
+              stateCode,
+              'SNAP'
+            );
+
+            if (!hybridVerification) {
+              hybridVerification = {
+                isConsistent: hybridResult.isConsistent,
+                statutoryCitations: hybridResult.statutoryCitations,
+                ontologyTermsViolated: hybridResult.ontologyTermsViolated.map(t => t.termName),
+                grade6Explanation: hybridResult.grade6Explanation
+              };
+            } else {
+              hybridVerification.statutoryCitations.push(...hybridResult.statutoryCitations);
+              hybridVerification.ontologyTermsViolated.push(...hybridResult.ontologyTermsViolated.map(t => t.termName));
+              hybridVerification.isConsistent = hybridVerification.isConsistent && hybridResult.isConsistent;
+            }
+
+            logger.info('Hybrid gateway consistency validation completed', {
+              service: 'PreSubmissionValidatorService',
+              caseId,
+              checkType: failedCheck.type,
+              isConsistent: hybridResult.isConsistent,
+              statutoryCitationsCount: hybridResult.statutoryCitations.length
+            });
+          } catch (error) {
+            logger.warn('Hybrid gateway consistency validation failed, continuing without', {
+              service: 'PreSubmissionValidatorService',
+              caseId,
+              checkType: failedCheck.type,
+              error: error instanceof Error ? error.message : 'Unknown'
+            });
+          }
+        }
+
+        if (hybridVerification) {
+          hybridVerification.statutoryCitations = [...new Set(hybridVerification.statutoryCitations)];
+          hybridVerification.ontologyTermsViolated = [...new Set(hybridVerification.ontologyTermsViolated)];
+        }
+      }
+
       const result: ValidationResult = {
         caseId,
         overallStatus,
@@ -153,7 +236,8 @@ class PreSubmissionValidatorService {
         checks,
         criticalIssues,
         recommendedActions,
-        readyForApproval: overallStatus === 'passed'
+        readyForApproval: overallStatus === 'passed',
+        hybridVerification
       };
 
       logger.info('Pre-submission validation completed', {
@@ -161,7 +245,8 @@ class PreSubmissionValidatorService {
         caseId,
         overallStatus,
         checksPassed,
-        checksFailed
+        checksFailed,
+        hasHybridVerification: !!hybridVerification
       });
 
       return result;

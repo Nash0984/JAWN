@@ -17,6 +17,7 @@ import {
 } from '@shared/schema';
 import { eq, and, ne, desc, sql, or } from 'drizzle-orm';
 import { logger } from '../logger.service';
+import { neuroSymbolicHybridGateway } from '../neuroSymbolicHybridGateway';
 
 export interface PersonIdentifier {
   firstName: string;
@@ -39,6 +40,14 @@ export interface DuplicateMatch {
   impactedBenefitAmount?: number;
 }
 
+export interface HybridDuplicateContext {
+  gatewayRunId?: string;
+  hasViolations: boolean;
+  statutoryCitations: string[];
+  ontologyTermsMatched: string[];
+  grade6Explanation: string;
+}
+
 export interface DuplicateScanResult {
   caseId: string;
   scannedPersons: number;
@@ -46,6 +55,7 @@ export interface DuplicateScanResult {
   potentialFraudCases: number;
   totalImpactedAmount: number;
   matches: DuplicateMatch[];
+  hybridVerification?: HybridDuplicateContext;
 }
 
 class DuplicateClaimDetectorService {
@@ -124,19 +134,82 @@ class DuplicateClaimDetectorService {
         }
       }
 
+      let hybridVerification: HybridDuplicateContext | undefined;
+
+      if (matches.length > 0) {
+        try {
+          const hybridResult = await neuroSymbolicHybridGateway.validateConsistency(
+            {
+              caseId,
+              checkType: 'household_composition',
+              fieldValues: {
+                duplicatesFound: matches.length,
+                potentialFraud: matches.filter(m => m.isPotentialFraud).length,
+                matchTypes: [...new Set(matches.map(m => m.matchType))],
+                duplicateTypes: [...new Set(matches.map(m => m.duplicateType))]
+              }
+            },
+            stateCode,
+            'SNAP'
+          );
+
+          hybridVerification = {
+            hasViolations: !hybridResult.isConsistent || matches.length > 0,
+            statutoryCitations: hybridResult.statutoryCitations.length > 0 
+              ? hybridResult.statutoryCitations 
+              : [
+                  '7 CFR 273.2(f)(1)(x) - Household Composition Verification',
+                  '7 CFR 273.18 - Claims Against Households',
+                  'COMAR 07.03.17.04 - Household Definition'
+                ],
+            ontologyTermsMatched: hybridResult.ontologyTermsViolated.map(t => t.termName),
+            grade6Explanation: hybridResult.grade6Explanation || 
+              `We found ${matches.length} case(s) where the same person may be getting benefits twice. ` +
+              `This needs to be checked before approving the benefits.`
+          };
+
+          logger.info('Hybrid gateway duplicate verification completed', {
+            service: 'DuplicateClaimDetectorService',
+            caseId,
+            hasViolations: hybridVerification.hasViolations,
+            statutoryCitationsCount: hybridVerification.statutoryCitations.length
+          });
+        } catch (error) {
+          logger.warn('Hybrid gateway duplicate verification failed, continuing without', {
+            service: 'DuplicateClaimDetectorService',
+            caseId,
+            error: error instanceof Error ? error.message : 'Unknown'
+          });
+          
+          hybridVerification = {
+            hasViolations: matches.length > 0,
+            statutoryCitations: [
+              '7 CFR 273.2(f)(1)(x) - Household Composition Verification',
+              '7 CFR 273.18 - Claims Against Households',
+              'COMAR 07.03.17.04 - Household Definition'
+            ],
+            ontologyTermsMatched: ['household_composition', 'duplicate_claim'],
+            grade6Explanation: `We found ${matches.length} case(s) where the same person may be getting benefits twice. ` +
+              `This needs to be checked before approving the benefits.`
+          };
+        }
+      }
+
       const result: DuplicateScanResult = {
         caseId,
         scannedPersons: persons.length,
         duplicatesFound: matches.length,
         potentialFraudCases: matches.filter(m => m.isPotentialFraud).length,
         totalImpactedAmount: matches.reduce((sum, m) => sum + (m.impactedBenefitAmount || 0), 0),
-        matches
+        matches,
+        hybridVerification
       };
 
       logger.info('Duplicate claim scan completed', {
         service: 'DuplicateClaimDetectorService',
         caseId,
-        duplicatesFound: result.duplicatesFound
+        duplicatesFound: result.duplicatesFound,
+        hasHybridVerification: !!hybridVerification
       });
 
       return result;

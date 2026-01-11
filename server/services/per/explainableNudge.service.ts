@@ -22,6 +22,7 @@ import {
 import { eq, and, desc, gte, lte, isNull, or } from 'drizzle-orm';
 import { logger } from '../logger.service';
 import { GoogleGenAI } from '@google/genai';
+import { neuroSymbolicHybridGateway } from '../neuroSymbolicHybridGateway';
 
 const gemini = process.env.GEMINI_API_KEY
   ? new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY })
@@ -62,10 +63,21 @@ export interface CaseworkerNudge {
   nudgeType: NudgeType;
 }
 
+export interface HybridNudgeGrounding {
+  gatewayRunId?: string;
+  isGroundedInStatute: boolean;
+  statutoryCitations: string[];
+  unsatCore: string[];
+  requiredActions: string[];
+  technicalExplanation: string;
+  grade6Explanation: string;
+}
+
 export interface NudgeGenerationResult {
   caseId: string;
   nudgesGenerated: number;
   nudges: CaseworkerNudge[];
+  hybridGrounding?: HybridNudgeGrounding;
 }
 
 class ExplainableNudgeService {
@@ -138,16 +150,60 @@ class ExplainableNudgeService {
         }
       }
 
+      let hybridGrounding: HybridNudgeGrounding | undefined;
+
+      if (nudges.length > 0) {
+        try {
+          const riskFactors = nudges.flatMap(n => n.riskFactors.map(rf => ({
+            type: rf.factor,
+            description: rf.evidence,
+            severity: rf.severity
+          })));
+
+          const hybridResult = await neuroSymbolicHybridGateway.generateGroundedNudge(
+            caseId,
+            riskFactors,
+            stateCode,
+            'SNAP'
+          );
+
+          hybridGrounding = {
+            gatewayRunId: hybridResult.nudgeId,
+            isGroundedInStatute: hybridResult.isGroundedInStatute,
+            statutoryCitations: hybridResult.statutoryCitations,
+            unsatCore: [],
+            requiredActions: hybridResult.requiredActions,
+            technicalExplanation: hybridResult.technicalExplanation,
+            grade6Explanation: hybridResult.grade6Explanation
+          };
+
+          logger.info('Hybrid gateway nudge grounding completed', {
+            service: 'ExplainableNudgeService',
+            caseId,
+            isGroundedInStatute: hybridResult.isGroundedInStatute,
+            statutoryCitationsCount: hybridResult.statutoryCitations.length
+          });
+        } catch (error) {
+          logger.warn('Hybrid gateway nudge grounding failed, continuing without', {
+            service: 'ExplainableNudgeService',
+            caseId,
+            error: error instanceof Error ? error.message : 'Unknown'
+          });
+        }
+      }
+
       logger.info('Nudges generated for case', {
         service: 'ExplainableNudgeService',
         caseId,
-        nudgesGenerated: nudges.length
+        nudgesGenerated: nudges.length,
+        hasHybridGrounding: !!hybridGrounding
       });
 
       return {
         caseId,
         nudgesGenerated: nudges.length,
-        nudges
+        nudges,
+        hybridGrounding
       };
 
     } catch (error) {

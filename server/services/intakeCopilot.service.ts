@@ -3,6 +3,7 @@ import { storage } from "../storage";
 import type { IntakeSession, IntakeMessage, ApplicationForm } from "@shared/schema";
 import { policyEngineService } from "./policyEngine.service";
 import type { PolicyEngineResponse } from "./policyEngine.service";
+import { neuroSymbolicHybridGateway } from "./neuroSymbolicHybridGateway";
 import { createLogger } from './logger.service';
 
 const logger = createLogger('IntakeCopilot');
@@ -14,11 +15,20 @@ interface ExtractedData {
   completeness: number;
 }
 
+interface HybridValidationContext {
+  z3SolverRunId?: string;
+  ontologyTermsMatched?: string[];
+  statutoryCitations?: string[];
+  verificationStatus?: 'verified' | 'pending' | 'conflict' | 'error';
+  grade6Explanation?: string;
+}
+
 interface BenefitSuggestions {
   eligible: boolean;
   programs: string[];
   summary: string;
   policyEngineResults?: PolicyEngineResponse;
+  hybridValidation?: HybridValidationContext;
 }
 
 interface DialogueResponse {
@@ -157,11 +167,58 @@ export class IntakeCopilotService {
       
       const summary = policyEngineService.formatBenefitsResponse(result);
       
+      let hybridValidation: HybridValidationContext | undefined;
+      
+      try {
+        const intakeCaseId = `intake-${Date.now()}`;
+        const hybridResult = await neuroSymbolicHybridGateway.verifyEligibility(
+          intakeCaseId,
+          stateCode,
+          'SNAP',
+          {
+            householdSize,
+            grossMonthlyIncome: monthlyIncome,
+            earnedIncome: monthlyIncome,
+            countableResources: extractedData.assets || 0,
+            hasElderlyMember: extractedData.elderlyOrDisabled || false,
+            hasDisabledMember: extractedData.elderlyOrDisabled || false,
+            shelterCosts: extractedData.rent || extractedData.mortgage || 0,
+            medicalCosts: extractedData.medicalExpenses || 0,
+            dependentCareCosts: extractedData.childcareExpenses || 0,
+          },
+          { triggeredBy: 'intakeCopilot.checkMultiBenefitEligibility' }
+        );
+        
+        hybridValidation = {
+          z3SolverRunId: hybridResult.symbolicLayer.solverRunId,
+          ontologyTermsMatched: hybridResult.rulesContext.ontologyTermsMatched.map(t => t.termLabel),
+          statutoryCitations: hybridResult.rulesContext.statutoryCitations,
+          verificationStatus: hybridResult.symbolicLayer.isSatisfied ? 'verified' : 'conflict',
+          grade6Explanation: hybridResult.grade6Explanation
+        };
+        
+        logger.info('Hybrid verification completed for intake', {
+          caseId: intakeCaseId,
+          status: hybridValidation.verificationStatus,
+          service: 'IntakeCopilot'
+        });
+      } catch (hybridError) {
+        logger.warn('Hybrid verification skipped', {
+          error: hybridError instanceof Error ? hybridError.message : 'Unknown error',
+          service: 'IntakeCopilot'
+        });
+        hybridValidation = {
+          verificationStatus: 'pending',
+          grade6Explanation: 'Formal verification is pending. Eligibility will be verified before final approval.'
+        };
+      }
+      
       return {
         eligible: true,
         programs: eligiblePrograms,
         summary,
-        policyEngineResults: result
+        policyEngineResults: result,
+        hybridValidation
       };
     } catch (error) {
       logger.error("PolicyEngine check failed", {

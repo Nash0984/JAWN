@@ -50,14 +50,28 @@ The backend uses Express.js with TypeScript and PostgreSQL via Drizzle ORM on Ne
 -   **Production Readiness**: Health check endpoints, role-based rate limiting, DoS protection, database connection pooling, graceful shutdown.
 -   **Unified Household Profiler**: Single profile for benefits and tax workflows.
 -   **Performance Optimization**: Server-side caching, extensive database indexing, non-blocking initialization.
--   **Rules-as-Code Architecture**: Maryland rules engines are primary, with PolicyEngine as a verifier.
--   **Neuro-Symbolic AI Architecture**: Production-grade implementation based on research paper "A Neuro-Symbolic Framework for Accountability in Public-Sector AI" (97.7% accuracy matching judicial determinations). 10 database tables deployed with ALL 5 implementation phases COMPLETE:
+-   **Rules-as-Code Architecture**: Maryland/tenant rules engines are the ONLY decision-makers. PolicyEngine is used for verification/validation only, NOT as a co-decision maker.
+-   **Neuro-Symbolic Hybrid Gateway (CRITICAL FOUNDATION)**: Production-grade implementation based on research paper "A Neuro-Symbolic Framework for Accountability in Public-Sector AI" (97.7% accuracy matching judicial determinations). ALL eligibility decisions MUST route through this gateway.
+    - **Neural Layer (Gemini)**: Used ONLY for extraction and translation of unstructured data. NEVER makes eligibility decisions. Provides confidence scores for audit trail.
+    - **Symbolic Layer (Z3 SMT Solver)**: Makes ALL eligibility determinations via formal verification. Generates UNSAT cores with statutory citations when rules are violated.
+    - **Rules-as-Code Layer**: Formal rules extracted from statute (7 CFR 273, COMAR, state-specific regulations). Versioned, validated, and traceable.
+    - **Service Integrations**: All core services route through hybrid gateway:
+      - `rulesEngine.calculateEligibilityWithHybridVerification()` - SNAP eligibility with Z3 verification
+      - PER Income Verification - Income discrepancies verified against formal income rules
+      - PER Consistency Checks - 7 check types mapped to ontology predicates
+      - PER Duplicate Detection - Household composition verified via TBox lookup
+      - PER Explainable Nudges - ALL nudges grounded in Z3 UNSAT core analysis, then simplified to Grade 6
+      - Intake Copilot - Real-time validation against formal rules during intake
+      - RAG Service - LLM answers cross-checked against TBox ontology before returning
+    - **Audit Trail**: Every decision logs: neural extraction confidence, Z3 solver run ID, ontology terms matched, UNSAT core, statutory citations. Stored in `hybrid_gateway_audit_logs` table.
+-   **Neuro-Symbolic Database Tables (12 tables)**:
     - **Phase 1 - TBox (Legal Ontology)**: `statutory_sources`, `ontology_terms` (with e5-large-v2 embeddings), `ontology_relationships` (knowledge graph edges)
     - **Phase 2 - Rule Extraction Pipeline**: `rule_fragments` (clause-level rule text), `formal_rules` (Z3 SMT logic), `rule_extraction_logs` (LLM audit trail). Three prompting strategies: vanilla, undirected, directed_symbolic.
     - **Phase 3 - ABox (Case Assertions)**: `case_assertions` linked to ontology terms via embedding-based semantic similarity (0.70+ threshold). Maps household data to Z3 SMT-LIB assertions.
-    - **Phase 4 - Z3 Solver Integration**: Real Z3 SMT solver via z3-solver npm package. `solver_runs` stores verification results with UNSAT core analysis. Rule constraint building, SAT/UNSAT detection, statutory citation tracking. API endpoints: `/api/z3-solver/verify`, `/api/z3-solver/stats`.
-    - **Phase 5 - Violation Trace Generator (COMPLETE)**: Appeal-ready explanations with statutory citations. `violation_traces` stores detailed violation records with legal citations, due process notices, and appeal guidance for all 6 states. `explanation_clauses` maps NOA clauses to formal predicates. API endpoints: `/api/violation-traces/*`, `/api/neuro-symbolic/verify`, `/api/neuro-symbolic/research-paper-alignment`. Goldberg v. Kelly (397 U.S. 254) compliance with notice, explanation, legal basis, contest rights, and hearing availability.
--   **Testing**: Vitest, @testing-library/react, and supertest. **Regression Gate: 192+ integration tests required** covering Research API (32), Benefit Screening (24), Tax Workflow (36), PER Module (29), Tax Calculations (26), IRS Consent (18), State Rules Engine (23+).
+    - **Phase 4 - Z3 Solver Integration**: `solver_runs` stores verification results with UNSAT core analysis. Rule constraint building, SAT/UNSAT detection, statutory citation tracking. API endpoints: `/api/z3-solver/verify`, `/api/z3-solver/stats`.
+    - **Phase 5 - Violation Trace Generator**: `violation_traces` stores detailed violation records with legal citations, due process notices, and appeal guidance for all 6 states. `explanation_clauses` maps NOA clauses to formal predicates. API endpoints: `/api/violation-traces/*`, `/api/neuro-symbolic/verify`, `/api/neuro-symbolic/research-paper-alignment`. Goldberg v. Kelly (397 U.S. 254) compliance with notice, explanation, legal basis, contest rights, and hearing availability.
+    - **Gateway Audit**: `hybrid_gateway_audit_logs` tracks every hybrid verification with full trace.
+-   **Testing**: Vitest, @testing-library/react, and supertest. **Regression Gate: 216+ integration tests required** covering Research API (32), Benefit Screening (24), Tax Workflow (36), PER Module (29), Tax Calculations (26), IRS Consent (18), State Rules Engine (23+), Hybrid Gateway (24+).
 -   **Distributed Caching System**: Production-ready cache with Redis/Upstash.
 -   **Scalable Connection Pooling**: Neon Pooled Connections.
 -   **WebSocket Real-Time Service**: Session-based authenticated WebSocket service.

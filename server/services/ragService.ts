@@ -3,6 +3,7 @@ import { ReadingLevelService } from "./readingLevelService";
 import { auditService } from "./auditService";
 import { ragCache } from "./ragCache";
 import { getGeminiClient, generateEmbedding as geminiGenerateEmbedding } from "./gemini.service";
+import { neuroSymbolicHybridGateway } from "./neuroSymbolicHybridGateway";
 import { logger } from './logger.service';
 
 // Track Gemini availability
@@ -64,6 +65,14 @@ function generateFallbackResponse(type: string, context?: any): any {
   }
 }
 
+export interface RagHybridVerification {
+  isVerified: boolean;
+  groundedClaims: string[];
+  unverifiableClaims: string[];
+  statutoryCitations: string[];
+  verificationConfidence: number;
+}
+
 export interface SearchResult {
   answer: string;
   sources: Array<{
@@ -88,6 +97,7 @@ export interface SearchResult {
     entities: string[];
     benefitProgram?: string;
   };
+  hybridVerification?: RagHybridVerification;
 }
 
 export interface VerificationResult {
@@ -276,6 +286,44 @@ class RAGService {
       // Step 4: Generate response using RAG
       const response = await this.generateResponse(query, relevantChunks, queryAnalysis);
       
+      // Step 5: Verify response against formal rules via hybrid gateway
+      let hybridVerification: RagHybridVerification | undefined;
+      try {
+        const programCode = queryAnalysis.benefitProgram?.replace('MD_', '') || 'SNAP';
+        const verification = await neuroSymbolicHybridGateway.verifyRagResponse(
+          query,
+          response.answer,
+          'MD',
+          programCode
+        );
+        
+        hybridVerification = verification;
+        
+        logger.info('RAG response hybrid verification complete', {
+          isVerified: verification.isVerified,
+          confidence: verification.verificationConfidence,
+          service: 'RAGService'
+        });
+        
+        if (!verification.isVerified) {
+          logger.warn('RAG response not fully grounded in statute', {
+            query,
+            unverifiableClaims: verification.unverifiableClaims.length,
+            service: 'RAGService'
+          });
+        }
+      } catch (verificationError) {
+        logger.warn('Hybrid verification skipped for RAG response', {
+          error: verificationError instanceof Error ? verificationError.message : 'Unknown error',
+          service: 'RAGService'
+        });
+      }
+      
+      const finalResponse = {
+        ...response,
+        hybridVerification
+      };
+      
       // FIXED: Cache complete response including citations and queryAnalysis
       ragCache.set(query, {
         answer: response.answer,
@@ -285,7 +333,7 @@ class RAGService {
         queryAnalysis: response.queryAnalysis
       }, benefitProgramId);
       
-      return response;
+      return finalResponse;
     } catch (error) {
       logger.error("RAG search error", { error, query, benefitProgramId });
       throw new Error("Failed to process search query");

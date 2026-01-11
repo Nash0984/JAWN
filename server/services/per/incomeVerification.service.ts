@@ -20,6 +20,10 @@ import {
 import { eq, and, gte, lte, desc, sql, isNull } from 'drizzle-orm';
 import { logger } from '../logger.service';
 import { GoogleGenAI } from '@google/genai';
+import { 
+  neuroSymbolicHybridGateway,
+  type IncomeVerificationInput
+} from '../neuroSymbolicHybridGateway';
 
 const gemini = process.env.GEMINI_API_KEY
   ? new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY })
@@ -59,6 +63,17 @@ export interface IncomeDiscrepancy {
   quarter: string;
 }
 
+export interface HybridVerificationContext {
+  gatewayRunId: string;
+  isDiscrepancyViolation: boolean;
+  statutoryCitations: string[];
+  recommendation: string;
+  grade6Explanation: string;
+  solverRunId?: string;
+  unsatCore?: string[];
+  processingPath?: string[];
+}
+
 export interface VerificationResult {
   caseId: string;
   verificationsRun: number;
@@ -67,6 +82,7 @@ export interface VerificationResult {
   totalEstimatedErrorAmount: number;
   discrepancies: IncomeDiscrepancy[];
   aiAnalysis?: string;
+  hybridVerification?: HybridVerificationContext;
 }
 
 class IncomeVerificationService {
@@ -200,6 +216,56 @@ class IncomeVerificationService {
         aiAnalysis = await this.getAIAnalysis(clientCase, discrepancies);
       }
 
+      let hybridVerification: HybridVerificationContext | undefined;
+      
+      if (discrepancies.length > 0) {
+        const largestDiscrepancy = discrepancies.reduce((max, d) => 
+          d.discrepancyAmount > max.discrepancyAmount ? d : max, discrepancies[0]);
+        
+        try {
+          const hybridInput: IncomeVerificationInput = {
+            caseId,
+            reportedIncome: largestDiscrepancy.reportedMonthlyIncome,
+            verifiedIncome: largestDiscrepancy.verifiedMonthlyIncome,
+            incomeSource: largestDiscrepancy.source,
+            verificationDate: new Date().toISOString(),
+            discrepancyAmount: largestDiscrepancy.discrepancyAmount
+          };
+
+          const hybridResult = await neuroSymbolicHybridGateway.verifyIncomeDiscrepancy(
+            hybridInput,
+            stateCode,
+            'SNAP',
+            { tenantId, triggeredBy: createdBy }
+          );
+
+          hybridVerification = {
+            gatewayRunId: hybridResult.gatewayRunId,
+            isDiscrepancyViolation: hybridResult.isDiscrepancyViolation,
+            statutoryCitations: hybridResult.statutoryCitations,
+            recommendation: hybridResult.recommendation,
+            grade6Explanation: hybridResult.grade6Explanation,
+            solverRunId: hybridResult.symbolicVerification?.solverRunId,
+            unsatCore: hybridResult.auditTrail.unsatCore,
+            processingPath: hybridResult.auditTrail.processingPath
+          };
+
+          logger.info('Hybrid gateway income verification completed', {
+            service: 'IncomeVerificationService',
+            caseId,
+            gatewayRunId: hybridResult.gatewayRunId,
+            isViolation: hybridResult.isDiscrepancyViolation,
+            statutoryCitations: hybridResult.statutoryCitations.length
+          });
+        } catch (error) {
+          logger.warn('Hybrid gateway verification failed, continuing without', {
+            service: 'IncomeVerificationService',
+            caseId,
+            error: error instanceof Error ? error.message : 'Unknown'
+          });
+        }
+      }
+
       const result: VerificationResult = {
         caseId,
         verificationsRun: wageData.length + reportedIncome.length,
@@ -207,14 +273,16 @@ class IncomeVerificationService {
         paymentErrorsDetected: discrepancies.filter(d => d.isPaymentError).length,
         totalEstimatedErrorAmount,
         discrepancies,
-        aiAnalysis
+        aiAnalysis,
+        hybridVerification
       };
 
       logger.info('Income verification completed', {
         service: 'IncomeVerificationService',
         caseId,
         discrepanciesFound: result.discrepanciesFound,
-        paymentErrorsDetected: result.paymentErrorsDetected
+        paymentErrorsDetected: result.paymentErrorsDetected,
+        hasHybridVerification: !!hybridVerification
       });
 
       return result;
