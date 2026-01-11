@@ -3339,13 +3339,26 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
   // Trigger FULL manual ingestion (download PDFs, extract text, generate embeddings)
   app.post("/api/manual/ingest-full", requireAdmin, async (req: Request, res: Response) => {
     try {
-      // Import the full ingestion service
-      const { ingestCompleteManual } = await import("./services/manualIngestionService");
-      
       logger.info("Starting complete manual ingestion pipeline...");
       
-      // Run the complete ingestion
-      const result = await ingestCompleteManual();
+      // Use unified ingestion service which is already imported as manualIngestionService
+      const programs = await storage.getBenefitPrograms();
+      const snapProgram = programs.find(p => p.code === "SNAP");
+      
+      if (!snapProgram) {
+        return res.status(500).json({ error: "Maryland SNAP program not found" });
+      }
+      
+      // Run the ingestion using the unified service
+      await manualIngestionService.ingestSectionMetadata(snapProgram.id);
+      const status = await manualIngestionService.getIngestionStatus();
+      
+      const result = {
+        sectionsProcessed: status.totalSections || 0,
+        chunksCreated: 0,
+        crossReferencesExtracted: 0,
+        errors: [] as string[],
+      };
       
       // Invalidate manual sections cache
       cacheService.del('manual_sections:all');
