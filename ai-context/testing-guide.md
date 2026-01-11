@@ -1,6 +1,6 @@
 # Testing Guide
 
-Comprehensive testing strategies for the Maryland Benefits Navigator system.
+Comprehensive testing strategies for the JAWN (Joint Access Welfare Network) multi-state benefits-tax platform.
 
 ## Table of Contents
 

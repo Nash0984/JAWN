@@ -1,6 +1,6 @@
 # Troubleshooting Guide
 
-Common issues, debugging patterns, and resolution steps for the Maryland Benefits Navigator system.
+Common issues, debugging patterns, and resolution steps for the JAWN (Joint Access Welfare Network) multi-state benefits-tax platform.
 
 ## Table of Contents
 

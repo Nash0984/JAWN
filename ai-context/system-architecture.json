@@ -1,9 +1,9 @@
 {
   "$schema": "https://json-schema.org/draft-07/schema#",
-  "systemName": "Maryland Multi-Program Benefits Navigator",
-  "version": "1.0.0",
-  "description": "AI-powered platform assisting users in understanding government benefit policies across 6 major Maryland programs using RAG + Rules as Code technology",
-  "lastUpdated": "2025-10-11",
+  "systemName": "JAWN - Joint Access Welfare Network",
+  "version": "2.1.0",
+  "description": "AI-powered multi-state platform integrating 6 benefit programs (SNAP, Medicaid, TANF, OHEP, Tax Credits, SSI) with federal/state tax preparation across 6 jurisdictions (MD, PA, VA, UT, IN, MI) using RAG + Rules as Code + Neuro-Symbolic AI (97.7% accuracy)",
+  "lastUpdated": "2026-01-11",
   
   "architectureType": "full-stack-monolith",
   "deploymentModel": "replit-cloud",
@@ -113,7 +113,7 @@
     "database": {
       "location": "shared/schema.ts",
       "orm": "Drizzle ORM",
-      "tables": 57,
+      "tables": 179,
       "keySchemas": [
         "users - User accounts with role-based access",
         "documents - Policy documents with metadata",

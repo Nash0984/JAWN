@@ -1,8 +1,8 @@
-# Maryland Benefits Navigator - Code Patterns
+# JAWN Platform - Code Patterns
 
 ## Overview
 
-This document provides reusable code patterns and examples from the Maryland Multi-Program Benefits Navigator system. These patterns demonstrate best practices for building full-stack TypeScript applications with React, Express, and PostgreSQL.
+This document provides reusable code patterns and examples from the JAWN (Joint Access Welfare Network) multi-state benefits-tax platform. These patterns demonstrate best practices for building full-stack TypeScript applications with React, Express, and PostgreSQL.
 
 ---
 

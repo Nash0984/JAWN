@@ -1,6 +1,6 @@
 # Deployment Checklist
 
-Comprehensive pre-deployment validation, environment setup, security hardening, and production monitoring for the Maryland Benefits Navigator system.
+Comprehensive pre-deployment validation, environment setup, security hardening, and production monitoring for the JAWN (Joint Access Welfare Network) multi-state benefits-tax platform.
 
 ## Table of Contents
 

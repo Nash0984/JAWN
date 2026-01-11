@@ -1,6 +1,6 @@
 # Performance Optimization Guide
 
-Comprehensive performance optimization strategies for the Maryland Benefits Navigator system.
+Comprehensive performance optimization strategies for the JAWN (Joint Access Welfare Network) multi-state benefits-tax platform.
 
 ## Table of Contents
 
