@@ -97,7 +97,14 @@ export const standardRateLimiter: RateLimitRequestHandler = rateLimit({
   // Skip successful requests from counting (optional)
   skip: (req: Request) => {
     // Don't count health checks
-    return req.path === '/health' || req.path === '/ready';
+    if (req.path === '/health' || req.path === '/ready') {
+      return true;
+    }
+    // Skip rate limiting for integration tests in development mode
+    if (process.env.NODE_ENV !== 'production' && req.headers['x-test-bypass'] === 'integration-test') {
+      return true;
+    }
+    return false;
   },
   // Custom handler for rate limit exceeded
   handler: (req, res) => {
@@ -135,6 +142,13 @@ export const authRateLimiter: RateLimitRequestHandler = rateLimit({
     retryAfter: 900 // 15 minutes in seconds
   },
   keyGenerator: (req: Request) => `auth:${createSafeIpKey(req.ip)}`,
+  skip: (req: Request) => {
+    // Skip rate limiting for integration tests in development mode
+    if (process.env.NODE_ENV !== 'production' && req.headers['x-test-bypass'] === 'integration-test') {
+      return true;
+    }
+    return false;
+  },
   handler: (req, res) => {
     logger.warn(`⚠️  Auth rate limit exceeded from IP: ${req.ip}`, {
       service: "rateLimiting",
@@ -171,6 +185,13 @@ export const aiRateLimiter: RateLimitRequestHandler = rateLimit({
   keyGenerator: (req: Request) => {
     const user = (req as any).user;
     return user ? `ai:user:${user.id}` : `ai:ip:${createSafeIpKey(req.ip)}`;
+  },
+  skip: (req: Request) => {
+    // Skip rate limiting for integration tests in development mode
+    if (process.env.NODE_ENV !== 'production' && req.headers['x-test-bypass'] === 'integration-test') {
+      return true;
+    }
+    return false;
   }
 });
 
@@ -195,6 +216,13 @@ export const uploadRateLimiter: RateLimitRequestHandler = rateLimit({
   keyGenerator: (req: Request) => {
     const user = (req as any).user;
     return user ? `upload:user:${user.id}` : `upload:ip:${createSafeIpKey(req.ip)}`;
+  },
+  skip: (req: Request) => {
+    // Skip rate limiting for integration tests in development mode
+    if (process.env.NODE_ENV !== 'production' && req.headers['x-test-bypass'] === 'integration-test') {
+      return true;
+    }
+    return false;
   }
 });
 
@@ -217,7 +245,14 @@ export function createCustomRateLimiter(
     },
     standardHeaders: true,
     legacyHeaders: false,
-    keyGenerator: (req: Request) => `custom:${createSafeIpKey(req.ip)}`
+    keyGenerator: (req: Request) => `custom:${createSafeIpKey(req.ip)}`,
+    skip: (req: Request) => {
+      // Skip rate limiting for integration tests in development mode
+      if (process.env.NODE_ENV !== 'production' && req.headers['x-test-bypass'] === 'integration-test') {
+        return true;
+      }
+      return false;
+    }
   });
 }
 
@@ -237,6 +272,13 @@ export const publicRateLimiter: RateLimitRequestHandler = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   keyGenerator: (req: Request) => `public:${createSafeIpKey(req.ip)}`,
+  skip: (req: Request) => {
+    // Skip rate limiting for integration tests in development mode
+    if (process.env.NODE_ENV !== 'production' && req.headers['x-test-bypass'] === 'integration-test') {
+      return true;
+    }
+    return false;
+  },
   handler: (req, res) => {
     logger.warn(`⚠️  Public endpoint rate limit exceeded: ${req.method} ${req.path} from ${req.ip}`, {
       service: "rateLimiting",
@@ -269,6 +311,13 @@ export const aggressiveRateLimiter: RateLimitRequestHandler = rateLimit({
     retryAfter: 900
   },
   keyGenerator: (req: Request) => `blocked:${createSafeIpKey(req.ip)}`,
+  skip: (req: Request) => {
+    // Skip rate limiting for integration tests in development mode
+    if (process.env.NODE_ENV !== 'production' && req.headers['x-test-bypass'] === 'integration-test') {
+      return true;
+    }
+    return false;
+  },
   handler: (req, res) => {
     logger.error(`🚨 IP BLOCKED due to rate limit abuse: ${req.ip} - ${req.method} ${req.path}`, {
       service: "rateLimiting",
@@ -304,6 +353,13 @@ export const bulkOperationRateLimiter: RateLimitRequestHandler = rateLimit({
   keyGenerator: (req: Request) => {
     const user = (req as any).user;
     return user ? `bulk:user:${user.id}` : `bulk:ip:${createSafeIpKey(req.ip)}`;
+  },
+  skip: (req: Request) => {
+    // Skip rate limiting for integration tests in development mode
+    if (process.env.NODE_ENV !== 'production' && req.headers['x-test-bypass'] === 'integration-test') {
+      return true;
+    }
+    return false;
   },
   handler: (req, res) => {
     logger.warn(`⚠️  Bulk operation rate limit exceeded: ${req.method} ${req.path}`, {
