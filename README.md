@@ -118,7 +118,7 @@ graph TB
     end
     
     subgraph "Data Layer"
-        DB[(PostgreSQL<br/>131 Tables<br/>Neon Database)]
+        DB[(PostgreSQL<br/>179 Tables<br/>Neon Database)]
         CACHE[(Redis/Upstash<br/>Distributed Cache)]
         GCS[Google Cloud Storage<br/>Document Files]
     end
