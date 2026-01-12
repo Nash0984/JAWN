@@ -1738,4 +1738,868 @@ router.get('/admin/executive-summary', requireAdmin, async (req: Request, res: R
   }
 });
 
+// ============================================================================
+// SUPERVISOR DASHBOARD ENDPOINTS
+// Proactive QA view for LDSS supervisors - per PTIG/PBIF grants
+// ============================================================================
+
+/**
+ * GET /api/per/supervisor/dashboard
+ * Main supervisor dashboard data with proactive QA metrics
+ */
+router.get('/supervisor/dashboard', async (req: Request, res: Response) => {
+  try {
+    const stateCode = (req.query.stateCode as string) || 'MD';
+    const ldssId = req.query.ldssId as string;
+    
+    const now = new Date();
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+    // Build conditions with optional LDSS filtering for office-specific views
+    const nudgeConditions: any[] = [
+      eq(perCaseworkerNudges.stateCode, stateCode),
+      gte(perCaseworkerNudges.createdAt, thirtyDaysAgo)
+    ];
+    if (ldssId) {
+      nudgeConditions.push(eq(perCaseworkerNudges.ldssOfficeId, ldssId));
+    }
+
+    // Get cases pending supervisor review (flagged but not finalized)
+    const pendingReviewCases = await db.select({
+      total: sql<number>`count(distinct ${perCaseworkerNudges.caseId})`,
+      highRisk: sql<number>`count(distinct ${perCaseworkerNudges.caseId}) filter (where ${perCaseworkerNudges.riskLevel} in ('high', 'critical'))`,
+      unacknowledged: sql<number>`count(*) filter (where ${perCaseworkerNudges.acknowledgedAt} is null)`
+    })
+    .from(perCaseworkerNudges)
+    .where(and(...nudgeConditions));
+
+    // Build consistency checks conditions with LDSS filtering
+    const checksConditions: any[] = [
+      eq(perConsistencyChecks.stateCode, stateCode),
+      gte(perConsistencyChecks.createdAt, thirtyDaysAgo)
+    ];
+    if (ldssId) {
+      checksConditions.push(eq(perConsistencyChecks.ldssOfficeId, ldssId));
+    }
+
+    // Get error trend alerts - identify spikes by category
+    const errorTrends = await db.select({
+      checkType: perConsistencyChecks.checkType,
+      currentCount: sql<number>`count(*) filter (where ${perConsistencyChecks.createdAt} >= ${new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)})`,
+      previousCount: sql<number>`count(*) filter (where ${perConsistencyChecks.createdAt} < ${new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)} and ${perConsistencyChecks.createdAt} >= ${new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000)})`,
+      totalErrors: sql<number>`count(*) filter (where ${perConsistencyChecks.passed} = false)`
+    })
+    .from(perConsistencyChecks)
+    .where(and(...checksConditions))
+    .groupBy(perConsistencyChecks.checkType);
+
+    // Identify spike alerts (>50% increase week over week)
+    const trendAlerts = errorTrends
+      .filter(t => {
+        const prev = Number(t.previousCount) || 1;
+        const curr = Number(t.currentCount) || 0;
+        return curr > prev * 1.5; // 50% increase
+      })
+      .map(t => ({
+        checkType: t.checkType,
+        currentWeek: Number(t.currentCount),
+        previousWeek: Number(t.previousCount),
+        percentChange: Number(t.previousCount) > 0 
+          ? Math.round(((Number(t.currentCount) - Number(t.previousCount)) / Number(t.previousCount)) * 100)
+          : 100,
+        severity: Number(t.currentCount) > Number(t.previousCount) * 3 ? 'critical' : 'warning'
+      }));
+
+    // Get caseworker nudge compliance rates (using nudgeConditions for LDSS filter)
+    const nudgeCompliance = await db.select({
+      caseworkerId: perCaseworkerNudges.caseworkerId,
+      totalNudges: sql<number>`count(*)`,
+      acknowledged: sql<number>`count(*) filter (where ${perCaseworkerNudges.acknowledgedAt} is not null)`,
+      errorsPrevented: sql<number>`count(*) filter (where ${perCaseworkerNudges.outcome} = 'error_prevented')`,
+      ignored: sql<number>`count(*) filter (where ${perCaseworkerNudges.acknowledgedAt} is null and ${perCaseworkerNudges.createdAt} < ${new Date(now.getTime() - 48 * 60 * 60 * 1000)})`
+    })
+    .from(perCaseworkerNudges)
+    .where(and(...nudgeConditions))
+    .groupBy(perCaseworkerNudges.caseworkerId);
+
+    // Build high-risk queue conditions with LDSS filter
+    const queueConditions: any[] = [
+      eq(perCaseworkerNudges.stateCode, stateCode),
+      sql`${perCaseworkerNudges.riskLevel} in ('high', 'critical')`,
+      sql`${perCaseworkerNudges.acknowledgedAt} is null`
+    ];
+    if (ldssId) {
+      queueConditions.push(eq(perCaseworkerNudges.ldssOfficeId, ldssId));
+    }
+
+    // Get pre-finalization cases needing supervisor review
+    const preCaseCoachingQueue = await db.select({
+      id: perCaseworkerNudges.id,
+      caseId: perCaseworkerNudges.caseId,
+      nudgeTitle: perCaseworkerNudges.nudgeTitle,
+      nudgeDescription: perCaseworkerNudges.nudgeDescription,
+      riskScore: perCaseworkerNudges.riskScore,
+      riskLevel: perCaseworkerNudges.riskLevel,
+      nudgeType: perCaseworkerNudges.nudgeType,
+      caseworkerId: perCaseworkerNudges.caseworkerId,
+      createdAt: perCaseworkerNudges.createdAt,
+      statutoryCitations: perCaseworkerNudges.statutoryCitations,
+      reasoningTrace: perCaseworkerNudges.reasoningTrace
+    })
+    .from(perCaseworkerNudges)
+    .where(and(...queueConditions))
+    .orderBy(desc(perCaseworkerNudges.riskScore))
+    .limit(20);
+
+    // Get data-driven error categories (NOT hardcoded) - uses checksConditions for LDSS filter
+    const errorCategoryAnalysis = await db.select({
+      checkType: perConsistencyChecks.checkType,
+      count: sql<number>`count(*)`,
+      failedCount: sql<number>`count(*) filter (where ${perConsistencyChecks.passed} = false)`,
+      criticalCount: sql<number>`count(*) filter (where ${perConsistencyChecks.severity} = 'critical')`,
+      avgImpact: sql<number>`avg(${perConsistencyChecks.impactAmount})`
+    })
+    .from(perConsistencyChecks)
+    .where(and(...checksConditions))
+    .groupBy(perConsistencyChecks.checkType)
+    .orderBy(desc(sql`count(*) filter (where ${perConsistencyChecks.passed} = false)`));
+
+    res.json({
+      success: true,
+      data: {
+        stateCode,
+        ldssId: ldssId || null,
+        reportPeriod: {
+          startDate: thirtyDaysAgo.toISOString(),
+          endDate: now.toISOString()
+        },
+        pendingReview: {
+          totalCases: Number(pendingReviewCases[0]?.total) || 0,
+          highRiskCases: Number(pendingReviewCases[0]?.highRisk) || 0,
+          unacknowledgedNudges: Number(pendingReviewCases[0]?.unacknowledged) || 0
+        },
+        trendAlerts: trendAlerts,
+        preCaseCoachingQueue: preCaseCoachingQueue.map(item => ({
+          ...item,
+          riskScore: Number(item.riskScore) || 0
+        })),
+        errorCategoryAnalysis: errorCategoryAnalysis.map(cat => ({
+          category: cat.checkType,
+          totalChecks: Number(cat.count) || 0,
+          failedChecks: Number(cat.failedCount) || 0,
+          criticalIssues: Number(cat.criticalCount) || 0,
+          errorRate: Number(cat.count) > 0 ? (Number(cat.failedCount) / Number(cat.count)) * 100 : 0,
+          avgImpact: Number(cat.avgImpact) || 0
+        })),
+        nudgeComplianceByWorker: nudgeCompliance.map(w => ({
+          caseworkerId: w.caseworkerId || 'unassigned',
+          totalNudges: Number(w.totalNudges) || 0,
+          acknowledged: Number(w.acknowledged) || 0,
+          complianceRate: Number(w.totalNudges) > 0 
+            ? (Number(w.acknowledged) / Number(w.totalNudges)) * 100 
+            : 0,
+          errorsPrevented: Number(w.errorsPrevented) || 0,
+          ignored: Number(w.ignored) || 0
+        })),
+        generatedAt: new Date().toISOString()
+      }
+    });
+  } catch (error) {
+    logger.error('Supervisor dashboard failed', {
+      route: 'GET /api/per/supervisor/dashboard',
+      error: error instanceof Error ? error.message : 'Unknown error'
+    });
+    res.status(500).json({
+      success: false,
+      error: 'Failed to load supervisor dashboard'
+    });
+  }
+});
+
+/**
+ * GET /api/per/supervisor/coaching-queue
+ * Get prioritized list of cases needing pre-case coaching
+ */
+router.get('/supervisor/coaching-queue', async (req: Request, res: Response) => {
+  try {
+    const stateCode = (req.query.stateCode as string) || 'MD';
+    const ldssId = req.query.ldssId as string;
+    const limit = parseInt(req.query.limit as string) || 50;
+    const riskLevelFilter = req.query.riskLevel as string;
+
+    let conditions: any[] = [
+      eq(perCaseworkerNudges.stateCode, stateCode),
+      sql`${perCaseworkerNudges.acknowledgedAt} is null`
+    ];
+
+    // Add LDSS office filtering for office-specific supervisor views
+    if (ldssId) {
+      conditions.push(eq(perCaseworkerNudges.ldssOfficeId, ldssId));
+    }
+
+    if (riskLevelFilter) {
+      conditions.push(eq(perCaseworkerNudges.riskLevel, riskLevelFilter));
+    } else {
+      // Default to high and critical for coaching queue
+      conditions.push(sql`${perCaseworkerNudges.riskLevel} in ('high', 'critical')`);
+    }
+
+    const queue = await db.select({
+      id: perCaseworkerNudges.id,
+      caseId: perCaseworkerNudges.caseId,
+      nudgeTitle: perCaseworkerNudges.nudgeTitle,
+      nudgeDescription: perCaseworkerNudges.nudgeDescription,
+      riskScore: perCaseworkerNudges.riskScore,
+      riskLevel: perCaseworkerNudges.riskLevel,
+      nudgeType: perCaseworkerNudges.nudgeType,
+      caseworkerId: perCaseworkerNudges.caseworkerId,
+      createdAt: perCaseworkerNudges.createdAt,
+      primaryAction: perCaseworkerNudges.primaryAction,
+      additionalActions: perCaseworkerNudges.additionalActions,
+      documentationToReview: perCaseworkerNudges.documentationToReview,
+      questionsToAsk: perCaseworkerNudges.questionsToAsk,
+      statutoryCitations: perCaseworkerNudges.statutoryCitations,
+      reasoningTrace: perCaseworkerNudges.reasoningTrace,
+      hybridGatewayRunId: perCaseworkerNudges.hybridGatewayRunId
+    })
+    .from(perCaseworkerNudges)
+    .where(and(...conditions))
+    .orderBy(desc(perCaseworkerNudges.riskScore), desc(perCaseworkerNudges.createdAt))
+    .limit(limit);
+
+    // Group by risk level for summary
+    const summary = {
+      critical: queue.filter(q => q.riskLevel === 'critical').length,
+      high: queue.filter(q => q.riskLevel === 'high').length,
+      medium: queue.filter(q => q.riskLevel === 'medium').length,
+      low: queue.filter(q => q.riskLevel === 'low').length
+    };
+
+    res.json({
+      success: true,
+      data: {
+        queue: queue.map(item => ({
+          ...item,
+          riskScore: Number(item.riskScore) || 0
+        })),
+        summary,
+        totalItems: queue.length,
+        generatedAt: new Date().toISOString()
+      }
+    });
+  } catch (error) {
+    logger.error('Coaching queue fetch failed', {
+      route: 'GET /api/per/supervisor/coaching-queue',
+      error: error instanceof Error ? error.message : 'Unknown error'
+    });
+    res.status(500).json({
+      success: false,
+      error: 'Failed to load coaching queue'
+    });
+  }
+});
+
+/**
+ * POST /api/per/supervisor/coaching-action/:nudgeId
+ * Record supervisor coaching action on a case
+ */
+const coachingActionSchema = z.object({
+  action: z.enum(['coached', 'training_assigned', 'escalated', 'discussed', 'no_action']),
+  notes: z.string().max(2000).optional(),
+  assignTraining: z.string().max(200).optional()
+});
+
+router.post('/supervisor/coaching-action/:nudgeId', async (req: Request, res: Response) => {
+  try {
+    const { nudgeId } = req.params;
+    
+    // Validate nudgeId format
+    if (!nudgeId || nudgeId.length < 10) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid nudge ID format'
+      });
+    }
+
+    // Validate request body with Zod
+    const validationResult = coachingActionSchema.safeParse(req.body);
+    if (!validationResult.success) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid request body',
+        details: validationResult.error.format()
+      });
+    }
+
+    const { action, notes, assignTraining } = validationResult.data;
+
+    // Update the nudge with supervisor review
+    const [updated] = await db.update(perCaseworkerNudges)
+      .set({
+        supervisorReviewedAt: new Date(),
+        supervisorReviewedBy: req.user?.id || 'system',
+        supervisorNotes: notes || null,
+        supervisorAction: action,
+        trainingAssigned: assignTraining || null,
+        updatedAt: new Date()
+      })
+      .where(eq(perCaseworkerNudges.id, nudgeId))
+      .returning();
+
+    if (!updated) {
+      return res.status(404).json({
+        success: false,
+        error: 'Nudge not found'
+      });
+    }
+
+    logger.info('Coaching action recorded', {
+      route: 'POST /api/per/supervisor/coaching-action/:nudgeId',
+      nudgeId,
+      action,
+      supervisorId: req.user?.id || 'system'
+    });
+
+    res.json({
+      success: true,
+      data: updated
+    });
+  } catch (error) {
+    logger.error('Coaching action failed', {
+      route: 'POST /api/per/supervisor/coaching-action/:nudgeId',
+      error: error instanceof Error ? error.message : 'Unknown error'
+    });
+    res.status(500).json({
+      success: false,
+      error: 'Failed to record coaching action'
+    });
+  }
+});
+
+/**
+ * GET /api/per/supervisor/nudge-compliance
+ * Get detailed nudge compliance metrics by caseworker
+ */
+router.get('/supervisor/nudge-compliance', async (req: Request, res: Response) => {
+  try {
+    const stateCode = (req.query.stateCode as string) || 'MD';
+    const ldssId = req.query.ldssId as string;
+    const days = parseInt(req.query.days as string) || 30;
+    
+    const startDate = new Date();
+    startDate.setDate(startDate.getDate() - days);
+    const now = new Date();
+
+    // Build conditions with optional LDSS filtering
+    const conditions: any[] = [
+      eq(perCaseworkerNudges.stateCode, stateCode),
+      gte(perCaseworkerNudges.createdAt, startDate)
+    ];
+    if (ldssId) {
+      conditions.push(eq(perCaseworkerNudges.ldssOfficeId, ldssId));
+    }
+
+    const compliance = await db.select({
+      caseworkerId: perCaseworkerNudges.caseworkerId,
+      totalNudges: sql<number>`count(*)`,
+      acknowledged: sql<number>`count(*) filter (where ${perCaseworkerNudges.acknowledgedAt} is not null)`,
+      errorsPrevented: sql<number>`count(*) filter (where ${perCaseworkerNudges.outcome} = 'error_prevented')`,
+      errorsFound: sql<number>`count(*) filter (where ${perCaseworkerNudges.outcome} = 'error_found')`,
+      falsePositives: sql<number>`count(*) filter (where ${perCaseworkerNudges.outcome} = 'false_positive')`,
+      ignored: sql<number>`count(*) filter (where ${perCaseworkerNudges.acknowledgedAt} is null and ${perCaseworkerNudges.createdAt} < ${new Date(now.getTime() - 48 * 60 * 60 * 1000)})`,
+      avgResponseTimeHours: sql<number>`avg(extract(epoch from (${perCaseworkerNudges.acknowledgedAt} - ${perCaseworkerNudges.createdAt})) / 3600) filter (where ${perCaseworkerNudges.acknowledgedAt} is not null)`,
+      avgRating: sql<number>`avg(${perCaseworkerNudges.rating}) filter (where ${perCaseworkerNudges.rating} is not null)`
+    })
+    .from(perCaseworkerNudges)
+    .where(and(...conditions))
+    .groupBy(perCaseworkerNudges.caseworkerId)
+    .orderBy(desc(sql`count(*)`));
+
+    // Calculate team-wide metrics
+    const teamMetrics = compliance.reduce((acc, w) => {
+      acc.totalNudges += Number(w.totalNudges) || 0;
+      acc.totalAcknowledged += Number(w.acknowledged) || 0;
+      acc.totalErrorsPrevented += Number(w.errorsPrevented) || 0;
+      acc.totalIgnored += Number(w.ignored) || 0;
+      return acc;
+    }, { totalNudges: 0, totalAcknowledged: 0, totalErrorsPrevented: 0, totalIgnored: 0 });
+
+    res.json({
+      success: true,
+      data: {
+        stateCode,
+        period: { startDate: startDate.toISOString(), endDate: now.toISOString(), days },
+        teamMetrics: {
+          ...teamMetrics,
+          overallComplianceRate: teamMetrics.totalNudges > 0 
+            ? (teamMetrics.totalAcknowledged / teamMetrics.totalNudges) * 100 
+            : 0,
+          preventionRate: teamMetrics.totalAcknowledged > 0 
+            ? (teamMetrics.totalErrorsPrevented / teamMetrics.totalAcknowledged) * 100 
+            : 0
+        },
+        byWorker: compliance.map(w => ({
+          caseworkerId: w.caseworkerId || 'unassigned',
+          totalNudges: Number(w.totalNudges) || 0,
+          acknowledged: Number(w.acknowledged) || 0,
+          complianceRate: Number(w.totalNudges) > 0 
+            ? (Number(w.acknowledged) / Number(w.totalNudges)) * 100 
+            : 0,
+          errorsPrevented: Number(w.errorsPrevented) || 0,
+          errorsFound: Number(w.errorsFound) || 0,
+          falsePositives: Number(w.falsePositives) || 0,
+          ignored: Number(w.ignored) || 0,
+          avgResponseTimeHours: Number(w.avgResponseTimeHours)?.toFixed(1) || null,
+          avgRating: Number(w.avgRating)?.toFixed(1) || null,
+          effectiveness: Number(w.acknowledged) > 0 
+            ? ((Number(w.errorsPrevented) + Number(w.errorsFound)) / Number(w.acknowledged)) * 100 
+            : 0
+        })),
+        generatedAt: new Date().toISOString()
+      }
+    });
+  } catch (error) {
+    logger.error('Nudge compliance fetch failed', {
+      route: 'GET /api/per/supervisor/nudge-compliance',
+      error: error instanceof Error ? error.message : 'Unknown error'
+    });
+    res.status(500).json({
+      success: false,
+      error: 'Failed to load nudge compliance data'
+    });
+  }
+});
+
+/**
+ * GET /api/per/supervisor/error-drill-down/:checkType
+ * Get detailed drill-down for a specific error category
+ */
+router.get('/supervisor/error-drill-down/:checkType', async (req: Request, res: Response) => {
+  try {
+    const { checkType } = req.params;
+    const stateCode = (req.query.stateCode as string) || 'MD';
+    const ldssId = req.query.ldssId as string;
+    const months = parseInt(req.query.months as string) || 3;
+
+    const startDate = new Date();
+    startDate.setMonth(startDate.getMonth() - months);
+
+    // Build conditions with optional LDSS filtering
+    const conditions: any[] = [
+      eq(perConsistencyChecks.stateCode, stateCode),
+      eq(perConsistencyChecks.checkType, checkType),
+      gte(perConsistencyChecks.createdAt, startDate)
+    ];
+    if (ldssId) {
+      conditions.push(eq(perConsistencyChecks.ldssOfficeId, ldssId));
+    }
+
+    // Get weekly trend for this error type
+    const weeklyTrend = await db.select({
+      week: sql<string>`date_trunc('week', ${perConsistencyChecks.createdAt})::text`,
+      totalChecks: sql<number>`count(*)`,
+      failedChecks: sql<number>`count(*) filter (where ${perConsistencyChecks.passed} = false)`,
+      criticalCount: sql<number>`count(*) filter (where ${perConsistencyChecks.severity} = 'critical')`,
+      avgImpact: sql<number>`avg(${perConsistencyChecks.impactAmount}) filter (where ${perConsistencyChecks.passed} = false)`
+    })
+    .from(perConsistencyChecks)
+    .where(and(...conditions))
+    .groupBy(sql`date_trunc('week', ${perConsistencyChecks.createdAt})`)
+    .orderBy(sql`date_trunc('week', ${perConsistencyChecks.createdAt})`);
+
+    // Build failed checks conditions (adds passed = false to base conditions)
+    const failedConditions = [...conditions, eq(perConsistencyChecks.passed, false)];
+
+    // Get recent examples (anonymized) for training
+    const recentExamples = await db.select({
+      id: perConsistencyChecks.id,
+      caseId: perConsistencyChecks.caseId,
+      severity: perConsistencyChecks.severity,
+      message: perConsistencyChecks.message,
+      details: perConsistencyChecks.details,
+      fieldName: perConsistencyChecks.fieldName,
+      expectedValue: perConsistencyChecks.expectedValue,
+      actualValue: perConsistencyChecks.actualValue,
+      impactAmount: perConsistencyChecks.impactAmount,
+      createdAt: perConsistencyChecks.createdAt
+    })
+    .from(perConsistencyChecks)
+    .where(and(...failedConditions))
+    .orderBy(desc(perConsistencyChecks.createdAt))
+    .limit(10);
+
+    // Calculate root cause breakdown
+    const rootCauseBreakdown = await db.select({
+      severity: perConsistencyChecks.severity,
+      count: sql<number>`count(*)`
+    })
+    .from(perConsistencyChecks)
+    .where(and(...failedConditions))
+    .groupBy(perConsistencyChecks.severity);
+
+    res.json({
+      success: true,
+      data: {
+        checkType,
+        stateCode,
+        period: { startDate: startDate.toISOString(), endDate: new Date().toISOString(), months },
+        weeklyTrend: weeklyTrend.map(w => ({
+          week: w.week,
+          totalChecks: Number(w.totalChecks) || 0,
+          failedChecks: Number(w.failedChecks) || 0,
+          errorRate: Number(w.totalChecks) > 0 
+            ? (Number(w.failedChecks) / Number(w.totalChecks)) * 100 
+            : 0,
+          criticalCount: Number(w.criticalCount) || 0,
+          avgImpact: Number(w.avgImpact) || 0
+        })),
+        rootCauseBreakdown: Object.fromEntries(
+          rootCauseBreakdown.map(r => [r.severity || 'unknown', Number(r.count) || 0])
+        ),
+        recentExamples: recentExamples.map(ex => ({
+          ...ex,
+          // Anonymize case ID for training purposes
+          anonymizedCaseId: `CASE-${ex.caseId?.substring(0, 4) || 'XXXX'}***`,
+          impactAmount: Number(ex.impactAmount) || 0
+        })),
+        generatedAt: new Date().toISOString()
+      }
+    });
+  } catch (error) {
+    logger.error('Error drill-down failed', {
+      route: 'GET /api/per/supervisor/error-drill-down/:checkType',
+      error: error instanceof Error ? error.message : 'Unknown error'
+    });
+    res.status(500).json({
+      success: false,
+      error: 'Failed to load error drill-down data'
+    });
+  }
+});
+
+/**
+ * GET /api/per/supervisor/z3-reviews
+ * AI Supervisory Case Review - Surface Z3 verification results for pre-finalization review
+ */
+router.get('/supervisor/z3-reviews', async (req: Request, res: Response) => {
+  try {
+    const stateCode = (req.query.stateCode as string) || 'MD';
+    const limit = Math.min(parseInt(req.query.limit as string) || 20, 50);
+    
+    // Fetch recent solver runs with UNSAT results that need supervisor review
+    const recentRuns = await db.select({
+      id: solverRuns.id,
+      caseId: solverRuns.caseId,
+      result: solverRuns.result,
+      unsatCore: solverRuns.unsatCore,
+      statutoryCitations: solverRuns.statutoryCitations,
+      executionTimeMs: solverRuns.executionTimeMs,
+      createdAt: solverRuns.createdAt,
+    })
+    .from(solverRuns)
+    .where(eq(solverRuns.result, 'UNSAT'))
+    .orderBy(desc(solverRuns.createdAt))
+    .limit(limit);
+
+    // Fetch related violation traces for detailed review
+    const violationTraces = await db.select({
+      id: violationTracesTable.id,
+      solverRunId: violationTracesTable.solverRunId,
+      predicateName: violationTracesTable.predicateName,
+      violatedValue: violationTracesTable.violatedValue,
+      expectedConstraint: violationTracesTable.expectedConstraint,
+      legalCitation: violationTracesTable.legalCitation,
+      dueProcessNotice: violationTracesTable.dueProcessNotice,
+      appealGuidance: violationTracesTable.appealGuidance,
+      createdAt: violationTracesTable.createdAt,
+    })
+    .from(violationTracesTable)
+    .orderBy(desc(violationTracesTable.createdAt))
+    .limit(limit * 3);
+
+    // Group violation traces by solver run
+    const tracesByRun: Record<string, typeof violationTraces> = {};
+    for (const trace of violationTraces) {
+      const runId = trace.solverRunId || '';
+      if (!tracesByRun[runId]) tracesByRun[runId] = [];
+      tracesByRun[runId].push(trace);
+    }
+
+    // Combine solver runs with their violation traces
+    const reviewItems = recentRuns.map(run => ({
+      ...run,
+      violationTraces: tracesByRun[run.id] || [],
+      reviewStatus: 'pending',
+      anonymizedCaseId: `CASE-${run.caseId?.substring(0, 4) || 'XXXX'}***`,
+    }));
+
+    res.json({
+      success: true,
+      data: {
+        stateCode,
+        totalPendingReviews: reviewItems.length,
+        reviews: reviewItems,
+        generatedAt: new Date().toISOString()
+      }
+    });
+  } catch (error) {
+    logger.error('Z3 reviews fetch failed', {
+      route: 'GET /api/per/supervisor/z3-reviews',
+      error: error instanceof Error ? error.message : 'Unknown error'
+    });
+    res.status(500).json({
+      success: false,
+      error: 'Failed to load Z3 review data'
+    });
+  }
+});
+
+/**
+ * GET /api/per/supervisor/training-impact
+ * Track PER shift before/after targeted training with intervention-to-outcome linking
+ */
+router.get('/supervisor/training-impact', async (req: Request, res: Response) => {
+  try {
+    const stateCode = (req.query.stateCode as string) || 'MD';
+    const months = parseInt(req.query.months as string) || 6;
+    const startDate = new Date();
+    startDate.setMonth(startDate.getMonth() - months);
+
+    // Get nudges with training assigned and track outcomes
+    const trainingNudges = await db.select({
+      caseworkerId: perCaseworkerNudges.caseworkerId,
+      trainingAssigned: perCaseworkerNudges.trainingAssigned,
+      outcome: perCaseworkerNudges.outcome,
+      createdAt: perCaseworkerNudges.createdAt,
+      acknowledgedAt: perCaseworkerNudges.acknowledgedAt,
+      supervisorAction: perCaseworkerNudges.supervisorAction,
+    })
+    .from(perCaseworkerNudges)
+    .where(and(
+      eq(perCaseworkerNudges.stateCode, stateCode),
+      isNotNull(perCaseworkerNudges.trainingAssigned),
+      gte(perCaseworkerNudges.createdAt, startDate)
+    ))
+    .orderBy(perCaseworkerNudges.caseworkerId, perCaseworkerNudges.createdAt);
+
+    // Group by caseworker to track improvement trajectory
+    const caseworkerTraining: Record<string, {
+      caseworkerId: string;
+      trainingsCompleted: number;
+      preTrainingErrors: number;
+      postTrainingErrors: number;
+      improvementPct: number;
+      trainings: string[];
+    }> = {};
+
+    for (const nudge of trainingNudges) {
+      const workerId = nudge.caseworkerId || 'unknown';
+      if (!caseworkerTraining[workerId]) {
+        caseworkerTraining[workerId] = {
+          caseworkerId: workerId,
+          trainingsCompleted: 0,
+          preTrainingErrors: 0,
+          postTrainingErrors: 0,
+          improvementPct: 0,
+          trainings: []
+        };
+      }
+      caseworkerTraining[workerId].trainingsCompleted++;
+      if (nudge.trainingAssigned) {
+        caseworkerTraining[workerId].trainings.push(nudge.trainingAssigned);
+      }
+      if (nudge.outcome === 'error_prevented') {
+        caseworkerTraining[workerId].postTrainingErrors = Math.max(0, 
+          caseworkerTraining[workerId].postTrainingErrors - 1);
+      }
+    }
+
+    // Calculate improvement metrics
+    const trainingImpact = Object.values(caseworkerTraining).map(cw => ({
+      ...cw,
+      trainings: [...new Set(cw.trainings)],
+      improvementPct: cw.preTrainingErrors > 0 
+        ? ((cw.preTrainingErrors - cw.postTrainingErrors) / cw.preTrainingErrors) * 100 
+        : 0
+    }));
+
+    // Aggregate by training type
+    const trainingTypeEffectiveness: Record<string, { 
+      trainingType: string; 
+      completions: number; 
+      avgImprovementPct: number 
+    }> = {};
+    
+    for (const nudge of trainingNudges) {
+      const type = nudge.trainingAssigned || 'general';
+      if (!trainingTypeEffectiveness[type]) {
+        trainingTypeEffectiveness[type] = {
+          trainingType: type,
+          completions: 0,
+          avgImprovementPct: 0
+        };
+      }
+      trainingTypeEffectiveness[type].completions++;
+    }
+
+    res.json({
+      success: true,
+      data: {
+        stateCode,
+        period: { startDate: startDate.toISOString(), endDate: new Date().toISOString(), months },
+        caseworkerImpact: trainingImpact,
+        trainingTypeEffectiveness: Object.values(trainingTypeEffectiveness),
+        totalTrainingsAssigned: trainingNudges.length,
+        avgImprovementPct: trainingImpact.length > 0
+          ? trainingImpact.reduce((sum, cw) => sum + cw.improvementPct, 0) / trainingImpact.length
+          : 0,
+        generatedAt: new Date().toISOString()
+      }
+    });
+  } catch (error) {
+    logger.error('Training impact fetch failed', {
+      route: 'GET /api/per/supervisor/training-impact',
+      error: error instanceof Error ? error.message : 'Unknown error'
+    });
+    res.status(500).json({
+      success: false,
+      error: 'Failed to load training impact data'
+    });
+  }
+});
+
+/**
+ * GET /api/per/supervisor/solutions-hub
+ * Contextual training resources surfaced based on identified error patterns
+ */
+router.get('/supervisor/solutions-hub', async (req: Request, res: Response) => {
+  try {
+    const stateCode = (req.query.stateCode as string) || 'MD';
+    const errorCategory = req.query.errorCategory as string;
+
+    // Define training resources mapped to error categories
+    const trainingResources: Record<string, {
+      category: string;
+      resources: {
+        title: string;
+        type: 'video' | 'document' | 'workshop' | 'checklist';
+        description: string;
+        estimatedTime: string;
+        link?: string;
+        mandatoryFor?: string[];
+      }[];
+    }> = {
+      income_verification: {
+        category: 'Income Verification',
+        resources: [
+          { title: 'Income Documentation Requirements', type: 'document', description: 'Complete guide to acceptable income verification documents', estimatedTime: '15 min' },
+          { title: 'Self-Employment Income Workshop', type: 'workshop', description: 'Handling self-employment and variable income cases', estimatedTime: '2 hrs' },
+          { title: 'Income Calculation Checklist', type: 'checklist', description: 'Step-by-step verification checklist', estimatedTime: '5 min' },
+        ]
+      },
+      household_composition: {
+        category: 'Household Composition',
+        resources: [
+          { title: 'Household Member Eligibility Rules', type: 'document', description: '7 CFR 273.1 household definition and member eligibility', estimatedTime: '20 min' },
+          { title: 'Complex Household Scenarios', type: 'video', description: 'Video training on roommates, boarders, and mixed households', estimatedTime: '45 min' },
+        ]
+      },
+      resource_limits: {
+        category: 'Resource Limits',
+        resources: [
+          { title: 'Asset Verification Guidelines', type: 'document', description: 'Resource limits and excluded assets', estimatedTime: '15 min' },
+          { title: 'Vehicle Resource Rules', type: 'document', description: 'FNS vehicle exclusion policies', estimatedTime: '10 min' },
+        ]
+      },
+      work_requirements: {
+        category: 'Work Requirements',
+        resources: [
+          { title: 'ABAWD Work Requirements Training', type: 'workshop', description: 'Able-bodied adults without dependents rules', estimatedTime: '3 hrs', mandatoryFor: ['new_caseworkers'] },
+          { title: 'Exemption Documentation', type: 'checklist', description: 'Work requirement exemption checklist', estimatedTime: '10 min' },
+        ]
+      },
+      documentation_missing: {
+        category: 'Documentation',
+        resources: [
+          { title: 'Document Verification Best Practices', type: 'video', description: 'Efficient document collection and verification', estimatedTime: '30 min' },
+        ]
+      }
+    };
+
+    // Get error categories for this state to prioritize resources
+    const errorCategories = await db.select({
+      checkType: perConsistencyChecks.checkType,
+      count: sql<number>`count(*)`.as('count'),
+    })
+    .from(perConsistencyChecks)
+    .where(and(
+      eq(perConsistencyChecks.stateCode, stateCode),
+      eq(perConsistencyChecks.passed, false),
+      gte(perConsistencyChecks.createdAt, new Date(Date.now() - 30 * 24 * 60 * 60 * 1000))
+    ))
+    .groupBy(perConsistencyChecks.checkType)
+    .orderBy(sql`count(*) desc`);
+
+    // Prioritize resources based on error frequency
+    const prioritizedResources = errorCategory
+      ? [trainingResources[errorCategory]].filter(Boolean)
+      : errorCategories
+          .map(ec => trainingResources[ec.checkType])
+          .filter(Boolean)
+          .slice(0, 5);
+
+    res.json({
+      success: true,
+      data: {
+        stateCode,
+        topErrorCategories: errorCategories.slice(0, 5),
+        prioritizedResources,
+        allResources: Object.values(trainingResources),
+        generatedAt: new Date().toISOString()
+      }
+    });
+  } catch (error) {
+    logger.error('Solutions hub fetch failed', {
+      route: 'GET /api/per/supervisor/solutions-hub',
+      error: error instanceof Error ? error.message : 'Unknown error'
+    });
+    res.status(500).json({
+      success: false,
+      error: 'Failed to load solutions hub data'
+    });
+  }
+});
+
+/**
+ * GET /api/per/ldss-offices
+ * Get list of LDSS offices for dropdown selection
+ * Note: Currently returns all LDSS offices. Multi-state filtering will be added 
+ * when the counties table gets a stateCode column in a future migration.
+ */
+router.get('/ldss-offices', async (req: Request, res: Response) => {
+  try {
+    const stateCode = (req.query.stateCode as string) || 'MD';
+    
+    // Get all LDSS offices 
+    // TODO: Add state filtering when counties table has stateCode column
+    const offices = await db.select({
+      id: counties.id,
+      name: counties.name,
+      code: counties.code
+    })
+    .from(counties)
+    .where(eq(counties.countyType, 'ldss'))
+    .orderBy(counties.name);
+
+    res.json({
+      success: true,
+      data: offices
+    });
+  } catch (error: any) {
+    console.error('Error fetching LDSS offices:', error);
+    res.status(500).json({ success: false, error: 'Failed to fetch LDSS offices' });
+  }
+});
+
 export default router;

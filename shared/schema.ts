@@ -8540,8 +8540,13 @@ export const perConsistencyChecks = pgTable("per_consistency_checks", {
   checkType: text("check_type").notNull(), // income_total, household_composition, documentation_complete, duplicate_person, income_source_match
   checkName: text("check_name").notNull(),
   checkDescription: text("check_description"),
+  message: text("message"), // Human-readable check message
+  details: text("details"), // Additional context
+  fieldName: text("field_name"), // The field being checked
   // Check results
   checkStatus: text("check_status").notNull(), // passed, failed, warning, skipped
+  passed: boolean("passed").default(true), // Quick access boolean for pass/fail
+  severity: text("severity"), // info, warning, critical
   riskScore: integer("risk_score"), // 0-100
   riskLevel: text("risk_level"), // low, medium, high, critical
   // Specific findings
@@ -8552,6 +8557,7 @@ export const perConsistencyChecks = pgTable("per_consistency_checks", {
   // Impact assessment
   potentialErrorType: text("potential_error_type"), // overpayment, underpayment, none
   estimatedImpact: integer("estimated_impact"), // Dollar amount if not corrected
+  impactAmount: integer("impact_amount"), // Alias for estimatedImpact
   // Caseworker guidance
   recommendedAction: text("recommended_action"),
   documentationNeeded: text("documentation_needed").array(),
@@ -8660,7 +8666,21 @@ export const perCaseworkerNudges = pgTable("per_caseworker_nudges", {
   feedbackRating: integer("feedback_rating"), // 1-5 stars
   // Outcome tracking
   outcomeType: text("outcome_type"), // error_prevented, error_found, false_positive, no_action_needed
+  outcome: text("outcome"), // Alias for outcomeType - error_prevented, error_found, false_positive, no_action_needed
   actualErrorAmount: integer("actual_error_amount"),
+  estimatedImpactAmount: integer("estimated_impact_amount"), // Estimated dollar impact of this nudge
+  // Acknowledgment tracking
+  acknowledgedAt: timestamp("acknowledged_at"),
+  rating: integer("rating"), // 1-5 caseworker rating of nudge usefulness
+  // Statutory citations from hybrid gateway
+  statutoryCitations: text("statutory_citations").array(), // Legal citations from Z3 UNSAT core
+  hybridGatewayRunId: varchar("hybrid_gateway_run_id"), // Link to solver_runs for verification audit
+  // Supervisor review (for pre-case coaching workflow)
+  supervisorReviewedAt: timestamp("supervisor_reviewed_at"),
+  supervisorReviewedBy: varchar("supervisor_reviewed_by").references(() => users.id),
+  supervisorNotes: text("supervisor_notes"),
+  supervisorAction: text("supervisor_action"), // coached, escalated, approved, training_assigned
+  trainingAssigned: text("training_assigned"), // ID of training module assigned
   // Context
   nudgeType: text("nudge_type").notNull(), // income_discrepancy, duplicate_claim, documentation_gap, pattern_alert
   programType: text("program_type").default("SNAP"),

@@ -1,5 +1,17 @@
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
+import { queryClient, apiRequest } from "@/lib/queryClient";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
 import {
   Card,
   CardContent,
@@ -66,6 +78,12 @@ import {
   Download,
   BarChart3,
   FileSpreadsheet,
+  ClipboardCheck,
+  UserCheck,
+  GraduationCap,
+  MessageSquareWarning,
+  ArrowUpRight,
+  Eye,
 } from "lucide-react";
 import { format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
@@ -239,6 +257,96 @@ interface TrendDataPoint {
   criticalIssues?: number;
 }
 
+interface TrendAlert {
+  checkType: string;
+  currentWeek: number;
+  previousWeek: number;
+  percentChange: number;
+  severity: "warning" | "critical";
+}
+
+interface PreCaseCoachingItem {
+  id: string;
+  caseId: string;
+  nudgeTitle: string;
+  nudgeDescription: string;
+  riskScore: number;
+  riskLevel: string;
+  nudgeType: string;
+  caseworkerId: string | null;
+  createdAt: string;
+  statutoryCitations: string[] | null;
+  reasoningTrace: string | null;
+}
+
+interface ErrorCategoryAnalysis {
+  category: string;
+  totalChecks: number;
+  failedChecks: number;
+  criticalIssues: number;
+  errorRate: number;
+  avgImpact: number;
+}
+
+interface NudgeComplianceByWorker {
+  caseworkerId: string;
+  totalNudges: number;
+  acknowledged: number;
+  complianceRate: number;
+  errorsPrevented: number;
+  ignored: number;
+}
+
+interface SupervisorDashboardData {
+  stateCode: string;
+  reportPeriod: {
+    startDate: string;
+    endDate: string;
+  };
+  pendingReview: {
+    totalCases: number;
+    highRiskCases: number;
+    unacknowledgedNudges: number;
+  };
+  trendAlerts: TrendAlert[];
+  preCaseCoachingQueue: PreCaseCoachingItem[];
+  errorCategoryAnalysis: ErrorCategoryAnalysis[];
+  nudgeComplianceByWorker: NudgeComplianceByWorker[];
+  generatedAt: string;
+}
+
+interface ErrorDrillDownData {
+  checkType: string;
+  stateCode: string;
+  period: {
+    startDate: string;
+    endDate: string;
+    months: number;
+  };
+  weeklyTrend: {
+    week: string;
+    totalChecks: number;
+    failedChecks: number;
+    errorRate: number;
+    criticalCount: number;
+    avgImpact: number;
+  }[];
+  rootCauseBreakdown: Record<string, number>;
+  recentExamples: {
+    id: string;
+    anonymizedCaseId: string;
+    severity: string;
+    message: string;
+    details: string;
+    fieldName: string;
+    expectedValue: string;
+    actualValue: string;
+    impactAmount: number;
+    createdAt: string;
+  }[];
+  generatedAt: string;
+}
+
 interface PermTrendDataPoint {
   samplePeriod: string;
   totalSamples: number;
@@ -276,9 +384,19 @@ const COLORS = ["#22c55e", "#f59e0b", "#ef4444", "#8b5cf6", "#06b6d4"];
 
 export default function PerDashboard() {
   const [stateCode, setStateCode] = useState("MD");
+  const [ldssId, setLdssId] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
   const [isExporting, setIsExporting] = useState(false);
+  const [drillDownCategory, setDrillDownCategory] = useState<string | null>(null);
+  const [coachingNudgeId, setCoachingNudgeId] = useState<string | null>(null);
+  const [coachingNotes, setCoachingNotes] = useState("");
+  const [coachingAction, setCoachingAction] = useState<string>("coached");
   const { toast } = useToast();
+
+  // Fetch LDSS offices for the selector
+  const { data: ldssOffices } = useQuery<{ success: boolean; data: { id: string; name: string; code: string }[] }>({
+    queryKey: [`/api/per/ldss-offices?stateCode=${stateCode}`],
+  });
 
   const { data: metrics, isLoading: metricsLoading } = useQuery<{ success: boolean; data: DashboardMetrics }>({
     queryKey: ["/api/per/dashboard", stateCode, refreshKey],
@@ -310,6 +428,36 @@ export default function PerDashboard() {
 
   const { data: trendsData, isLoading: trendsLoading } = useQuery<{ success: boolean; data: TrendsResponse }>({
     queryKey: ["/api/per/admin/trends", stateCode, refreshKey],
+  });
+
+  const { data: supervisorData, isLoading: supervisorLoading } = useQuery<{ success: boolean; data: SupervisorDashboardData }>({
+    queryKey: [`/api/per/supervisor/dashboard?stateCode=${stateCode}${ldssId ? `&ldssId=${ldssId}` : ''}`, refreshKey],
+  });
+
+  const { data: drillDownData, isLoading: drillDownLoading } = useQuery<{ success: boolean; data: ErrorDrillDownData }>({
+    queryKey: [`/api/per/supervisor/error-drill-down/${encodeURIComponent(drillDownCategory || '')}?stateCode=${stateCode}${ldssId ? `&ldssId=${ldssId}` : ''}`, refreshKey],
+    enabled: !!drillDownCategory,
+  });
+
+  const coachingMutation = useMutation({
+    mutationFn: async ({ nudgeId, action, notes }: { nudgeId: string; action: string; notes: string }) => {
+      return apiRequest(`/api/per/supervisor/coaching-action/${nudgeId}`, {
+        method: 'POST',
+        body: JSON.stringify({ action, notes }),
+      });
+    },
+    onSuccess: () => {
+      toast({ title: "Coaching action recorded successfully" });
+      setCoachingNudgeId(null);
+      setCoachingNotes("");
+      // Invalidate supervisor dashboard queries with current filters
+      queryClient.invalidateQueries({ 
+        queryKey: [`/api/per/supervisor/dashboard?stateCode=${stateCode}${ldssId ? `&ldssId=${ldssId}` : ''}`] 
+      });
+    },
+    onError: (error) => {
+      toast({ title: "Failed to record coaching action", variant: "destructive" });
+    },
   });
 
   const handleRefresh = () => setRefreshKey(prev => prev + 1);
@@ -460,6 +608,7 @@ export default function PerDashboard() {
   const ldssData = ldssComparison?.data;
   const execSummary = executiveSummary?.data;
   const trends = trendsData?.data;
+  const supervisorDash = supervisorData?.data;
 
   const errorTypeData = dashboardData?.errorsByType 
     ? Object.entries(dashboardData.errorsByType).map(([name, value]) => ({ name, value }))
@@ -683,9 +832,12 @@ export default function PerDashboard() {
 
         {/* Main Content Tabs */}
         <Tabs defaultValue="executive" className="space-y-4">
-          <TabsList>
+          <TabsList className="flex flex-wrap gap-1">
             <TabsTrigger value="executive" className="flex items-center gap-1">
               <Building2 className="h-4 w-4" /> Executive Overview
+            </TabsTrigger>
+            <TabsTrigger value="supervisor" className="flex items-center gap-1">
+              <ClipboardCheck className="h-4 w-4" /> Supervisor Dashboard
             </TabsTrigger>
             <TabsTrigger value="riskQueue">Risk Queue</TabsTrigger>
             <TabsTrigger value="nudges">High Priority Nudges</TabsTrigger>
@@ -1071,6 +1223,367 @@ export default function PerDashboard() {
                           />
                         </LineChart>
                       </ResponsiveContainer>
+                    )}
+                  </CardContent>
+                </Card>
+              </div>
+            </div>
+          </TabsContent>
+
+          {/* Supervisor Dashboard Tab - Proactive QA & Coaching */}
+          <TabsContent value="supervisor">
+            <div className="space-y-6">
+              {/* LDSS Office Selector for Tier-2 filtering */}
+              <div className="flex items-center gap-4 p-4 bg-muted/50 rounded-lg border">
+                <div className="flex items-center gap-2">
+                  <Building2 className="h-5 w-5 text-muted-foreground" />
+                  <span className="font-medium">View Scope:</span>
+                </div>
+                <Select 
+                  value={ldssId || "statewide"} 
+                  onValueChange={(val) => setLdssId(val === "statewide" ? null : val)}
+                >
+                  <SelectTrigger className="w-[280px]">
+                    <SelectValue placeholder="Select LDSS Office" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="statewide">
+                      <span className="flex items-center gap-2">
+                        <Eye className="h-4 w-4" /> Statewide View (Admin)
+                      </span>
+                    </SelectItem>
+                    {ldssOffices?.data?.map((office) => (
+                      <SelectItem key={office.id} value={office.id}>
+                        {office.name} ({office.code})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {ldssId && (
+                  <Badge variant="outline" className="text-blue-600 border-blue-300">
+                    Office-Specific View (Tier 2)
+                  </Badge>
+                )}
+                {!ldssId && (
+                  <Badge variant="outline" className="text-purple-600 border-purple-300">
+                    Statewide View (Tier 1)
+                  </Badge>
+                )}
+              </div>
+
+              {/* Supervisor Landing - Trend Alerts */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <Card className={supervisorDash?.pendingReview?.highRiskCases ? "border-red-500/50" : ""}>
+                  <CardHeader className="pb-2">
+                    <CardDescription className="flex items-center gap-1">
+                      <AlertTriangle className="h-4 w-4 text-red-500" /> High-Risk Cases Pending
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    {supervisorLoading ? (
+                      <Skeleton className="h-10 w-16" />
+                    ) : (
+                      <>
+                        <div className="text-3xl font-bold text-red-600">
+                          {supervisorDash?.pendingReview?.highRiskCases || 0}
+                        </div>
+                        <p className="text-sm text-muted-foreground mt-1">
+                          of {supervisorDash?.pendingReview?.totalCases || 0} total flagged
+                        </p>
+                      </>
+                    )}
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader className="pb-2">
+                    <CardDescription className="flex items-center gap-1">
+                      <MessageSquareWarning className="h-4 w-4 text-orange-500" /> Unacknowledged Nudges
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    {supervisorLoading ? (
+                      <Skeleton className="h-10 w-16" />
+                    ) : (
+                      <>
+                        <div className="text-3xl font-bold">
+                          {supervisorDash?.pendingReview?.unacknowledgedNudges || 0}
+                        </div>
+                        <p className="text-sm text-muted-foreground mt-1">
+                          Awaiting caseworker response
+                        </p>
+                      </>
+                    )}
+                  </CardContent>
+                </Card>
+
+                <Card className={supervisorDash?.trendAlerts?.length ? "border-yellow-500/50" : ""}>
+                  <CardHeader className="pb-2">
+                    <CardDescription className="flex items-center gap-1">
+                      <ArrowUpRight className="h-4 w-4 text-yellow-600" /> Error Trend Alerts
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    {supervisorLoading ? (
+                      <Skeleton className="h-10 w-16" />
+                    ) : (
+                      <>
+                        <div className="text-3xl font-bold text-yellow-600">
+                          {supervisorDash?.trendAlerts?.length || 0}
+                        </div>
+                        <p className="text-sm text-muted-foreground mt-1">
+                          Categories with spike this week
+                        </p>
+                      </>
+                    )}
+                  </CardContent>
+                </Card>
+              </div>
+
+              {/* Trend Alerts - Data-Driven Error Categories */}
+              {supervisorDash?.trendAlerts && supervisorDash.trendAlerts.length > 0 && (
+                <Card className="border-yellow-500/50">
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2 text-yellow-700">
+                      <AlertTriangle className="h-5 w-5" />
+                      Error Category Spikes Detected
+                    </CardTitle>
+                    <CardDescription>
+                      These error categories show a significant increase compared to last week. Consider targeted coaching.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-3">
+                      {supervisorDash.trendAlerts.map((alert, i) => (
+                        <div key={i} className={`flex items-center justify-between p-3 rounded-lg ${alert.severity === 'critical' ? 'bg-red-50 border border-red-200' : 'bg-yellow-50 border border-yellow-200'}`}>
+                          <div className="flex items-center gap-3">
+                            <Badge variant={alert.severity === 'critical' ? "destructive" : "secondary"}>
+                              {alert.severity.toUpperCase()}
+                            </Badge>
+                            <div>
+                              <p className="font-medium capitalize">{alert.checkType?.replace(/_/g, ' ') || 'Unknown'}</p>
+                              <p className="text-sm text-muted-foreground">
+                                This week: {alert.currentWeek} | Last week: {alert.previousWeek}
+                              </p>
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <span className={`text-lg font-bold ${alert.severity === 'critical' ? 'text-red-600' : 'text-yellow-600'}`}>
+                              +{alert.percentChange}%
+                            </span>
+                            <p className="text-xs text-muted-foreground">increase</p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* Pre-Case Coaching Queue */}
+              <Card>
+                <CardHeader>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <CardTitle className="flex items-center gap-2">
+                        <GraduationCap className="h-5 w-5 text-blue-500" />
+                        Pre-Case Coaching Queue
+                      </CardTitle>
+                      <CardDescription>
+                        High-risk cases flagged before finalization. Review and coach caseworkers proactively.
+                      </CardDescription>
+                    </div>
+                    <Badge variant="outline">
+                      {supervisorDash?.preCaseCoachingQueue?.length || 0} cases
+                    </Badge>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  {supervisorLoading ? (
+                    <div className="space-y-2">
+                      {[1, 2, 3].map(i => <Skeleton key={i} className="h-16 w-full" />)}
+                    </div>
+                  ) : !supervisorDash?.preCaseCoachingQueue?.length ? (
+                    <div className="text-center py-8 text-muted-foreground">
+                      <ClipboardCheck className="h-12 w-12 mx-auto mb-4 text-green-500" />
+                      <p>No high-risk cases in coaching queue</p>
+                      <p className="text-sm">All flagged cases have been reviewed</p>
+                    </div>
+                  ) : (
+                    <ScrollArea className="h-[350px]">
+                      <div className="space-y-3">
+                        {supervisorDash.preCaseCoachingQueue.map((item) => (
+                          <div key={item.id} className="p-4 border rounded-lg hover:bg-muted/50 transition-colors">
+                            <div className="flex items-start justify-between">
+                              <div className="flex-1">
+                                <div className="flex items-center gap-2 mb-1">
+                                  <Badge variant={item.riskLevel === 'critical' ? "destructive" : item.riskLevel === 'high' ? "destructive" : "secondary"}>
+                                    {item.riskLevel?.toUpperCase()}
+                                  </Badge>
+                                  <span className="text-sm text-muted-foreground">
+                                    Risk Score: {item.riskScore}
+                                  </span>
+                                  <span className="text-sm text-muted-foreground">|</span>
+                                  <span className="text-sm text-muted-foreground capitalize">
+                                    {item.nudgeType?.replace(/_/g, ' ')}
+                                  </span>
+                                </div>
+                                <h4 className="font-medium">{item.nudgeTitle}</h4>
+                                <p className="text-sm text-muted-foreground mt-1 line-clamp-2">
+                                  {item.nudgeDescription}
+                                </p>
+                                {item.statutoryCitations && item.statutoryCitations.length > 0 && (
+                                  <div className="flex flex-wrap gap-1 mt-2">
+                                    {item.statutoryCitations.slice(0, 3).map((cite, i) => (
+                                      <Badge key={i} variant="outline" className="text-xs">
+                                        {cite}
+                                      </Badge>
+                                    ))}
+                                    {item.statutoryCitations.length > 3 && (
+                                      <Badge variant="outline" className="text-xs">
+                                        +{item.statutoryCitations.length - 3} more
+                                      </Badge>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                              <div className="flex flex-col items-end gap-2">
+                                <Button size="sm" variant="default">
+                                  <Eye className="h-3 w-3 mr-1" />
+                                  Review
+                                </Button>
+                                <span className="text-xs text-muted-foreground">
+                                  {item.createdAt ? format(new Date(item.createdAt), "MMM d, h:mm a") : ""}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </ScrollArea>
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* Two-Column Layout: Error Categories + Nudge Compliance */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {/* Data-Driven Error Category Analysis */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <BarChart3 className="h-5 w-5 text-purple-500" />
+                      Error Category Analysis
+                    </CardTitle>
+                    <CardDescription>
+                      Error types discovered from QC data (30 days). Categories emerge from actual patterns, not hardcoded.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    {supervisorLoading ? (
+                      <Skeleton className="h-[250px] w-full" />
+                    ) : !supervisorDash?.errorCategoryAnalysis?.length ? (
+                      <div className="h-[250px] flex items-center justify-center text-muted-foreground">
+                        <p>No error category data available</p>
+                      </div>
+                    ) : (
+                      <>
+                        <p className="text-xs text-muted-foreground mb-2">Click any bar to drill down into root causes</p>
+                        <ResponsiveContainer width="100%" height={250}>
+                          <BarChart 
+                            data={supervisorDash.errorCategoryAnalysis.map(cat => ({
+                              category: cat.category?.replace(/_/g, ' ').slice(0, 15) || 'Unknown',
+                              fullCategory: cat.category,
+                              failedChecks: cat.failedChecks,
+                              totalChecks: cat.totalChecks,
+                              errorRate: cat.errorRate?.toFixed(1)
+                            }))}
+                            layout="vertical"
+                            onClick={(data) => {
+                              if (data && data.activePayload && data.activePayload[0]) {
+                                setDrillDownCategory(data.activePayload[0].payload.fullCategory);
+                              }
+                            }}
+                            style={{ cursor: 'pointer' }}
+                          >
+                            <CartesianGrid strokeDasharray="3 3" />
+                            <XAxis type="number" tick={{ fontSize: 12 }} />
+                            <YAxis type="category" dataKey="category" width={120} tick={{ fontSize: 11 }} />
+                            <Tooltip 
+                              content={({ active, payload }) => {
+                                if (active && payload && payload.length) {
+                                  const data = payload[0].payload;
+                                  return (
+                                    <div className="bg-background border rounded p-2 shadow-lg">
+                                      <p className="font-medium capitalize">{data.fullCategory?.replace(/_/g, ' ')}</p>
+                                      <p className="text-sm">Failed: {data.failedChecks} of {data.totalChecks}</p>
+                                      <p className="text-sm">Error Rate: {data.errorRate}%</p>
+                                      <p className="text-xs text-blue-500 mt-1">Click to drill down</p>
+                                    </div>
+                                  );
+                                }
+                                return null;
+                              }}
+                            />
+                            <Bar dataKey="failedChecks" fill="#ef4444" name="Failed Checks" radius={[0, 4, 4, 0]} />
+                          </BarChart>
+                        </ResponsiveContainer>
+                      </>
+                    )}
+                  </CardContent>
+                </Card>
+
+                {/* Caseworker Nudge Compliance Tracking */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <UserCheck className="h-5 w-5 text-green-500" />
+                      Caseworker Nudge Compliance
+                    </CardTitle>
+                    <CardDescription>
+                      Track who follows vs ignores AI guidance. Identify coaching opportunities.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    {supervisorLoading ? (
+                      <div className="space-y-2">
+                        {[1, 2, 3].map(i => <Skeleton key={i} className="h-12 w-full" />)}
+                      </div>
+                    ) : !supervisorDash?.nudgeComplianceByWorker?.length ? (
+                      <div className="text-center py-8 text-muted-foreground">
+                        <Users className="h-12 w-12 mx-auto mb-4" />
+                        <p>No nudge compliance data available</p>
+                      </div>
+                    ) : (
+                      <ScrollArea className="h-[250px]">
+                        <table className="w-full text-sm">
+                          <thead className="sticky top-0 bg-background border-b">
+                            <tr>
+                              <th className="text-left py-2 px-2 font-medium">Caseworker</th>
+                              <th className="text-right py-2 px-2 font-medium">Nudges</th>
+                              <th className="text-right py-2 px-2 font-medium">Compliance</th>
+                              <th className="text-right py-2 px-2 font-medium">Prevented</th>
+                              <th className="text-right py-2 px-2 font-medium">Ignored</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {supervisorDash.nudgeComplianceByWorker.map((worker, i) => (
+                              <tr key={i} className="border-b hover:bg-muted/50">
+                                <td className="py-2 px-2 font-medium">
+                                  {worker.caseworkerId?.slice(0, 8) || 'Unassigned'}...
+                                </td>
+                                <td className="py-2 px-2 text-right">{worker.totalNudges}</td>
+                                <td className="py-2 px-2 text-right">
+                                  <span className={worker.complianceRate < 50 ? "text-red-600 font-medium" : worker.complianceRate >= 80 ? "text-green-600 font-medium" : ""}>
+                                    {worker.complianceRate.toFixed(0)}%
+                                  </span>
+                                </td>
+                                <td className="py-2 px-2 text-right text-green-600">{worker.errorsPrevented}</td>
+                                <td className="py-2 px-2 text-right text-red-600">{worker.ignored}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </ScrollArea>
                     )}
                   </CardContent>
                 </Card>
@@ -1471,6 +1984,204 @@ export default function PerDashboard() {
           </TabsContent>
         </Tabs>
       </div>
+
+      {/* Error Category Drill-Down Modal */}
+      <Dialog open={!!drillDownCategory} onOpenChange={(open) => !open && setDrillDownCategory(null)}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <FileSearch className="h-5 w-5 text-purple-500" />
+              Error Category Drill-Down: {drillDownCategory?.replace(/_/g, ' ')}
+            </DialogTitle>
+            <DialogDescription>
+              Quarterly trends, root cause analysis, and recent examples for this error category.
+            </DialogDescription>
+          </DialogHeader>
+
+          {drillDownLoading ? (
+            <div className="space-y-4">
+              <Skeleton className="h-[200px] w-full" />
+              <Skeleton className="h-[100px] w-full" />
+              <Skeleton className="h-[150px] w-full" />
+            </div>
+          ) : drillDownData?.data ? (
+            <div className="space-y-6">
+              {/* Weekly Trend Chart */}
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-base">Weekly Error Trend (Last 12 Weeks)</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <ResponsiveContainer width="100%" height={200}>
+                    <LineChart data={drillDownData.data.weeklyTrend}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis dataKey="week" tick={{ fontSize: 10 }} />
+                      <YAxis 
+                        tick={{ fontSize: 10 }} 
+                        domain={[0, 'auto']}
+                        label={{ value: 'Error Rate %', angle: -90, position: 'insideLeft', fontSize: 10 }}
+                      />
+                      <Tooltip />
+                      <Line type="monotone" dataKey="errorRate" stroke="#ef4444" strokeWidth={2} dot={{ fill: '#ef4444' }} name="Error Rate %" />
+                      <Line type="monotone" dataKey="criticalCount" stroke="#f59e0b" strokeWidth={2} dot={{ fill: '#f59e0b' }} name="Critical Errors" />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </CardContent>
+              </Card>
+
+              {/* Root Cause Breakdown */}
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <Target className="h-4 w-4" />
+                    Root Cause Analysis
+                  </CardTitle>
+                  <CardDescription>
+                    Distribution of underlying causes from hybrid gateway UNSAT cores
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {Object.keys(drillDownData.data.rootCauseBreakdown).length === 0 ? (
+                    <p className="text-muted-foreground text-center py-4">No root cause data available</p>
+                  ) : (
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                      {Object.entries(drillDownData.data.rootCauseBreakdown).map(([cause, count]) => (
+                        <div key={cause} className="p-3 border rounded-lg">
+                          <div className="text-2xl font-bold text-purple-600">{count as number}</div>
+                          <div className="text-xs text-muted-foreground capitalize">{cause.replace(/_/g, ' ')}</div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* Recent Examples */}
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-base">Recent Examples (Last 10)</CardTitle>
+                  <CardDescription>
+                    Anonymized case details for training reference
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {drillDownData.data.recentExamples.length === 0 ? (
+                    <p className="text-muted-foreground text-center py-4">No recent examples found</p>
+                  ) : (
+                    <ScrollArea className="h-[200px]">
+                      <div className="space-y-2">
+                        {drillDownData.data.recentExamples.map((example, idx) => (
+                          <div key={example.id || idx} className="p-3 border rounded-lg text-sm">
+                            <div className="flex justify-between items-start mb-2">
+                              <Badge variant={example.severity === 'critical' ? 'destructive' : example.severity === 'high' ? 'secondary' : 'outline'}>
+                                {example.severity}
+                              </Badge>
+                              <span className="text-xs text-muted-foreground">
+                                Case: {example.anonymizedCaseId}
+                              </span>
+                            </div>
+                            <p className="mb-1">{example.message}</p>
+                            {example.fieldName && (
+                              <div className="text-xs text-muted-foreground">
+                                <span className="font-medium">Field:</span> {example.fieldName}
+                                {example.expectedValue && (
+                                  <span className="ml-2">Expected: {example.expectedValue}</span>
+                                )}
+                                {example.actualValue && (
+                                  <span className="ml-2">Actual: {example.actualValue}</span>
+                                )}
+                              </div>
+                            )}
+                            {example.impactAmount > 0 && (
+                              <div className="text-xs text-red-600 mt-1">
+                                Potential Impact: ${example.impactAmount.toFixed(2)}
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </ScrollArea>
+                  )}
+                </CardContent>
+              </Card>
+            </div>
+          ) : (
+            <div className="text-center py-8 text-muted-foreground">
+              <AlertTriangle className="h-12 w-12 mx-auto mb-4" />
+              <p>No drill-down data available for this category</p>
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDrillDownCategory(null)}>
+              Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Coaching Action Modal */}
+      <Dialog open={!!coachingNudgeId} onOpenChange={(open) => !open && setCoachingNudgeId(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <GraduationCap className="h-5 w-5 text-blue-500" />
+              Record Coaching Action
+            </DialogTitle>
+            <DialogDescription>
+              Document the coaching action taken for this nudge.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label>Action Taken</Label>
+              <Select value={coachingAction} onValueChange={setCoachingAction}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select action" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="coached">Coached Caseworker</SelectItem>
+                  <SelectItem value="training_assigned">Assigned Training</SelectItem>
+                  <SelectItem value="escalated">Escalated to Management</SelectItem>
+                  <SelectItem value="discussed">Discussed in Team Meeting</SelectItem>
+                  <SelectItem value="no_action">No Action Needed</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Notes</Label>
+              <Textarea
+                placeholder="Add coaching notes..."
+                value={coachingNotes}
+                onChange={(e) => setCoachingNotes(e.target.value)}
+                rows={4}
+              />
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCoachingNudgeId(null)}>
+              Cancel
+            </Button>
+            <Button 
+              onClick={() => {
+                if (coachingNudgeId) {
+                  coachingMutation.mutate({
+                    nudgeId: coachingNudgeId,
+                    action: coachingAction,
+                    notes: coachingNotes,
+                  });
+                }
+              }}
+              disabled={coachingMutation.isPending}
+            >
+              {coachingMutation.isPending ? "Saving..." : "Save Coaching Action"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
