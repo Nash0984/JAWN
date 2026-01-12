@@ -21,6 +21,12 @@ import { Progress } from "@/components/ui/progress";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
   LineChart,
   Line,
   BarChart,
@@ -54,8 +60,15 @@ import {
   ListOrdered,
   Brain,
   Scale,
+  Building2,
+  MapPin,
+  FileText,
+  Download,
+  BarChart3,
+  FileSpreadsheet,
 } from "lucide-react";
 import { format } from "date-fns";
+import { useToast } from "@/hooks/use-toast";
 
 interface DashboardMetrics {
   totalCasesScanned: number;
@@ -128,11 +141,144 @@ interface RiskStats {
   modelVersion: string;
 }
 
+interface LdssMetrics {
+  ldssId: string;
+  ldssName: string;
+  ldssCode: string;
+  region?: string;
+  metrics: {
+    incomeVerification: {
+      total: number;
+      errorCount: number;
+      errorRate: number;
+      avgDiscrepancy: number;
+      resolvedCount: number;
+    };
+    consistencyChecks: {
+      total: number;
+      failedCount: number;
+      warningCount: number;
+      criticalCount: number;
+    };
+    caseworkerNudges: {
+      total: number;
+      acknowledgedCount: number;
+      acknowledgeRate: number;
+      errorsPreventedCount: number;
+      avgRating: number;
+    };
+    duplicateClaims: {
+      total: number;
+      confirmedCount: number;
+      resolvedCount: number;
+    };
+  };
+}
+
+interface LdssComparisonResponse {
+  stateCode: string;
+  reportPeriod: {
+    startDate: string;
+    endDate: string;
+    days: number;
+  };
+  statewideKPIs: {
+    overallErrorRate: number;
+    totalVerifications: number;
+    totalErrors: number;
+    totalNudgesGenerated: number;
+    errorsPreventedByNudges: number;
+    confirmedDuplicates: number;
+    ldssCount: number;
+  };
+  ldssComparison: LdssMetrics[];
+  highestRiskOffices: { name: string; errorRate: string; region?: string }[];
+  generatedAt: string;
+}
+
+interface ExecutiveSummaryResponse {
+  stateCode: string;
+  reportMonth: string;
+  keyMetrics: {
+    currentErrorRate: string;
+    errorRateChange: string;
+    errorRateTrend: "improving" | "stable" | "worsening";
+    totalVerificationsThisMonth: number;
+    errorsDetectedThisMonth: number;
+    estimatedErrorAmount: number;
+  };
+  nudgeImpact: {
+    nudgesGeneratedThisMonth: number;
+    errorsPreventedThisMonth: number;
+    estimatedSavings: number;
+  };
+  permCompliance: {
+    currentPeriod: string;
+    totalSamples: number;
+    completedReviews: number;
+    completionRate: string;
+    errorsFound: number;
+    errorRate: string;
+  } | null;
+  generatedAt: string;
+}
+
+interface TrendDataPoint {
+  period: string;
+  totalVerifications?: number;
+  errorCount?: number;
+  errorRate?: number;
+  avgDiscrepancy?: number;
+  totalNudges?: number;
+  acknowledgedNudges?: number;
+  acknowledgeRate?: number;
+  errorsPrevented?: number;
+  totalChecks?: number;
+  failedChecks?: number;
+  failureRate?: number;
+  criticalIssues?: number;
+}
+
+interface PermTrendDataPoint {
+  samplePeriod: string;
+  totalSamples: number;
+  completedReviews: number;
+  errorsFound: number;
+  errorRate: number;
+  overpaymentAmount: number;
+  underpaymentAmount: number;
+}
+
+interface TrendsResponse {
+  stateCode: string;
+  reportPeriod: {
+    startDate: string;
+    endDate: string;
+    months: number;
+    granularity: string;
+  };
+  trends: {
+    incomeVerification: TrendDataPoint[];
+    caseworkerNudges: TrendDataPoint[];
+    permCompliance: PermTrendDataPoint[];
+    consistencyChecks: TrendDataPoint[];
+  };
+  summary: {
+    latestErrorRate: number;
+    errorRateTrend: number;
+    totalErrorsPrevented: number;
+    currentPermErrorRate: number;
+  };
+  generatedAt: string;
+}
+
 const COLORS = ["#22c55e", "#f59e0b", "#ef4444", "#8b5cf6", "#06b6d4"];
 
 export default function PerDashboard() {
   const [stateCode, setStateCode] = useState("MD");
   const [refreshKey, setRefreshKey] = useState(0);
+  const [isExporting, setIsExporting] = useState(false);
+  const { toast } = useToast();
 
   const { data: metrics, isLoading: metricsLoading } = useQuery<{ success: boolean; data: DashboardMetrics }>({
     queryKey: ["/api/per/dashboard", stateCode, refreshKey],
@@ -154,13 +300,166 @@ export default function PerDashboard() {
     queryKey: ["/api/per/risk-scores/stats", stateCode, refreshKey],
   });
 
+  const { data: ldssComparison, isLoading: ldssComparisonLoading } = useQuery<{ success: boolean; data: LdssComparisonResponse }>({
+    queryKey: ["/api/per/admin/ldss-comparison", stateCode, refreshKey],
+  });
+
+  const { data: executiveSummary, isLoading: executiveSummaryLoading } = useQuery<{ success: boolean; data: ExecutiveSummaryResponse }>({
+    queryKey: ["/api/per/admin/executive-summary", stateCode, refreshKey],
+  });
+
+  const { data: trendsData, isLoading: trendsLoading } = useQuery<{ success: boolean; data: TrendsResponse }>({
+    queryKey: ["/api/per/admin/trends", stateCode, refreshKey],
+  });
+
   const handleRefresh = () => setRefreshKey(prev => prev + 1);
+
+  const handleExportPDF = async () => {
+    if (!execSummary || !ldssData) {
+      toast({ title: "No data to export", variant: "destructive" });
+      return;
+    }
+    setIsExporting(true);
+    try {
+      const { jsPDF } = await import("jspdf");
+      const doc = new jsPDF();
+      const reportDate = format(new Date(), "MMMM d, yyyy");
+      doc.setFontSize(18);
+      doc.text("PER Executive Summary Report", 20, 20);
+      doc.setFontSize(10);
+      doc.text(`State: ${execSummary.stateCode} | Generated: ${reportDate}`, 20, 30);
+      doc.setFontSize(12);
+      doc.text("Key Performance Metrics", 20, 45);
+      doc.setFontSize(10);
+      let y = 55;
+      doc.text(`Current Error Rate: ${execSummary.keyMetrics.currentErrorRate}`, 25, y); y += 8;
+      doc.text(`Error Rate Change: ${execSummary.keyMetrics.errorRateChange}`, 25, y); y += 8;
+      doc.text(`Total Verifications (Month): ${execSummary.keyMetrics.totalVerificationsThisMonth.toLocaleString()}`, 25, y); y += 8;
+      doc.text(`Errors Detected: ${execSummary.keyMetrics.errorsDetectedThisMonth.toLocaleString()}`, 25, y); y += 8;
+      doc.text(`Estimated Error Amount: $${execSummary.keyMetrics.estimatedErrorAmount.toLocaleString()}`, 25, y); y += 15;
+      doc.setFontSize(12);
+      doc.text("Nudge Impact", 20, y); y += 10;
+      doc.setFontSize(10);
+      doc.text(`Nudges Generated: ${execSummary.nudgeImpact.nudgesGeneratedThisMonth.toLocaleString()}`, 25, y); y += 8;
+      doc.text(`Errors Prevented: ${execSummary.nudgeImpact.errorsPreventedThisMonth.toLocaleString()}`, 25, y); y += 8;
+      doc.text(`Estimated Savings: $${execSummary.nudgeImpact.estimatedSavings.toLocaleString()}`, 25, y); y += 15;
+      if (execSummary.permCompliance) {
+        doc.setFontSize(12);
+        doc.text("PERM Compliance", 20, y); y += 10;
+        doc.setFontSize(10);
+        doc.text(`Period: ${execSummary.permCompliance.currentPeriod}`, 25, y); y += 8;
+        doc.text(`Completion Rate: ${execSummary.permCompliance.completionRate}`, 25, y); y += 8;
+        doc.text(`PERM Error Rate: ${execSummary.permCompliance.errorRate}`, 25, y); y += 15;
+      }
+      doc.setFontSize(12);
+      doc.text("LDSS Office Performance Summary", 20, y); y += 10;
+      doc.setFontSize(10);
+      doc.text(`Total Offices: ${ldssData.statewideKPIs.ldssCount}`, 25, y); y += 8;
+      doc.text(`Statewide Error Rate: ${ldssData.statewideKPIs.overallErrorRate.toFixed(2)}%`, 25, y); y += 15;
+      if (ldssData.highestRiskOffices?.length > 0) {
+        doc.setFontSize(12);
+        doc.text("Highest Risk Offices", 20, y); y += 10;
+        doc.setFontSize(10);
+        ldssData.highestRiskOffices.forEach((office, i) => {
+          doc.text(`${i + 1}. ${office.name} - Error Rate: ${office.errorRate}`, 25, y);
+          y += 7;
+        });
+      }
+      const fileName = `PER_Executive_Summary_${stateCode}_${format(new Date(), "yyyy-MM-dd")}.pdf`;
+      doc.save(fileName);
+      toast({ title: "PDF exported successfully" });
+    } catch (error) {
+      console.error("PDF export error:", error);
+      toast({ title: "Failed to export PDF", variant: "destructive" });
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
+  const handleExportExcel = async () => {
+    if (!execSummary || !ldssData) {
+      toast({ title: "No data to export", variant: "destructive" });
+      return;
+    }
+    setIsExporting(true);
+    try {
+      const ExcelJS = await import("exceljs");
+      const workbook = new ExcelJS.Workbook();
+      workbook.creator = "JAWN PER Dashboard";
+      workbook.created = new Date();
+      const summarySheet = workbook.addWorksheet("Executive Summary");
+      summarySheet.columns = [
+        { header: "Metric", key: "metric", width: 35 },
+        { header: "Value", key: "value", width: 25 },
+      ];
+      summarySheet.addRow({ metric: "Report Month", value: execSummary.reportMonth });
+      summarySheet.addRow({ metric: "State Code", value: execSummary.stateCode });
+      summarySheet.addRow({ metric: "", value: "" });
+      summarySheet.addRow({ metric: "KEY METRICS", value: "" });
+      summarySheet.addRow({ metric: "Current Error Rate", value: execSummary.keyMetrics.currentErrorRate });
+      summarySheet.addRow({ metric: "Error Rate Change", value: execSummary.keyMetrics.errorRateChange });
+      summarySheet.addRow({ metric: "Error Rate Trend", value: execSummary.keyMetrics.errorRateTrend });
+      summarySheet.addRow({ metric: "Total Verifications (Month)", value: execSummary.keyMetrics.totalVerificationsThisMonth });
+      summarySheet.addRow({ metric: "Errors Detected", value: execSummary.keyMetrics.errorsDetectedThisMonth });
+      summarySheet.addRow({ metric: "Estimated Error Amount", value: `$${execSummary.keyMetrics.estimatedErrorAmount.toLocaleString()}` });
+      summarySheet.addRow({ metric: "", value: "" });
+      summarySheet.addRow({ metric: "NUDGE IMPACT", value: "" });
+      summarySheet.addRow({ metric: "Nudges Generated", value: execSummary.nudgeImpact.nudgesGeneratedThisMonth });
+      summarySheet.addRow({ metric: "Errors Prevented", value: execSummary.nudgeImpact.errorsPreventedThisMonth });
+      summarySheet.addRow({ metric: "Estimated Savings", value: `$${execSummary.nudgeImpact.estimatedSavings.toLocaleString()}` });
+      if (execSummary.permCompliance) {
+        summarySheet.addRow({ metric: "", value: "" });
+        summarySheet.addRow({ metric: "PERM COMPLIANCE", value: "" });
+        summarySheet.addRow({ metric: "Current Period", value: execSummary.permCompliance.currentPeriod });
+        summarySheet.addRow({ metric: "Total Samples", value: execSummary.permCompliance.totalSamples });
+        summarySheet.addRow({ metric: "Completed Reviews", value: execSummary.permCompliance.completedReviews });
+        summarySheet.addRow({ metric: "Completion Rate", value: execSummary.permCompliance.completionRate });
+        summarySheet.addRow({ metric: "PERM Error Rate", value: execSummary.permCompliance.errorRate });
+      }
+      const ldssSheet = workbook.addWorksheet("LDSS Office Comparison");
+      ldssSheet.columns = [
+        { header: "Office Name", key: "name", width: 30 },
+        { header: "Region", key: "region", width: 15 },
+        { header: "Error Rate", key: "errorRate", width: 15 },
+        { header: "Verifications", key: "verifications", width: 15 },
+        { header: "Nudges Generated", key: "nudges", width: 15 },
+        { header: "Errors Prevented", key: "prevented", width: 15 },
+      ];
+      ldssData.ldssComparison?.forEach((office) => {
+        ldssSheet.addRow({
+          name: office.ldssName,
+          region: office.region || "N/A",
+          errorRate: `${office.metrics.incomeVerification.errorRate.toFixed(2)}%`,
+          verifications: office.metrics.incomeVerification.total,
+          nudges: office.metrics.caseworkerNudges.total,
+          prevented: office.metrics.caseworkerNudges.errorsPreventedCount,
+        });
+      });
+      const buffer = await workbook.xlsx.writeBuffer();
+      const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `PER_Executive_Report_${stateCode}_${format(new Date(), "yyyy-MM-dd")}.xlsx`;
+      link.click();
+      URL.revokeObjectURL(url);
+      toast({ title: "Excel exported successfully" });
+    } catch (error) {
+      console.error("Excel export error:", error);
+      toast({ title: "Failed to export Excel", variant: "destructive" });
+    } finally {
+      setIsExporting(false);
+    }
+  };
 
   const dashboardData = metrics?.data;
   const nudges = highPriorityNudges?.data || [];
   const health = systemHealth?.data;
   const riskQueueData = riskQueue?.data;
   const riskStatsData = riskStats?.data;
+  const ldssData = ldssComparison?.data;
+  const execSummary = executiveSummary?.data;
+  const trends = trendsData?.data;
 
   const errorTypeData = dashboardData?.errorsByType 
     ? Object.entries(dashboardData.errorsByType).map(([name, value]) => ({ name, value }))
@@ -383,13 +682,401 @@ export default function PerDashboard() {
         </div>
 
         {/* Main Content Tabs */}
-        <Tabs defaultValue="riskQueue" className="space-y-4">
+        <Tabs defaultValue="executive" className="space-y-4">
           <TabsList>
+            <TabsTrigger value="executive" className="flex items-center gap-1">
+              <Building2 className="h-4 w-4" /> Executive Overview
+            </TabsTrigger>
             <TabsTrigger value="riskQueue">Risk Queue</TabsTrigger>
             <TabsTrigger value="nudges">High Priority Nudges</TabsTrigger>
             <TabsTrigger value="errors">Error Breakdown</TabsTrigger>
             <TabsTrigger value="perm">PERM Compliance</TabsTrigger>
           </TabsList>
+
+          {/* Executive Overview Tab - State Admin View */}
+          <TabsContent value="executive">
+            <div className="space-y-6">
+              {/* Executive Summary KPIs */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <BarChart3 className="h-5 w-5 text-blue-500" />
+                    Statewide Executive Summary
+                  </CardTitle>
+                  <CardDescription>
+                    {execSummary?.reportMonth || "Current Month"} - High-level metrics for leadership briefings
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {executiveSummaryLoading ? (
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      {[1, 2, 3].map(i => <Skeleton key={i} className="h-24" />)}
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <Card className={execSummary?.keyMetrics?.errorRateTrend === "improving" ? "border-green-500/50" : execSummary?.keyMetrics?.errorRateTrend === "worsening" ? "border-red-500/50" : ""}>
+                        <CardContent className="pt-4">
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <p className="text-sm text-muted-foreground">Statewide Error Rate</p>
+                              <p className="text-3xl font-bold">{execSummary?.keyMetrics?.currentErrorRate || "0%"}</p>
+                              <p className="text-sm flex items-center gap-1">
+                                <span className={execSummary?.keyMetrics?.errorRateTrend === "improving" ? "text-green-600" : execSummary?.keyMetrics?.errorRateTrend === "worsening" ? "text-red-600" : ""}>
+                                  {execSummary?.keyMetrics?.errorRateChange || "0%"}
+                                </span>
+                                {execSummary?.keyMetrics?.errorRateTrend === "improving" && <TrendingDown className="h-4 w-4 text-green-500" />}
+                                {execSummary?.keyMetrics?.errorRateTrend === "worsening" && <TrendingUp className="h-4 w-4 text-red-500" />}
+                                <span className="text-muted-foreground">vs last month</span>
+                              </p>
+                            </div>
+                            <Target className="h-10 w-10 text-purple-500" />
+                          </div>
+                        </CardContent>
+                      </Card>
+
+                      <Card className="border-green-500/50">
+                        <CardContent className="pt-4">
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <p className="text-sm text-muted-foreground">Errors Prevented This Month</p>
+                              <p className="text-3xl font-bold text-green-600">{execSummary?.nudgeImpact?.errorsPreventedThisMonth || 0}</p>
+                              <p className="text-sm text-muted-foreground">
+                                Est. Savings: ${(execSummary?.nudgeImpact?.estimatedSavings || 0).toLocaleString()}
+                              </p>
+                            </div>
+                            <CheckCircle className="h-10 w-10 text-green-500" />
+                          </div>
+                        </CardContent>
+                      </Card>
+
+                      <Card>
+                        <CardContent className="pt-4">
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <p className="text-sm text-muted-foreground">PERM Compliance</p>
+                              <p className="text-3xl font-bold">{execSummary?.permCompliance?.completionRate || "N/A"}</p>
+                              <p className="text-sm text-muted-foreground">
+                                {execSummary?.permCompliance?.currentPeriod || "No active period"}
+                              </p>
+                            </div>
+                            <ShieldCheck className="h-10 w-10 text-blue-500" />
+                          </div>
+                        </CardContent>
+                      </Card>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* LDSS Office Comparison Table */}
+              <Card>
+                <CardHeader>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <CardTitle className="flex items-center gap-2">
+                        <MapPin className="h-5 w-5 text-orange-500" />
+                        LDSS Office Comparison
+                      </CardTitle>
+                      <CardDescription>
+                        Compare error rates, nudge effectiveness, and workload across {ldssData?.statewideKPIs?.ldssCount || 24} LDSS offices
+                      </CardDescription>
+                    </div>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="outline" size="sm" disabled={isExporting || !execSummary || !ldssData}>
+                          <Download className="h-4 w-4 mr-2" />
+                          {isExporting ? "Exporting..." : "Export Report"}
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuItem onClick={handleExportPDF}>
+                          <FileText className="h-4 w-4 mr-2" />
+                          Export as PDF
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={handleExportExcel}>
+                          <FileSpreadsheet className="h-4 w-4 mr-2" />
+                          Export as Excel
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  {ldssComparisonLoading ? (
+                    <div className="space-y-2">
+                      {[1, 2, 3, 4, 5].map(i => <Skeleton key={i} className="h-12 w-full" />)}
+                    </div>
+                  ) : !ldssData?.ldssComparison?.length ? (
+                    <div className="text-center py-8 text-muted-foreground">
+                      <Building2 className="h-12 w-12 mx-auto mb-4" />
+                      <p>No LDSS offices configured</p>
+                      <p className="text-sm">Configure counties in the system to see comparisons</p>
+                    </div>
+                  ) : (
+                    <ScrollArea className="h-[400px]">
+                      <table className="w-full text-sm">
+                        <thead className="sticky top-0 bg-background border-b">
+                          <tr>
+                            <th className="text-left py-3 px-2 font-medium">LDSS Office</th>
+                            <th className="text-left py-3 px-2 font-medium">Region</th>
+                            <th className="text-right py-3 px-2 font-medium">Error Rate</th>
+                            <th className="text-right py-3 px-2 font-medium">Verifications</th>
+                            <th className="text-right py-3 px-2 font-medium">Nudge Rate</th>
+                            <th className="text-right py-3 px-2 font-medium">Errors Prevented</th>
+                            <th className="text-center py-3 px-2 font-medium">Status</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {ldssData.ldssComparison.map((ldss) => (
+                            <tr key={ldss.ldssId} className="border-b hover:bg-muted/50">
+                              <td className="py-3 px-2 font-medium">{ldss.ldssName}</td>
+                              <td className="py-3 px-2 text-muted-foreground capitalize">{ldss.region || "-"}</td>
+                              <td className="py-3 px-2 text-right">
+                                <span className={ldss.metrics.incomeVerification.errorRate > 6 ? "text-red-600 font-medium" : ldss.metrics.incomeVerification.errorRate > 4 ? "text-yellow-600" : "text-green-600"}>
+                                  {ldss.metrics.incomeVerification.errorRate.toFixed(1)}%
+                                </span>
+                              </td>
+                              <td className="py-3 px-2 text-right">{ldss.metrics.incomeVerification.total}</td>
+                              <td className="py-3 px-2 text-right">
+                                {ldss.metrics.caseworkerNudges.acknowledgeRate.toFixed(0)}%
+                              </td>
+                              <td className="py-3 px-2 text-right text-green-600">
+                                {ldss.metrics.caseworkerNudges.errorsPreventedCount}
+                              </td>
+                              <td className="py-3 px-2 text-center">
+                                <Badge variant={ldss.metrics.incomeVerification.errorRate > 6 ? "destructive" : ldss.metrics.incomeVerification.errorRate > 4 ? "secondary" : "default"}>
+                                  {ldss.metrics.incomeVerification.errorRate > 6 ? "High Risk" : ldss.metrics.incomeVerification.errorRate > 4 ? "Monitor" : "Good"}
+                                </Badge>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </ScrollArea>
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* Highest Risk Offices Alert */}
+              {ldssData?.highestRiskOffices && ldssData.highestRiskOffices.length > 0 && (
+                <Card className="border-red-500/50">
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2 text-red-600">
+                      <AlertTriangle className="h-5 w-5" />
+                      Highest Risk Offices - Action Required
+                    </CardTitle>
+                    <CardDescription>
+                      These offices have the highest error rates and may require additional support or intervention
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+                      {ldssData.highestRiskOffices.map((office, index) => (
+                        <Card key={index} className="border-l-4 border-l-red-500">
+                          <CardContent className="py-3">
+                            <div className="font-medium">{office.name}</div>
+                            <div className="text-2xl font-bold text-red-600">{office.errorRate}</div>
+                            <div className="text-xs text-muted-foreground capitalize">{office.region || "Unknown"} Region</div>
+                          </CardContent>
+                        </Card>
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* Statewide Aggregates */}
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <Card>
+                  <CardContent className="pt-4">
+                    <div className="flex items-center gap-3">
+                      <FileSearch className="h-8 w-8 text-blue-500" />
+                      <div>
+                        <p className="text-sm text-muted-foreground">Total Verifications</p>
+                        <p className="text-2xl font-bold">{ldssData?.statewideKPIs?.totalVerifications?.toLocaleString() || 0}</p>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardContent className="pt-4">
+                    <div className="flex items-center gap-3">
+                      <AlertCircle className="h-8 w-8 text-red-500" />
+                      <div>
+                        <p className="text-sm text-muted-foreground">Total Errors Detected</p>
+                        <p className="text-2xl font-bold text-red-600">{ldssData?.statewideKPIs?.totalErrors?.toLocaleString() || 0}</p>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardContent className="pt-4">
+                    <div className="flex items-center gap-3">
+                      <Bell className="h-8 w-8 text-orange-500" />
+                      <div>
+                        <p className="text-sm text-muted-foreground">Nudges Generated</p>
+                        <p className="text-2xl font-bold">{ldssData?.statewideKPIs?.totalNudgesGenerated?.toLocaleString() || 0}</p>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardContent className="pt-4">
+                    <div className="flex items-center gap-3">
+                      <Users className="h-8 w-8 text-purple-500" />
+                      <div>
+                        <p className="text-sm text-muted-foreground">Duplicates Found</p>
+                        <p className="text-2xl font-bold">{ldssData?.statewideKPIs?.confirmedDuplicates?.toLocaleString() || 0}</p>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+
+              {/* Statewide Trend Charts */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {/* Error Rate Trend */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-base">Error Rate Trend</CardTitle>
+                    <CardDescription>Statewide payment error rate over time</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    {trendsLoading ? (
+                      <Skeleton className="h-[200px] w-full" />
+                    ) : !trends?.trends?.incomeVerification?.length ? (
+                      <div className="h-[200px] flex items-center justify-center text-muted-foreground">
+                        <p>No trend data available</p>
+                      </div>
+                    ) : (
+                      <ResponsiveContainer width="100%" height={200}>
+                        <LineChart data={trends.trends.incomeVerification.map(t => ({
+                          ...t,
+                          period: t.period ? format(new Date(t.period), "MMM d") : ""
+                        }))}>
+                          <CartesianGrid strokeDasharray="3 3" />
+                          <XAxis dataKey="period" tick={{ fontSize: 12 }} />
+                          <YAxis tick={{ fontSize: 12 }} domain={[0, 'auto']} />
+                          <Tooltip />
+                          <Legend />
+                          <Line 
+                            type="monotone" 
+                            dataKey="errorRate" 
+                            name="Error Rate %" 
+                            stroke="#ef4444" 
+                            strokeWidth={2}
+                            dot={{ r: 3 }}
+                          />
+                        </LineChart>
+                      </ResponsiveContainer>
+                    )}
+                  </CardContent>
+                </Card>
+
+                {/* Nudge Effectiveness */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-base">Nudge Effectiveness</CardTitle>
+                    <CardDescription>Errors prevented through caseworker nudges</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    {trendsLoading ? (
+                      <Skeleton className="h-[200px] w-full" />
+                    ) : !trends?.trends?.caseworkerNudges?.length ? (
+                      <div className="h-[200px] flex items-center justify-center text-muted-foreground">
+                        <p>No nudge data available</p>
+                      </div>
+                    ) : (
+                      <ResponsiveContainer width="100%" height={200}>
+                        <BarChart data={trends.trends.caseworkerNudges.map(t => ({
+                          ...t,
+                          period: t.period ? format(new Date(t.period), "MMM d") : ""
+                        }))}>
+                          <CartesianGrid strokeDasharray="3 3" />
+                          <XAxis dataKey="period" tick={{ fontSize: 12 }} />
+                          <YAxis tick={{ fontSize: 12 }} />
+                          <Tooltip />
+                          <Legend />
+                          <Bar dataKey="totalNudges" name="Nudges Generated" fill="#f59e0b" />
+                          <Bar dataKey="errorsPrevented" name="Errors Prevented" fill="#22c55e" />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    )}
+                  </CardContent>
+                </Card>
+
+                {/* Verification Volume */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-base">Verification Volume</CardTitle>
+                    <CardDescription>Income verifications and errors detected</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    {trendsLoading ? (
+                      <Skeleton className="h-[200px] w-full" />
+                    ) : !trends?.trends?.incomeVerification?.length ? (
+                      <div className="h-[200px] flex items-center justify-center text-muted-foreground">
+                        <p>No verification data available</p>
+                      </div>
+                    ) : (
+                      <ResponsiveContainer width="100%" height={200}>
+                        <BarChart data={trends.trends.incomeVerification.map(t => ({
+                          ...t,
+                          period: t.period ? format(new Date(t.period), "MMM d") : ""
+                        }))}>
+                          <CartesianGrid strokeDasharray="3 3" />
+                          <XAxis dataKey="period" tick={{ fontSize: 12 }} />
+                          <YAxis tick={{ fontSize: 12 }} />
+                          <Tooltip />
+                          <Legend />
+                          <Bar dataKey="totalVerifications" name="Verifications" fill="#06b6d4" />
+                          <Bar dataKey="errorCount" name="Errors Found" fill="#ef4444" />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    )}
+                  </CardContent>
+                </Card>
+
+                {/* PERM Compliance Trend */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-base">PERM Error Rate by Quarter</CardTitle>
+                    <CardDescription>Federal QC sample error rates</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    {trendsLoading ? (
+                      <Skeleton className="h-[200px] w-full" />
+                    ) : !trends?.trends?.permCompliance?.length ? (
+                      <div className="h-[200px] flex items-center justify-center text-muted-foreground">
+                        <p>No PERM data available</p>
+                      </div>
+                    ) : (
+                      <ResponsiveContainer width="100%" height={200}>
+                        <LineChart data={trends.trends.permCompliance}>
+                          <CartesianGrid strokeDasharray="3 3" />
+                          <XAxis dataKey="samplePeriod" tick={{ fontSize: 12 }} />
+                          <YAxis tick={{ fontSize: 12 }} domain={[0, 'auto']} />
+                          <Tooltip />
+                          <Legend />
+                          <Line 
+                            type="monotone" 
+                            dataKey="errorRate" 
+                            name="PERM Error Rate %" 
+                            stroke="#8b5cf6" 
+                            strokeWidth={2}
+                            dot={{ r: 4 }}
+                          />
+                        </LineChart>
+                      </ResponsiveContainer>
+                    )}
+                  </CardContent>
+                </Card>
+              </div>
+            </div>
+          </TabsContent>
 
           {/* Risk Queue Tab - ML-Based Case Prioritization */}
           <TabsContent value="riskQueue">

@@ -40,7 +40,10 @@ The backend uses Express.js with TypeScript and PostgreSQL via Drizzle ORM on Ne
     - **PERM Reporting Service**: FNS-compliant sampling (180 active/80 negative cases per quarter) and federal payment error rate reporting
     - **5 Database Tables**: `per_income_verifications`, `per_consistency_checks`, `per_duplicate_claims`, `per_caseworker_nudges`, `per_perm_samples`
     - **25+ API Endpoints**: Full REST API at `/api/per/*` for assessment, verification, validation, nudges, and PERM compliance
-    - **PER Dashboard**: Real-time error prevention metrics, high-priority nudge display, PERM compliance status at `/admin/per`
+    - **PER Dashboard**: Real-time error prevention metrics at `/admin/per` with two distinct UX modes:
+      - *State Admin View (Executive Overview tab)*: Default tab for Benefits Access Directors with statewide KPIs, LDSS office comparison table, highest-risk office alerts, 4 trend charts (error rates, nudge effectiveness, verification volume, PERM compliance), and PDF/Excel export for leadership briefings
+      - *Caseworker View (Risk Queue/High Priority Nudges tabs)*: ML-based case prioritization, individual nudge management, and case-level error prevention tools
+      - API: `/api/per/admin/ldss-comparison`, `/api/per/admin/trends`, `/api/per/admin/executive-summary` (admin-only endpoints)
 
 ## System Design Choices
 -   **Data Management**: PostgreSQL for core data, Google Cloud Storage for files.

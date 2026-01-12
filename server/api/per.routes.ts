@@ -7,6 +7,16 @@
 
 import { Router, Request, Response } from 'express';
 import { z } from 'zod';
+import { db } from '../db';
+import {
+  counties,
+  perIncomeVerifications,
+  perConsistencyChecks,
+  perCaseworkerNudges,
+  perDuplicateClaims,
+  perPermSamples
+} from '@shared/schema';
+import { eq, and, gte, lte, sql, desc } from 'drizzle-orm';
 import {
   paymentErrorReductionService,
   incomeVerificationService,
@@ -1243,6 +1253,487 @@ router.get('/compliance/report', requireAdmin, async (req: Request, res: Respons
     res.status(500).json({
       success: false,
       error: 'Failed to get compliance report'
+    });
+  }
+});
+
+// ============================================================================
+// STATE ADMIN ENDPOINTS (Benefits Access Director)
+// Executive-level dashboards for central state administrative staff
+// ============================================================================
+
+/**
+ * GET /api/per/admin/ldss-comparison
+ * Compare PER metrics across all LDSS offices for state-level oversight
+ * Returns error rates, risk scores, and nudge effectiveness by office
+ */
+router.get('/admin/ldss-comparison', requireAdmin, async (req: Request, res: Response) => {
+  try {
+    const stateCode = (req.query.stateCode as string) || 'MD';
+    const days = parseInt(req.query.days as string) || 30;
+    
+    const endDate = new Date();
+    const startDate = new Date();
+    startDate.setDate(startDate.getDate() - days);
+
+    // Get all counties/LDSS offices for the state
+    const countiesResult = await db.select({
+      id: counties.id,
+      name: counties.name,
+      code: counties.code,
+      region: counties.region
+    })
+    .from(counties)
+    .where(eq(counties.countyType, 'ldss'));
+
+    // Build comparison metrics for each LDSS
+    const ldssMetrics = await Promise.all(
+      countiesResult.map(async (county) => {
+        // Get income verification stats for this county/tenant
+        const verificationStats = await db.select({
+          totalVerifications: sql<number>`count(*)`,
+          errorCount: sql<number>`count(*) filter (where ${perIncomeVerifications.isPaymentError} = true)`,
+          avgDiscrepancy: sql<number>`avg(abs(${perIncomeVerifications.discrepancyAmount}))`,
+          resolvedCount: sql<number>`count(*) filter (where ${perIncomeVerifications.resolutionStatus} = 'resolved')`
+        })
+        .from(perIncomeVerifications)
+        .where(and(
+          eq(perIncomeVerifications.tenantId, county.id),
+          gte(perIncomeVerifications.createdAt, startDate),
+          lte(perIncomeVerifications.createdAt, endDate)
+        ));
+
+        // Get consistency check stats
+        const checkStats = await db.select({
+          totalChecks: sql<number>`count(*)`,
+          failedChecks: sql<number>`count(*) filter (where ${perConsistencyChecks.passed} = false)`,
+          warningCount: sql<number>`count(*) filter (where ${perConsistencyChecks.severity} = 'warning')`,
+          criticalCount: sql<number>`count(*) filter (where ${perConsistencyChecks.severity} = 'critical')`
+        })
+        .from(perConsistencyChecks)
+        .where(and(
+          eq(perConsistencyChecks.tenantId, county.id),
+          gte(perConsistencyChecks.createdAt, startDate),
+          lte(perConsistencyChecks.createdAt, endDate)
+        ));
+
+        // Get nudge stats
+        const nudgeStats = await db.select({
+          totalNudges: sql<number>`count(*)`,
+          acknowledgedNudges: sql<number>`count(*) filter (where ${perCaseworkerNudges.acknowledgedAt} is not null)`,
+          errorsPreventedCount: sql<number>`count(*) filter (where ${perCaseworkerNudges.outcome} = 'error_prevented')`,
+          avgRating: sql<number>`avg(${perCaseworkerNudges.rating})`
+        })
+        .from(perCaseworkerNudges)
+        .where(and(
+          eq(perCaseworkerNudges.tenantId, county.id),
+          gte(perCaseworkerNudges.createdAt, startDate),
+          lte(perCaseworkerNudges.createdAt, endDate)
+        ));
+
+        // Get duplicate claim stats
+        const duplicateStats = await db.select({
+          totalDuplicates: sql<number>`count(*)`,
+          confirmedDuplicates: sql<number>`count(*) filter (where ${perDuplicateClaims.isConfirmedDuplicate} = true)`,
+          resolvedDuplicates: sql<number>`count(*) filter (where ${perDuplicateClaims.resolutionStatus} = 'resolved')`
+        })
+        .from(perDuplicateClaims)
+        .where(and(
+          eq(perDuplicateClaims.tenantId, county.id),
+          gte(perDuplicateClaims.createdAt, startDate),
+          lte(perDuplicateClaims.createdAt, endDate)
+        ));
+
+        // Calculate derived metrics
+        const totalVer = Number(verificationStats[0]?.totalVerifications) || 0;
+        const errorCount = Number(verificationStats[0]?.errorCount) || 0;
+        const totalNudges = Number(nudgeStats[0]?.totalNudges) || 0;
+        const acknowledgedNudges = Number(nudgeStats[0]?.acknowledgedNudges) || 0;
+        const errorsPreventedCount = Number(nudgeStats[0]?.errorsPreventedCount) || 0;
+
+        return {
+          ldssId: county.id,
+          ldssName: county.name,
+          ldssCode: county.code,
+          region: county.region,
+          metrics: {
+            incomeVerification: {
+              total: totalVer,
+              errorCount,
+              errorRate: totalVer > 0 ? (errorCount / totalVer) * 100 : 0,
+              avgDiscrepancy: Number(verificationStats[0]?.avgDiscrepancy) || 0,
+              resolvedCount: Number(verificationStats[0]?.resolvedCount) || 0
+            },
+            consistencyChecks: {
+              total: Number(checkStats[0]?.totalChecks) || 0,
+              failedCount: Number(checkStats[0]?.failedChecks) || 0,
+              warningCount: Number(checkStats[0]?.warningCount) || 0,
+              criticalCount: Number(checkStats[0]?.criticalCount) || 0
+            },
+            caseworkerNudges: {
+              total: totalNudges,
+              acknowledgedCount: acknowledgedNudges,
+              acknowledgeRate: totalNudges > 0 ? (acknowledgedNudges / totalNudges) * 100 : 0,
+              errorsPreventedCount,
+              avgRating: Number(nudgeStats[0]?.avgRating) || 0
+            },
+            duplicateClaims: {
+              total: Number(duplicateStats[0]?.totalDuplicates) || 0,
+              confirmedCount: Number(duplicateStats[0]?.confirmedDuplicates) || 0,
+              resolvedCount: Number(duplicateStats[0]?.resolvedDuplicates) || 0
+            }
+          }
+        };
+      })
+    );
+
+    // Calculate statewide aggregates
+    const statewideTotals = ldssMetrics.reduce((acc, ldss) => {
+      acc.totalVerifications += ldss.metrics.incomeVerification.total;
+      acc.totalErrors += ldss.metrics.incomeVerification.errorCount;
+      acc.totalNudges += ldss.metrics.caseworkerNudges.total;
+      acc.totalErrorsPrevented += ldss.metrics.caseworkerNudges.errorsPreventedCount;
+      acc.totalDuplicates += ldss.metrics.duplicateClaims.confirmedCount;
+      return acc;
+    }, {
+      totalVerifications: 0,
+      totalErrors: 0,
+      totalNudges: 0,
+      totalErrorsPrevented: 0,
+      totalDuplicates: 0
+    });
+
+    // Sort LDSS by error rate (highest first) for prioritization
+    const sortedLdss = ldssMetrics.sort((a, b) => 
+      b.metrics.incomeVerification.errorRate - a.metrics.incomeVerification.errorRate
+    );
+
+    res.json({
+      success: true,
+      data: {
+        stateCode,
+        reportPeriod: {
+          startDate: startDate.toISOString(),
+          endDate: endDate.toISOString(),
+          days
+        },
+        statewideKPIs: {
+          overallErrorRate: statewideTotals.totalVerifications > 0 
+            ? (statewideTotals.totalErrors / statewideTotals.totalVerifications) * 100 
+            : 0,
+          totalVerifications: statewideTotals.totalVerifications,
+          totalErrors: statewideTotals.totalErrors,
+          totalNudgesGenerated: statewideTotals.totalNudges,
+          errorsPreventedByNudges: statewideTotals.totalErrorsPrevented,
+          confirmedDuplicates: statewideTotals.totalDuplicates,
+          ldssCount: ldssMetrics.length
+        },
+        ldssComparison: sortedLdss,
+        highestRiskOffices: sortedLdss.slice(0, 5).map(l => ({
+          name: l.ldssName,
+          errorRate: l.metrics.incomeVerification.errorRate.toFixed(1) + '%',
+          region: l.region
+        })),
+        generatedAt: new Date().toISOString()
+      }
+    });
+  } catch (error) {
+    logger.error('LDSS comparison failed', {
+      route: 'GET /api/per/admin/ldss-comparison',
+      error: error instanceof Error ? error.message : 'Unknown error'
+    });
+    res.status(500).json({
+      success: false,
+      error: 'Failed to generate LDSS comparison'
+    });
+  }
+});
+
+/**
+ * GET /api/per/admin/trends
+ * Get statewide PER trends over time for executive dashboards
+ * Returns time-series data for error rates, verifications, and PERM compliance
+ */
+router.get('/admin/trends', requireAdmin, async (req: Request, res: Response) => {
+  try {
+    const stateCode = (req.query.stateCode as string) || 'MD';
+    const months = parseInt(req.query.months as string) || 6;
+    const granularity = (req.query.granularity as string) || 'weekly'; // daily, weekly, monthly
+    
+    const endDate = new Date();
+    const startDate = new Date();
+    startDate.setMonth(startDate.getMonth() - months);
+
+    // Determine date truncation based on granularity
+    const dateTrunc = granularity === 'daily' ? 'day' : 
+                      granularity === 'monthly' ? 'month' : 'week';
+
+    // Get verification trends over time
+    const verificationTrends = await db.select({
+      period: sql<string>`date_trunc(${dateTrunc}, ${perIncomeVerifications.createdAt})::text`,
+      totalVerifications: sql<number>`count(*)`,
+      errorCount: sql<number>`count(*) filter (where ${perIncomeVerifications.isPaymentError} = true)`,
+      avgDiscrepancy: sql<number>`avg(abs(${perIncomeVerifications.discrepancyAmount}))`
+    })
+    .from(perIncomeVerifications)
+    .where(and(
+      eq(perIncomeVerifications.stateCode, stateCode),
+      gte(perIncomeVerifications.createdAt, startDate),
+      lte(perIncomeVerifications.createdAt, endDate)
+    ))
+    .groupBy(sql`date_trunc(${dateTrunc}, ${perIncomeVerifications.createdAt})`)
+    .orderBy(sql`date_trunc(${dateTrunc}, ${perIncomeVerifications.createdAt})`);
+
+    // Get nudge trends over time
+    const nudgeTrends = await db.select({
+      period: sql<string>`date_trunc(${dateTrunc}, ${perCaseworkerNudges.createdAt})::text`,
+      totalNudges: sql<number>`count(*)`,
+      acknowledgedNudges: sql<number>`count(*) filter (where ${perCaseworkerNudges.acknowledgedAt} is not null)`,
+      errorsPrevented: sql<number>`count(*) filter (where ${perCaseworkerNudges.outcome} = 'error_prevented')`
+    })
+    .from(perCaseworkerNudges)
+    .where(and(
+      eq(perCaseworkerNudges.stateCode, stateCode),
+      gte(perCaseworkerNudges.createdAt, startDate),
+      lte(perCaseworkerNudges.createdAt, endDate)
+    ))
+    .groupBy(sql`date_trunc(${dateTrunc}, ${perCaseworkerNudges.createdAt})`)
+    .orderBy(sql`date_trunc(${dateTrunc}, ${perCaseworkerNudges.createdAt})`);
+
+    // Get PERM sample trends by quarter
+    const permTrends = await db.select({
+      samplePeriod: perPermSamples.samplePeriod,
+      totalSamples: sql<number>`count(*)`,
+      completedReviews: sql<number>`count(*) filter (where ${perPermSamples.reviewStatus} = 'completed')`,
+      errorsFound: sql<number>`count(*) filter (where ${perPermSamples.hasError} = true)`,
+      overpaymentAmount: sql<number>`sum(${perPermSamples.errorAmount}) filter (where ${perPermSamples.errorType} = 'overpayment')`,
+      underpaymentAmount: sql<number>`sum(${perPermSamples.errorAmount}) filter (where ${perPermSamples.errorType} = 'underpayment')`
+    })
+    .from(perPermSamples)
+    .where(and(
+      eq(perPermSamples.stateCode, stateCode),
+      gte(perPermSamples.selectionDate, startDate)
+    ))
+    .groupBy(perPermSamples.samplePeriod)
+    .orderBy(perPermSamples.samplePeriod);
+
+    // Get consistency check trends
+    const checkTrends = await db.select({
+      period: sql<string>`date_trunc(${dateTrunc}, ${perConsistencyChecks.createdAt})::text`,
+      totalChecks: sql<number>`count(*)`,
+      failedChecks: sql<number>`count(*) filter (where ${perConsistencyChecks.passed} = false)`,
+      criticalIssues: sql<number>`count(*) filter (where ${perConsistencyChecks.severity} = 'critical')`
+    })
+    .from(perConsistencyChecks)
+    .where(and(
+      eq(perConsistencyChecks.stateCode, stateCode),
+      gte(perConsistencyChecks.createdAt, startDate),
+      lte(perConsistencyChecks.createdAt, endDate)
+    ))
+    .groupBy(sql`date_trunc(${dateTrunc}, ${perConsistencyChecks.createdAt})`)
+    .orderBy(sql`date_trunc(${dateTrunc}, ${perConsistencyChecks.createdAt})`);
+
+    // Format trends for charting
+    const formattedVerificationTrends = verificationTrends.map(t => ({
+      period: t.period,
+      totalVerifications: Number(t.totalVerifications) || 0,
+      errorCount: Number(t.errorCount) || 0,
+      errorRate: Number(t.totalVerifications) > 0 
+        ? (Number(t.errorCount) / Number(t.totalVerifications)) * 100 
+        : 0,
+      avgDiscrepancy: Number(t.avgDiscrepancy) || 0
+    }));
+
+    const formattedNudgeTrends = nudgeTrends.map(t => ({
+      period: t.period,
+      totalNudges: Number(t.totalNudges) || 0,
+      acknowledgedNudges: Number(t.acknowledgedNudges) || 0,
+      acknowledgeRate: Number(t.totalNudges) > 0 
+        ? (Number(t.acknowledgedNudges) / Number(t.totalNudges)) * 100 
+        : 0,
+      errorsPrevented: Number(t.errorsPrevented) || 0
+    }));
+
+    const formattedPermTrends = permTrends.map(t => ({
+      samplePeriod: t.samplePeriod,
+      totalSamples: Number(t.totalSamples) || 0,
+      completedReviews: Number(t.completedReviews) || 0,
+      errorsFound: Number(t.errorsFound) || 0,
+      errorRate: Number(t.completedReviews) > 0 
+        ? (Number(t.errorsFound) / Number(t.completedReviews)) * 100 
+        : 0,
+      overpaymentAmount: Number(t.overpaymentAmount) || 0,
+      underpaymentAmount: Number(t.underpaymentAmount) || 0
+    }));
+
+    const formattedCheckTrends = checkTrends.map(t => ({
+      period: t.period,
+      totalChecks: Number(t.totalChecks) || 0,
+      failedChecks: Number(t.failedChecks) || 0,
+      failureRate: Number(t.totalChecks) > 0 
+        ? (Number(t.failedChecks) / Number(t.totalChecks)) * 100 
+        : 0,
+      criticalIssues: Number(t.criticalIssues) || 0
+    }));
+
+    res.json({
+      success: true,
+      data: {
+        stateCode,
+        reportPeriod: {
+          startDate: startDate.toISOString(),
+          endDate: endDate.toISOString(),
+          months,
+          granularity
+        },
+        trends: {
+          incomeVerification: formattedVerificationTrends,
+          caseworkerNudges: formattedNudgeTrends,
+          permCompliance: formattedPermTrends,
+          consistencyChecks: formattedCheckTrends
+        },
+        summary: {
+          latestErrorRate: formattedVerificationTrends.length > 0 
+            ? formattedVerificationTrends[formattedVerificationTrends.length - 1].errorRate 
+            : 0,
+          errorRateTrend: formattedVerificationTrends.length >= 2
+            ? formattedVerificationTrends[formattedVerificationTrends.length - 1].errorRate - 
+              formattedVerificationTrends[formattedVerificationTrends.length - 2].errorRate
+            : 0,
+          totalErrorsPrevented: formattedNudgeTrends.reduce((sum, t) => sum + t.errorsPrevented, 0),
+          currentPermErrorRate: formattedPermTrends.length > 0
+            ? formattedPermTrends[formattedPermTrends.length - 1].errorRate
+            : 0
+        },
+        generatedAt: new Date().toISOString()
+      }
+    });
+  } catch (error) {
+    logger.error('Trends generation failed', {
+      route: 'GET /api/per/admin/trends',
+      error: error instanceof Error ? error.message : 'Unknown error'
+    });
+    res.status(500).json({
+      success: false,
+      error: 'Failed to generate trends data'
+    });
+  }
+});
+
+/**
+ * GET /api/per/admin/executive-summary
+ * Generate executive summary for leadership briefings
+ */
+router.get('/admin/executive-summary', requireAdmin, async (req: Request, res: Response) => {
+  try {
+    const stateCode = (req.query.stateCode as string) || 'MD';
+    
+    // Get current month and previous month for comparison
+    const now = new Date();
+    const currentMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    const previousMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    const previousMonthEnd = new Date(now.getFullYear(), now.getMonth(), 0);
+
+    // Current month stats
+    const currentStats = await db.select({
+      totalVerifications: sql<number>`count(*)`,
+      errorCount: sql<number>`count(*) filter (where ${perIncomeVerifications.isPaymentError} = true)`,
+      totalErrorAmount: sql<number>`sum(abs(${perIncomeVerifications.discrepancyAmount})) filter (where ${perIncomeVerifications.isPaymentError} = true)`
+    })
+    .from(perIncomeVerifications)
+    .where(and(
+      eq(perIncomeVerifications.stateCode, stateCode),
+      gte(perIncomeVerifications.createdAt, currentMonthStart)
+    ));
+
+    // Previous month stats for comparison
+    const previousStats = await db.select({
+      totalVerifications: sql<number>`count(*)`,
+      errorCount: sql<number>`count(*) filter (where ${perIncomeVerifications.isPaymentError} = true)`
+    })
+    .from(perIncomeVerifications)
+    .where(and(
+      eq(perIncomeVerifications.stateCode, stateCode),
+      gte(perIncomeVerifications.createdAt, previousMonthStart),
+      lte(perIncomeVerifications.createdAt, previousMonthEnd)
+    ));
+
+    // Current nudge effectiveness
+    const nudgeEffectiveness = await db.select({
+      totalNudges: sql<number>`count(*)`,
+      errorsPrevented: sql<number>`count(*) filter (where ${perCaseworkerNudges.outcome} = 'error_prevented')`,
+      estimatedSavings: sql<number>`sum(${perCaseworkerNudges.estimatedImpactAmount}) filter (where ${perCaseworkerNudges.outcome} = 'error_prevented')`
+    })
+    .from(perCaseworkerNudges)
+    .where(and(
+      eq(perCaseworkerNudges.stateCode, stateCode),
+      gte(perCaseworkerNudges.createdAt, currentMonthStart)
+    ));
+
+    // PERM compliance status (latest quarter)
+    const latestPermStatus = await db.select({
+      samplePeriod: perPermSamples.samplePeriod,
+      totalSamples: sql<number>`count(*)`,
+      completedReviews: sql<number>`count(*) filter (where ${perPermSamples.reviewStatus} = 'completed')`,
+      errorsFound: sql<number>`count(*) filter (where ${perPermSamples.hasError} = true)`
+    })
+    .from(perPermSamples)
+    .where(eq(perPermSamples.stateCode, stateCode))
+    .groupBy(perPermSamples.samplePeriod)
+    .orderBy(desc(perPermSamples.samplePeriod))
+    .limit(1);
+
+    // Calculate metrics
+    const currentErrorRate = Number(currentStats[0]?.totalVerifications) > 0
+      ? (Number(currentStats[0]?.errorCount) / Number(currentStats[0]?.totalVerifications)) * 100
+      : 0;
+    const previousErrorRate = Number(previousStats[0]?.totalVerifications) > 0
+      ? (Number(previousStats[0]?.errorCount) / Number(previousStats[0]?.totalVerifications)) * 100
+      : 0;
+    const errorRateChange = currentErrorRate - previousErrorRate;
+
+    res.json({
+      success: true,
+      data: {
+        stateCode,
+        reportMonth: now.toLocaleString('default', { month: 'long', year: 'numeric' }),
+        keyMetrics: {
+          currentErrorRate: currentErrorRate.toFixed(2) + '%',
+          errorRateChange: (errorRateChange >= 0 ? '+' : '') + errorRateChange.toFixed(2) + '%',
+          errorRateTrend: errorRateChange < 0 ? 'improving' : errorRateChange > 0 ? 'worsening' : 'stable',
+          totalVerificationsThisMonth: Number(currentStats[0]?.totalVerifications) || 0,
+          errorsDetectedThisMonth: Number(currentStats[0]?.errorCount) || 0,
+          estimatedErrorAmount: Number(currentStats[0]?.totalErrorAmount) || 0
+        },
+        nudgeImpact: {
+          nudgesGeneratedThisMonth: Number(nudgeEffectiveness[0]?.totalNudges) || 0,
+          errorsPreventedThisMonth: Number(nudgeEffectiveness[0]?.errorsPrevented) || 0,
+          estimatedSavings: Number(nudgeEffectiveness[0]?.estimatedSavings) || 0
+        },
+        permCompliance: latestPermStatus.length > 0 ? {
+          currentPeriod: latestPermStatus[0].samplePeriod,
+          totalSamples: Number(latestPermStatus[0].totalSamples) || 0,
+          completedReviews: Number(latestPermStatus[0].completedReviews) || 0,
+          completionRate: Number(latestPermStatus[0].totalSamples) > 0
+            ? ((Number(latestPermStatus[0].completedReviews) / Number(latestPermStatus[0].totalSamples)) * 100).toFixed(1) + '%'
+            : '0%',
+          errorsFound: Number(latestPermStatus[0].errorsFound) || 0,
+          errorRate: Number(latestPermStatus[0].completedReviews) > 0
+            ? ((Number(latestPermStatus[0].errorsFound) / Number(latestPermStatus[0].completedReviews)) * 100).toFixed(2) + '%'
+            : '0%'
+        } : null,
+        generatedAt: new Date().toISOString(),
+        nextUpdate: 'Auto-refreshes daily at 6:00 AM EST'
+      }
+    });
+  } catch (error) {
+    logger.error('Executive summary generation failed', {
+      route: 'GET /api/per/admin/executive-summary',
+      error: error instanceof Error ? error.message : 'Unknown error'
+    });
+    res.status(500).json({
+      success: false,
+      error: 'Failed to generate executive summary'
     });
   }
 });
