@@ -2602,4 +2602,136 @@ router.get('/ldss-offices', async (req: Request, res: Response) => {
   }
 });
 
+/**
+ * GET /api/per/ldss-league
+ * Get LDSS League rankings for PER Excellence
+ * Ranks LDSS offices by error prevention metrics
+ */
+router.get('/ldss-league', async (req: Request, res: Response) => {
+  try {
+    const stateCode = (req.query.stateCode as string) || 'MD';
+    const periodType = (req.query.periodType as string) || 'monthly'; // daily, weekly, monthly, all_time
+
+    // Get all LDSS offices
+    const offices = await db.select({
+      id: counties.id,
+      name: counties.name,
+      code: counties.code
+    })
+    .from(counties)
+    .where(eq(counties.countyType, 'ldss'))
+    .orderBy(counties.name);
+
+    // Calculate period bounds
+    const now = new Date();
+    let periodStart: Date;
+    switch (periodType) {
+      case 'daily':
+        periodStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        break;
+      case 'weekly':
+        const dayOfWeek = now.getDay();
+        periodStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() - dayOfWeek);
+        break;
+      case 'monthly':
+        periodStart = new Date(now.getFullYear(), now.getMonth(), 1);
+        break;
+      case 'all_time':
+      default:
+        periodStart = new Date(2020, 0, 1);
+    }
+
+    // Get PER metrics for each office
+    const leagueRankings = await Promise.all(offices.map(async (office) => {
+      // Count consistency checks (passed vs failed)
+      const checksResult = await db.select({
+        total: sql<number>`COUNT(*)`,
+        passed: sql<number>`SUM(CASE WHEN ${perConsistencyChecks.isPassing} = true THEN 1 ELSE 0 END)`
+      })
+      .from(perConsistencyChecks)
+      .where(and(
+        eq(perConsistencyChecks.ldssOfficeId, office.id),
+        gte(perConsistencyChecks.verifiedAt, periodStart)
+      ));
+
+      const totalChecks = Number(checksResult[0]?.total) || 0;
+      const passedChecks = Number(checksResult[0]?.passed) || 0;
+      const accuracyRate = totalChecks > 0 ? (passedChecks / totalChecks) * 100 : 0;
+
+      // Count nudges and compliance
+      const nudgesResult = await db.select({
+        total: sql<number>`COUNT(*)`,
+        followed: sql<number>`SUM(CASE WHEN ${perCaseworkerNudges.wasFollowed} = true THEN 1 ELSE 0 END)`
+      })
+      .from(perCaseworkerNudges)
+      .where(and(
+        eq(perCaseworkerNudges.ldssOfficeId, office.id),
+        gte(perCaseworkerNudges.displayedAt, periodStart)
+      ));
+
+      const totalNudges = Number(nudgesResult[0]?.total) || 0;
+      const followedNudges = Number(nudgesResult[0]?.followed) || 0;
+      const nudgeComplianceRate = totalNudges > 0 ? (followedNudges / totalNudges) * 100 : 0;
+
+      // Calculate composite score (weighted average)
+      // 60% accuracy, 30% nudge compliance, 10% volume bonus
+      const volumeBonus = Math.min(totalChecks / 100, 10); // Max 10 points for volume
+      const compositeScore = (accuracyRate * 0.6) + (nudgeComplianceRate * 0.3) + volumeBonus;
+
+      return {
+        officeId: office.id,
+        officeName: office.name,
+        officeCode: office.code,
+        totalChecks,
+        passedChecks,
+        accuracyRate: Math.round(accuracyRate * 10) / 10,
+        totalNudges,
+        followedNudges,
+        nudgeComplianceRate: Math.round(nudgeComplianceRate * 10) / 10,
+        compositeScore: Math.round(compositeScore * 10) / 10,
+        rank: 0 // Will be set after sorting
+      };
+    }));
+
+    // Sort by composite score and assign ranks
+    const sortedRankings = leagueRankings
+      .filter(r => r.totalChecks > 0) // Only include offices with activity
+      .sort((a, b) => b.compositeScore - a.compositeScore)
+      .map((entry, index) => ({
+        ...entry,
+        rank: index + 1
+      }));
+
+    // Determine tier badges based on rank
+    const tieredRankings = sortedRankings.map(entry => ({
+      ...entry,
+      tier: entry.rank <= 3 ? 'gold' : entry.rank <= 8 ? 'silver' : 'bronze',
+      tierBadge: entry.rank === 1 ? '🥇' : entry.rank === 2 ? '🥈' : entry.rank === 3 ? '🥉' : ''
+    }));
+
+    res.json({
+      success: true,
+      data: {
+        periodType,
+        periodStart: periodStart.toISOString(),
+        periodEnd: now.toISOString(),
+        totalOffices: tieredRankings.length,
+        rankings: tieredRankings,
+        topPerformers: tieredRankings.slice(0, 3),
+        stateAverage: {
+          accuracyRate: tieredRankings.length > 0 
+            ? Math.round(tieredRankings.reduce((sum, r) => sum + r.accuracyRate, 0) / tieredRankings.length * 10) / 10 
+            : 0,
+          nudgeComplianceRate: tieredRankings.length > 0 
+            ? Math.round(tieredRankings.reduce((sum, r) => sum + r.nudgeComplianceRate, 0) / tieredRankings.length * 10) / 10 
+            : 0
+        }
+      }
+    });
+  } catch (error: any) {
+    console.error('Error fetching LDSS League rankings:', error);
+    res.status(500).json({ success: false, error: 'Failed to fetch LDSS League rankings' });
+  }
+});
+
 export default router;

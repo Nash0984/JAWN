@@ -84,6 +84,10 @@ import {
   MessageSquareWarning,
   ArrowUpRight,
   Eye,
+  Trophy,
+  Medal,
+  Award,
+  Star,
 } from "lucide-react";
 import { format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
@@ -437,6 +441,46 @@ export default function PerDashboard() {
   const { data: drillDownData, isLoading: drillDownLoading } = useQuery<{ success: boolean; data: ErrorDrillDownData }>({
     queryKey: [`/api/per/supervisor/error-drill-down/${encodeURIComponent(drillDownCategory || '')}?stateCode=${stateCode}${ldssId ? `&ldssId=${ldssId}` : ''}`, refreshKey],
     enabled: !!drillDownCategory,
+  });
+
+  // LDSS League query
+  const [leaguePeriod, setLeaguePeriod] = useState<string>('monthly');
+  const { data: ldssLeague, isLoading: leagueLoading } = useQuery<{
+    success: boolean;
+    data: {
+      periodType: string;
+      periodStart: string;
+      periodEnd: string;
+      totalOffices: number;
+      rankings: Array<{
+        officeId: string;
+        officeName: string;
+        officeCode: string;
+        totalChecks: number;
+        passedChecks: number;
+        accuracyRate: number;
+        totalNudges: number;
+        followedNudges: number;
+        nudgeComplianceRate: number;
+        compositeScore: number;
+        rank: number;
+        tier: 'gold' | 'silver' | 'bronze';
+        tierBadge: string;
+      }>;
+      topPerformers: Array<{
+        officeId: string;
+        officeName: string;
+        compositeScore: number;
+        rank: number;
+        tierBadge: string;
+      }>;
+      stateAverage: {
+        accuracyRate: number;
+        nudgeComplianceRate: number;
+      };
+    };
+  }>({
+    queryKey: [`/api/per/ldss-league?stateCode=${stateCode}&periodType=${leaguePeriod}`, refreshKey],
   });
 
   const coachingMutation = useMutation({
@@ -843,6 +887,9 @@ export default function PerDashboard() {
             <TabsTrigger value="nudges">High Priority Nudges</TabsTrigger>
             <TabsTrigger value="errors">Error Breakdown</TabsTrigger>
             <TabsTrigger value="perm">PERM Compliance</TabsTrigger>
+            <TabsTrigger value="ldssLeague" className="flex items-center gap-1">
+              <Trophy className="h-4 w-4" /> LDSS League
+            </TabsTrigger>
           </TabsList>
 
           {/* Executive Overview Tab - State Admin View */}
@@ -1977,6 +2024,274 @@ export default function PerDashboard() {
                     <p className="text-sm text-muted-foreground">
                       States exceeding this threshold may face FNS corrective action requirements
                     </p>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          </TabsContent>
+
+          {/* LDSS League Tab */}
+          <TabsContent value="ldssLeague">
+            <div className="space-y-6">
+              {/* League Header */}
+              <Card>
+                <CardHeader>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <CardTitle className="flex items-center gap-2">
+                        <Trophy className="h-5 w-5 text-yellow-500" />
+                        LDSS League for PER Excellence
+                      </CardTitle>
+                      <CardDescription>
+                        Recognize and celebrate LDSS offices with the highest payment error prevention rates
+                      </CardDescription>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Select value={leaguePeriod} onValueChange={setLeaguePeriod}>
+                        <SelectTrigger className="w-36">
+                          <SelectValue placeholder="Period" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="daily">Daily</SelectItem>
+                          <SelectItem value="weekly">Weekly</SelectItem>
+                          <SelectItem value="monthly">Monthly</SelectItem>
+                          <SelectItem value="all_time">All Time</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <Button variant="outline" size="icon" onClick={() => setRefreshKey(k => k + 1)}>
+                        <RefreshCw className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+                </CardHeader>
+              </Card>
+
+              {/* Top Performers Podium */}
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <Award className="h-4 w-4 text-yellow-500" />
+                    Top Performers
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {leagueLoading ? (
+                    <div className="flex justify-center gap-4">
+                      {[1, 2, 3].map(i => <Skeleton key={i} className="h-32 w-40" />)}
+                    </div>
+                  ) : (
+                    <div className="flex justify-center items-end gap-4">
+                      {/* 2nd Place */}
+                      {ldssLeague?.data?.topPerformers?.[1] && (
+                        <div className="text-center">
+                          <div className="text-4xl mb-2">🥈</div>
+                          <div className="bg-gray-100 dark:bg-gray-800 rounded-lg p-4 h-24 flex flex-col justify-center">
+                            <div className="font-semibold text-sm">{ldssLeague.data.topPerformers[1].officeName.replace(' LDSS', '')}</div>
+                            <div className="text-2xl font-bold text-gray-600">{ldssLeague.data.topPerformers[1].compositeScore}</div>
+                            <div className="text-xs text-muted-foreground">points</div>
+                          </div>
+                        </div>
+                      )}
+                      {/* 1st Place */}
+                      {ldssLeague?.data?.topPerformers?.[0] && (
+                        <div className="text-center">
+                          <div className="text-5xl mb-2">🥇</div>
+                          <div className="bg-yellow-100 dark:bg-yellow-900/30 rounded-lg p-4 h-32 flex flex-col justify-center border-2 border-yellow-400">
+                            <div className="font-semibold">{ldssLeague.data.topPerformers[0].officeName.replace(' LDSS', '')}</div>
+                            <div className="text-3xl font-bold text-yellow-600">{ldssLeague.data.topPerformers[0].compositeScore}</div>
+                            <div className="text-xs text-muted-foreground">points</div>
+                          </div>
+                        </div>
+                      )}
+                      {/* 3rd Place */}
+                      {ldssLeague?.data?.topPerformers?.[2] && (
+                        <div className="text-center">
+                          <div className="text-4xl mb-2">🥉</div>
+                          <div className="bg-orange-100 dark:bg-orange-900/30 rounded-lg p-4 h-20 flex flex-col justify-center">
+                            <div className="font-semibold text-sm">{ldssLeague.data.topPerformers[2].officeName.replace(' LDSS', '')}</div>
+                            <div className="text-xl font-bold text-orange-600">{ldssLeague.data.topPerformers[2].compositeScore}</div>
+                            <div className="text-xs text-muted-foreground">points</div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  {!leagueLoading && (!ldssLeague?.data?.topPerformers || ldssLeague.data.topPerformers.length === 0) && (
+                    <div className="text-center py-8 text-muted-foreground">
+                      <Trophy className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                      <p>No league data available yet</p>
+                      <p className="text-sm">Rankings will appear as LDSS offices process cases</p>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* State Averages */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <Card>
+                  <CardContent className="pt-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm text-muted-foreground">Participating Offices</p>
+                        <p className="text-2xl font-bold">{ldssLeague?.data?.totalOffices || 0}</p>
+                      </div>
+                      <Building2 className="h-8 w-8 text-blue-500" />
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardContent className="pt-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm text-muted-foreground">Avg Accuracy Rate</p>
+                        <p className="text-2xl font-bold">{ldssLeague?.data?.stateAverage?.accuracyRate || 0}%</p>
+                      </div>
+                      <Target className="h-8 w-8 text-green-500" />
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardContent className="pt-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm text-muted-foreground">Avg Nudge Compliance</p>
+                        <p className="text-2xl font-bold">{ldssLeague?.data?.stateAverage?.nudgeComplianceRate || 0}%</p>
+                      </div>
+                      <CheckCircle className="h-8 w-8 text-purple-500" />
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+
+              {/* Full Rankings Table */}
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <Medal className="h-4 w-4" />
+                    Full League Standings
+                  </CardTitle>
+                  <CardDescription>
+                    Composite score = 60% accuracy + 30% nudge compliance + 10% volume bonus
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {leagueLoading ? (
+                    <div className="space-y-2">
+                      {[1, 2, 3, 4, 5].map(i => <Skeleton key={i} className="h-12 w-full" />)}
+                    </div>
+                  ) : (
+                    <ScrollArea className="h-[400px]">
+                      <table className="w-full">
+                        <thead className="sticky top-0 bg-background border-b">
+                          <tr className="text-left text-sm">
+                            <th className="py-2 px-2 w-12">Rank</th>
+                            <th className="py-2 px-2">LDSS Office</th>
+                            <th className="py-2 px-2 text-right">Cases</th>
+                            <th className="py-2 px-2 text-right">Accuracy</th>
+                            <th className="py-2 px-2 text-right">Nudge %</th>
+                            <th className="py-2 px-2 text-right">Score</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {ldssLeague?.data?.rankings?.map((office) => (
+                            <tr key={office.officeId} className="border-b hover:bg-muted/50">
+                              <td className="py-3 px-2">
+                                <div className="flex items-center gap-1">
+                                  {office.tierBadge && <span className="text-lg">{office.tierBadge}</span>}
+                                  {!office.tierBadge && <span className="text-muted-foreground">{office.rank}</span>}
+                                </div>
+                              </td>
+                              <td className="py-3 px-2">
+                                <div className="font-medium">{office.officeName.replace(' LDSS', '')}</div>
+                                <div className="text-xs text-muted-foreground">{office.officeCode}</div>
+                              </td>
+                              <td className="py-3 px-2 text-right">
+                                <span className="text-sm">{office.totalChecks}</span>
+                              </td>
+                              <td className="py-3 px-2 text-right">
+                                <Badge variant={office.accuracyRate >= 95 ? 'default' : office.accuracyRate >= 90 ? 'secondary' : 'destructive'}>
+                                  {office.accuracyRate}%
+                                </Badge>
+                              </td>
+                              <td className="py-3 px-2 text-right">
+                                <span className={office.nudgeComplianceRate >= 80 ? 'text-green-600' : office.nudgeComplianceRate >= 60 ? 'text-yellow-600' : 'text-red-600'}>
+                                  {office.nudgeComplianceRate}%
+                                </span>
+                              </td>
+                              <td className="py-3 px-2 text-right">
+                                <span className="font-bold">{office.compositeScore}</span>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                      {(!ldssLeague?.data?.rankings || ldssLeague.data.rankings.length === 0) && (
+                        <div className="text-center py-8 text-muted-foreground">
+                          No ranking data available
+                        </div>
+                      )}
+                    </ScrollArea>
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* PER Excellence Achievements Info */}
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <Award className="h-4 w-4 text-purple-500" />
+                    PER Excellence Achievements
+                  </CardTitle>
+                  <CardDescription>
+                    Individual caseworker achievements for error prevention excellence
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                    <div className="p-3 border rounded-lg bg-gradient-to-br from-orange-50 to-orange-100 dark:from-orange-900/20 dark:to-orange-800/20">
+                      <div className="flex items-center gap-2 mb-1">
+                        <ShieldCheck className="h-4 w-4 text-orange-600" />
+                        <span className="font-medium text-sm">Error Prevention Rookie</span>
+                      </div>
+                      <p className="text-xs text-muted-foreground">10 error-free cases</p>
+                    </div>
+                    <div className="p-3 border rounded-lg bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-900/20 dark:to-gray-800/20">
+                      <div className="flex items-center gap-2 mb-1">
+                        <ShieldCheck className="h-4 w-4 text-gray-600" />
+                        <span className="font-medium text-sm">Error Prevention Champion</span>
+                      </div>
+                      <p className="text-xs text-muted-foreground">50 error-free cases</p>
+                    </div>
+                    <div className="p-3 border rounded-lg bg-gradient-to-br from-yellow-50 to-yellow-100 dark:from-yellow-900/20 dark:to-yellow-800/20">
+                      <div className="flex items-center gap-2 mb-1">
+                        <ShieldCheck className="h-4 w-4 text-yellow-600" />
+                        <span className="font-medium text-sm">Zero Defect Master</span>
+                      </div>
+                      <p className="text-xs text-muted-foreground">100 error-free cases</p>
+                    </div>
+                    <div className="p-3 border rounded-lg">
+                      <div className="flex items-center gap-2 mb-1">
+                        <CheckCircle className="h-4 w-4 text-green-600" />
+                        <span className="font-medium text-sm">Nudge Follower</span>
+                      </div>
+                      <p className="text-xs text-muted-foreground">25 AI guidance followed</p>
+                    </div>
+                    <div className="p-3 border rounded-lg bg-gradient-to-br from-purple-50 to-purple-100 dark:from-purple-900/20 dark:to-purple-800/20">
+                      <div className="flex items-center gap-2 mb-1">
+                        <Award className="h-4 w-4 text-purple-600" />
+                        <span className="font-medium text-sm">Quality Conscience</span>
+                      </div>
+                      <p className="text-xs text-muted-foreground">98%+ accuracy rate</p>
+                    </div>
+                    <div className="p-3 border rounded-lg bg-gradient-to-br from-blue-50 to-blue-100 dark:from-blue-900/20 dark:to-blue-800/20">
+                      <div className="flex items-center gap-2 mb-1">
+                        <Star className="h-4 w-4 text-blue-600" />
+                        <span className="font-medium text-sm">LDSS League All-Star</span>
+                      </div>
+                      <p className="text-xs text-muted-foreground">Top 3 office contributor</p>
+                    </div>
                   </div>
                 </CardContent>
               </Card>
