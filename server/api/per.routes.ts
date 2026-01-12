@@ -14,7 +14,8 @@ import {
   perConsistencyChecks,
   perCaseworkerNudges,
   perDuplicateClaims,
-  perPermSamples
+  perPermSamples,
+  clientCases
 } from '@shared/schema';
 import { eq, and, gte, lte, sql, desc } from 'drizzle-orm';
 import {
@@ -2641,32 +2642,35 @@ router.get('/ldss-league', async (req: Request, res: Response) => {
         periodStart = new Date(2020, 0, 1);
     }
 
-    // Get PER metrics for each office
+    // Get PER metrics for each office by joining with clientCases
     const leagueRankings = await Promise.all(offices.map(async (office) => {
-      // Count consistency checks (passed vs failed)
+      // Count consistency checks (passed vs failed) - join through clientCases.countyCode
       const checksResult = await db.select({
         total: sql<number>`COUNT(*)`,
-        passed: sql<number>`SUM(CASE WHEN ${perConsistencyChecks.isPassing} = true THEN 1 ELSE 0 END)`
+        passed: sql<number>`SUM(CASE WHEN ${perConsistencyChecks.passed} = true THEN 1 ELSE 0 END)`
       })
       .from(perConsistencyChecks)
+      .innerJoin(clientCases, eq(perConsistencyChecks.caseId, clientCases.id))
       .where(and(
-        eq(perConsistencyChecks.ldssOfficeId, office.id),
-        gte(perConsistencyChecks.verifiedAt, periodStart)
+        eq(clientCases.countyCode, office.code),
+        gte(perConsistencyChecks.createdAt, periodStart)
       ));
 
       const totalChecks = Number(checksResult[0]?.total) || 0;
       const passedChecks = Number(checksResult[0]?.passed) || 0;
       const accuracyRate = totalChecks > 0 ? (passedChecks / totalChecks) * 100 : 0;
 
-      // Count nudges and compliance
+      // Count nudges and compliance - join through clientCases.countyCode
+      // Nudge is "followed" if outcomeType is 'error_prevented' or nudgeStatus is 'acted_upon'
       const nudgesResult = await db.select({
         total: sql<number>`COUNT(*)`,
-        followed: sql<number>`SUM(CASE WHEN ${perCaseworkerNudges.wasFollowed} = true THEN 1 ELSE 0 END)`
+        followed: sql<number>`SUM(CASE WHEN ${perCaseworkerNudges.outcomeType} = 'error_prevented' OR ${perCaseworkerNudges.nudgeStatus} = 'acted_upon' THEN 1 ELSE 0 END)`
       })
       .from(perCaseworkerNudges)
+      .innerJoin(clientCases, eq(perCaseworkerNudges.caseId, clientCases.id))
       .where(and(
-        eq(perCaseworkerNudges.ldssOfficeId, office.id),
-        gte(perCaseworkerNudges.displayedAt, periodStart)
+        eq(clientCases.countyCode, office.code),
+        gte(perCaseworkerNudges.createdAt, periodStart)
       ));
 
       const totalNudges = Number(nudgesResult[0]?.total) || 0;
