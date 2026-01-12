@@ -37,6 +37,12 @@ The backend is built with Express.js and TypeScript, utilizing PostgreSQL via Dr
     -   Duplicate Claim Detector
     -   Explainable Nudge Service (XAI)
     -   PERM Reporting Service
+-   **PER Supervisor Dashboard**: Three-tier hierarchy for proactive quality assurance monitoring:
+    -   **Tier 1 (State Admin)**: Executive oversight with statewide metrics, trend analysis, and LDSS comparisons
+    -   **Tier 2 (LDSS Supervisor)**: Office-filtered views with coaching queue, nudge compliance tracking, and diagnostic drill-down
+    -   **Tier 3 (Caseworker)**: Real-time AI nudges, risk scoring, and decision support
+    -   LDSS office selector for tier switching (Maryland-only; multi-state filtering requires counties.stateCode column migration)
+    -   99.9% accuracy is an aspirational documentation goal, not a system requirement
 
 ## System Design Choices
 -   **Data Management**: PostgreSQL for core data, Google Cloud Storage for files.
