@@ -101,7 +101,8 @@ const ERROR_CATEGORIES = [
   { value: 'medical_deduction', label: 'Medical Deduction' },
 ];
 
-const MOCK_INTERVENTIONS: TrainingIntervention[] = [
+// Fallback data when API returns empty (for initial demo)
+const FALLBACK_INTERVENTIONS: TrainingIntervention[] = [
   {
     id: '1',
     name: 'Income Verification Best Practices',
@@ -140,7 +141,7 @@ const MOCK_INTERVENTIONS: TrainingIntervention[] = [
   },
 ];
 
-const MOCK_TREND_DATA: ErrorTrendData[] = [
+const FALLBACK_TREND_DATA: ErrorTrendData[] = [
   { period: 'Q1 2023', errorRate: 9.8 },
   { period: 'Q2 2023', errorRate: 9.2 },
   { period: 'Q3 2023', errorRate: 8.7 },
@@ -161,28 +162,84 @@ export default function TrainingImpactTracing() {
     startDate: '',
   });
 
-  const metrics: TrainingMetrics = {
-    totalInterventions: MOCK_INTERVENTIONS.length,
-    activeInterventions: MOCK_INTERVENTIONS.filter(i => i.status === 'active').length,
-    completedInterventions: MOCK_INTERVENTIONS.filter(i => i.status === 'completed').length,
-    averageImpact: MOCK_INTERVENTIONS.filter(i => i.impactPercentage)
+  // Fetch training interventions from API
+  const { data: interventionsData, isLoading: isLoadingInterventions, refetch: refetchInterventions } = useQuery<{
+    success: boolean;
+    data: {
+      interventions: TrainingIntervention[];
+      metrics: TrainingMetrics;
+    };
+  }>({
+    queryKey: ['/api/per/training-interventions', selectedCategory],
+  });
+
+  // Fetch error trend data
+  const { data: trendData, isLoading: isLoadingTrends } = useQuery<{
+    success: boolean;
+    data: ErrorTrendData[];
+  }>({
+    queryKey: ['/api/per/error-trends'],
+  });
+
+  // Create training intervention mutation
+  const createInterventionMutation = useMutation({
+    mutationFn: async (intervention: typeof newIntervention) => {
+      return apiRequest('/api/per/training-interventions', {
+        method: 'POST',
+        body: JSON.stringify(intervention),
+      });
+    },
+    onSuccess: () => {
+      toast({
+        title: "Training Intervention Created",
+        description: `${newIntervention.name} has been scheduled.`,
+      });
+      setShowNewInterventionDialog(false);
+      setNewIntervention({ name: '', description: '', errorCategory: '', startDate: '' });
+      queryClient.invalidateQueries({ queryKey: ['/api/per/training-interventions'] });
+    },
+    onError: () => {
+      toast({
+        title: "Error",
+        description: "Failed to create training intervention. Please try again.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Use API data or fallback to demo data
+  const apiInterventions = interventionsData?.data?.interventions || [];
+  const interventions = apiInterventions.length > 0 ? apiInterventions : FALLBACK_INTERVENTIONS;
+  
+  const apiMetrics = interventionsData?.data?.metrics;
+  const metrics: TrainingMetrics = apiMetrics || {
+    totalInterventions: interventions.length,
+    activeInterventions: interventions.filter(i => i.status === 'active').length,
+    completedInterventions: interventions.filter(i => i.status === 'completed').length,
+    averageImpact: interventions.filter(i => i.impactPercentage)
       .reduce((acc, i) => acc + (i.impactPercentage || 0), 0) / 
-      MOCK_INTERVENTIONS.filter(i => i.impactPercentage).length || 0,
-    caseworkersTrained: new Set(MOCK_INTERVENTIONS.flatMap(i => i.targetedCaseworkers)).size,
+      (interventions.filter(i => i.impactPercentage).length || 1),
+    caseworkersTrained: new Set(interventions.flatMap(i => i.targetedCaseworkers)).size,
     errorReductionAchieved: 3.7,
   };
 
+  const apiTrendData = trendData?.data || [];
+  const errorTrendData = apiTrendData.length > 0 ? apiTrendData : FALLBACK_TREND_DATA;
+
   const filteredInterventions = selectedCategory === 'all' 
-    ? MOCK_INTERVENTIONS 
-    : MOCK_INTERVENTIONS.filter(i => i.errorCategory === selectedCategory);
+    ? interventions 
+    : interventions.filter(i => i.errorCategory === selectedCategory);
 
   const handleCreateIntervention = () => {
-    toast({
-      title: "Training Intervention Created",
-      description: `${newIntervention.name} has been scheduled.`,
-    });
-    setShowNewInterventionDialog(false);
-    setNewIntervention({ name: '', description: '', errorCategory: '', startDate: '' });
+    if (!newIntervention.name || !newIntervention.errorCategory) {
+      toast({
+        title: "Validation Error",
+        description: "Please provide a name and error category.",
+        variant: "destructive",
+      });
+      return;
+    }
+    createInterventionMutation.mutate(newIntervention);
   };
 
   const getStatusBadge = (status: string) => {
@@ -396,7 +453,7 @@ export default function TrainingImpactTracing() {
         <CardContent>
           <div className="h-[300px]">
             <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={MOCK_TREND_DATA}>
+              <LineChart data={errorTrendData}>
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="period" />
                 <YAxis 
@@ -406,7 +463,7 @@ export default function TrainingImpactTracing() {
                 <Tooltip 
                   formatter={(value: number) => [`${value.toFixed(1)}%`, 'Error Rate']}
                   labelFormatter={(label) => {
-                    const point = MOCK_TREND_DATA.find(d => d.period === label);
+                    const point = errorTrendData.find(d => d.period === label);
                     return point?.trainingIntervention 
                       ? `${label} - Training: ${point.trainingIntervention}`
                       : label;
