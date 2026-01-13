@@ -2785,19 +2785,20 @@ router.get('/caseworker/flagged-cases', async (req: Request, res: Response) => {
       let statutoryCitations: string[] = [];
       
       try {
-        // Get violation traces for this case from the symbolic layer
+        // Get violation traces for this case from the symbolic layer (Z3/Rules-as-Code)
         const traces = await violationTraceService.getViolationTracesForCase(nudge.caseId);
         violationTraces = traces.map(t => ({
-          ruleId: t.ruleId,
+          ruleId: t.id,
           ruleName: t.ruleName,
           eligibilityDomain: t.eligibilityDomain,
           statutoryCitation: t.statutoryCitation,
-          explanation: t.plainLanguageExplanation,
-          severity: t.severity
+          explanation: t.violationDescription,
+          severity: t.severityLevel
         }));
         statutoryCitations = traces.map(t => t.statutoryCitation).filter(Boolean);
       } catch (e) {
-        // Continue without traces if service unavailable
+        // Continue without traces if symbolic layer unavailable
+        logger.debug('Violation traces unavailable for case', { caseId: nudge.caseId });
       }
 
       const riskLevel = (nudge.riskScore || 0) > 0.8 ? 'critical' : 
