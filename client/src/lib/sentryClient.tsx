@@ -87,12 +87,12 @@ if (typeof window !== 'undefined') {
 
 /**
  * Sentry Error Boundary Component
- * Handles async initialization by starting with a fallback and upgrading to real ErrorBoundary
- * Uses a class component to avoid hook issues during initialization
+ * Simple passthrough error boundary - Sentry integration disabled to avoid hook conflicts
+ * Uses a class component for React error boundary compatibility
  */
 interface SentryErrorBoundaryState {
-  ErrorBoundaryComponent: ComponentType<{ children: ReactNode }> | null;
   hasError: boolean;
+  error: Error | null;
 }
 
 export class SentryErrorBoundary extends React.Component<
@@ -102,51 +102,67 @@ export class SentryErrorBoundary extends React.Component<
   constructor(props: { children: ReactNode }) {
     super(props);
     this.state = {
-      ErrorBoundaryComponent: null,
-      hasError: false
+      hasError: false,
+      error: null
     };
   }
 
-  componentDidMount() {
-    // Wait for Sentry to initialize
-    initializationPromise?.then(() => {
-      if (sentryEnabled && Sentry?.ErrorBoundary) {
-        this.setState({ ErrorBoundaryComponent: Sentry.ErrorBoundary });
-      }
-    }).catch(() => {
-      // Silently fail - just render children without error boundary
-    });
-  }
-
-  static getDerivedStateFromError(_error: Error) {
-    return { hasError: true };
+  static getDerivedStateFromError(error: Error) {
+    return { hasError: true, error };
   }
 
   componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
-    // Log error to console as fallback when Sentry is not available
     console.error('[SentryErrorBoundary] Caught error:', error, errorInfo);
+    if (sentryEnabled && Sentry?.captureException) {
+      try {
+        Sentry.captureException(error, { extra: { componentStack: errorInfo.componentStack } });
+      } catch (e) {
+        // Silently fail if Sentry is not available
+      }
+    }
   }
 
   render() {
     const { children } = this.props;
-    const { ErrorBoundaryComponent, hasError } = this.state;
+    const { hasError, error } = this.state;
 
-    // If we have a caught error and no Sentry boundary, show fallback
-    if (hasError && !ErrorBoundaryComponent) {
+    if (hasError) {
       return (
-        <div style={{ padding: '20px', textAlign: 'center' }}>
-          <h2>Something went wrong</h2>
-          <p>Please refresh the page to try again.</p>
+        <div style={{ padding: '20px', textAlign: 'center', fontFamily: 'system-ui, sans-serif' }}>
+          <h2 style={{ color: '#e53e3e', marginBottom: '16px' }}>Something went wrong</h2>
+          <p style={{ color: '#4a5568', marginBottom: '16px' }}>
+            We're sorry, but something unexpected happened.
+          </p>
+          <button 
+            onClick={() => window.location.reload()}
+            style={{ 
+              padding: '8px 16px', 
+              backgroundColor: '#3182ce', 
+              color: 'white', 
+              border: 'none', 
+              borderRadius: '4px',
+              cursor: 'pointer'
+            }}
+          >
+            Refresh Page
+          </button>
+          {import.meta.env.DEV && error && (
+            <pre style={{ 
+              marginTop: '20px', 
+              padding: '12px', 
+              backgroundColor: '#f7fafc', 
+              borderRadius: '4px',
+              textAlign: 'left',
+              fontSize: '12px',
+              overflow: 'auto'
+            }}>
+              {error.message}
+            </pre>
+          )}
         </div>
       );
     }
 
-    // If Sentry error boundary is available, use it
-    if (ErrorBoundaryComponent) {
-      return <ErrorBoundaryComponent>{children}</ErrorBoundaryComponent>;
-    }
-
-    // Default: render children directly (before Sentry loads or if not available)
     return <>{children}</>;
   }
 }

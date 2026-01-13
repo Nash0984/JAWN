@@ -641,22 +641,22 @@ function Router() {
 
 function App() {
   return (
-    <HelmetProvider>
-      <QueryClientProvider client={queryClient}>
-        <TenantProvider>
-          <TenantThemeProvider>
-            <BrandingProvider>
-              <SessionExpiryProvider>
-                <TooltipProvider>
-                  <Toaster />
+    <QueryClientProvider client={queryClient}>
+      <TooltipProvider>
+        <Toaster />
+        <HelmetProvider>
+          <TenantProvider>
+            <TenantThemeProvider>
+              <BrandingProvider>
+                <SessionExpiryProvider>
                   <Router />
-                </TooltipProvider>
-              </SessionExpiryProvider>
-            </BrandingProvider>
-          </TenantThemeProvider>
-        </TenantProvider>
-      </QueryClientProvider>
-    </HelmetProvider>
+                </SessionExpiryProvider>
+              </BrandingProvider>
+            </TenantThemeProvider>
+          </TenantProvider>
+        </HelmetProvider>
+      </TooltipProvider>
+    </QueryClientProvider>
   );
 }
 
