@@ -13,6 +13,18 @@ export interface MonitoringDashboardMetrics {
   ai: AIMetrics;
   cache: CacheMetrics;
   health: HealthMetrics;
+  gateway?: GatewayMetrics;
+}
+
+export interface GatewayMetrics {
+  totalInvocations: number;
+  successfulVerifications: number;
+  conflictOverrides: number;
+  errors: number;
+  coverageRate: number;
+  byProgram: Array<{ program: string; invocations: number; verified: number; conflicts: number }>;
+  byOperation: Array<{ operation: string; count: number }>;
+  trend: Array<{ timestamp: string; invocations: number; verified: number; conflicts: number }>;
 }
 
 export interface ErrorMetrics {

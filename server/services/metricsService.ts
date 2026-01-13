@@ -1,7 +1,7 @@
 /**
  * Unified Metrics Service
  * 
- * Aggregates 7 observability domains for admin monitoring dashboard:
+ * Aggregates 8 observability domains for admin monitoring dashboard:
  * 1. Errors - Error tracking and rate trends
  * 2. Security - Security events and threat detection
  * 3. Performance - API/DB response times
@@ -9,6 +9,7 @@
  * 5. AI - AI API usage and costs
  * 6. Cache - Cache performance metrics
  * 7. Health - System health checks
+ * 8. Gateway - Neuro-symbolic hybrid gateway routing and verification coverage
  */
 
 import { db } from "../db";
@@ -31,8 +32,10 @@ import type {
   EFilingMetrics,
   AIMetrics,
   CacheMetrics,
-  HealthMetrics
+  HealthMetrics,
+  GatewayMetrics
 } from "@shared/monitoring";
+import { hybridGatewayAuditLogs } from "@shared/schema";
 
 // ============================================================================
 // Type Definitions
@@ -96,7 +99,7 @@ export class MetricsService {
     };
 
     // Fetch all domains in parallel for efficiency
-    const [errors, security, performance, eFiling, ai, cache, health] = await Promise.all([
+    const [errors, security, performance, eFiling, ai, cache, health, gateway] = await Promise.all([
       this.getErrorMetrics(defaultRange, tenantId),
       this.getSecurityMetrics(defaultRange, tenantId),
       this.getPerformanceMetrics(defaultRange, tenantId),
@@ -104,6 +107,7 @@ export class MetricsService {
       this.getAIMetrics(defaultRange),
       this.getCacheMetrics(),
       this.getHealthMetrics(),
+      this.getGatewayMetrics(defaultRange, tenantId),
     ]);
 
     return {
@@ -113,7 +117,8 @@ export class MetricsService {
       eFiling,
       ai,
       cache,
-      health
+      health,
+      gateway
     };
   }
 
@@ -707,6 +712,110 @@ export class MetricsService {
     }
 
     return health;
+  }
+
+  /**
+   * Domain 8: Gateway Metrics (Neuro-Symbolic Hybrid Gateway)
+   * Tracks Gateway routing coverage, verification success, and conflict resolution
+   */
+  private async getGatewayMetrics(timeRange: TimeRange, tenantId?: string): Promise<GatewayMetrics> {
+    try {
+      const conditions = [
+        gte(hybridGatewayAuditLogs.createdAt, timeRange.start),
+        lte(hybridGatewayAuditLogs.createdAt, timeRange.end),
+      ];
+
+      if (tenantId) {
+        conditions.push(eq(hybridGatewayAuditLogs.tenantId, tenantId));
+      }
+
+      // Get overall counts
+      const totals = await db
+        .select({
+          total: sql<number>`COUNT(*)`.as('total'),
+          verified: sql<number>`COUNT(*) FILTER (WHERE ${hybridGatewayAuditLogs.solverResult} = 'SAT' OR ${hybridGatewayAuditLogs.isLegallyGrounded} = true)`.as('verified'),
+          conflicts: sql<number>`COUNT(*) FILTER (WHERE ${hybridGatewayAuditLogs.solverResult} = 'UNSAT')`.as('conflicts'),
+          errors: sql<number>`COUNT(*) FILTER (WHERE ${hybridGatewayAuditLogs.errorInfo} IS NOT NULL)`.as('errors'),
+        })
+        .from(hybridGatewayAuditLogs)
+        .where(and(...conditions));
+
+      const totalInvocations = Number(totals[0]?.total || 0);
+      const successfulVerifications = Number(totals[0]?.verified || 0);
+      const conflictOverrides = Number(totals[0]?.conflicts || 0);
+      const errors = Number(totals[0]?.errors || 0);
+
+      // Coverage by program
+      const byProgram = await db
+        .select({
+          program: hybridGatewayAuditLogs.programCode,
+          invocations: sql<number>`COUNT(*)`.as('invocations'),
+          verified: sql<number>`COUNT(*) FILTER (WHERE ${hybridGatewayAuditLogs.solverResult} = 'SAT' OR ${hybridGatewayAuditLogs.isLegallyGrounded} = true)`.as('verified'),
+          conflicts: sql<number>`COUNT(*) FILTER (WHERE ${hybridGatewayAuditLogs.solverResult} = 'UNSAT')`.as('conflicts'),
+        })
+        .from(hybridGatewayAuditLogs)
+        .where(and(...conditions))
+        .groupBy(hybridGatewayAuditLogs.programCode);
+
+      // Coverage by operation type
+      const byOperation = await db
+        .select({
+          operation: hybridGatewayAuditLogs.operationType,
+          count: sql<number>`COUNT(*)`.as('count'),
+        })
+        .from(hybridGatewayAuditLogs)
+        .where(and(...conditions))
+        .groupBy(hybridGatewayAuditLogs.operationType);
+
+      // Trend data (hourly)
+      const trend = await db
+        .select({
+          timestamp: sql`date_trunc('hour', ${hybridGatewayAuditLogs.createdAt})`.as('bucket'),
+          invocations: sql<number>`COUNT(*)`.as('invocations'),
+          verified: sql<number>`COUNT(*) FILTER (WHERE ${hybridGatewayAuditLogs.solverResult} = 'SAT' OR ${hybridGatewayAuditLogs.isLegallyGrounded} = true)`.as('verified'),
+          conflicts: sql<number>`COUNT(*) FILTER (WHERE ${hybridGatewayAuditLogs.solverResult} = 'UNSAT')`.as('conflicts'),
+        })
+        .from(hybridGatewayAuditLogs)
+        .where(and(...conditions))
+        .groupBy(sql`date_trunc('hour', ${hybridGatewayAuditLogs.createdAt})`)
+        .orderBy(sql`date_trunc('hour', ${hybridGatewayAuditLogs.createdAt})`);
+
+      return {
+        totalInvocations,
+        successfulVerifications,
+        conflictOverrides,
+        errors,
+        coverageRate: totalInvocations > 0 ? successfulVerifications / totalInvocations : 0,
+        byProgram: byProgram.map(p => ({
+          program: p.program || 'unknown',
+          invocations: Number(p.invocations),
+          verified: Number(p.verified),
+          conflicts: Number(p.conflicts),
+        })),
+        byOperation: byOperation.map(o => ({
+          operation: o.operation || 'unknown',
+          count: Number(o.count),
+        })),
+        trend: trend.map(t => ({
+          timestamp: new Date(t.timestamp as any).toISOString(),
+          invocations: Number(t.invocations),
+          verified: Number(t.verified),
+          conflicts: Number(t.conflicts),
+        })),
+      };
+    } catch (error) {
+      logger.error('Error fetching gateway metrics', { error });
+      return {
+        totalInvocations: 0,
+        successfulVerifications: 0,
+        conflictOverrides: 0,
+        errors: 0,
+        coverageRate: 0,
+        byProgram: [],
+        byOperation: [],
+        trend: [],
+      };
+    }
   }
 
   /**
