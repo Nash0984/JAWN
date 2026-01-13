@@ -8957,6 +8957,114 @@ export type InsertPerPermSample = z.infer<typeof insertPerPermSampleSchema>;
 export type HybridGatewayAuditLog = typeof hybridGatewayAuditLogs.$inferSelect;
 export type InsertHybridGatewayAuditLog = z.infer<typeof insertHybridGatewayAuditLogSchema>;
 
+// ============================================================================
+// E&E Data Dictionary Tables (172 fields per PTIG specification)
+// ============================================================================
+
+// E&E Data Dictionary Field Definitions
+export const eeDataDictionaryFields = pgTable("ee_data_dictionary_fields", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  fieldName: varchar("field_name", { length: 100 }).notNull(),
+  fieldLabel: varchar("field_label", { length: 255 }).notNull(),
+  fieldDescription: text("field_description"),
+  dataType: varchar("data_type", { length: 50 }).notNull(), // string, number, date, boolean, array
+  category: varchar("category", { length: 100 }).notNull(), // demographics, address, income, deductions, program, verification
+  subcategory: varchar("subcategory", { length: 100 }),
+  isRequired: boolean("is_required").default(false),
+  isEncrypted: boolean("is_encrypted").default(false), // For PII like SSN
+  sourceSystem: varchar("source_system", { length: 100 }), // CARES, MD_SAIL, NDNH, etc.
+  mappingExpression: text("mapping_expression"), // JSONPath or transformation expression
+  validationRules: jsonb("validation_rules"), // JSON validation rules
+  defaultValue: text("default_value"),
+  displayOrder: integer("display_order"),
+  stateCode: varchar("state_code", { length: 10 }).default('MD'),
+  programCodes: text("program_codes").array(), // SNAP, MEDICAID, TANF, etc.
+  isActive: boolean("is_active").default(true),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// E&E Field Mapping Configurations (per state/program)
+export const eeFieldMappings = pgTable("ee_field_mappings", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  fieldId: varchar("field_id").references(() => eeDataDictionaryFields.id),
+  stateCode: varchar("state_code", { length: 10 }).notNull(),
+  programCode: varchar("program_code", { length: 20 }).notNull(),
+  sourceFieldName: varchar("source_field_name", { length: 100 }).notNull(),
+  sourceTable: varchar("source_table", { length: 100 }),
+  transformationLogic: text("transformation_logic"),
+  validationQuery: text("validation_query"),
+  lastSyncedAt: timestamp("last_synced_at"),
+  syncStatus: varchar("sync_status", { length: 20 }).default('active'), // active, deprecated, error
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// E&E Individual Records (normalized storage)
+export const eeIndividualRecords = pgTable("ee_individual_records", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  individualId: varchar("individual_id", { length: 50 }).notNull(),
+  mdmId: varchar("mdm_id", { length: 50 }), // Master Data Management ID
+  sourceSystem: varchar("source_system", { length: 50 }).notNull(),
+  stateCode: varchar("state_code", { length: 10 }).notNull(),
+  fieldValues: jsonb("field_values").notNull(), // JSON blob of all 172 field values
+  dataQualityScore: real("data_quality_score"), // 0.0 to 1.0
+  lastVerifiedAt: timestamp("last_verified_at"),
+  verificationSource: varchar("verification_source", { length: 50 }),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// E&E Verification Results
+export const eeVerificationResults = pgTable("ee_verification_results", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  individualRecordId: varchar("individual_record_id").references(() => eeIndividualRecords.id),
+  fieldName: varchar("field_name", { length: 100 }).notNull(),
+  verificationSource: varchar("verification_source", { length: 100 }).notNull(), // NDNH, state_wage_registry, employer_direct
+  verifiedValue: text("verified_value"),
+  reportedValue: text("reported_value"),
+  discrepancyDetected: boolean("discrepancy_detected").default(false),
+  discrepancyDetails: text("discrepancy_details"),
+  confidenceLevel: varchar("confidence_level", { length: 20 }), // high, medium, low
+  verifiedAt: timestamp("verified_at").defaultNow(),
+  expiresAt: timestamp("expires_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+// Insert schemas for E&E tables
+export const insertEEDataDictionaryFieldSchema = createInsertSchema(eeDataDictionaryFields).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertEEFieldMappingSchema = createInsertSchema(eeFieldMappings).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertEEIndividualRecordSchema = createInsertSchema(eeIndividualRecords).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertEEVerificationResultSchema = createInsertSchema(eeVerificationResults).omit({
+  id: true,
+  createdAt: true,
+});
+
+// Types for E&E tables
+export type EEDataDictionaryField = typeof eeDataDictionaryFields.$inferSelect;
+export type InsertEEDataDictionaryField = z.infer<typeof insertEEDataDictionaryFieldSchema>;
+export type EEFieldMapping = typeof eeFieldMappings.$inferSelect;
+export type InsertEEFieldMapping = z.infer<typeof insertEEFieldMappingSchema>;
+export type EEIndividualRecord = typeof eeIndividualRecords.$inferSelect;
+export type InsertEEIndividualRecord = z.infer<typeof insertEEIndividualRecordSchema>;
+export type EEVerificationResult = typeof eeVerificationResults.$inferSelect;
+export type InsertEEVerificationResult = z.infer<typeof insertEEVerificationResultSchema>;
+
 // Export tax return tables from taxReturnSchema
 // COMMENTED OUT DURING SCHEMA ROLLBACK - taxReturnSchema.ts moved to backup
 // export * from './taxReturnSchema';
