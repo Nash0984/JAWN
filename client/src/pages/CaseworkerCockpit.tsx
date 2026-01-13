@@ -106,34 +106,40 @@ export default function CaseworkerCockpit() {
   // Fetch flagged cases from PER neuro-symbolic hybrid gateway
   const { data: perFlaggedCasesResponse, isLoading: flaggedCasesLoading, error: flaggedCasesError } = useQuery<{ success: boolean; data: FlaggedCase[] }>({
     queryKey: ["/api/per/caseworker/flagged-cases"],
+    retry: false,
   });
-  const flaggedCases = perFlaggedCasesResponse?.data;
+  const flaggedCases = perFlaggedCasesResponse?.data ?? [];
 
   // Fetch trend alerts from PER analytics
   const { data: trendAlertsResponse, isLoading: trendAlertsLoading } = useQuery<{ success: boolean; data: { alerts: TrendAlert[]; totalAlerts: number; criticalAlerts: number; currentQuarter: string } }>({
     queryKey: ["/api/per/caseworker/trend-alerts"],
+    retry: false,
   });
   const trendAlerts = trendAlertsResponse?.data;
 
   // Fetch solutions hub content
   const { data: solutionsHubResponse, isLoading: solutionsHubLoading } = useQuery<{ success: boolean; data: { domains: string[]; solutions: Record<string, SolutionsHubEntry> } }>({
     queryKey: ["/api/per/solutions-hub"],
+    retry: false,
   });
   const solutionsHub = solutionsHubResponse?.data;
 
   // Fetch error patterns for current caseworker (fallback to QC endpoint)
   const { data: errorPatterns, isLoading: errorPatternsLoading } = useQuery<ErrorPattern[]>({
     queryKey: ["/api/qc/error-patterns/me"],
+    retry: false,
   });
 
   // Fetch job aids
   const { data: jobAids, isLoading: jobAidsLoading } = useQuery<JobAid[]>({
     queryKey: ["/api/qc/job-aids"],
+    retry: false,
   });
 
   // Fetch training interventions
   const { data: trainingInterventions, isLoading: trainingLoading } = useQuery<TrainingIntervention[]>({
     queryKey: ["/api/qc/training-interventions"],
+    retry: false,
   });
 
   // Get risk score color
@@ -540,10 +546,14 @@ export default function CaseworkerCockpit() {
                         </Badge>
                       </div>
                       <div className="text-sm text-muted-foreground">
-                        <p>Expected Impact: <span className="font-semibold text-green-600">{(training.impactScore * 100).toFixed(0)}%</span> improvement</p>
-                        <p className="text-xs mt-1">
-                          Historical data: {training.preTrainingErrorRate.toFixed(1)}% → {training.postTrainingErrorRate.toFixed(1)}%
-                        </p>
+                        {training.impactScore != null && (
+                          <p>Expected Impact: <span className="font-semibold text-green-600">{(training.impactScore * 100).toFixed(0)}%</span> improvement</p>
+                        )}
+                        {training.preTrainingErrorRate != null && training.postTrainingErrorRate != null && (
+                          <p className="text-xs mt-1">
+                            Historical data: {training.preTrainingErrorRate.toFixed(1)}% → {training.postTrainingErrorRate.toFixed(1)}%
+                          </p>
+                        )}
                       </div>
                       <Button size="sm" className="w-full mt-2" data-testid={`start-training-${training.id}`}>
                         Start Training

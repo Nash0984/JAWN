@@ -2761,14 +2761,14 @@ router.get('/caseworker/flagged-cases', async (req: Request, res: Response) => {
       nudgeId: perCaseworkerNudges.id,
       caseId: perCaseworkerNudges.caseId,
       nudgeType: perCaseworkerNudges.nudgeType,
-      nudgeMessage: perCaseworkerNudges.nudgeMessage,
+      nudgeMessage: perCaseworkerNudges.nudgeDescription,
       riskScore: perCaseworkerNudges.riskScore,
-      errorCategory: perCaseworkerNudges.errorCategory,
+      errorCategory: perCaseworkerNudges.nudgeType,
       nudgeStatus: perCaseworkerNudges.nudgeStatus,
       createdAt: perCaseworkerNudges.createdAt,
       clientName: clientCases.clientName,
-      caseNumber: clientCases.caseNumber,
-      programType: clientCases.programType,
+      caseNumber: clientCases.clientIdentifier,
+      programType: perCaseworkerNudges.programType,
     })
     .from(perCaseworkerNudges)
     .innerJoin(clientCases, eq(perCaseworkerNudges.caseId, clientCases.id))
@@ -2831,7 +2831,8 @@ router.get('/caseworker/flagged-cases', async (req: Request, res: Response) => {
   } catch (error) {
     logger.error('Get caseworker flagged cases failed', {
       route: 'GET /api/per/caseworker/flagged-cases',
-      error: error instanceof Error ? error.message : 'Unknown error'
+      error: error instanceof Error ? error.message : 'Unknown error',
+      stack: error instanceof Error ? error.stack : undefined
     });
     res.status(500).json({
       success: false,
@@ -2852,21 +2853,21 @@ router.get('/caseworker/proactive-caseload', async (req: Request, res: Response)
     const stateCode = (req.query.stateCode as string) || 'MD';
     const limit = parseInt(req.query.limit as string) || 10;
 
-    // Build query for cases with matching error category
+    // Build query for cases with matching error category (using nudgeType as category)
     const conditions: any[] = [];
     if (errorCategory) {
-      conditions.push(eq(perCaseworkerNudges.errorCategory, errorCategory));
+      conditions.push(eq(perCaseworkerNudges.nudgeType, errorCategory));
     }
     conditions.push(eq(perCaseworkerNudges.nudgeStatus, 'pending'));
 
     const similarCases = await db.select({
       nudgeId: perCaseworkerNudges.id,
       caseId: perCaseworkerNudges.caseId,
-      caseNumber: clientCases.caseNumber,
+      caseNumber: clientCases.clientIdentifier,
       clientName: clientCases.clientName,
       riskScore: perCaseworkerNudges.riskScore,
-      errorCategory: perCaseworkerNudges.errorCategory,
-      nudgeMessage: perCaseworkerNudges.nudgeMessage,
+      errorCategory: perCaseworkerNudges.nudgeType,
+      nudgeMessage: perCaseworkerNudges.nudgeDescription,
       createdAt: perCaseworkerNudges.createdAt
     })
     .from(perCaseworkerNudges)
@@ -2996,9 +2997,9 @@ router.get('/caseworker/trend-alerts', async (req: Request, res: Response) => {
     const prevQuarterStart = new Date(currentQuarterStart);
     prevQuarterStart.setMonth(prevQuarterStart.getMonth() - 3);
 
-    // Current quarter nudges by category
+    // Current quarter nudges by category (using nudgeType as error category)
     const currentQuarterNudges = await db.select({
-      errorCategory: perCaseworkerNudges.errorCategory,
+      errorCategory: perCaseworkerNudges.nudgeType,
       count: sql<number>`COUNT(*)`
     })
     .from(perCaseworkerNudges)
@@ -3006,11 +3007,11 @@ router.get('/caseworker/trend-alerts', async (req: Request, res: Response) => {
       gte(perCaseworkerNudges.createdAt, currentQuarterStart),
       caseworkerId ? eq(perCaseworkerNudges.caseworkerId, caseworkerId) : sql`1=1`
     ))
-    .groupBy(perCaseworkerNudges.errorCategory);
+    .groupBy(perCaseworkerNudges.nudgeType);
 
-    // Previous quarter nudges by category
+    // Previous quarter nudges by category (using nudgeType as error category)
     const prevQuarterNudges = await db.select({
-      errorCategory: perCaseworkerNudges.errorCategory,
+      errorCategory: perCaseworkerNudges.nudgeType,
       count: sql<number>`COUNT(*)`
     })
     .from(perCaseworkerNudges)
@@ -3019,7 +3020,7 @@ router.get('/caseworker/trend-alerts', async (req: Request, res: Response) => {
       lte(perCaseworkerNudges.createdAt, currentQuarterStart),
       caseworkerId ? eq(perCaseworkerNudges.caseworkerId, caseworkerId) : sql`1=1`
     ))
-    .groupBy(perCaseworkerNudges.errorCategory);
+    .groupBy(perCaseworkerNudges.nudgeType);
 
     // Calculate trends and identify spikes
     const prevMap = new Map(prevQuarterNudges.map(n => [n.errorCategory, Number(n.count)]));
@@ -3060,7 +3061,8 @@ router.get('/caseworker/trend-alerts', async (req: Request, res: Response) => {
   } catch (error) {
     logger.error('Get trend alerts failed', {
       route: 'GET /api/per/caseworker/trend-alerts',
-      error: error instanceof Error ? error.message : 'Unknown error'
+      error: error instanceof Error ? error.message : 'Unknown error',
+      stack: error instanceof Error ? error.stack : undefined
     });
     res.status(500).json({
       success: false,
