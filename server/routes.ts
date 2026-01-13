@@ -1505,6 +1505,22 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
     });
   }));
 
+  // Get comprehensive monitoring metrics (8 domains including Gateway)
+  app.get("/api/admin/monitoring/all", requireAdmin, asyncHandler(async (req: Request, res: Response) => {
+    const { metricsService } = await import("./services/metricsService");
+    
+    const tenantId = req.tenant?.tenant?.id || undefined;
+    
+    // Get all 8 domains of metrics (errors, security, performance, eFiling, ai, cache, health, gateway)
+    const allMetrics = await metricsService.getAllMetrics(undefined, tenantId);
+    
+    res.json({
+      success: true,
+      timestamp: new Date().toISOString(),
+      ...allMetrics,
+    });
+  }));
+
   // Get realtime metrics for WebSocket fallback (HTTP polling)
   app.get("/api/admin/metrics/realtime", requireAuth, requireAdmin, asyncHandler(async (req: Request, res: Response) => {
     const { metricsService } = await import("./services/metricsService");
