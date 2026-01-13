@@ -2,7 +2,7 @@ import { Link } from "wouter";
 import { useAuth } from "@/hooks/useAuth";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Calculator, FileText, Search, HelpCircle, BookOpen } from "lucide-react";
+import { Calculator, FileText, Search, HelpCircle, BookOpen, AlertCircle, Calendar } from "lucide-react";
 
 export default function ClientDashboard() {
   const { user } = useAuth();
@@ -14,6 +14,13 @@ export default function ClientDashboard() {
       icon: Calculator,
       href: "/eligibility",
       testId: "action-eligibility",
+    },
+    {
+      title: "Report Changes",
+      description: "Income, household, or work status changes",
+      icon: AlertCircle,
+      href: "/client/report-changes",
+      testId: "action-report-changes",
     },
     {
       title: "Search Policies",

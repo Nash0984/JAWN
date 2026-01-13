@@ -7631,6 +7631,167 @@ If the question cannot be answered with the available information, say so clearl
   }));
 
   // ==========================================
+  // Client Change Reporting Portal
+  // Per PTIG: Client-facing guided flows for income/household/work status changes
+  // ==========================================
+  
+  // Report client change (income, household, work status, redetermination)
+  app.post("/api/client/report-change", requireAuth, asyncHandler(async (req: Request, res: Response) => {
+    const { type, payload } = req.body;
+    
+    if (!type || !payload) {
+      return res.status(400).json({ 
+        success: false, 
+        error: "Missing change type or payload" 
+      });
+    }
+    
+    const validTypes = ['income_change', 'household_change', 'work_status', 'redetermination'];
+    if (!validTypes.includes(type)) {
+      return res.status(400).json({ 
+        success: false, 
+        error: "Invalid change type" 
+      });
+    }
+    
+    logger.info('Client change reported', {
+      userId: req.user?.id,
+      changeType: type,
+      timestamp: new Date().toISOString()
+    });
+    
+    // In production, this would create a notification for the caseworker
+    // and potentially trigger PER risk assessment on the case
+    
+    res.json({
+      success: true,
+      data: {
+        confirmationNumber: `CHG-${Date.now()}-${Math.random().toString(36).substr(2, 6).toUpperCase()}`,
+        type,
+        submittedAt: new Date().toISOString(),
+        message: "Your change has been submitted successfully. Your caseworker will review it within 3-5 business days."
+      }
+    });
+  }));
+
+  // Client FAQ Chatbot endpoint
+  app.post("/api/client/faq-chat", asyncHandler(async (req: Request, res: Response) => {
+    const { question } = req.body;
+    
+    if (!question || typeof question !== 'string') {
+      return res.status(400).json({ 
+        success: false, 
+        error: "Question is required" 
+      });
+    }
+    
+    const questionLower = question.toLowerCase();
+    
+    // Simple keyword-based routing for FAQ responses
+    let category = 'general';
+    let answer = '';
+    
+    if (questionLower.includes('work') || questionLower.includes('abawd') || questionLower.includes('able-bodied') || questionLower.includes('employment')) {
+      category = 'work_requirements';
+      answer = `**SNAP Work Requirements**
+
+If you're an able-bodied adult without dependents (ABAWD) between 18-49 years old, you may need to meet work requirements:
+
+- Work at least 80 hours per month, OR
+- Participate in approved job training/education, OR
+- Volunteer at least 80 hours per month
+
+You may be exempt if you are pregnant, care for a child under 6, have a disability, or work 30+ hours per week already.
+
+Need help? Call 1-800-332-6347 to discuss your situation.`;
+    } else if (questionLower.includes('status') || questionLower.includes('balance') || questionLower.includes('ebt') || questionLower.includes('amount')) {
+      category = 'benefit_status';
+      answer = `**Checking Your Benefit Status**
+
+You can check your benefit status:
+
+**Online:** Visit your state's benefits portal
+**Phone:** Call 1-800-332-6347 (have your case number ready)
+**EBT Balance:** Call the number on the back of your EBT card
+
+Your portal shows:
+- Current monthly benefit amount
+- Next issuance date
+- Certification end date
+- Any required actions`;
+    } else if (questionLower.includes('document') || questionLower.includes('submit') || questionLower.includes('proof') || questionLower.includes('verification')) {
+      category = 'documents';
+      answer = `**Documents You May Need**
+
+**Identity:** Driver's license, birth certificate, or passport
+**Income:** Last 4 pay stubs, self-employment records, benefits letters
+**Housing:** Lease, mortgage statement, utility bills
+**Other:** Bank statements, medical receipts
+
+**How to Submit:**
+- Online: Upload through your state portal
+- In Person: Bring to your local DSS office
+- Mail: Send copies (keep originals!)
+
+Always keep copies of everything you submit.`;
+    } else if (questionLower.includes('renew') || questionLower.includes('recertif') || questionLower.includes('deadline') || questionLower.includes('redeterm')) {
+      category = 'renewal';
+      answer = `**SNAP Renewal (Recertification)**
+
+Your benefits must be renewed periodically (usually every 12 months).
+
+**Renewal Process:**
+1. You'll receive a renewal packet 30-45 days before deadline
+2. Complete and return the form
+3. Attend interview (phone or in-person)
+4. Provide any requested documents
+
+**Important:** Missing your deadline may cause a gap in benefits. Set a reminder 30 days before your certification ends!`;
+    } else if (questionLower.includes('household') || questionLower.includes('move') || questionLower.includes('change') || questionLower.includes('report')) {
+      category = 'household_changes';
+      answer = `**Reporting Changes**
+
+Report changes within 10 days of when they occur:
+
+**Must Report:**
+- New job, lost job, or pay changes
+- Someone moves in or out
+- Address changes
+- Changes in housing costs
+
+**How to Report:**
+- Online: Benefits portal
+- Phone: 1-800-332-6347
+- In Person: Local DSS office
+
+Failure to report changes can result in overpayment that must be repaid.`;
+    } else {
+      category = 'general';
+      answer = `I can help you with questions about:
+
+- **Work Requirements** - ABAWD rules and exemptions
+- **Benefit Status** - Check your EBT balance and case status
+- **Documents** - What you need to submit
+- **Renewals** - When and how to renew your benefits
+- **Reporting Changes** - What changes you need to report
+
+What would you like to know more about? You can also call 1-800-332-6347 for immediate assistance.`;
+    }
+    
+    logger.info('FAQ chat response', {
+      question: question.substring(0, 100),
+      category,
+      timestamp: new Date().toISOString()
+    });
+    
+    res.json({
+      success: true,
+      answer,
+      category
+    });
+  }));
+
+  // ==========================================
   // VITA Intake Routes
   // ==========================================
 

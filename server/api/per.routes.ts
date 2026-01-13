@@ -31,6 +31,8 @@ import {
 } from '../services/per';
 import { logger } from '../services/logger.service';
 import { requireStaff, requireAdmin, requireAuth } from '../middleware/auth';
+import { neuroSymbolicHybridGateway } from '../services/neuroSymbolicHybridGateway';
+import { violationTraceService } from '../services/violationTraceService';
 
 const router = Router();
 
@@ -2735,6 +2737,955 @@ router.get('/ldss-league', async (req: Request, res: Response) => {
   } catch (error: any) {
     console.error('Error fetching LDSS League rankings:', error);
     res.status(500).json({ success: false, error: 'Failed to fetch LDSS League rankings' });
+  }
+});
+
+// ============================================================================
+// CASEWORKER HYBRID GATEWAY ENDPOINTS (Neuro-Symbolic Integration)
+// ============================================================================
+
+/**
+ * GET /api/per/caseworker/flagged-cases
+ * Get flagged cases for current caseworker with neuro-symbolic violation traces
+ * Implements: Rules-Based Engine real-time alerts + Predictive Model risk scores
+ */
+router.get('/caseworker/flagged-cases', async (req: Request, res: Response) => {
+  try {
+    const caseworkerId = req.user?.id;
+    const stateCode = (req.query.stateCode as string) || 'MD';
+    const limit = parseInt(req.query.limit as string) || 20;
+
+    // Get cases with pending nudges for this caseworker
+    const nudgesWithCases = await db.select({
+      nudgeId: perCaseworkerNudges.id,
+      caseId: perCaseworkerNudges.caseId,
+      nudgeType: perCaseworkerNudges.nudgeType,
+      nudgeMessage: perCaseworkerNudges.nudgeMessage,
+      riskScore: perCaseworkerNudges.riskScore,
+      errorCategory: perCaseworkerNudges.errorCategory,
+      nudgeStatus: perCaseworkerNudges.nudgeStatus,
+      createdAt: perCaseworkerNudges.createdAt,
+      clientName: clientCases.clientName,
+      caseNumber: clientCases.caseNumber,
+      programType: clientCases.programType,
+    })
+    .from(perCaseworkerNudges)
+    .innerJoin(clientCases, eq(perCaseworkerNudges.caseId, clientCases.id))
+    .where(and(
+      caseworkerId ? eq(perCaseworkerNudges.caseworkerId, caseworkerId) : sql`1=1`,
+      eq(perCaseworkerNudges.nudgeStatus, 'pending')
+    ))
+    .orderBy(desc(perCaseworkerNudges.riskScore))
+    .limit(limit);
+
+    // Enrich with violation traces from hybrid gateway
+    const flaggedCases = await Promise.all(nudgesWithCases.map(async (nudge) => {
+      let violationTraces: any[] = [];
+      let statutoryCitations: string[] = [];
+      
+      try {
+        // Get violation traces for this case from the symbolic layer
+        const traces = await violationTraceService.getViolationTracesForCase(nudge.caseId);
+        violationTraces = traces.map(t => ({
+          ruleId: t.ruleId,
+          ruleName: t.ruleName,
+          eligibilityDomain: t.eligibilityDomain,
+          statutoryCitation: t.statutoryCitation,
+          explanation: t.plainLanguageExplanation,
+          severity: t.severity
+        }));
+        statutoryCitations = traces.map(t => t.statutoryCitation).filter(Boolean);
+      } catch (e) {
+        // Continue without traces if service unavailable
+      }
+
+      const riskLevel = (nudge.riskScore || 0) > 0.8 ? 'critical' : 
+                       (nudge.riskScore || 0) > 0.6 ? 'high' : 
+                       (nudge.riskScore || 0) > 0.4 ? 'medium' : 'low';
+
+      return {
+        id: nudge.nudgeId,
+        caseId: nudge.caseId,
+        caseNumber: nudge.caseNumber,
+        clientName: nudge.clientName || 'Unknown',
+        programType: nudge.programType,
+        riskScore: nudge.riskScore || 0,
+        riskLevel,
+        flaggedErrorTypes: nudge.errorCategory ? [nudge.errorCategory] : [],
+        flaggedDate: nudge.createdAt?.toISOString() || new Date().toISOString(),
+        reviewStatus: nudge.nudgeStatus,
+        aiGuidance: nudge.nudgeMessage,
+        nudgeType: nudge.nudgeType,
+        violationTraces,
+        statutoryCitations,
+        appealReady: statutoryCitations.length > 0
+      };
+    }));
+
+    res.json({
+      success: true,
+      data: flaggedCases
+    });
+  } catch (error) {
+    logger.error('Get caseworker flagged cases failed', {
+      route: 'GET /api/per/caseworker/flagged-cases',
+      error: error instanceof Error ? error.message : 'Unknown error'
+    });
+    res.status(500).json({
+      success: false,
+      error: 'Failed to get flagged cases'
+    });
+  }
+});
+
+/**
+ * GET /api/per/caseworker/proactive-caseload
+ * Get proactive caseload module - cases flagged with similar risk profiles
+ * Per PTIG: "Proactive Caseload module on the same page automatically displays 
+ * a list of current, active cases flagged with a similar risk profile"
+ */
+router.get('/caseworker/proactive-caseload', async (req: Request, res: Response) => {
+  try {
+    const errorCategory = req.query.errorCategory as string;
+    const stateCode = (req.query.stateCode as string) || 'MD';
+    const limit = parseInt(req.query.limit as string) || 10;
+
+    // Build query for cases with matching error category
+    const conditions: any[] = [];
+    if (errorCategory) {
+      conditions.push(eq(perCaseworkerNudges.errorCategory, errorCategory));
+    }
+    conditions.push(eq(perCaseworkerNudges.nudgeStatus, 'pending'));
+
+    const similarCases = await db.select({
+      nudgeId: perCaseworkerNudges.id,
+      caseId: perCaseworkerNudges.caseId,
+      caseNumber: clientCases.caseNumber,
+      clientName: clientCases.clientName,
+      riskScore: perCaseworkerNudges.riskScore,
+      errorCategory: perCaseworkerNudges.errorCategory,
+      nudgeMessage: perCaseworkerNudges.nudgeMessage,
+      createdAt: perCaseworkerNudges.createdAt
+    })
+    .from(perCaseworkerNudges)
+    .innerJoin(clientCases, eq(perCaseworkerNudges.caseId, clientCases.id))
+    .where(and(...conditions))
+    .orderBy(desc(perCaseworkerNudges.riskScore))
+    .limit(limit);
+
+    res.json({
+      success: true,
+      data: {
+        errorCategory: errorCategory || 'all',
+        totalMatching: similarCases.length,
+        cases: similarCases.map(c => ({
+          id: c.nudgeId,
+          caseId: c.caseId,
+          caseNumber: c.caseNumber,
+          clientName: c.clientName || 'Unknown',
+          riskScore: c.riskScore || 0,
+          riskLevel: (c.riskScore || 0) > 0.8 ? 'critical' : 
+                     (c.riskScore || 0) > 0.6 ? 'high' : 
+                     (c.riskScore || 0) > 0.4 ? 'medium' : 'low',
+          errorCategory: c.errorCategory,
+          aiGuidance: c.nudgeMessage,
+          flaggedDate: c.createdAt?.toISOString()
+        }))
+      }
+    });
+  } catch (error) {
+    logger.error('Get proactive caseload failed', {
+      route: 'GET /api/per/caseworker/proactive-caseload',
+      error: error instanceof Error ? error.message : 'Unknown error'
+    });
+    res.status(500).json({
+      success: false,
+      error: 'Failed to get proactive caseload'
+    });
+  }
+});
+
+/**
+ * POST /api/per/caseworker/validate-case/:caseId
+ * Run real-time Rules-Based Engine validation on a case before finalization
+ * Implements: "real-time alerts from the Rules-Based Engine to catch data entry errors"
+ */
+router.post('/caseworker/validate-case/:caseId', async (req: Request, res: Response) => {
+  try {
+    const { caseId } = req.params;
+    const stateCode = (req.query.stateCode as string) || 'MD';
+    const programCode = (req.query.programCode as string) || 'SNAP';
+
+    // Run pre-submission validation through PER services
+    const validationResult = await preSubmissionValidatorService.validateCase(caseId, {
+      stateCode
+    });
+
+    // If validation found issues, get violation traces
+    let violationTraces: any[] = [];
+    if (!validationResult.isValid && validationResult.checks) {
+      const failedChecks = validationResult.checks.filter((c: any) => !c.passed);
+      
+      for (const check of failedChecks) {
+        try {
+          // Map check types to eligibility domains for statutory lookup
+          const domainMap: Record<string, string> = {
+            'income_totals': 'income',
+            'household_composition': 'household_composition',
+            'work_requirements': 'abawd_work_requirements',
+            'resource_limits': 'resources',
+            'shelter_deduction': 'deductions'
+          };
+          const domain = domainMap[check.checkType] || 'general';
+          
+          violationTraces.push({
+            checkType: check.checkType,
+            eligibilityDomain: domain,
+            message: check.message,
+            details: check.details,
+            severity: check.severity || 'medium',
+            suggestedAction: check.suggestedAction
+          });
+        } catch (e) {
+          // Continue if trace generation fails
+        }
+      }
+    }
+
+    res.json({
+      success: true,
+      data: {
+        caseId,
+        isValid: validationResult.isValid,
+        riskScore: validationResult.riskScore || 0,
+        checksPerformed: validationResult.checks?.length || 0,
+        issuesFound: validationResult.checks?.filter((c: any) => !c.passed).length || 0,
+        checks: validationResult.checks || [],
+        violationTraces,
+        recommendations: validationResult.recommendations || [],
+        appealReady: violationTraces.some(t => t.statutoryCitation)
+      }
+    });
+  } catch (error) {
+    logger.error('Caseworker case validation failed', {
+      route: 'POST /api/per/caseworker/validate-case/:caseId',
+      error: error instanceof Error ? error.message : 'Unknown error'
+    });
+    res.status(500).json({
+      success: false,
+      error: 'Failed to validate case'
+    });
+  }
+});
+
+/**
+ * GET /api/per/caseworker/trend-alerts
+ * Get trend alerts for caseworker - spikes in specific error categories
+ * Per PTIG: "Trend Alert widget is flashing red: ALERT: Shelter & Utility errors spiked"
+ */
+router.get('/caseworker/trend-alerts', async (req: Request, res: Response) => {
+  try {
+    const stateCode = (req.query.stateCode as string) || 'MD';
+    const caseworkerId = req.user?.id;
+
+    // Get error category counts for current quarter vs previous
+    const now = new Date();
+    const currentQuarterStart = new Date(now.getFullYear(), Math.floor(now.getMonth() / 3) * 3, 1);
+    const prevQuarterStart = new Date(currentQuarterStart);
+    prevQuarterStart.setMonth(prevQuarterStart.getMonth() - 3);
+
+    // Current quarter nudges by category
+    const currentQuarterNudges = await db.select({
+      errorCategory: perCaseworkerNudges.errorCategory,
+      count: sql<number>`COUNT(*)`
+    })
+    .from(perCaseworkerNudges)
+    .where(and(
+      gte(perCaseworkerNudges.createdAt, currentQuarterStart),
+      caseworkerId ? eq(perCaseworkerNudges.caseworkerId, caseworkerId) : sql`1=1`
+    ))
+    .groupBy(perCaseworkerNudges.errorCategory);
+
+    // Previous quarter nudges by category
+    const prevQuarterNudges = await db.select({
+      errorCategory: perCaseworkerNudges.errorCategory,
+      count: sql<number>`COUNT(*)`
+    })
+    .from(perCaseworkerNudges)
+    .where(and(
+      gte(perCaseworkerNudges.createdAt, prevQuarterStart),
+      lte(perCaseworkerNudges.createdAt, currentQuarterStart),
+      caseworkerId ? eq(perCaseworkerNudges.caseworkerId, caseworkerId) : sql`1=1`
+    ))
+    .groupBy(perCaseworkerNudges.errorCategory);
+
+    // Calculate trends and identify spikes
+    const prevMap = new Map(prevQuarterNudges.map(n => [n.errorCategory, Number(n.count)]));
+    
+    const alerts = currentQuarterNudges
+      .map(curr => {
+        const prevCount = prevMap.get(curr.errorCategory) || 1;
+        const currentCount = Number(curr.count);
+        const percentChange = ((currentCount - prevCount) / prevCount) * 100;
+        
+        return {
+          errorCategory: curr.errorCategory,
+          currentCount,
+          previousCount: prevCount,
+          percentChange: Math.round(percentChange),
+          isSpike: percentChange > 50,
+          isCritical: percentChange > 100,
+          alertLevel: percentChange > 100 ? 'critical' : percentChange > 50 ? 'warning' : 'info',
+          message: percentChange > 100 
+            ? `ALERT: ${curr.errorCategory} errors spiked by ${Math.round(percentChange)}% this quarter`
+            : percentChange > 50 
+            ? `Warning: ${curr.errorCategory} errors increased by ${Math.round(percentChange)}%`
+            : `${curr.errorCategory} errors are stable`
+        };
+      })
+      .filter(a => a.isSpike)
+      .sort((a, b) => b.percentChange - a.percentChange);
+
+    res.json({
+      success: true,
+      data: {
+        currentQuarter: `Q${Math.floor(now.getMonth() / 3) + 1} ${now.getFullYear()}`,
+        totalAlerts: alerts.length,
+        criticalAlerts: alerts.filter(a => a.isCritical).length,
+        alerts
+      }
+    });
+  } catch (error) {
+    logger.error('Get trend alerts failed', {
+      route: 'GET /api/per/caseworker/trend-alerts',
+      error: error instanceof Error ? error.message : 'Unknown error'
+    });
+    res.status(500).json({
+      success: false,
+      error: 'Failed to get trend alerts'
+    });
+  }
+});
+
+/**
+ * GET /api/per/solutions-hub
+ * Get Solutions Hub - training links and job aids for specific error domains
+ * Per PTIG: "Solutions Hub displays links to the specific training tools"
+ */
+router.get('/solutions-hub', async (req: Request, res: Response) => {
+  try {
+    const errorCategory = req.query.errorCategory as string;
+    const eligibilityDomain = req.query.eligibilityDomain as string;
+
+    // Map error categories to training resources
+    const solutionsHub: Record<string, any> = {
+      wages_salaries: {
+        domain: 'Income Verification',
+        trainingLinks: [
+          { title: 'Income Documentation Requirements', type: 'job_aid', url: '/training/income-docs' },
+          { title: 'W-2 vs Pay Stub Verification', type: 'video', url: '/training/w2-verification' },
+          { title: 'Self-Employment Income Calculation', type: 'guide', url: '/training/self-employment' }
+        ],
+        policyReferences: [
+          { citation: '7 CFR 273.9', title: 'Income and Deductions', url: '/policy/7cfr273.9' },
+          { citation: 'COMAR 07.03.17.05', title: 'Income Standards', url: '/policy/comar-income' }
+        ],
+        quickTips: [
+          'Always verify income with most recent 4 pay stubs',
+          'Check for overtime and variable income patterns',
+          'Confirm employer information matches verification'
+        ]
+      },
+      shelter_deduction: {
+        domain: 'Shelter Costs',
+        trainingLinks: [
+          { title: 'Standard Utility Allowance Calculator', type: 'tool', url: '/training/sua-calculator' },
+          { title: 'Shelter Deduction Guidelines', type: 'job_aid', url: '/training/shelter-guide' },
+          { title: 'Seasonal Cooling SUA Application', type: 'guide', url: '/training/cooling-sua' }
+        ],
+        policyReferences: [
+          { citation: '7 CFR 273.9(d)', title: 'Shelter Deductions', url: '/policy/7cfr273.9d' },
+          { citation: 'COMAR 07.03.17.09', title: 'Utility Standards', url: '/policy/comar-utility' }
+        ],
+        quickTips: [
+          'Verify which SUA applies based on actual utility payments',
+          'Check for seasonal utility adjustments',
+          'Confirm rent/mortgage documentation is current'
+        ]
+      },
+      household_composition: {
+        domain: 'Household Composition',
+        trainingLinks: [
+          { title: 'Who Is In the Household?', type: 'job_aid', url: '/training/household-comp' },
+          { title: 'Boarder vs Household Member', type: 'video', url: '/training/boarder-rules' },
+          { title: 'Student Eligibility Rules', type: 'guide', url: '/training/student-rules' }
+        ],
+        policyReferences: [
+          { citation: '7 CFR 273.1', title: 'Household Concept', url: '/policy/7cfr273.1' },
+          { citation: 'COMAR 07.03.17.03', title: 'Household Definition', url: '/policy/comar-household' }
+        ],
+        quickTips: [
+          'Verify all individuals purchase and prepare food together',
+          'Check for separate household claims at same address',
+          'Confirm relationship documentation for all members'
+        ]
+      },
+      abawd_time_limits: {
+        domain: 'ABAWD Work Requirements',
+        trainingLinks: [
+          { title: 'ABAWD Exemption Checklist', type: 'job_aid', url: '/training/abawd-exemptions' },
+          { title: 'Work Requirement Verification', type: 'video', url: '/training/work-verification' },
+          { title: 'HR1 Work Requirement Changes', type: 'guide', url: '/training/hr1-changes' }
+        ],
+        policyReferences: [
+          { citation: '7 CFR 273.24', title: 'ABAWD Time Limits', url: '/policy/7cfr273.24' },
+          { citation: 'COMAR 07.03.17.21', title: 'Work Requirements', url: '/policy/comar-work' }
+        ],
+        quickTips: [
+          'Check all possible exemption categories before applying time limit',
+          'Verify 80+ hours of qualifying activity documentation',
+          'Track months of benefits accurately across fiscal years'
+        ]
+      }
+    };
+
+    // If specific category requested, return just that
+    if (errorCategory && solutionsHub[errorCategory]) {
+      return res.json({
+        success: true,
+        data: solutionsHub[errorCategory]
+      });
+    }
+
+    // Return all solutions hub content
+    res.json({
+      success: true,
+      data: {
+        domains: Object.keys(solutionsHub),
+        solutions: solutionsHub
+      }
+    });
+  } catch (error) {
+    logger.error('Get solutions hub failed', {
+      route: 'GET /api/per/solutions-hub',
+      error: error instanceof Error ? error.message : 'Unknown error'
+    });
+    res.status(500).json({
+      success: false,
+      error: 'Failed to get solutions hub'
+    });
+  }
+});
+
+// ==========================================
+// PER Proactive Messaging Routes
+// ==========================================
+
+// Import proactive messaging service
+import { perProactiveMessagingService } from '../services/perProactiveMessaging.service';
+
+// Trigger daily proactive messaging batch
+router.post('/proactive-messaging/batch', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const user = req.user as any;
+    
+    // Only admins can trigger batch processing
+    if (!user || (user.role !== 'admin' && user.role !== 'state_admin')) {
+      return res.status(403).json({
+        success: false,
+        error: 'Admin access required'
+      });
+    }
+
+    logger.info('Proactive messaging batch triggered', {
+      triggeredBy: user.id,
+      timestamp: new Date().toISOString()
+    });
+
+    const result = await perProactiveMessagingService.processDailyProactiveMessages();
+
+    res.json({
+      success: true,
+      data: {
+        messagesSent: result.sent,
+        messagesFailed: result.failed,
+        processedAt: new Date().toISOString()
+      }
+    });
+  } catch (error) {
+    logger.error('Proactive messaging batch failed', {
+      route: 'POST /api/per/proactive-messaging/batch',
+      error: error instanceof Error ? error.message : 'Unknown error'
+    });
+    res.status(500).json({
+      success: false,
+      error: 'Failed to process proactive messages'
+    });
+  }
+});
+
+// Send individual proactive message (for manual triggering)
+router.post('/proactive-messaging/send', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const user = req.user as any;
+    
+    if (!user) {
+      return res.status(401).json({
+        success: false,
+        error: 'Authentication required'
+      });
+    }
+
+    const { 
+      templateType, 
+      recipientId, 
+      recipientType = 'caseworker',
+      variables = {} 
+    } = req.body;
+
+    if (!templateType || !recipientId) {
+      return res.status(400).json({
+        success: false,
+        error: 'Template type and recipient ID are required'
+      });
+    }
+
+    logger.info('Manual proactive message triggered', {
+      triggeredBy: user.id,
+      templateType,
+      recipientId
+    });
+
+    // Handle specific template types
+    switch (templateType) {
+      case 'high_risk_case_alert':
+        await perProactiveMessagingService.sendHighRiskCaseAlert(
+          recipientId,
+          variables.caseNumber || 'Unknown',
+          variables.errorCategory || 'general',
+          parseFloat(variables.riskScore) || 0.75,
+          variables.aiGuidance || 'Review case for potential errors',
+          '/caseworker/cockpit'
+        );
+        break;
+
+      case 'nudge_compliance_reminder':
+        await perProactiveMessagingService.sendNudgeComplianceReminder(
+          recipientId,
+          parseInt(variables.pendingNudges) || 1,
+          {
+            caseNumber: variables.caseNumber || 'Unknown',
+            nudgeType: variables.nudgeType || 'Review Required',
+            riskLevel: variables.riskLevel || 'High'
+          },
+          '/caseworker/cockpit'
+        );
+        break;
+
+      case 'redetermination_reminder':
+        await perProactiveMessagingService.sendRedeterminationReminder(
+          recipientId,
+          new Date(variables.certEndDate || Date.now() + 30 * 24 * 60 * 60 * 1000),
+          '/client/report-changes'
+        );
+        break;
+
+      case 'abawd_work_requirement':
+        await perProactiveMessagingService.sendAbawdWorkRequirementAlert(
+          recipientId,
+          parseInt(variables.monthsUsed) || 0,
+          parseInt(variables.hoursReported) || 0,
+          '/client/report-changes'
+        );
+        break;
+
+      case 'missing_verification':
+        await perProactiveMessagingService.sendMissingVerificationReminder(
+          recipientId,
+          (variables.verificationType as any) || 'income',
+          new Date(variables.deadline || Date.now() + 14 * 24 * 60 * 60 * 1000),
+          '/client/report-changes'
+        );
+        break;
+
+      default:
+        return res.status(400).json({
+          success: false,
+          error: `Unknown template type: ${templateType}`
+        });
+    }
+
+    res.json({
+      success: true,
+      data: {
+        templateType,
+        recipientId,
+        sentAt: new Date().toISOString()
+      }
+    });
+  } catch (error) {
+    logger.error('Manual proactive message failed', {
+      route: 'POST /api/per/proactive-messaging/send',
+      error: error instanceof Error ? error.message : 'Unknown error'
+    });
+    res.status(500).json({
+      success: false,
+      error: 'Failed to send proactive message'
+    });
+  }
+});
+
+// Get proactive messaging templates
+router.get('/proactive-messaging/templates', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const templates = [
+      {
+        id: 'missing_income_verification',
+        name: 'Missing Income Verification',
+        description: 'Reminder to submit income documentation',
+        recipientType: 'client',
+        channels: ['in_app', 'email']
+      },
+      {
+        id: 'missing_shelter_verification',
+        name: 'Missing Shelter Verification',
+        description: 'Reminder to submit housing cost documentation',
+        recipientType: 'client',
+        channels: ['in_app', 'email']
+      },
+      {
+        id: 'abawd_work_requirement_warning',
+        name: 'ABAWD Work Requirement Warning',
+        description: 'Alert about work requirement compliance',
+        recipientType: 'client',
+        channels: ['in_app', 'email']
+      },
+      {
+        id: 'redetermination_reminder_30day',
+        name: 'Redetermination Reminder (30 days)',
+        description: 'Reminder to complete benefit renewal',
+        recipientType: 'client',
+        channels: ['in_app', 'email']
+      },
+      {
+        id: 'redetermination_reminder_10day',
+        name: 'Redetermination Reminder (10 days)',
+        description: 'Urgent reminder about renewal deadline',
+        recipientType: 'client',
+        channels: ['in_app', 'email']
+      },
+      {
+        id: 'high_risk_case_alert',
+        name: 'High-Risk Case Alert',
+        description: 'Alert caseworker about high-risk case',
+        recipientType: 'caseworker',
+        channels: ['in_app', 'email']
+      },
+      {
+        id: 'nudge_compliance_reminder',
+        name: 'Nudge Compliance Reminder',
+        description: 'Reminder to acknowledge pending AI guidance',
+        recipientType: 'caseworker',
+        channels: ['in_app']
+      }
+    ];
+
+    res.json({
+      success: true,
+      data: templates
+    });
+  } catch (error) {
+    logger.error('Get templates failed', {
+      route: 'GET /api/per/proactive-messaging/templates',
+      error: error instanceof Error ? error.message : 'Unknown error'
+    });
+    res.status(500).json({
+      success: false,
+      error: 'Failed to get templates'
+    });
+  }
+});
+
+// ==========================================
+// External Data Integration Routes
+// Per PTIG: Automated verification pathway connectors
+// ==========================================
+
+import { externalDataIntegrationService } from '../services/externalDataIntegration.service';
+
+// Get E&E Data Dictionary field mapping documentation
+router.get('/external-data/ee-mapping', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const mapping = externalDataIntegrationService.getEEFieldMappingDocumentation();
+    res.json({
+      success: true,
+      data: mapping
+    });
+  } catch (error) {
+    logger.error('Get E&E mapping failed', {
+      route: 'GET /api/per/external-data/ee-mapping',
+      error: error instanceof Error ? error.message : 'Unknown error'
+    });
+    res.status(500).json({
+      success: false,
+      error: 'Failed to get E&E field mapping'
+    });
+  }
+});
+
+// Verify wages against external registry (STUB)
+router.post('/external-data/verify-wages', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const user = req.user as any;
+    
+    // Only staff can access verification services
+    if (!user || !['caseworker', 'supervisor', 'admin', 'state_admin'].includes(user.role)) {
+      return res.status(403).json({
+        success: false,
+        error: 'Staff access required'
+      });
+    }
+
+    const { ssn, employerName, reportedIncome, reportingPeriod } = req.body;
+
+    if (!ssn || !reportedIncome) {
+      return res.status(400).json({
+        success: false,
+        error: 'SSN and reported income are required'
+      });
+    }
+
+    logger.info('Wage verification requested', {
+      requestedBy: user.id,
+      employerName,
+      reportingPeriod
+    });
+
+    const result = await externalDataIntegrationService.verifyWages(
+      ssn,
+      employerName || 'Unknown',
+      parseFloat(reportedIncome),
+      reportingPeriod
+    );
+
+    res.json({
+      success: true,
+      data: result
+    });
+  } catch (error) {
+    logger.error('Wage verification failed', {
+      route: 'POST /api/per/external-data/verify-wages',
+      error: error instanceof Error ? error.message : 'Unknown error'
+    });
+    res.status(500).json({
+      success: false,
+      error: 'Failed to verify wages'
+    });
+  }
+});
+
+// Lookup employment registry (STUB)
+router.post('/external-data/employment-lookup', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const user = req.user as any;
+    
+    if (!user || !['caseworker', 'supervisor', 'admin', 'state_admin'].includes(user.role)) {
+      return res.status(403).json({
+        success: false,
+        error: 'Staff access required'
+      });
+    }
+
+    const { ssn, firstName, lastName, dateOfBirth } = req.body;
+
+    if (!firstName || !lastName || !dateOfBirth) {
+      return res.status(400).json({
+        success: false,
+        error: 'Name and date of birth are required'
+      });
+    }
+
+    logger.info('Employment registry lookup requested', {
+      requestedBy: user.id,
+      firstName,
+      lastName
+    });
+
+    const result = await externalDataIntegrationService.lookupEmploymentRegistry(
+      ssn || '',
+      firstName,
+      lastName,
+      dateOfBirth
+    );
+
+    res.json({
+      success: true,
+      data: result
+    });
+  } catch (error) {
+    logger.error('Employment lookup failed', {
+      route: 'POST /api/per/external-data/employment-lookup',
+      error: error instanceof Error ? error.message : 'Unknown error'
+    });
+    res.status(500).json({
+      success: false,
+      error: 'Failed to lookup employment registry'
+    });
+  }
+});
+
+// Cross-reference verification (STUB)
+router.post('/external-data/cross-reference', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const user = req.user as any;
+    
+    if (!user || !['caseworker', 'supervisor', 'admin', 'state_admin'].includes(user.role)) {
+      return res.status(403).json({
+        success: false,
+        error: 'Staff access required'
+      });
+    }
+
+    const { householdProfile, verificationType } = req.body;
+
+    if (!householdProfile || !verificationType) {
+      return res.status(400).json({
+        success: false,
+        error: 'Household profile and verification type are required'
+      });
+    }
+
+    const validTypes = ['income', 'employment', 'identity', 'citizenship'];
+    if (!validTypes.includes(verificationType)) {
+      return res.status(400).json({
+        success: false,
+        error: `Invalid verification type. Valid types: ${validTypes.join(', ')}`
+      });
+    }
+
+    logger.info('Cross-reference verification requested', {
+      requestedBy: user.id,
+      verificationType,
+      profileId: householdProfile.id
+    });
+
+    const result = await externalDataIntegrationService.crossReferenceVerification(
+      householdProfile,
+      verificationType
+    );
+
+    res.json({
+      success: true,
+      data: result
+    });
+  } catch (error) {
+    logger.error('Cross-reference verification failed', {
+      route: 'POST /api/per/external-data/cross-reference',
+      error: error instanceof Error ? error.message : 'Unknown error'
+    });
+    res.status(500).json({
+      success: false,
+      error: 'Failed to cross-reference data'
+    });
+  }
+});
+
+// Map household profile to E&E format
+router.post('/external-data/map-to-ee', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const user = req.user as any;
+    
+    if (!user || !['caseworker', 'supervisor', 'admin', 'state_admin'].includes(user.role)) {
+      return res.status(403).json({
+        success: false,
+        error: 'Staff access required'
+      });
+    }
+
+    const { householdProfile } = req.body;
+
+    if (!householdProfile) {
+      return res.status(400).json({
+        success: false,
+        error: 'Household profile is required'
+      });
+    }
+
+    logger.info('E&E mapping requested', {
+      requestedBy: user.id,
+      profileId: householdProfile.id
+    });
+
+    const eeData = await externalDataIntegrationService.mapToEEFormat(householdProfile);
+
+    res.json({
+      success: true,
+      data: {
+        eeRecord: eeData,
+        mappingVersion: '1.0',
+        mappedAt: new Date().toISOString()
+      }
+    });
+  } catch (error) {
+    logger.error('E&E mapping failed', {
+      route: 'POST /api/per/external-data/map-to-ee',
+      error: error instanceof Error ? error.message : 'Unknown error'
+    });
+    res.status(500).json({
+      success: false,
+      error: 'Failed to map to E&E format'
+    });
+  }
+});
+
+// Batch income verification (admin only)
+router.post('/external-data/batch-verify', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const user = req.user as any;
+    
+    if (!user || !['admin', 'state_admin'].includes(user.role)) {
+      return res.status(403).json({
+        success: false,
+        error: 'Admin access required'
+      });
+    }
+
+    const { cases } = req.body;
+
+    if (!cases || !Array.isArray(cases)) {
+      return res.status(400).json({
+        success: false,
+        error: 'Cases array is required'
+      });
+    }
+
+    if (cases.length > 100) {
+      return res.status(400).json({
+        success: false,
+        error: 'Maximum 100 cases per batch'
+      });
+    }
+
+    logger.info('Batch verification started', {
+      requestedBy: user.id,
+      caseCount: cases.length
+    });
+
+    const result = await externalDataIntegrationService.batchVerifyIncome(cases);
+
+    res.json({
+      success: true,
+      data: result
+    });
+  } catch (error) {
+    logger.error('Batch verification failed', {
+      route: 'POST /api/per/external-data/batch-verify',
+      error: error instanceof Error ? error.message : 'Unknown error'
+    });
+    res.status(500).json({
+      success: false,
+      error: 'Failed to process batch verification'
+    });
   }
 });
 

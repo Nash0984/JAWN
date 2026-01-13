@@ -18,6 +18,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Plus, Trash2, Save, FileText, Calculator, Users } from "lucide-react";
 import { FinancialOpportunityRadar } from "@/components/FinancialOpportunityRadar";
+import { AIGuardrails } from "@/components/AIGuardrails";
 
 // Profile mode type
 type ProfileMode = "combined" | "benefits_only" | "tax_only";
@@ -1025,6 +1026,22 @@ export default function HouseholdProfiler() {
                         </div>
                       </CardContent>
                     </Card>
+                  )}
+
+                  {/* AI Guardrails - Pre-submission checks per PTIG */}
+                  {showBenefitsSection && (
+                    <AIGuardrails 
+                      formData={{
+                        employmentIncome: watchedValues.employmentIncome,
+                        selfEmploymentIncome: watchedValues.selfEmploymentIncome,
+                        rentOrMortgage: watchedValues.rentOrMortgage,
+                        utilityCosts: watchedValues.utilityCosts,
+                        householdSize: watchedValues.householdSize,
+                        householdAssets: watchedValues.householdAssets,
+                        elderlyOrDisabled: watchedValues.elderlyOrDisabled
+                      }}
+                      isVisible={showBenefitsSection}
+                    />
                   )}
 
                   {/* Action Buttons */}

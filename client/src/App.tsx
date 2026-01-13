@@ -20,6 +20,7 @@ import NotFound from "@/pages/not-found";
 import Navigation from "@/components/Navigation";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import ClientDashboard from "@/pages/ClientDashboard";
+import ClientVerificationPortal from "@/pages/ClientVerificationPortal";
 import NavigatorDashboard from "@/pages/NavigatorDashboard";
 import CaseworkerDashboard from "@/pages/CaseworkerDashboard";
 import CaseworkerCockpit from "@/pages/CaseworkerCockpit";
@@ -173,6 +174,13 @@ function Router() {
             {() => (
               <ProtectedRoute>
                 <ClientDashboard />
+              </ProtectedRoute>
+            )}
+          </Route>
+          <Route path="/client/report-changes">
+            {() => (
+              <ProtectedRoute>
+                <ClientVerificationPortal />
               </ProtectedRoute>
             )}
           </Route>

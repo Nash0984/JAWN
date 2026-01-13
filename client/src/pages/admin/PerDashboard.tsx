@@ -91,6 +91,7 @@ import {
 } from "lucide-react";
 import { format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
+import TrainingImpactTracing from "@/components/per/TrainingImpactTracing";
 
 interface DashboardMetrics {
   totalCasesScanned: number;
@@ -889,6 +890,12 @@ export default function PerDashboard() {
             <TabsTrigger value="perm">PERM Compliance</TabsTrigger>
             <TabsTrigger value="ldssLeague" className="flex items-center gap-1">
               <Trophy className="h-4 w-4" /> LDSS League
+            </TabsTrigger>
+            <TabsTrigger value="solutionsHub" className="flex items-center gap-1">
+              <GraduationCap className="h-4 w-4" /> Solutions Hub
+            </TabsTrigger>
+            <TabsTrigger value="trainingImpact" className="flex items-center gap-1">
+              <Target className="h-4 w-4" /> Training Impact
             </TabsTrigger>
           </TabsList>
 
@@ -2296,6 +2303,208 @@ export default function PerDashboard() {
                 </CardContent>
               </Card>
             </div>
+          </TabsContent>
+
+          {/* Solutions Hub Tab - Training Resources for Error Categories */}
+          <TabsContent value="solutionsHub">
+            <div className="space-y-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <GraduationCap className="h-5 w-5 text-purple-500" />
+                    Solutions Hub - Training Resources & Policy References
+                  </CardTitle>
+                  <CardDescription>
+                    Comprehensive training materials, job aids, and policy references for reducing errors in key categories.
+                    Per PTIG: "Solutions Hub displays links to the specific training tools."
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    {/* Wages & Salaries */}
+                    <Card className="border-l-4 border-l-blue-500">
+                      <CardHeader className="pb-2">
+                        <CardTitle className="text-lg flex items-center gap-2">
+                          <DollarSign className="h-5 w-5 text-blue-500" />
+                          Wages & Salaries
+                        </CardTitle>
+                        <CardDescription>Income verification and earned income documentation</CardDescription>
+                      </CardHeader>
+                      <CardContent className="space-y-3">
+                        <div>
+                          <h5 className="font-medium text-sm mb-2">Training Resources</h5>
+                          <div className="space-y-1">
+                            <a href="/training/income-docs" className="flex items-center gap-2 text-sm text-blue-600 hover:underline">
+                              <FileText className="h-3 w-3" /> Income Documentation Requirements
+                            </a>
+                            <a href="/training/w2-verification" className="flex items-center gap-2 text-sm text-blue-600 hover:underline">
+                              <FileText className="h-3 w-3" /> W-2 vs Pay Stub Verification (Video)
+                            </a>
+                            <a href="/training/self-employment" className="flex items-center gap-2 text-sm text-blue-600 hover:underline">
+                              <FileText className="h-3 w-3" /> Self-Employment Income Calculation
+                            </a>
+                          </div>
+                        </div>
+                        <div>
+                          <h5 className="font-medium text-sm mb-2">Policy References</h5>
+                          <div className="space-y-1">
+                            <p className="text-xs font-mono text-muted-foreground">7 CFR 273.9 - Income and Deductions</p>
+                            <p className="text-xs font-mono text-muted-foreground">COMAR 07.03.17.05 - Income Standards</p>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+
+                    {/* Shelter Deduction */}
+                    <Card className="border-l-4 border-l-green-500">
+                      <CardHeader className="pb-2">
+                        <CardTitle className="text-lg flex items-center gap-2">
+                          <Building2 className="h-5 w-5 text-green-500" />
+                          Shelter Deduction
+                        </CardTitle>
+                        <CardDescription>Housing costs, utilities, and SUA calculations</CardDescription>
+                      </CardHeader>
+                      <CardContent className="space-y-3">
+                        <div>
+                          <h5 className="font-medium text-sm mb-2">Training Resources</h5>
+                          <div className="space-y-1">
+                            <a href="/training/sua-calculator" className="flex items-center gap-2 text-sm text-green-600 hover:underline">
+                              <FileText className="h-3 w-3" /> Standard Utility Allowance Calculator
+                            </a>
+                            <a href="/training/shelter-guide" className="flex items-center gap-2 text-sm text-green-600 hover:underline">
+                              <FileText className="h-3 w-3" /> Shelter Deduction Guidelines
+                            </a>
+                            <a href="/training/cooling-sua" className="flex items-center gap-2 text-sm text-green-600 hover:underline">
+                              <FileText className="h-3 w-3" /> Seasonal Cooling SUA Application
+                            </a>
+                          </div>
+                        </div>
+                        <div>
+                          <h5 className="font-medium text-sm mb-2">Policy References</h5>
+                          <div className="space-y-1">
+                            <p className="text-xs font-mono text-muted-foreground">7 CFR 273.9(d) - Shelter Deductions</p>
+                            <p className="text-xs font-mono text-muted-foreground">COMAR 07.03.17.09 - Utility Standards</p>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+
+                    {/* Household Composition */}
+                    <Card className="border-l-4 border-l-orange-500">
+                      <CardHeader className="pb-2">
+                        <CardTitle className="text-lg flex items-center gap-2">
+                          <Users className="h-5 w-5 text-orange-500" />
+                          Household Composition
+                        </CardTitle>
+                        <CardDescription>Who is in the household and purchasing/preparing food together</CardDescription>
+                      </CardHeader>
+                      <CardContent className="space-y-3">
+                        <div>
+                          <h5 className="font-medium text-sm mb-2">Training Resources</h5>
+                          <div className="space-y-1">
+                            <a href="/training/household-comp" className="flex items-center gap-2 text-sm text-orange-600 hover:underline">
+                              <FileText className="h-3 w-3" /> Who Is In the Household? Job Aid
+                            </a>
+                            <a href="/training/boarder-rules" className="flex items-center gap-2 text-sm text-orange-600 hover:underline">
+                              <FileText className="h-3 w-3" /> Boarder vs Household Member (Video)
+                            </a>
+                            <a href="/training/student-rules" className="flex items-center gap-2 text-sm text-orange-600 hover:underline">
+                              <FileText className="h-3 w-3" /> Student Eligibility Rules
+                            </a>
+                          </div>
+                        </div>
+                        <div>
+                          <h5 className="font-medium text-sm mb-2">Policy References</h5>
+                          <div className="space-y-1">
+                            <p className="text-xs font-mono text-muted-foreground">7 CFR 273.1 - Household Concept</p>
+                            <p className="text-xs font-mono text-muted-foreground">COMAR 07.03.17.03 - Household Definition</p>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+
+                    {/* ABAWD Time Limits */}
+                    <Card className="border-l-4 border-l-red-500">
+                      <CardHeader className="pb-2">
+                        <CardTitle className="text-lg flex items-center gap-2">
+                          <AlertTriangle className="h-5 w-5 text-red-500" />
+                          ABAWD Work Requirements
+                        </CardTitle>
+                        <CardDescription>Able-bodied adults without dependents time limits and exemptions</CardDescription>
+                      </CardHeader>
+                      <CardContent className="space-y-3">
+                        <div>
+                          <h5 className="font-medium text-sm mb-2">Training Resources</h5>
+                          <div className="space-y-1">
+                            <a href="/training/abawd-exemptions" className="flex items-center gap-2 text-sm text-red-600 hover:underline">
+                              <FileText className="h-3 w-3" /> ABAWD Exemption Checklist
+                            </a>
+                            <a href="/training/work-verification" className="flex items-center gap-2 text-sm text-red-600 hover:underline">
+                              <FileText className="h-3 w-3" /> Work Requirement Verification (Video)
+                            </a>
+                            <a href="/training/hr1-changes" className="flex items-center gap-2 text-sm text-red-600 hover:underline">
+                              <FileText className="h-3 w-3" /> HR1 Work Requirement Changes
+                            </a>
+                          </div>
+                        </div>
+                        <div>
+                          <h5 className="font-medium text-sm mb-2">Policy References</h5>
+                          <div className="space-y-1">
+                            <p className="text-xs font-mono text-muted-foreground">7 CFR 273.24 - ABAWD Time Limits</p>
+                            <p className="text-xs font-mono text-muted-foreground">COMAR 07.03.17.21 - Work Requirements</p>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </div>
+
+                  {/* Quick Tips Section */}
+                  <div className="mt-6">
+                    <Card className="bg-purple-50 dark:bg-purple-950/30">
+                      <CardHeader>
+                        <CardTitle className="text-base flex items-center gap-2">
+                          <MessageSquareWarning className="h-5 w-5 text-purple-500" />
+                          Quick Reference Tips for Supervisors
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                          <div className="flex items-start gap-2">
+                            <CheckCircle className="h-4 w-4 text-green-500 mt-0.5 flex-shrink-0" />
+                            <span>Always verify income with most recent 4 pay stubs</span>
+                          </div>
+                          <div className="flex items-start gap-2">
+                            <CheckCircle className="h-4 w-4 text-green-500 mt-0.5 flex-shrink-0" />
+                            <span>Check all possible ABAWD exemption categories before applying time limit</span>
+                          </div>
+                          <div className="flex items-start gap-2">
+                            <CheckCircle className="h-4 w-4 text-green-500 mt-0.5 flex-shrink-0" />
+                            <span>Verify which SUA applies based on actual utility payments</span>
+                          </div>
+                          <div className="flex items-start gap-2">
+                            <CheckCircle className="h-4 w-4 text-green-500 mt-0.5 flex-shrink-0" />
+                            <span>Verify all individuals purchase and prepare food together</span>
+                          </div>
+                          <div className="flex items-start gap-2">
+                            <CheckCircle className="h-4 w-4 text-green-500 mt-0.5 flex-shrink-0" />
+                            <span>Check for overtime and variable income patterns</span>
+                          </div>
+                          <div className="flex items-start gap-2">
+                            <CheckCircle className="h-4 w-4 text-green-500 mt-0.5 flex-shrink-0" />
+                            <span>Confirm relationship documentation for all members</span>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          </TabsContent>
+
+          {/* Training Impact Tab */}
+          <TabsContent value="trainingImpact">
+            <TrainingImpactTracing />
           </TabsContent>
         </Tabs>
       </div>

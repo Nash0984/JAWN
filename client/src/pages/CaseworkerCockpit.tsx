@@ -12,21 +12,54 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { EmptyState } from "@/components/ui/empty-state";
-import { AlertTriangle, TrendingUp, TrendingDown, BookOpen, FileText, HelpCircle, Search, ChevronDown, ChevronUp, CheckCircle2 } from "lucide-react";
+import { AlertTriangle, TrendingUp, TrendingDown, BookOpen, FileText, HelpCircle, Search, ChevronDown, ChevronUp, CheckCircle2, Bell, Scale, Lightbulb, ExternalLink } from "lucide-react";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, Legend, ResponsiveContainer } from "recharts";
 import { format } from "date-fns";
 import { ERROR_CATEGORY_LABELS } from "@shared/qcConstants";
 
+interface ViolationTrace {
+  ruleId: string;
+  ruleName: string;
+  eligibilityDomain: string;
+  statutoryCitation: string;
+  explanation: string;
+  severity: string;
+}
+
 interface FlaggedCase {
   id: string;
   caseId: string;
+  caseNumber?: string;
   clientName: string;
+  programType?: string;
   riskScore: number;
   flaggedErrorTypes: string[];
   flaggedDate: string;
   reviewStatus: string;
   riskLevel: string;
   aiGuidance: string;
+  nudgeType?: string;
+  violationTraces?: ViolationTrace[];
+  statutoryCitations?: string[];
+  appealReady?: boolean;
+}
+
+interface TrendAlert {
+  errorCategory: string;
+  currentCount: number;
+  previousCount: number;
+  percentChange: number;
+  isSpike: boolean;
+  isCritical: boolean;
+  alertLevel: string;
+  message: string;
+}
+
+interface SolutionsHubEntry {
+  domain: string;
+  trainingLinks: Array<{ title: string; type: string; url: string }>;
+  policyReferences: Array<{ citation: string; title: string; url: string }>;
+  quickTips: string[];
 }
 
 interface ErrorPattern {
@@ -68,13 +101,27 @@ export default function CaseworkerCockpit() {
   const [jobAidCategory, setJobAidCategory] = useState<string>("all");
   const [jobAidSearch, setJobAidSearch] = useState<string>("");
   const [showHelp, setShowHelp] = useState(false);
+  const [selectedSolutionCategory, setSelectedSolutionCategory] = useState<string | null>(null);
 
-  // Fetch flagged cases for current caseworker
-  const { data: flaggedCases, isLoading: flaggedCasesLoading, error: flaggedCasesError } = useQuery<FlaggedCase[]>({
-    queryKey: ["/api/qc/flagged-cases/me"],
+  // Fetch flagged cases from PER neuro-symbolic hybrid gateway
+  const { data: perFlaggedCasesResponse, isLoading: flaggedCasesLoading, error: flaggedCasesError } = useQuery<{ success: boolean; data: FlaggedCase[] }>({
+    queryKey: ["/api/per/caseworker/flagged-cases"],
   });
+  const flaggedCases = perFlaggedCasesResponse?.data;
 
-  // Fetch error patterns for current caseworker
+  // Fetch trend alerts from PER analytics
+  const { data: trendAlertsResponse, isLoading: trendAlertsLoading } = useQuery<{ success: boolean; data: { alerts: TrendAlert[]; totalAlerts: number; criticalAlerts: number; currentQuarter: string } }>({
+    queryKey: ["/api/per/caseworker/trend-alerts"],
+  });
+  const trendAlerts = trendAlertsResponse?.data;
+
+  // Fetch solutions hub content
+  const { data: solutionsHubResponse, isLoading: solutionsHubLoading } = useQuery<{ success: boolean; data: { domains: string[]; solutions: Record<string, SolutionsHubEntry> } }>({
+    queryKey: ["/api/per/solutions-hub"],
+  });
+  const solutionsHub = solutionsHubResponse?.data;
+
+  // Fetch error patterns for current caseworker (fallback to QC endpoint)
   const { data: errorPatterns, isLoading: errorPatternsLoading } = useQuery<ErrorPattern[]>({
     queryKey: ["/api/qc/error-patterns/me"],
   });
@@ -172,6 +219,39 @@ export default function CaseworkerCockpit() {
           </p>
         </div>
 
+        {/* Trend Alerts - Per PTIG: "Trend Alert widget is flashing red" */}
+        {trendAlerts && trendAlerts.alerts && trendAlerts.alerts.length > 0 && (
+          <div className="space-y-2" data-testid="trend-alerts-section">
+            {trendAlerts.alerts.filter(a => a.isCritical).map((alert, idx) => (
+              <div
+                key={idx}
+                className={`p-4 rounded-lg flex items-center gap-3 ${
+                  alert.isCritical ? 'bg-red-100 dark:bg-red-950 border-l-4 border-red-500 animate-pulse' :
+                  'bg-yellow-100 dark:bg-yellow-950 border-l-4 border-yellow-500'
+                }`}
+                data-testid={`trend-alert-${idx}`}
+              >
+                <Bell className={`h-5 w-5 ${alert.isCritical ? 'text-red-600' : 'text-yellow-600'}`} />
+                <div className="flex-1">
+                  <p className={`font-semibold ${alert.isCritical ? 'text-red-800 dark:text-red-200' : 'text-yellow-800 dark:text-yellow-200'}`}>
+                    {alert.message}
+                  </p>
+                  <p className="text-sm text-muted-foreground">
+                    {trendAlerts.currentQuarter} • {alert.currentCount} errors vs {alert.previousCount} last quarter
+                  </p>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setSelectedSolutionCategory(alert.errorCategory)}
+                >
+                  View Solutions
+                </Button>
+              </div>
+            ))}
+          </div>
+        )}
+
         {/* Dashboard Grid */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Section 1: Flagged Cases Panel - Takes 2 columns on large screens */}
@@ -259,12 +339,89 @@ export default function CaseworkerCockpit() {
                           {expandedCaseId === flaggedCase.id && (
                             <TableRow key={`${flaggedCase.id}-expanded`}>
                               <TableCell colSpan={6}>
-                                <div className="bg-blue-50 dark:bg-blue-950 p-4 rounded-lg" data-testid={`ai-guidance-${flaggedCase.id}`}>
-                                  <h4 className="font-semibold mb-2 flex items-center gap-2">
-                                    <AlertTriangle className="h-4 w-4" />
-                                    AI Guidance
-                                  </h4>
-                                  <p className="text-sm">{flaggedCase.aiGuidance}</p>
+                                <div className="space-y-4">
+                                  <div className="bg-blue-50 dark:bg-blue-950 p-4 rounded-lg" data-testid={`ai-guidance-${flaggedCase.id}`}>
+                                    <h4 className="font-semibold mb-2 flex items-center gap-2">
+                                      <Lightbulb className="h-4 w-4" />
+                                      AI Guidance (Predictive Model)
+                                    </h4>
+                                    <p className="text-sm">{flaggedCase.aiGuidance}</p>
+                                  </div>
+                                  
+                                  {flaggedCase.violationTraces && flaggedCase.violationTraces.length > 0 && (
+                                    <div className="bg-amber-50 dark:bg-amber-950 p-4 rounded-lg" data-testid={`violation-traces-${flaggedCase.id}`}>
+                                      <h4 className="font-semibold mb-3 flex items-center gap-2">
+                                        <Scale className="h-4 w-4" />
+                                        Rules-Based Violation Traces (Statutory Citations)
+                                      </h4>
+                                      <div className="space-y-3">
+                                        {flaggedCase.violationTraces.map((trace, idx) => (
+                                          <div key={idx} className="border-l-4 border-amber-500 pl-3 py-1">
+                                            <div className="flex items-start justify-between">
+                                              <div>
+                                                <span className="font-medium text-sm">{trace.ruleName}</span>
+                                                <Badge variant="outline" className="ml-2 text-xs">{trace.eligibilityDomain}</Badge>
+                                              </div>
+                                              {trace.severity && (
+                                                <Badge className={
+                                                  trace.severity === 'critical' ? 'bg-red-100 text-red-800' :
+                                                  trace.severity === 'high' ? 'bg-orange-100 text-orange-800' :
+                                                  'bg-yellow-100 text-yellow-800'
+                                                }>
+                                                  {trace.severity}
+                                                </Badge>
+                                              )}
+                                            </div>
+                                            <p className="text-sm text-muted-foreground mt-1">{trace.explanation}</p>
+                                            {trace.statutoryCitation && (
+                                              <p className="text-xs font-mono mt-1 text-blue-600 dark:text-blue-400">
+                                                Legal Basis: {trace.statutoryCitation}
+                                              </p>
+                                            )}
+                                          </div>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  )}
+
+                                  {flaggedCase.appealReady && (
+                                    <div className="bg-green-50 dark:bg-green-950 p-3 rounded-lg flex items-center gap-2">
+                                      <CheckCircle2 className="h-4 w-4 text-green-600" />
+                                      <span className="text-sm font-medium text-green-800 dark:text-green-200">
+                                        Appeal Ready - All decisions backed by statutory citations
+                                      </span>
+                                    </div>
+                                  )}
+
+                                  {flaggedCase.flaggedErrorTypes.length > 0 && solutionsHub?.solutions && (
+                                    <div className="bg-purple-50 dark:bg-purple-950 p-4 rounded-lg">
+                                      <h4 className="font-semibold mb-2 flex items-center gap-2">
+                                        <BookOpen className="h-4 w-4" />
+                                        Solutions Hub - Quick References
+                                      </h4>
+                                      <div className="grid gap-2">
+                                        {flaggedCase.flaggedErrorTypes.map((errorType) => {
+                                          const solution = solutionsHub.solutions[errorType];
+                                          if (!solution) return null;
+                                          return (
+                                            <div key={errorType} className="text-sm">
+                                              <p className="font-medium">{solution.domain}</p>
+                                              <div className="flex flex-wrap gap-2 mt-1">
+                                                {solution.trainingLinks.slice(0, 2).map((link, idx) => (
+                                                  <Button key={idx} variant="outline" size="sm" className="text-xs h-7" asChild>
+                                                    <a href={link.url}>
+                                                      <ExternalLink className="h-3 w-3 mr-1" />
+                                                      {link.title}
+                                                    </a>
+                                                  </Button>
+                                                ))}
+                                              </div>
+                                            </div>
+                                          );
+                                        })}
+                                      </div>
+                                    </div>
+                                  )}
                                 </div>
                               </TableCell>
                             </TableRow>
@@ -495,6 +652,83 @@ export default function CaseworkerCockpit() {
             </CardContent>
           </Card>
         </div>
+
+        {/* Solutions Hub Dialog - Opens when View Solutions is clicked */}
+        <Dialog open={!!selectedSolutionCategory} onOpenChange={(open) => !open && setSelectedSolutionCategory(null)}>
+          <DialogContent className="max-w-2xl">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <BookOpen className="h-5 w-5" />
+                Solutions Hub: {selectedSolutionCategory ? ERROR_CATEGORY_LABELS[selectedSolutionCategory] || selectedSolutionCategory : ''}
+              </DialogTitle>
+              <DialogDescription>
+                Training resources and policy references for reducing errors in this category
+              </DialogDescription>
+            </DialogHeader>
+            {selectedSolutionCategory && solutionsHub?.solutions?.[selectedSolutionCategory] && (
+              <div className="space-y-6">
+                {/* Training Links */}
+                <div>
+                  <h4 className="font-semibold mb-3 flex items-center gap-2">
+                    <FileText className="h-4 w-4" />
+                    Training Resources
+                  </h4>
+                  <div className="grid gap-2">
+                    {solutionsHub.solutions[selectedSolutionCategory].trainingLinks.map((link, idx) => (
+                      <a
+                        key={idx}
+                        href={link.url}
+                        className="flex items-center justify-between p-3 border rounded-lg hover:bg-accent transition-colors"
+                      >
+                        <div>
+                          <span className="font-medium">{link.title}</span>
+                          <Badge variant="secondary" className="ml-2 text-xs">{link.type}</Badge>
+                        </div>
+                        <ExternalLink className="h-4 w-4 text-muted-foreground" />
+                      </a>
+                    ))}
+                  </div>
+                </div>
+                
+                {/* Policy References */}
+                <div>
+                  <h4 className="font-semibold mb-3 flex items-center gap-2">
+                    <Scale className="h-4 w-4" />
+                    Policy References
+                  </h4>
+                  <div className="space-y-2">
+                    {solutionsHub.solutions[selectedSolutionCategory].policyReferences.map((ref, idx) => (
+                      <a
+                        key={idx}
+                        href={ref.url}
+                        className="block p-3 border rounded-lg hover:bg-accent transition-colors"
+                      >
+                        <span className="font-mono text-sm text-blue-600 dark:text-blue-400">{ref.citation}</span>
+                        <p className="text-sm mt-1">{ref.title}</p>
+                      </a>
+                    ))}
+                  </div>
+                </div>
+                
+                {/* Quick Tips */}
+                <div>
+                  <h4 className="font-semibold mb-3 flex items-center gap-2">
+                    <Lightbulb className="h-4 w-4" />
+                    Quick Tips
+                  </h4>
+                  <ul className="space-y-2">
+                    {solutionsHub.solutions[selectedSolutionCategory].quickTips.map((tip, idx) => (
+                      <li key={idx} className="flex items-start gap-2 text-sm">
+                        <CheckCircle2 className="h-4 w-4 text-green-600 mt-0.5 flex-shrink-0" />
+                        <span>{tip}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              </div>
+            )}
+          </DialogContent>
+        </Dialog>
 
         {/* Floating Help Button */}
         <Dialog open={showHelp} onOpenChange={setShowHelp}>
