@@ -2517,13 +2517,13 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
         categoricalEligibility: hasSSI ? 'SSI' : hasTANF ? 'TANF' : undefined,
       };
 
-      const result = await rulesEngine.calculateEligibility(
+      const result = await rulesEngine.calculateEligibilityWithHybridVerification(
         snapProgram.id,
         household,
-        userId
+        'MD',
+        userId ? `user-${userId}` : undefined
       );
 
-      // Log calculation for audit trail
       if (userId) {
         await rulesEngine.logCalculation(
           snapProgram.id,
@@ -2555,6 +2555,7 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
           'Social Security numbers for all household members'
         ],
         appliedRules: result.calculationBreakdown,
+        hybridVerification: result.hybridVerification,
       });
     } catch (error) {
       logger.error("Eligibility check error:", error);
@@ -2607,13 +2608,13 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
         categoricalEligibility: hasSSI ? 'SSI' : hasTANF ? 'TANF' : undefined,
       };
 
-      const result = await rulesEngine.calculateEligibility(
+      const result = await rulesEngine.calculateEligibilityWithHybridVerification(
         snapProgram.id,
         household,
-        userId
+        'MD',
+        userId ? `calc-${userId}` : undefined
       );
 
-      // Save calculation if user provided
       if (userId) {
         await rulesEngine.logCalculation(
           snapProgram.id,
@@ -2636,6 +2637,7 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
         },
         policyCitations: result.policyCitations,
         appliedRules: result.rulesSnapshot,
+        hybridVerification: result.hybridVerification,
       });
     } catch (error) {
       logger.error("Benefit calculation error:", error);

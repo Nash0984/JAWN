@@ -81,6 +81,18 @@ export interface HybridCalculationResult {
     policyEngineResult?: any;
     discrepancy?: string;
   };
+  
+  // Neuro-Symbolic Hybrid Gateway verification (mandatory for SNAP)
+  hybridVerification?: {
+    z3SolverRunId?: string;
+    neuralConfidence?: number;
+    ontologyTermsMatched?: string[];
+    unsatCore?: string[];
+    statutoryCitations?: string[];
+    verificationStatus?: 'verified' | 'unverified' | 'conflict' | 'error';
+    grade6Explanation?: string;
+    auditLogId?: string;
+  };
 }
 
 type RulesEngineAdapter = (
@@ -181,7 +193,12 @@ class RulesEngineAdapterService {
       categoricalEligibility: input.hasSSI ? 'SSI' : input.hasTANF ? 'TANF' : undefined,
     };
 
-    const result = await rulesEngine.calculateEligibility(input.benefitProgramId, household);
+    const result = await rulesEngine.calculateEligibilityWithHybridVerification(
+      input.benefitProgramId, 
+      household,
+      'MD',
+      `adapter-${Date.now()}`
+    );
 
     return {
       eligible: result.isEligible,
@@ -192,7 +209,8 @@ class RulesEngineAdapterService {
         `${c.sectionNumber}: ${c.description}`
       ) || [],
       programCode: 'MD_SNAP',
-      calculationType: 'eligibility'
+      calculationType: 'eligibility',
+      hybridVerification: result.hybridVerification
     };
   }
 
@@ -212,7 +230,11 @@ class RulesEngineAdapterService {
       hasArrearage: (input.utilityArrears || 0) > 0,
     };
 
-    const result = await ohepRulesEngine.calculateEligibility(household);
+    const result = await ohepRulesEngine.calculateEligibilityWithHybridVerification(
+      household,
+      'MD',
+      `adapter-ohep-${Date.now()}`
+    );
 
     return {
       eligible: result.isEligible,
@@ -221,7 +243,8 @@ class RulesEngineAdapterService {
       breakdown: result.calculationBreakdown,
       citations: result.policyCitations.map(c => `${c.sectionNumber}: ${c.description}`),
       programCode: 'MD_OHEP',
-      calculationType: 'eligibility'
+      calculationType: 'eligibility',
+      hybridVerification: result.hybridVerification
     };
   }
 
@@ -242,7 +265,11 @@ class RulesEngineAdapterService {
       continuousMonthsReceived: 0, // Would need to track
     };
 
-    const result = await tanfRulesEngine.calculateEligibility(household);
+    const result = await tanfRulesEngine.calculateEligibilityWithHybridVerification(
+      household,
+      'MD',
+      `adapter-tanf-${Date.now()}`
+    );
 
     return {
       eligible: result.isEligible,
@@ -251,7 +278,8 @@ class RulesEngineAdapterService {
       breakdown: result.calculationBreakdown,
       citations: result.policyCitations.map(c => `${c.sectionNumber}: ${c.description}`),
       programCode: 'MD_TANF',
-      calculationType: 'eligibility'
+      calculationType: 'eligibility',
+      hybridVerification: result.hybridVerification
     };
   }
 
@@ -273,7 +301,11 @@ class RulesEngineAdapterService {
       liquidAssets: input.assets || 0,
     };
 
-    const result = await medicaidRulesEngine.calculateEligibility(household);
+    const result = await medicaidRulesEngine.calculateEligibilityWithHybridVerification(
+      household,
+      'MD',
+      `adapter-medicaid-${Date.now()}`
+    );
 
     return {
       eligible: result.isEligible,
@@ -282,7 +314,8 @@ class RulesEngineAdapterService {
       breakdown: result.calculationBreakdown,
       citations: result.policyCitations,
       programCode: 'MEDICAID',
-      calculationType: 'eligibility'
+      calculationType: 'eligibility',
+      hybridVerification: result.hybridVerification
     };
   }
 

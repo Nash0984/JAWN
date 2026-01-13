@@ -10,6 +10,8 @@ import {
   type TanfWorkRequirement,
   type TanfTimeLimit,
 } from "../../shared/schema";
+import { neuroSymbolicHybridGateway } from "./neuroSymbolicHybridGateway";
+import { logger } from "./logger.service";
 
 // ============================================================================
 // Maryland TANF (TCA) Rules Engine - Temporary Cash Assistance
@@ -30,6 +32,17 @@ export interface TANFHouseholdInput {
   monthsReceived?: number; // Lifetime months of TANF
   continuousMonthsReceived?: number; // Current consecutive months
   hasHardshipExemption?: boolean;
+}
+
+export interface TANFHybridVerificationContext {
+  z3SolverRunId?: string;
+  neuralConfidence?: number;
+  ontologyTermsMatched?: string[];
+  unsatCore?: string[];
+  statutoryCitations?: string[];
+  verificationStatus?: 'verified' | 'unverified' | 'conflict' | 'error';
+  grade6Explanation?: string;
+  auditLogId?: string;
 }
 
 export interface TANFEligibilityResult {
@@ -75,6 +88,7 @@ export interface TANFEligibilityResult {
     ruleType: string;
     description: string;
   }>;
+  hybridVerification?: TANFHybridVerificationContext;
 }
 
 class TANFRulesEngine {
@@ -471,6 +485,87 @@ class TANFRulesEngine {
         },
       ],
     };
+  }
+
+  /**
+   * Calculate TANF eligibility with neuro-symbolic hybrid verification
+   * Wraps calculateEligibility with Gateway verification for formal rule checking
+   */
+  async calculateEligibilityWithHybridVerification(
+    household: TANFHouseholdInput,
+    stateCode: string = 'MD',
+    caseId?: string,
+    effectiveDate: Date = new Date()
+  ): Promise<TANFEligibilityResult> {
+    const result = await this.calculateEligibility(household, effectiveDate);
+    const effectiveCaseId = caseId || `tanf-eligibility-${Date.now()}`;
+    
+    try {
+      const hybridResult = await neuroSymbolicHybridGateway.verifyEligibility(
+        effectiveCaseId,
+        stateCode,
+        'TANF',
+        {
+          householdSize: household.size,
+          grossMonthlyIncome: household.countableMonthlyIncome / 100,
+          countableResources: household.liquidAssets / 100,
+          earnedIncome: household.hasEarnedIncome ? household.countableMonthlyIncome / 100 : 0,
+        },
+        { triggeredBy: 'tanfRulesEngine.calculateEligibilityWithHybridVerification' }
+      );
+
+      const ontologyTerms = hybridResult.rulesAsCodeContext?.ontologyTermsMatched || [];
+      const formalRules = hybridResult.rulesAsCodeContext?.formalRulesUsed || [];
+      const statutoryCitations = formalRules
+        .map(r => r.statutoryCitation)
+        .filter((c): c is string => Boolean(c));
+
+      result.hybridVerification = {
+        z3SolverRunId: hybridResult.symbolicLayer.solverRunId,
+        neuralConfidence: hybridResult.neuralLayer.averageConfidence,
+        ontologyTermsMatched: ontologyTerms.map(t => t.termName),
+        unsatCore: hybridResult.symbolicLayer.unsatCore,
+        statutoryCitations: statutoryCitations,
+        verificationStatus: hybridResult.symbolicLayer.isSatisfied ? 'verified' : 
+                           hybridResult.decision.determination === 'error' ? 'error' : 'conflict',
+        grade6Explanation: undefined,
+        auditLogId: hybridResult.gatewayRunId
+      };
+
+      if (hybridResult.symbolicLayer.isSatisfied) {
+        result.calculationBreakdown.push(
+          `✓ Z3 symbolic verification passed (Run ID: ${hybridResult.symbolicLayer.solverRunId})`
+        );
+      } else {
+        result.calculationBreakdown.push(
+          `⚠ Z3 verification: ${hybridResult.decision.determination.toUpperCase()}`
+        );
+        result.calculationBreakdown.push(
+          `  UNSAT core: ${hybridResult.symbolicLayer.unsatCore?.join(', ') || 'N/A'}`
+        );
+      }
+
+      for (const citation of statutoryCitations) {
+        result.policyCitations.push({
+          sectionNumber: citation,
+          sectionTitle: 'Z3 Verified',
+          ruleType: 'formal_verification',
+          description: `Formally verified via neuro-symbolic hybrid gateway`
+        });
+      }
+    } catch (error) {
+      logger.warn("[TANFRulesEngine] Gateway verification failed, continuing with rules engine result", {
+        error: error instanceof Error ? error.message : "Unknown error",
+        caseId: effectiveCaseId,
+        service: "TANFRulesEngine"
+      });
+      result.hybridVerification = {
+        verificationStatus: 'error',
+        grade6Explanation: 'The system was unable to complete formal verification. Decision based on rules engine calculation.'
+      };
+    }
+
+    return result;
   }
 }
 

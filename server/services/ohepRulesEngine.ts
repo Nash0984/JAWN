@@ -9,6 +9,8 @@ import {
   type OhepBenefitTier,
   type OhepSeasonalFactor,
 } from "../../shared/schema";
+import { neuroSymbolicHybridGateway } from "./neuroSymbolicHybridGateway";
+import { logger } from "./logger.service";
 
 // ============================================================================
 // Maryland OHEP Rules Engine - Energy Assistance Program
@@ -25,6 +27,17 @@ export interface OHEPHouseholdInput {
   hasArrearage?: boolean; // Past due utility bills
   heatingFuelType?: string; // electric, gas, oil, propane, wood
   utilityDisconnectDate?: Date;
+}
+
+export interface OHEPHybridVerificationContext {
+  z3SolverRunId?: string;
+  neuralConfidence?: number;
+  ontologyTermsMatched?: string[];
+  unsatCore?: string[];
+  statutoryCitations?: string[];
+  verificationStatus?: 'verified' | 'unverified' | 'conflict' | 'error';
+  grade6Explanation?: string;
+  auditLogId?: string;
 }
 
 export interface OHEPEligibilityResult {
@@ -53,6 +66,7 @@ export interface OHEPEligibilityResult {
     ruleType: string;
     description: string;
   }>;
+  hybridVerification?: OHEPHybridVerificationContext;
 }
 
 class OHEPRulesEngine {
@@ -359,6 +373,87 @@ class OHEPRulesEngine {
         },
       ],
     };
+  }
+
+  /**
+   * Calculate OHEP eligibility with neuro-symbolic hybrid verification
+   * Wraps calculateEligibility with Gateway verification for formal rule checking
+   */
+  async calculateEligibilityWithHybridVerification(
+    household: OHEPHouseholdInput,
+    stateCode: string = 'MD',
+    caseId?: string,
+    effectiveDate: Date = new Date()
+  ): Promise<OHEPEligibilityResult> {
+    const result = await this.calculateEligibility(household, effectiveDate);
+    const effectiveCaseId = caseId || `ohep-eligibility-${Date.now()}`;
+    
+    try {
+      const hybridResult = await neuroSymbolicHybridGateway.verifyEligibility(
+        effectiveCaseId,
+        stateCode,
+        'OHEP',
+        {
+          householdSize: household.size,
+          grossMonthlyIncome: household.grossMonthlyIncome / 100,
+          hasElderlyMember: household.hasElderlyMember,
+          hasDisabledMember: household.hasDisabledMember,
+        },
+        { triggeredBy: 'ohepRulesEngine.calculateEligibilityWithHybridVerification' }
+      );
+
+      const ontologyTerms = hybridResult.rulesAsCodeContext?.ontologyTermsMatched || [];
+      const formalRules = hybridResult.rulesAsCodeContext?.formalRulesUsed || [];
+      const statutoryCitations = formalRules
+        .map(r => r.statutoryCitation)
+        .filter((c): c is string => Boolean(c));
+
+      result.hybridVerification = {
+        z3SolverRunId: hybridResult.symbolicLayer.solverRunId,
+        neuralConfidence: hybridResult.neuralLayer.averageConfidence,
+        ontologyTermsMatched: ontologyTerms.map(t => t.termName),
+        unsatCore: hybridResult.symbolicLayer.unsatCore,
+        statutoryCitations: statutoryCitations,
+        verificationStatus: hybridResult.symbolicLayer.isSatisfied ? 'verified' : 
+                           hybridResult.decision.determination === 'error' ? 'error' : 'conflict',
+        grade6Explanation: undefined,
+        auditLogId: hybridResult.gatewayRunId
+      };
+
+      if (hybridResult.symbolicLayer.isSatisfied) {
+        result.calculationBreakdown.push(
+          `✓ Z3 symbolic verification passed (Run ID: ${hybridResult.symbolicLayer.solverRunId})`
+        );
+      } else {
+        result.calculationBreakdown.push(
+          `⚠ Z3 verification: ${hybridResult.decision.determination.toUpperCase()}`
+        );
+        result.calculationBreakdown.push(
+          `  UNSAT core: ${hybridResult.symbolicLayer.unsatCore?.join(', ') || 'N/A'}`
+        );
+      }
+
+      for (const citation of statutoryCitations) {
+        result.policyCitations.push({
+          sectionNumber: citation,
+          sectionTitle: 'Z3 Verified',
+          ruleType: 'formal_verification',
+          description: `Formally verified via neuro-symbolic hybrid gateway`
+        });
+      }
+    } catch (error) {
+      logger.warn("[OHEPRulesEngine] Gateway verification failed, continuing with rules engine result", {
+        error: error instanceof Error ? error.message : "Unknown error",
+        caseId: effectiveCaseId,
+        service: "OHEPRulesEngine"
+      });
+      result.hybridVerification = {
+        verificationStatus: 'error',
+        grade6Explanation: 'The system was unable to complete formal verification. Decision based on rules engine calculation.'
+      };
+    }
+
+    return result;
   }
 }
 

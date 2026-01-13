@@ -19,6 +19,7 @@ import {
 } from "../../shared/schema";
 import { rulesAsCodeService } from "./rulesAsCodeService";
 import { neuroSymbolicHybridGateway, type HybridVerificationResult } from "./neuroSymbolicHybridGateway";
+import { logger } from "./logger.service";
 
 // ============================================================================
 // Maryland SNAP Rules Engine - Deterministic Eligibility Calculations
@@ -636,6 +637,10 @@ class RulesEngine {
    * 3. Ontology term matching for statutory citations (TBox linkage)
    * 4. Audit logging with full hybrid verification context
    * 
+   * CRITICAL: Gateway verification is MANDATORY. The Gateway's Z3 solver is
+   * the authoritative decision-maker. If Gateway determines ineligibility,
+   * that decision takes precedence over the rules engine calculation.
+   * 
    * @param benefitProgramId - The benefit program (e.g., 'snap')
    * @param household - Household financial data
    * @param stateCode - Jurisdiction state code (MD, PA, etc.)
@@ -671,20 +676,34 @@ class RulesEngine {
         { triggeredBy: 'rulesEngine.calculateEligibilityWithHybridVerification' }
       );
 
+      const ontologyTerms = hybridResult.rulesAsCodeContext?.ontologyTermsMatched || [];
+      const formalRules = hybridResult.rulesAsCodeContext?.formalRulesUsed || [];
+      const statutoryCitations = formalRules
+        .map(r => r.statutoryCitation)
+        .filter((c): c is string => Boolean(c));
+
       result.hybridVerification = {
         z3SolverRunId: hybridResult.symbolicLayer.solverRunId,
         neuralConfidence: hybridResult.neuralLayer.averageConfidence,
-        ontologyTermsMatched: hybridResult.rulesContext.ontologyTermsMatched.map(t => t.termLabel),
+        ontologyTermsMatched: ontologyTerms.map(t => t.termName),
         unsatCore: hybridResult.symbolicLayer.unsatCore,
-        statutoryCitations: hybridResult.rulesContext.statutoryCitations,
-        verificationStatus: hybridResult.symbolicLayer.isSatisfied ? 'verified' : 'conflict',
-        grade6Explanation: hybridResult.grade6Explanation,
+        statutoryCitations: statutoryCitations,
+        verificationStatus: hybridResult.symbolicLayer.isSatisfied ? 'verified' : 
+                           hybridResult.decision.determination === 'error' ? 'error' : 'conflict',
+        grade6Explanation: undefined,
         auditLogId: hybridResult.gatewayRunId
       };
 
       if (!hybridResult.symbolicLayer.isSatisfied) {
+        if (hybridResult.decision.determination === 'ineligible') {
+          result.isEligible = false;
+          result.monthlyBenefit = 0;
+          result.reason = `Gateway Z3 verification: UNSAT - ${hybridResult.symbolicLayer.unsatCore?.join(', ') || 'ineligible per formal rules'}`;
+          result.ineligibilityReasons = result.ineligibilityReasons || [];
+          result.ineligibilityReasons.push(`Z3 solver determined ineligibility: ${hybridResult.symbolicLayer.unsatCore?.join(', ') || 'formal rule violation'}`);
+        }
         result.calculationBreakdown.push(
-          `⚠ Z3 verification conflict detected - review required`
+          `⚠ Z3 verification: ${hybridResult.decision.determination.toUpperCase()} - Gateway is authoritative`
         );
         result.calculationBreakdown.push(
           `  UNSAT core: ${hybridResult.symbolicLayer.unsatCore?.join(', ') || 'N/A'}`
@@ -695,20 +714,23 @@ class RulesEngine {
         );
       }
 
-      if (hybridResult.rulesContext.statutoryCitations && hybridResult.rulesContext.statutoryCitations.length > 0) {
-        for (const citation of hybridResult.rulesContext.statutoryCitations) {
-          result.policyCitations.push({
-            sectionNumber: citation,
-            sectionTitle: 'Z3 Verified',
-            ruleType: 'formal_verification',
-            description: `Formally verified via neuro-symbolic hybrid gateway`
-          });
-        }
+      for (const citation of statutoryCitations) {
+        result.policyCitations.push({
+          sectionNumber: citation,
+          sectionTitle: 'Z3 Verified',
+          ruleType: 'formal_verification',
+          description: `Formally verified via neuro-symbolic hybrid gateway`
+        });
       }
     } catch (error) {
+      logger.warn("[RulesEngine] Gateway verification failed, using rules engine result", {
+        error: error instanceof Error ? error.message : "Unknown error",
+        caseId: effectiveCaseId,
+        service: "RulesEngine"
+      });
       result.hybridVerification = {
         verificationStatus: 'error',
-        grade6Explanation: 'The system was unable to complete formal verification, but the eligibility calculation remains valid.'
+        grade6Explanation: 'The system was unable to complete formal verification. Decision based on rules engine calculation.'
       };
     }
 
