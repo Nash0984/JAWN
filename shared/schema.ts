@@ -8279,8 +8279,10 @@ export const formalRules = pgTable("formal_rules", {
   programCode: text("program_code").notNull(),
   ruleName: text("rule_name").notNull(), // Human-readable rule identifier
   eligibilityDomain: text("eligibility_domain").notNull(),
+  ruleType: text("rule_type").default("requirement"), // requirement, threshold, exception, verification
   // Z3 SMT Solver logic
   z3Logic: text("z3_logic").notNull(), // e.g., "Implies(And(GrossIncome <= IncomeThreshold), Applicant_Eligible)"
+  description: text("description"), // Human-readable description of the rule
   ontologyTermsUsed: text("ontology_terms_used").array(), // References to ontology_terms
   statutoryCitation: text("statutory_citation").notNull(),
   // Versioning and validation
@@ -8291,8 +8293,10 @@ export const formalRules = pgTable("formal_rules", {
   // Extraction metadata
   extractionPrompt: text("extraction_prompt"), // LLM prompt used
   extractionModel: text("extraction_model"), // gemini-1.5-pro, gpt-o1, etc.
-  promptStrategy: text("prompt_strategy"), // vanilla, undirected, directed_symbolic
+  promptingStrategy: text("prompting_strategy"), // vanilla, undirected, directed_symbolic
   extractionConfidence: real("extraction_confidence"),
+  isVerified: boolean("is_verified").default(false), // Manually verified by human
+  extractedAt: timestamp("extracted_at"), // When the rule was extracted
   // Approval workflow
   status: text("status").notNull().default("draft"), // draft, pending_review, approved, deprecated
   approvedBy: varchar("approved_by").references(() => users.id),
@@ -8308,6 +8312,7 @@ export const formalRules = pgTable("formal_rules", {
   stateCodeIdx: index("formal_rules_state_code_idx").on(table.stateCode),
   programCodeIdx: index("formal_rules_program_code_idx").on(table.programCode),
   eligibilityDomainIdx: index("formal_rules_eligibility_domain_idx").on(table.eligibilityDomain),
+  ruleTypeIdx: index("formal_rules_rule_type_idx").on(table.ruleType),
   statusIdx: index("formal_rules_status_idx").on(table.status),
   isValidIdx: index("formal_rules_is_valid_idx").on(table.isValid),
   stateProgramIdx: index("formal_rules_state_program_idx").on(table.stateCode, table.programCode),
