@@ -68,10 +68,14 @@ interface TenantProviderProps {
 export function TenantProvider({ children }: TenantProviderProps) {
   const [tenantError, setTenantError] = useState<Error | null>(null);
   
-  // Extract state code from URL
+  // Extract state code from URL - only match valid 2-letter state codes
+  // Exclude known system paths like /admin, /login, /caseworker, etc.
   const currentPath = window.location.pathname;
-  const stateMatch = currentPath.match(/^\/([a-z]+)\//);
-  const stateCodeFromUrl = stateMatch ? stateMatch[1].toUpperCase() : 'MD'; // Default to Maryland
+  const SYSTEM_PATHS = ['admin', 'login', 'register', 'caseworker', 'navigator', 'client', 'api', 'public', 'assets'];
+  const stateMatch = currentPath.match(/^\/([a-z]{2})\//i); // Only match 2-letter codes (state abbreviations)
+  const extractedCode = stateMatch ? stateMatch[1].toUpperCase() : null;
+  // Only use extracted code if it's a valid state abbreviation (not a system path)
+  const stateCodeFromUrl = extractedCode && !SYSTEM_PATHS.includes(extractedCode.toLowerCase()) ? extractedCode : 'MD'; // Default to Maryland
 
   // Fetch current tenant info
   const { data, isLoading, error } = useQuery<{ tenant: Tenant; branding?: TenantBranding }>({

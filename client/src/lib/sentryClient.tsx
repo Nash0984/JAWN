@@ -14,11 +14,16 @@ let initializationPromise: Promise<void> | null = null;
 
 // Try to import Sentry packages - gracefully handle if not installed
 async function initializeSentry() {
+  // Early return if DSN is not configured - prevents unnecessary module loading
+  const dsn = import.meta.env.VITE_SENTRY_DSN;
+  if (!dsn) {
+    console.warn("⚠️  Sentry DSN not configured (VITE_SENTRY_DSN). Frontend error tracking disabled.");
+    return;
+  }
+  
   try {
     const sentryModule = await import("@sentry/react");
     Sentry = sentryModule.default || sentryModule;
-    
-    const dsn = import.meta.env.VITE_SENTRY_DSN;
     
     if (dsn) {
       const environment = import.meta.env.VITE_SENTRY_ENVIRONMENT || import.meta.env.MODE || "development";
@@ -67,9 +72,6 @@ async function initializeSentry() {
       sentryEnabled = true;
       // Keep: Sentry initialization confirmation - important for production monitoring
       console.log(`✅ Sentry initialized (${environment}) on frontend`);
-    } else {
-      // Keep: Sentry configuration warning - important for setup diagnostics
-      console.warn("⚠️  Sentry DSN not configured (VITE_SENTRY_DSN). Frontend error tracking disabled.");
     }
   } catch (error) {
     // Keep: Sentry package warning - important for setup diagnostics
