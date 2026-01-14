@@ -4,6 +4,12 @@ import { SentryErrorBoundary } from "./lib/sentryClient";
 import App from "./App";
 import "./index.css";
 
+// Remove loading class to reveal content after React mounts (FOUC prevention)
+const revealContent = () => {
+  document.body.classList.remove('loading');
+  document.body.classList.add('loaded');
+};
+
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <SentryErrorBoundary>
@@ -11,3 +17,6 @@ createRoot(document.getElementById("root")!).render(
     </SentryErrorBoundary>
   </StrictMode>
 );
+
+// Reveal content after React has rendered
+revealContent();
