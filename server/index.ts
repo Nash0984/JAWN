@@ -37,6 +37,44 @@ import { sql } from "drizzle-orm";
 import { EnvValidator } from "./utils/envValidation";
 import { ProductionValidator } from "./utils/productionValidation";
 import "./utils/piiMasking"; // Import early to override console methods with PII redaction
+import net from "net";
+
+// ============================================================================
+// PORT AVAILABILITY CHECK - Wait for port to be available before binding
+// ============================================================================
+async function waitForPortAvailable(port: number, maxRetries: number = 10, retryDelayMs: number = 1000): Promise<boolean> {
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    const isAvailable = await new Promise<boolean>((resolve) => {
+      const tester = net.createServer()
+        .once('error', (err: NodeJS.ErrnoException) => {
+          if (err.code === 'EADDRINUSE') {
+            resolve(false);
+          } else {
+            resolve(false);
+          }
+        })
+        .once('listening', () => {
+          tester.close(() => resolve(true));
+        })
+        .listen(port, '0.0.0.0');
+    });
+
+    if (isAvailable) {
+      if (attempt > 1) {
+        logger.info(`✅ Port ${port} is now available (after ${attempt} attempts)`);
+      }
+      return true;
+    }
+
+    if (attempt < maxRetries) {
+      logger.warn(`⏳ Port ${port} in use, waiting ${retryDelayMs}ms... (attempt ${attempt}/${maxRetries})`);
+      await new Promise(resolve => setTimeout(resolve, retryDelayMs));
+    }
+  }
+
+  logger.error(`❌ Port ${port} still in use after ${maxRetries} attempts`);
+  return false;
+}
 
 // ============================================================================
 // ENVIRONMENT VALIDATION - Validate required environment variables on startup
@@ -463,6 +501,14 @@ app.use("/api/", apiVersionMiddleware);
   // this serves both the API and the client.
   // It is the only port that is not firewalled.
   const port = parseInt(process.env.PORT || '5000', 10);
+
+  // Wait for port to become available (handles EADDRINUSE during restarts)
+  const portAvailable = await waitForPortAvailable(port, 10, 1000);
+  if (!portAvailable) {
+    logger.error(`❌ FATAL: Cannot bind to port ${port} - port is in use and did not become available`);
+    process.exit(1);
+  }
+
   server.listen({
     port,
     host: "0.0.0.0",
@@ -525,6 +571,18 @@ app.use("/api/", apiVersionMiddleware);
     logger.info(`\n🛑 ${signal} received. Starting graceful shutdown...`);
     
     try {
+      // Stop WebSocket server first (closes connections and clears intervals)
+      try {
+        const { getWebSocketService } = await import("./services/websocket.service");
+        const wsService = getWebSocketService();
+        if (wsService) {
+          wsService.shutdown();
+          logger.info("✅ WebSocket server closed");
+        }
+      } catch (error) {
+        logger.error("⚠️  Error closing WebSocket server:", error);
+      }
+
       // Close HTTP server (stop accepting new requests)
       await new Promise<void>((resolve, reject) => {
         server.close((err) => {
