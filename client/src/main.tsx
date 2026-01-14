@@ -4,10 +4,14 @@ import { SentryErrorBoundary } from "./lib/sentryClient";
 import App from "./App";
 import "./index.css";
 
-// Remove loading class to reveal content after React mounts (FOUC prevention)
-const revealContent = () => {
-  document.body.classList.remove('loading');
-  document.body.classList.add('loaded');
+// Hide initial loader after React mounts
+const hideLoader = () => {
+  const loader = document.getElementById('initial-loader');
+  if (loader) {
+    loader.classList.add('hidden');
+    // Remove from DOM after fade-out transition
+    setTimeout(() => loader.remove(), 300);
+  }
 };
 
 createRoot(document.getElementById("root")!).render(
@@ -18,5 +22,5 @@ createRoot(document.getElementById("root")!).render(
   </StrictMode>
 );
 
-// Reveal content after React has rendered
-revealContent();
+// Hide loader after React has rendered
+hideLoader();
