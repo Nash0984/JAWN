@@ -253,7 +253,7 @@ export async function generateSyntheticData(
       await db.insert(eeSyntheticIndividuals).values({
         individualId,
         mdmId: `MDM${individualId}`,
-        sourceSystem: "CARES",
+        sourceSystem: "E&E",
         ssn: randomSSN(),
         dateOfBirth: dob.toISOString().split('T')[0],
         birthStateCode: "MD",

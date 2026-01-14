@@ -60,7 +60,7 @@ router.get("/health", asyncHandler(async (req: Request, res: Response) => {
     totalRecords: stats.totalIndividuals,
     totalCases: stats.totalCases,
     activeCases: stats.activeCases,
-    description: "E&E Synthetic Database for CARES/SAWS sidecar testing"
+    description: "E&E Synthetic Database for sidecar testing"
   });
 }));
 
