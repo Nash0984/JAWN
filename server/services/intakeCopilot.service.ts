@@ -69,7 +69,56 @@ export class IntakeCopilotService {
       model: this.model,
       contents: [{ role: 'user', parts: [{ text: fullPrompt }] }]
     });
-    const assistantMessage = response.text || "I apologize, but I couldn't process that. Could you please rephrase?";
+    let assistantMessage = response.text || "I apologize, but I couldn't process that. Could you please rephrase?";
+    
+    // MODE 1: EXPLANATION VERIFICATION
+    // Verify AI response against statutory rules before outputting to user
+    // Per neuro-symbolic gateway: All eligibility statements must be legally grounded
+    try {
+      const verificationResult = await neuroSymbolicHybridGateway.verifyExplanation(
+        assistantMessage,
+        session.stateCode || "MD",
+        session.programCode || "SNAP",
+        {
+          caseId: sessionId,
+          triggeredBy: "intake_copilot_chat"
+        }
+      );
+
+      if (!verificationResult.isLegallyConsistent && verificationResult.symbolicVerification.violationCount > 0) {
+        // AI response contains legally inaccurate claims - log and modify response
+        logger.warn("[IntakeCopilot] AI response failed statutory verification", {
+          sessionId,
+          violationCount: verificationResult.symbolicVerification.violationCount,
+          citations: verificationResult.statutoryCitations,
+          gatewayRunId: verificationResult.gatewayRunId,
+          service: "IntakeCopilot"
+        });
+
+        // Append legal grounding notice if explanation claims were detected
+        if (verificationResult.grade6Explanation) {
+          assistantMessage += `\n\n*Note: ${verificationResult.grade6Explanation}*`;
+        }
+      }
+
+      // Log successful verification
+      logger.debug("[IntakeCopilot] AI response verified", {
+        sessionId,
+        isConsistent: verificationResult.isLegallyConsistent,
+        assertionCount: verificationResult.parsedExplanation.assertionCount,
+        ruleCount: verificationResult.symbolicVerification.tboxRuleCount,
+        processingTimeMs: verificationResult.processingTimeMs,
+        service: "IntakeCopilot"
+      });
+    } catch (verificationError) {
+      // Log but don't block - verification is defensive, not blocking
+      logger.warn("[IntakeCopilot] Explanation verification failed - proceeding with unverified response", {
+        sessionId,
+        error: verificationError instanceof Error ? verificationError.message : "Unknown",
+        service: "IntakeCopilot"
+      });
+    }
+    
     const extracted = await this.extractDataFromMessage(userMessage, session);
     
     await this.saveMessage(sessionId, "user", userMessage);

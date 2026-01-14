@@ -53,11 +53,24 @@ The backend is built with Express.js and TypeScript, utilizing PostgreSQL via Dr
 -   **Unified Household Profiler**: Single profile for benefits and tax workflows.
 -   **Performance Optimization**: Server-side caching, extensive database indexing, non-blocking initialization.
 -   **Rules-as-Code Architecture**: Maryland/tenant rules engines are the sole decision-makers, with PolicyEngine used for verification/validation only.
--   **Neuro-Symbolic Hybrid Gateway**: A production-grade implementation for accountability in public-sector AI, requiring all eligibility decisions to route through a three-layer architecture:
+-   **Neuro-Symbolic Hybrid Gateway**: A production-grade implementation for accountability in public-sector AI, requiring all eligibility decisions to route through a three-layer architecture (per "A Neuro-Symbolic Framework for Accountability in Public-Sector AI" - Allen Sunny, University of Maryland):
     1.  **Neural Layer (Gemini)**: Exclusively for extraction and translation of unstructured data (e.g., OCR, document classification), never for eligibility decisions.
     2.  **Rules-as-Code (RaC) Layer**: Legal knowledge base transforming statutes into machine-verifiable SMT-LIB artifacts, maintaining provenance to legal citations.
     3.  **Symbolic/Z3 Solver Layer**: Proof engine that ingests case assertions and RaC-produced constraints to run satisfiability checks, generating UNSAT cores with statutory citations when rules are violated.
-    This gateway ensures that RaC feeds Z3, forming the "symbolic side" of the hybrid gateway, and all core services integrate through it for verification.
+    
+    **Dual Verification Modes (Implemented January 2026)**:
+    -   **Mode 1 (Explanation Verification)**: Tests if AI responses/NOA explanations are legally consistent with statute. Returns SAT (legally valid) or UNSAT (violation with statutory citations). Used for: Chat interface AI response verification, NOA review, appeal support.
+    -   **Mode 2 (Case Eligibility Verification)**: Tests if case data satisfies eligibility rules. The authoritative eligibility decision-maker.
+    -   **Dual Verification**: Runs both modes in parallel with cross-validation to detect inconsistencies between explanations and case data.
+    
+    **Key Services**:
+    -   `explanationClauseParser.ts`: Extracts ABox assertions from free-text explanations using ontology vocabulary matching, normalizes variants to canonical predicates, converts to Implies() syntax
+    -   `z3SolverService.ts`: Vocabulary-filtered TBox rule retrieval, Mode 1 explanation verification, Mode 2 case verification
+    -   `neuroSymbolicHybridGateway.ts`: Unified verification gateway with verifyExplanation(), verifyEligibility(), and dualVerification() methods
+    
+    **Gateway Integration Points**: Public API eligibility routes, Adaptive Intake Copilot, Cross-Enrollment Engine, Benefits Access Review (BAR), PER Module pre-submission validator, Cross-Enrollment Intelligence/Financial Opportunity Radar
+    
+    This gateway ensures that RaC feeds Z3, forming the "symbolic side" of the hybrid gateway, and all core services integrate through it for verification. The architecture enables legal accountability for all AI-generated eligibility statements.
 -   **Testing**: Comprehensive testing with Vitest, @testing-library/react, and supertest, including a regression gate requiring 216+ integration tests across various modules.
 -   **Distributed Caching System**: Production-ready cache with Redis/Upstash.
 -   **Scalable Connection Pooling**: Neon Pooled Connections.

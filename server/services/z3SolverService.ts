@@ -749,6 +749,251 @@ class Z3SolverService {
       byProgram
     };
   }
+
+  /**
+   * VOCABULARY-FILTERED RULE RETRIEVAL
+   * Per Section 3.4.2.4 of the paper: "only those statutory rules whose vocabulary
+   * overlaps with the ontology terms present in the extracted assertions"
+   * 
+   * This reduces the TBox constraint set to only rules relevant to the ABox assertions,
+   * improving solver efficiency and ensuring focused verification.
+   */
+  async getVocabularyFilteredRules(
+    predicateNames: string[],
+    stateCode: string,
+    programCode: string
+  ): Promise<typeof formalRules.$inferSelect[]> {
+    if (predicateNames.length === 0) {
+      return [];
+    }
+
+    const normalizedPredicates = predicateNames.map(p => 
+      p.toLowerCase().replace(/[^a-z0-9_]/g, '_')
+    );
+
+    const allRules = await db.select()
+      .from(formalRules)
+      .where(and(
+        eq(formalRules.stateCode, stateCode),
+        eq(formalRules.programCode, programCode),
+        eq(formalRules.isValid, true),
+        eq(formalRules.status, "approved")
+      ));
+
+    return allRules.filter(rule => {
+      if (!rule.z3Logic) return false;
+      
+      const z3LogicLower = rule.z3Logic.toLowerCase();
+      const ruleNameLower = rule.ruleName.toLowerCase();
+      
+      return normalizedPredicates.some(pred => 
+        z3LogicLower.includes(pred) ||
+        ruleNameLower.includes(pred)
+      );
+    });
+  }
+
+  /**
+   * MODE 1: EXPLANATION VERIFICATION
+   * Verify that extracted ABox assertions from an explanation are consistent
+   * with vocabulary-filtered TBox rules.
+   * 
+   * This implements the paper's core verification methodology:
+   * SAT = explanation is legally consistent with statute
+   * UNSAT = explanation violates statutory constraints (returns UNSAT core)
+   * 
+   * @param aboxAssertions - Assertions extracted from explanation text
+   * @param tboxRules - Vocabulary-filtered formal rules
+   * @param stateCode - State jurisdiction
+   * @param programCode - Program code
+   * @returns Solver result with SAT/UNSAT and violation traces
+   */
+  async verifyExplanationAssertions(
+    aboxAssertions: Array<{
+      predicateName: string;
+      predicateValue: string;
+      predicateType?: string;
+    }>,
+    tboxRules: typeof formalRules.$inferSelect[],
+    stateCode: string,
+    programCode: string,
+    contextCaseId?: string
+  ): Promise<{
+    runId: string;
+    result: SolverResult;
+    status: VerificationStatus;
+    isSatisfied: boolean;
+    violations: RuleViolation[];
+    unsatCore: string[];
+    solverOutput: string;
+    executionTimeMs: number;
+    verificationMode: "explanation";
+  }> {
+    const startTime = Date.now();
+    const runId = `exp-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+
+    console.log(`[Z3Solver] MODE 1: Explanation verification with ${aboxAssertions.length} assertions, ${tboxRules.length} rules`);
+
+    if (aboxAssertions.length === 0) {
+      return {
+        runId,
+        result: "SAT",
+        status: "eligible",
+        isSatisfied: true,
+        violations: [],
+        unsatCore: [],
+        solverOutput: "; No assertions to verify - trivially SAT",
+        executionTimeMs: Date.now() - startTime,
+        verificationMode: "explanation"
+      };
+    }
+
+    if (tboxRules.length === 0) {
+      return {
+        runId,
+        result: "UNKNOWN",
+        status: "needs_review",
+        isSatisfied: false,
+        violations: [],
+        unsatCore: [],
+        solverOutput: "; No matching TBox rules found for vocabulary - cannot verify",
+        executionTimeMs: Date.now() - startTime,
+        verificationMode: "explanation"
+      };
+    }
+
+    const violations: RuleViolation[] = [];
+    const unsatCore: string[] = [];
+    const outputLines: string[] = [
+      "; Z3 Explanation Verification (Mode 1)",
+      `; Timestamp: ${new Date().toISOString()}`,
+      `; Assertions: ${aboxAssertions.length}, Rules: ${tboxRules.length}`,
+      ""
+    ];
+
+    for (const rule of tboxRules) {
+      if (!rule.z3Logic) continue;
+
+      const isViolated = this.checkExplanationAgainstRule(aboxAssertions, rule);
+      
+      if (isViolated) {
+        violations.push({
+          ruleId: rule.id,
+          ruleName: rule.ruleName,
+          citation: rule.statutoryCitation || `Formal Rule ${rule.eligibilityDomain}`,
+          predicatesFailed: aboxAssertions.map(a => a.predicateName),
+          explanation: `Explanation assertion violates rule: ${rule.z3Logic}`
+        });
+        unsatCore.push(rule.id);
+        outputLines.push(`; VIOLATED: ${rule.ruleName} (${rule.statutoryCitation || rule.id})`);
+      } else {
+        outputLines.push(`; SATISFIED: ${rule.ruleName}`);
+      }
+    }
+
+    const result: SolverResult = violations.length === 0 ? "SAT" : "UNSAT";
+    const status = this.determineStatus(result, violations);
+
+    outputLines.push("");
+    outputLines.push(`; Result: ${result}`);
+    if (result === "UNSAT") {
+      outputLines.push(`; UNSAT Core: [${unsatCore.join(", ")}]`);
+    }
+
+    const caseIdToUse = contextCaseId || `explanation-${runId}`;
+    
+    await db.insert(solverRuns).values({
+      id: runId,
+      caseId: caseIdToUse,
+      stateCode,
+      programCode,
+      solverResult: result,
+      verificationStatus: status,
+      isSatisfied: result === "SAT",
+      tboxRuleIds: tboxRules.map(r => r.id),
+      unsatCore: unsatCore.length > 0 ? unsatCore : null,
+      violatedRuleIds: violations.map(v => v.ruleId),
+      violatedCitations: violations.map(v => v.citation),
+      solverTimeMs: Date.now() - startTime,
+      constraintCount: aboxAssertions.length + tboxRules.length,
+      variableCount: aboxAssertions.length,
+      triggeredBy: "explanation_verification",
+      solverTrace: { 
+        output: outputLines.join("\n"), 
+        violations, 
+        status,
+        verificationMode: "explanation"
+      }
+    });
+
+    return {
+      runId,
+      result,
+      status,
+      isSatisfied: result === "SAT",
+      violations,
+      unsatCore,
+      solverOutput: outputLines.join("\n"),
+      executionTimeMs: Date.now() - startTime,
+      verificationMode: "explanation"
+    };
+  }
+
+  /**
+   * Check if explanation assertions violate a specific rule
+   */
+  private checkExplanationAgainstRule(
+    assertions: Array<{ predicateName: string; predicateValue: string }>,
+    rule: typeof formalRules.$inferSelect
+  ): boolean {
+    if (!rule.z3Logic) return false;
+
+    const z3Logic = rule.z3Logic.toLowerCase();
+
+    for (const assertion of assertions) {
+      const predLower = assertion.predicateName.toLowerCase();
+      
+      if (!z3Logic.includes(predLower)) continue;
+
+      if (rule.eligibilityDomain === "income" && rule.ruleType === "threshold") {
+        const thresholdMatch = z3Logic.match(/<=?\s*\w+\s+(\d+)/);
+        if (thresholdMatch) {
+          const threshold = parseInt(thresholdMatch[1], 10);
+          const assertedValue = parseFloat(assertion.predicateValue);
+          if (!isNaN(assertedValue) && !isNaN(threshold) && assertedValue > threshold) {
+            return true;
+          }
+        }
+      }
+
+      if (rule.eligibilityDomain === "resources" && rule.ruleType === "threshold") {
+        const resourceMatch = z3Logic.match(/<=?\s*\w+\s+(\d+)/);
+        if (resourceMatch) {
+          const threshold = parseInt(resourceMatch[1], 10);
+          const assertedValue = parseFloat(assertion.predicateValue);
+          if (!isNaN(assertedValue) && !isNaN(threshold) && assertedValue > threshold) {
+            return true;
+          }
+        }
+      }
+
+      if (rule.eligibilityDomain === "residency" && rule.ruleType === "requirement") {
+        if (assertion.predicateValue.toLowerCase() === "false" || 
+            assertion.predicateValue.toLowerCase() === "no") {
+          return true;
+        }
+      }
+
+      if (rule.eligibilityDomain === "citizenship" && rule.ruleType === "requirement") {
+        const validStatuses = ["us_citizen", "us_national", "qualified_alien", "citizen", "true"];
+        if (!validStatuses.includes(assertion.predicateValue.toLowerCase())) {
+          return true;
+        }
+      }
+    }
+
+    return false;
+  }
 }
 
 export const z3SolverService = new Z3SolverService();

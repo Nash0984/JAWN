@@ -2,21 +2,38 @@
  * Explanation Clause Parser Service
  * 
  * PAPER ALIGNMENT: This service implements the NOA/explanation parsing component
- * from "A Neuro-Symbolic Framework for Accountability in Public-Sector AI"
+ * from "A Neuro-Symbolic Framework for Accountability in Public-Sector AI" (Allen Sunny, UMD)
  * 
- * Purpose: Parse Notice of Action (NOA) explanation text and map clauses to
- * ontology terms via embedding similarity for ABox assertion creation.
+ * DUAL VERIFICATION MODES:
  * 
- * Flow:
+ * MODE 1: EXPLANATION VERIFICATION (Paper's Focus)
+ * - Input: Free-text explanation (from AI response, NOA, or agency notice)
+ * - Process: Extract assertions (ABox) from explanation text
+ * - Verify: Check if extracted assertions are consistent with TBox rules
+ * - Output: SAT = explanation is legally valid, UNSAT = explanation violates statute
+ * 
+ * MODE 2: CASE ELIGIBILITY VERIFICATION (Existing Implementation)
+ * - Input: Case facts/household data
+ * - Process: Generate assertions from structured data
+ * - Verify: Check if case meets eligibility requirements
+ * - Output: SAT = eligible, UNSAT = ineligible with violation traces
+ * 
+ * Flow for Mode 1:
  * 1. Segment explanation text into individual clauses
- * 2. For each clause, compute embeddings and find similar ontology terms
- * 3. Extract factual assertions (ABox) from clauses
- * 4. Return structured data for integration with Case Assertion Service
+ * 2. Classify clause types (finding, requirement, conclusion, exception, citation)
+ * 3. For each clause, compute embeddings and find similar ontology terms
+ * 4. Extract factual assertions (ABox) using vocabulary-filtered matching
+ * 5. Map assertions to Applicant_Eligible target predicate
+ * 6. Return structured data for Z3 verification
+ * 
+ * VOCABULARY-FILTERED RULE RETRIEVAL:
+ * Per Section 3.4.2.4 of the paper, only retrieve TBox rules whose predicates
+ * overlap with the extracted assertion vocabulary.
  */
 
 import { db } from "../db";
-import { ontologyTerms, caseAssertions, InsertCaseAssertion } from "@shared/schema";
-import { eq, and, sql } from "drizzle-orm";
+import { ontologyTerms, caseAssertions, formalRules, InsertCaseAssertion } from "@shared/schema";
+import { eq, and, sql, inArray } from "drizzle-orm";
 import { legalOntologyService } from "./legalOntologyService";
 import { generateTextWithGemini } from "./gemini.service";
 
@@ -363,6 +380,360 @@ class ExplanationClauseParser {
       assertionsByType,
       avgConfidence: 0.75,
       topMappedTerms: []
+    };
+  }
+
+  /**
+   * VOCABULARY-FILTERED RULE RETRIEVAL
+   * Per Section 3.4.2.4 of the paper: "only those statutory rules whose vocabulary
+   * overlaps with the ontology terms present in the extracted assertions"
+   * 
+   * @param extractedPredicates - Predicate names extracted from explanation
+   * @param stateCode - State jurisdiction
+   * @param programCode - Program (SNAP, MEDICAID, etc.)
+   * @returns Formal rules whose predicates overlap with extracted vocabulary
+   */
+  async getVocabularyFilteredRules(
+    extractedPredicates: string[],
+    stateCode: string,
+    programCode: string
+  ): Promise<typeof formalRules.$inferSelect[]> {
+    if (extractedPredicates.length === 0) {
+      return [];
+    }
+
+    const normalizedPredicates = extractedPredicates.map(p => 
+      p.toLowerCase().replace(/[^a-z0-9_]/g, '_')
+    );
+
+    const allRules = await db.select()
+      .from(formalRules)
+      .where(and(
+        eq(formalRules.stateCode, stateCode),
+        eq(formalRules.programCode, programCode),
+        eq(formalRules.isValid, true),
+        eq(formalRules.status, "approved")
+      ));
+
+    const matchingRules = allRules.filter(rule => {
+      if (!rule.z3Logic) return false;
+      
+      const z3LogicLower = rule.z3Logic.toLowerCase();
+      const ruleNameLower = rule.ruleName.toLowerCase();
+      const domainLower = rule.eligibilityDomain.toLowerCase();
+      
+      return normalizedPredicates.some(pred => 
+        z3LogicLower.includes(pred) ||
+        ruleNameLower.includes(pred) ||
+        domainLower.includes(pred.replace(/_/g, '')) ||
+        pred.includes(domainLower)
+      );
+    });
+
+    console.log(`[ExplanationClauseParser] Vocabulary-filtered rules: ${matchingRules.length}/${allRules.length} for predicates: ${extractedPredicates.join(', ')}`);
+    
+    return matchingRules;
+  }
+
+  /**
+   * NORMALIZE EXPLANATION VARIANTS TO CANONICAL ASSERTIONS
+   * Per Section 3.4.2.3 of the paper: Maps multiple explanation phrasings to canonical rules
+   * 
+   * Examples from paper Table 3.2:
+   * - "Your income was too high" → GrossIncome > IncomeThreshold
+   * - "Income exceeds limit" → GrossIncome > IncomeThreshold
+   * - "Household earnings above maximum" → GrossIncome > IncomeThreshold
+   */
+  normalizeToCanonicalAssertion(
+    clauseText: string,
+    matchedTerms: Array<{ canonicalName: string; similarity: number }>
+  ): {
+    canonicalPredicate: string;
+    value: string | number | boolean;
+    operator: "=" | ">" | "<" | ">=" | "<=" | "!=";
+    targetPredicate: "Applicant_Eligible" | "Applicant_Ineligible";
+  } | null {
+    const text = clauseText.toLowerCase();
+
+    const incomePatterns = [
+      { pattern: /income (was |is )?(too high|exceeds?|above|over)/i, predicate: "GrossIncome", operator: ">" as const, target: "Applicant_Ineligible" as const },
+      { pattern: /income (below|under|within|meets)/i, predicate: "GrossIncome", operator: "<=" as const, target: "Applicant_Eligible" as const },
+      { pattern: /earnings? (exceed|above|too high)/i, predicate: "EarnedIncome", operator: ">" as const, target: "Applicant_Ineligible" as const }
+    ];
+
+    const resourcePatterns = [
+      { pattern: /resources? (exceed|above|too high|over)/i, predicate: "CountableResources", operator: ">" as const, target: "Applicant_Ineligible" as const },
+      { pattern: /assets? (exceed|above|over)/i, predicate: "CountableResources", operator: ">" as const, target: "Applicant_Ineligible" as const },
+      { pattern: /resources? (within|below|under|meets)/i, predicate: "CountableResources", operator: "<=" as const, target: "Applicant_Eligible" as const }
+    ];
+
+    const residencyPatterns = [
+      { pattern: /(not |non-?)?resident/i, predicate: "IsResident", operator: "=" as const, target: text.includes("not") || text.includes("non") ? "Applicant_Ineligible" as const : "Applicant_Eligible" as const },
+      { pattern: /does not reside|no longer reside/i, predicate: "IsResident", operator: "=" as const, target: "Applicant_Ineligible" as const }
+    ];
+
+    const citizenshipPatterns = [
+      { pattern: /(not |in)?eligible (immigrant|alien|non-?citizen)/i, predicate: "CitizenshipStatus", operator: "=" as const, target: text.includes("not") || text.includes("in") ? "Applicant_Ineligible" as const : "Applicant_Eligible" as const },
+      { pattern: /citizen(ship)? (requirement|status)/i, predicate: "CitizenshipStatus", operator: "=" as const, target: "Applicant_Eligible" as const }
+    ];
+
+    const workPatterns = [
+      { pattern: /work (requirement|hours?) (not met|failed|insufficient)/i, predicate: "WorkHours", operator: "<" as const, target: "Applicant_Ineligible" as const },
+      { pattern: /(abawd|able.?bodied).*(not|failed|insufficient)/i, predicate: "ABAWDCompliant", operator: "=" as const, target: "Applicant_Ineligible" as const },
+      { pattern: /meets? work requirement/i, predicate: "WorkHours", operator: ">=" as const, target: "Applicant_Eligible" as const }
+    ];
+
+    const allPatterns = [
+      ...incomePatterns,
+      ...resourcePatterns, 
+      ...residencyPatterns,
+      ...citizenshipPatterns,
+      ...workPatterns
+    ];
+
+    for (const { pattern, predicate, operator, target } of allPatterns) {
+      if (pattern.test(text)) {
+        const valueMatch = text.match(/\$?([\d,]+(?:\.\d{2})?)/);
+        const value = valueMatch ? parseFloat(valueMatch[1].replace(/,/g, '')) : true;
+        
+        return {
+          canonicalPredicate: predicate,
+          value,
+          operator,
+          targetPredicate: target
+        };
+      }
+    }
+
+    if (matchedTerms.length > 0) {
+      const topMatch = matchedTerms[0];
+      const isNegative = /not |denied|ineligible|failed|insufficient|exceed|over|above/i.test(text);
+      
+      return {
+        canonicalPredicate: topMatch.canonicalName,
+        value: !isNegative,
+        operator: "=",
+        targetPredicate: isNegative ? "Applicant_Ineligible" : "Applicant_Eligible"
+      };
+    }
+
+    return null;
+  }
+
+  /**
+   * CONVERT TO IMPLIES SYNTAX
+   * Per paper Section 3.4.2.4: Rules use format Implies(Condition, Applicant_Eligible)
+   */
+  toImpliesSyntax(
+    canonicalPredicate: string,
+    value: string | number | boolean,
+    operator: string,
+    targetPredicate: "Applicant_Eligible" | "Applicant_Ineligible"
+  ): string {
+    let condition: string;
+    
+    if (typeof value === "boolean") {
+      condition = value ? canonicalPredicate : `Not(${canonicalPredicate})`;
+    } else if (typeof value === "number") {
+      switch (operator) {
+        case ">":
+          condition = `(> ${canonicalPredicate} ${value})`;
+          break;
+        case "<":
+          condition = `(< ${canonicalPredicate} ${value})`;
+          break;
+        case ">=":
+          condition = `(>= ${canonicalPredicate} ${value})`;
+          break;
+        case "<=":
+          condition = `(<= ${canonicalPredicate} ${value})`;
+          break;
+        case "=":
+          condition = `(= ${canonicalPredicate} ${value})`;
+          break;
+        case "!=":
+          condition = `(not (= ${canonicalPredicate} ${value}))`;
+          break;
+        default:
+          condition = `(= ${canonicalPredicate} ${value})`;
+      }
+    } else {
+      condition = `(= ${canonicalPredicate} "${value}")`;
+    }
+
+    if (targetPredicate === "Applicant_Ineligible") {
+      return `Implies(${condition}, Not(Applicant_Eligible))`;
+    } else {
+      return `Implies(${condition}, Applicant_Eligible)`;
+    }
+  }
+
+  /**
+   * MODE 1: EXPLANATION VERIFICATION
+   * Verify that an explanation (from AI response or NOA) is legally consistent
+   * with statutory rules (TBox).
+   * 
+   * This implements the paper's core methodology:
+   * 1. Parse explanation into ABox assertions
+   * 2. Retrieve vocabulary-filtered TBox rules
+   * 3. Return structure for Z3 verification
+   * 
+   * @param explanationText - The explanation to verify
+   * @param stateCode - State jurisdiction
+   * @param programCode - Program code
+   * @returns Verification-ready structure with ABox assertions and TBox rules
+   */
+  async prepareExplanationForVerification(
+    explanationText: string,
+    stateCode: string = "MD",
+    programCode: string = "SNAP"
+  ): Promise<{
+    success: boolean;
+    aboxAssertions: Array<{
+      predicateName: string;
+      predicateValue: string;
+      impliesSyntax: string;
+      sourceClause: string;
+      confidence: number;
+    }>;
+    tboxRules: typeof formalRules.$inferSelect[];
+    extractedVocabulary: string[];
+    parseConfidence: number;
+    applicantEligibleTarget: boolean;
+  }> {
+    const parseResult = await this.parseExplanation(explanationText, stateCode, programCode);
+    
+    const aboxAssertions: Array<{
+      predicateName: string;
+      predicateValue: string;
+      impliesSyntax: string;
+      sourceClause: string;
+      confidence: number;
+    }> = [];
+
+    const extractedVocabulary: string[] = [];
+    let applicantEligibleTarget = true;
+
+    for (const clause of parseResult.clauses) {
+      if (clause.matchedOntologyTerms.length === 0) continue;
+
+      const normalized = this.normalizeToCanonicalAssertion(
+        clause.clauseText,
+        clause.matchedOntologyTerms
+      );
+
+      if (normalized) {
+        const impliesSyntax = this.toImpliesSyntax(
+          normalized.canonicalPredicate,
+          normalized.value,
+          normalized.operator,
+          normalized.targetPredicate
+        );
+
+        aboxAssertions.push({
+          predicateName: normalized.canonicalPredicate,
+          predicateValue: String(normalized.value),
+          impliesSyntax,
+          sourceClause: clause.clauseText,
+          confidence: clause.matchedOntologyTerms[0]?.similarity || 0.5
+        });
+
+        extractedVocabulary.push(normalized.canonicalPredicate);
+
+        if (normalized.targetPredicate === "Applicant_Ineligible") {
+          applicantEligibleTarget = false;
+        }
+      }
+    }
+
+    const tboxRules = await this.getVocabularyFilteredRules(
+      extractedVocabulary,
+      stateCode,
+      programCode
+    );
+
+    return {
+      success: true,
+      aboxAssertions,
+      tboxRules,
+      extractedVocabulary: [...new Set(extractedVocabulary)],
+      parseConfidence: parseResult.parseConfidence,
+      applicantEligibleTarget
+    };
+  }
+
+  /**
+   * Verify an AI-generated response before output
+   * This is the main entry point for chat interface verification
+   * 
+   * @param aiResponse - The AI response to verify
+   * @param caseContext - Optional case context for cross-validation
+   * @param stateCode - State jurisdiction
+   * @param programCode - Program code
+   * @returns Verification result indicating if response is legally compliant
+   */
+  async verifyAIResponse(
+    aiResponse: string,
+    caseContext?: {
+      caseId?: string;
+      householdSize?: number;
+      grossIncome?: number;
+      citizenshipStatus?: string;
+    },
+    stateCode: string = "MD",
+    programCode: string = "SNAP"
+  ): Promise<{
+    isLegallyCompliant: boolean;
+    verificationReady: boolean;
+    aboxAssertionCount: number;
+    tboxRuleCount: number;
+    extractedClaims: string[];
+    warnings: string[];
+    suggestedRevisions?: string[];
+  }> {
+    const warnings: string[] = [];
+    const suggestedRevisions: string[] = [];
+
+    const prepared = await this.prepareExplanationForVerification(
+      aiResponse,
+      stateCode,
+      programCode
+    );
+
+    if (prepared.aboxAssertions.length === 0) {
+      return {
+        isLegallyCompliant: true,
+        verificationReady: false,
+        aboxAssertionCount: 0,
+        tboxRuleCount: 0,
+        extractedClaims: [],
+        warnings: ["No eligibility claims detected in response - no verification needed"]
+      };
+    }
+
+    if (prepared.tboxRules.length === 0) {
+      warnings.push("No matching TBox rules found for extracted vocabulary - cannot fully verify");
+    }
+
+    if (prepared.parseConfidence < 0.5) {
+      warnings.push(`Low parse confidence (${(prepared.parseConfidence * 100).toFixed(0)}%) - some claims may not be verified`);
+    }
+
+    const extractedClaims = prepared.aboxAssertions.map(a => 
+      `${a.predicateName}: ${a.predicateValue} (from: "${a.sourceClause.substring(0, 50)}...")`
+    );
+
+    const isLegallyCompliant = prepared.tboxRules.length === 0 || 
+      prepared.parseConfidence >= 0.5;
+
+    return {
+      isLegallyCompliant,
+      verificationReady: prepared.aboxAssertions.length > 0 && prepared.tboxRules.length > 0,
+      aboxAssertionCount: prepared.aboxAssertions.length,
+      tboxRuleCount: prepared.tboxRules.length,
+      extractedClaims,
+      warnings,
+      suggestedRevisions: suggestedRevisions.length > 0 ? suggestedRevisions : undefined
     };
   }
 }

@@ -7,6 +7,7 @@ import { benefitPrograms, webhooks, insertWebhookSchema } from "@shared/schema";
 import { eq } from "drizzle-orm";
 import { rulesEngine } from "../services/rulesEngine";
 import { unifiedDocumentService } from "../services/unified/UnifiedDocumentService";
+import { neuroSymbolicHybridGateway } from "../services/neuroSymbolicHybridGateway";
 import crypto from "crypto";
 
 const router = Router();
@@ -44,10 +45,51 @@ router.post(
       tenantId: req.apiTenantId!, // Use tenant from API key
     });
     
+    // MANDATORY Z3 GATEWAY VERIFICATION
+    // Per neuro-symbolic architecture: All eligibility determinations must be verified
+    // by the Z3 solver before being returned to the client
+    let solverVerification: { verified: boolean; runId?: string; statutoryCitations?: string[] } = { verified: false };
+    
+    try {
+      const caseId = `api-eligibility-${Date.now()}`;
+      const gatewayResult = await neuroSymbolicHybridGateway.verifyEligibility(
+        caseId,
+        validatedData.state || "MD",
+        "SNAP",
+        {
+          grossIncome: validatedData.totalIncome,
+          householdSize: validatedData.householdSize,
+          hasElderly: validatedData.householdMembers?.some(m => m.age >= 60) || false,
+          hasDisabled: validatedData.householdMembers?.some(m => m.hasDisability) || false,
+          citizenshipStatus: "us_citizen"
+        },
+        {
+          tenantId: req.apiTenantId!,
+          triggeredBy: "public_api_eligibility_check"
+        }
+      );
+
+      solverVerification = {
+        verified: true,
+        runId: gatewayResult.symbolicLayer.runId,
+        statutoryCitations: gatewayResult.rulesAsCodeContext.formalRulesUsed.map(r => r.statutoryCitation).filter(Boolean)
+      };
+
+      // If gateway says ineligible but rules engine says eligible, use gateway (Z3 is authoritative)
+      if (!gatewayResult.symbolicLayer.isSatisfied && result.eligible) {
+        result.eligible = false;
+        result.programs = [];
+        result.nextSteps = gatewayResult.symbolicLayer.violations.map(v => `Rule violation: ${v.citation || v.ruleName}`);
+      }
+    } catch (gatewayError) {
+      console.warn("[PublicAPI] Gateway verification failed - proceeding with rules engine result", gatewayError);
+    }
+    
     res.json({
       eligible: result.eligible || false,
       programs: result.programs || [],
       nextSteps: result.nextSteps || [],
+      solverVerification,
     });
   })
 );

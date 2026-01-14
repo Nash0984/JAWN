@@ -3,6 +3,7 @@ import { policyEngineTaxCalculationService } from './policyEngineTaxCalculation'
 import { GoogleGenAI } from '@google/genai';
 import { cacheService } from './cacheService';
 import { logger } from './logger.service';
+import { neuroSymbolicHybridGateway } from './neuroSymbolicHybridGateway';
 
 /**
  * Cross-Enrollment Intelligence Engine
@@ -389,7 +390,7 @@ export class CrossEnrollmentIntelligenceService {
   }
   
   /**
-   * Generate comprehensive cross-enrollment analysis
+   * Generate comprehensive cross-enrollment analysis with solver verification
    */
   async generateFullAnalysis(
     taxInput: TaxHouseholdInput,
@@ -401,6 +402,44 @@ export class CrossEnrollmentIntelligenceService {
       await this.analyzeBenefitsForTax(benefitData) : [];
     
     const allOpportunities = [...taxOpportunities, ...benefitOpportunities];
+    
+    // NEURO-SYMBOLIC VERIFICATION
+    // Verify high-priority opportunity recommendations against statutory rules
+    // Per paper: All eligibility statements must be grounded in statute
+    for (const opportunity of allOpportunities.filter(o => o.priority === 'high')) {
+      try {
+        const verificationResult = await neuroSymbolicHybridGateway.verifyExplanation(
+          opportunity.navigatorNotes,
+          taxInput.stateCode || "MD",
+          opportunity.category === 'SNAP' ? 'SNAP' : 
+            opportunity.category === 'Medicaid' ? 'MEDICAID' : 'SNAP',
+          {
+            caseId: opportunity.id,
+            triggeredBy: "cross_enrollment_intelligence"
+          }
+        );
+
+        if (verificationResult.isLegallyConsistent && verificationResult.statutoryCitations.length > 0) {
+          // Append statutory grounding to navigator notes
+          opportunity.navigatorNotes += ` [Verified: ${verificationResult.statutoryCitations.slice(0, 2).join(', ')}]`;
+        } else if (!verificationResult.isLegallyConsistent) {
+          // Reduce priority if recommendation fails verification
+          logger.warn("[CrossEnrollmentIntelligence] Opportunity failed solver verification", {
+            opportunityId: opportunity.id,
+            category: opportunity.category,
+            violationCount: verificationResult.symbolicVerification.violationCount,
+            service: "CrossEnrollmentIntelligence"
+          });
+          opportunity.priority = 'medium';
+        }
+      } catch (verificationError) {
+        logger.warn("[CrossEnrollmentIntelligence] Gateway verification failed - proceeding unverified", {
+          opportunityId: opportunity.id,
+          error: verificationError instanceof Error ? verificationError.message : "Unknown",
+          service: "CrossEnrollmentIntelligence"
+        });
+      }
+    }
     
     const totalPotentialValue = allOpportunities.reduce(
       (sum, opp) => sum + opp.recommendation.estimatedValue, 

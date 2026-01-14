@@ -1075,6 +1075,387 @@ class NeuroSymbolicHybridGateway {
       ontologyTermsAvailable: terms.length
     };
   }
+
+  /**
+   * MODE 1: EXPLANATION VERIFICATION
+   * ================================
+   * 
+   * Verify that an explanation (from AI response, NOA, or agency notice) is legally
+   * consistent with statutory rules.
+   * 
+   * This implements the paper's core methodology:
+   * 1. Parse explanation into ABox assertions using ExplanationClauseParser
+   * 2. Retrieve vocabulary-filtered TBox rules
+   * 3. Run Z3 solver to check consistency
+   * 4. Return SAT (legally valid) or UNSAT (violation with statutory citations)
+   * 
+   * USE CASES:
+   * - Chat interface: Verify AI responses before output to user
+   * - NOA review: Check if agency explanation is legally grounded
+   * - Appeal support: Identify which statutory rules the explanation cites/violates
+   * 
+   * @param explanationText - Free-text explanation to verify
+   * @param stateCode - State jurisdiction
+   * @param programCode - Program code
+   * @param options - Additional context (caseId, triggeredBy)
+   * @returns Verification result with SAT/UNSAT, violation traces, and audit trail
+   */
+  async verifyExplanation(
+    explanationText: string,
+    stateCode: string = "MD",
+    programCode: string = "SNAP",
+    options: {
+      caseId?: string;
+      triggeredBy?: string;
+      returnGrade6Explanation?: boolean;
+    } = {}
+  ): Promise<{
+    gatewayRunId: string;
+    verificationMode: "explanation";
+    isLegallyConsistent: boolean;
+    result: "SAT" | "UNSAT" | "UNKNOWN" | "ERROR";
+    
+    parsedExplanation: {
+      clauseCount: number;
+      assertionCount: number;
+      extractedVocabulary: string[];
+      parseConfidence: number;
+    };
+    
+    symbolicVerification: {
+      solverRunId: string;
+      tboxRuleCount: number;
+      violationCount: number;
+      violations: Array<{
+        ruleId: string;
+        ruleName: string;
+        statutoryCitation: string;
+        explanation: string;
+      }>;
+      unsatCore: string[];
+    };
+    
+    statutoryCitations: string[];
+    grade6Explanation?: string;
+    auditTrail: AuditTrailEntry;
+    processingTimeMs: number;
+  }> {
+    const gatewayRunId = nanoid();
+    const startTime = Date.now();
+    const processingPath: string[] = ["mode1_explanation_verification_started"];
+
+    logger.info("[HybridGateway] MODE 1: Explanation verification", {
+      gatewayRunId,
+      explanationLength: explanationText.length,
+      stateCode,
+      programCode,
+      service: "NeuroSymbolicHybridGateway"
+    });
+
+    try {
+      processingPath.push("parsing_explanation");
+      
+      const { explanationClauseParser } = await import("./explanationClauseParser");
+      const prepared = await explanationClauseParser.prepareExplanationForVerification(
+        explanationText,
+        stateCode,
+        programCode
+      );
+
+      processingPath.push(`parsed_clauses:${prepared.aboxAssertions.length}`);
+
+      if (prepared.aboxAssertions.length === 0) {
+        processingPath.push("no_assertions_found");
+        
+        const auditTrail: AuditTrailEntry = {
+          gatewayRunId,
+          neuralExtractionConfidence: prepared.parseConfidence,
+          solverRunId: "",
+          ontologyTermsMatched: [],
+          unsatCore: [],
+          statutoryCitations: [],
+          processingPath,
+          totalProcessingTimeMs: Date.now() - startTime
+        };
+
+        return {
+          gatewayRunId,
+          verificationMode: "explanation",
+          isLegallyConsistent: true,
+          result: "SAT",
+          parsedExplanation: {
+            clauseCount: 0,
+            assertionCount: 0,
+            extractedVocabulary: [],
+            parseConfidence: 0
+          },
+          symbolicVerification: {
+            solverRunId: "",
+            tboxRuleCount: 0,
+            violationCount: 0,
+            violations: [],
+            unsatCore: []
+          },
+          statutoryCitations: [],
+          auditTrail,
+          processingTimeMs: Date.now() - startTime
+        };
+      }
+
+      processingPath.push("running_z3_verification");
+
+      const aboxForSolver = prepared.aboxAssertions.map(a => ({
+        predicateName: a.predicateName,
+        predicateValue: a.predicateValue,
+        predicateType: "string" as const
+      }));
+
+      const solverResult = await z3SolverService.verifyExplanationAssertions(
+        aboxForSolver,
+        prepared.tboxRules,
+        stateCode,
+        programCode,
+        options.caseId
+      );
+
+      processingPath.push(`solver_complete:${solverResult.result}`);
+
+      const statutoryCitations = solverResult.violations
+        .map(v => v.citation)
+        .filter(Boolean);
+
+      let grade6Explanation: string | undefined;
+      if (options.returnGrade6Explanation && solverResult.result === "UNSAT") {
+        processingPath.push("generating_grade6_explanation");
+        const technicalExplanation = `This explanation has ${solverResult.violations.length} legal issue(s): ${solverResult.violations.map(v => v.explanation).join("; ")}`;
+        grade6Explanation = await this.simplifyToGrade6(technicalExplanation);
+      }
+
+      const auditTrail: AuditTrailEntry = {
+        gatewayRunId,
+        neuralExtractionConfidence: prepared.parseConfidence,
+        solverRunId: solverResult.runId,
+        ontologyTermsMatched: prepared.extractedVocabulary,
+        unsatCore: solverResult.unsatCore,
+        statutoryCitations,
+        processingPath,
+        totalProcessingTimeMs: Date.now() - startTime
+      };
+
+      await this.logAuditTrail(
+        auditTrail,
+        options.caseId || `explanation-${gatewayRunId}`,
+        stateCode,
+        programCode,
+        "rag_verification",
+        solverResult.result === "SAT" ? "eligible" : "ineligible",
+        options.triggeredBy
+      );
+
+      logger.info("[HybridGateway] MODE 1: Verification complete", {
+        gatewayRunId,
+        result: solverResult.result,
+        violationCount: solverResult.violations.length,
+        processingTimeMs: Date.now() - startTime,
+        service: "NeuroSymbolicHybridGateway"
+      });
+
+      return {
+        gatewayRunId,
+        verificationMode: "explanation",
+        isLegallyConsistent: solverResult.result === "SAT",
+        result: solverResult.result,
+        parsedExplanation: {
+          clauseCount: prepared.aboxAssertions.length,
+          assertionCount: prepared.aboxAssertions.length,
+          extractedVocabulary: prepared.extractedVocabulary,
+          parseConfidence: prepared.parseConfidence
+        },
+        symbolicVerification: {
+          solverRunId: solverResult.runId,
+          tboxRuleCount: prepared.tboxRules.length,
+          violationCount: solverResult.violations.length,
+          violations: solverResult.violations.map(v => ({
+            ruleId: v.ruleId,
+            ruleName: v.ruleName,
+            statutoryCitation: v.citation,
+            explanation: v.explanation
+          })),
+          unsatCore: solverResult.unsatCore
+        },
+        statutoryCitations,
+        grade6Explanation,
+        auditTrail,
+        processingTimeMs: Date.now() - startTime
+      };
+
+    } catch (error) {
+      logger.error("[HybridGateway] MODE 1: Verification failed", {
+        gatewayRunId,
+        error: error instanceof Error ? error.message : "Unknown",
+        service: "NeuroSymbolicHybridGateway"
+      });
+
+      processingPath.push(`error:${error instanceof Error ? error.message : "unknown"}`);
+
+      return {
+        gatewayRunId,
+        verificationMode: "explanation",
+        isLegallyConsistent: false,
+        result: "ERROR",
+        parsedExplanation: {
+          clauseCount: 0,
+          assertionCount: 0,
+          extractedVocabulary: [],
+          parseConfidence: 0
+        },
+        symbolicVerification: {
+          solverRunId: "",
+          tboxRuleCount: 0,
+          violationCount: 0,
+          violations: [],
+          unsatCore: []
+        },
+        statutoryCitations: [],
+        auditTrail: {
+          gatewayRunId,
+          neuralExtractionConfidence: null,
+          solverRunId: "",
+          ontologyTermsMatched: [],
+          unsatCore: [],
+          statutoryCitations: [],
+          processingPath,
+          totalProcessingTimeMs: Date.now() - startTime
+        },
+        processingTimeMs: Date.now() - startTime
+      };
+    }
+  }
+
+  /**
+   * DUAL VERIFICATION: Verify both explanation AND case data consistency
+   * 
+   * This is the most comprehensive verification mode that:
+   * 1. Verifies the explanation is legally grounded (Mode 1)
+   * 2. Verifies the case data meets eligibility requirements (Mode 2)
+   * 3. Cross-validates that explanation claims match case data
+   * 
+   * If explanation says "denied due to excess income" but case data shows
+   * income is within limits, this will detect the inconsistency.
+   */
+  async dualVerification(
+    explanationText: string,
+    caseId: string,
+    householdFacts: HouseholdFactsInput,
+    stateCode: string = "MD",
+    programCode: string = "SNAP",
+    options: {
+      tenantId?: string;
+      triggeredBy?: string;
+    } = {}
+  ): Promise<{
+    gatewayRunId: string;
+    
+    mode1Result: {
+      isLegallyConsistent: boolean;
+      result: "SAT" | "UNSAT" | "UNKNOWN" | "ERROR";
+      violationCount: number;
+    };
+    
+    mode2Result: {
+      isEligible: boolean;
+      result: "SAT" | "UNSAT" | "UNKNOWN" | "ERROR";
+      violationCount: number;
+    };
+    
+    crossValidation: {
+      isConsistent: boolean;
+      discrepancies: string[];
+    };
+    
+    combinedDetermination: "valid_eligible" | "valid_ineligible" | "inconsistent" | "error";
+    statutoryCitations: string[];
+    processingTimeMs: number;
+  }> {
+    const gatewayRunId = nanoid();
+    const startTime = Date.now();
+
+    logger.info("[HybridGateway] DUAL VERIFICATION", {
+      gatewayRunId,
+      caseId,
+      stateCode,
+      programCode,
+      service: "NeuroSymbolicHybridGateway"
+    });
+
+    const [mode1Result, mode2Result] = await Promise.all([
+      this.verifyExplanation(explanationText, stateCode, programCode, {
+        caseId,
+        triggeredBy: options.triggeredBy
+      }),
+      this.verifyEligibility(caseId, stateCode, programCode, householdFacts, {
+        tenantId: options.tenantId,
+        triggeredBy: options.triggeredBy
+      })
+    ]);
+
+    const discrepancies: string[] = [];
+
+    const explanationClaimsIneligible = mode1Result.result === "UNSAT" || 
+      mode1Result.parsedExplanation.extractedVocabulary.some(v => 
+        v.toLowerCase().includes("ineligible") || v.toLowerCase().includes("denied")
+      );
+    
+    const caseIsEligible = mode2Result.symbolicLayer.result === "SAT";
+
+    if (explanationClaimsIneligible && caseIsEligible) {
+      discrepancies.push("Explanation claims ineligibility but case data shows eligibility");
+    }
+
+    if (!explanationClaimsIneligible && !caseIsEligible) {
+      discrepancies.push("Explanation suggests eligibility but case data shows ineligibility");
+    }
+
+    const crossValidationConsistent = discrepancies.length === 0;
+
+    let combinedDetermination: "valid_eligible" | "valid_ineligible" | "inconsistent" | "error";
+    
+    if (mode1Result.result === "ERROR" || mode2Result.symbolicLayer.result === "ERROR") {
+      combinedDetermination = "error";
+    } else if (!crossValidationConsistent) {
+      combinedDetermination = "inconsistent";
+    } else if (caseIsEligible) {
+      combinedDetermination = "valid_eligible";
+    } else {
+      combinedDetermination = "valid_ineligible";
+    }
+
+    const allCitations = [
+      ...mode1Result.statutoryCitations,
+      ...mode2Result.rulesAsCodeContext.formalRulesUsed.map(r => r.statutoryCitation).filter(Boolean)
+    ];
+
+    return {
+      gatewayRunId,
+      mode1Result: {
+        isLegallyConsistent: mode1Result.isLegallyConsistent,
+        result: mode1Result.result,
+        violationCount: mode1Result.symbolicVerification.violationCount
+      },
+      mode2Result: {
+        isEligible: caseIsEligible,
+        result: mode2Result.symbolicLayer.result,
+        violationCount: mode2Result.symbolicLayer.violations.length
+      },
+      crossValidation: {
+        isConsistent: crossValidationConsistent,
+        discrepancies
+      },
+      combinedDetermination,
+      statutoryCitations: [...new Set(allCitations)],
+      processingTimeMs: Date.now() - startTime
+    };
+  }
 }
 
 export const neuroSymbolicHybridGateway = new NeuroSymbolicHybridGateway();

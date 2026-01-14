@@ -15,6 +15,7 @@ import { policyEngineService } from "./policyEngine.service";
 import { cacheService, CACHE_KEYS } from "./cacheService";
 import { notificationService } from "./notification.service";
 import { logger } from "./logger.service";
+import { neuroSymbolicHybridGateway } from "./neuroSymbolicHybridGateway";
 
 interface HouseholdData {
   householdId: string;
@@ -366,6 +367,47 @@ class CrossEnrollmentEngineService {
           }
         }
         
+        // NEURO-SYMBOLIC GATEWAY VERIFICATION
+        // Verify AI-generated recommendation explanation against statutory rules
+        // Per paper: All eligibility statements must be legally grounded
+        let isStatutorilyVerified = false;
+        let statutoryCitations: string[] = [];
+        
+        try {
+          const verificationResult = await neuroSymbolicHybridGateway.verifyExplanation(
+            prediction.explanation,
+            "MD",
+            program.code,
+            {
+              caseId: household.householdId,
+              triggeredBy: "cross_enrollment_recommendation"
+            }
+          );
+
+          isStatutorilyVerified = verificationResult.isLegallyConsistent;
+          statutoryCitations = verificationResult.statutoryCitations;
+
+          // Boost confidence if explanation is grounded in statute
+          if (isStatutorilyVerified) {
+            verifiedConfidence = Math.min(1, verifiedConfidence * 1.1);
+          } else if (verificationResult.symbolicVerification.violationCount > 0) {
+            // Reduce confidence if explanation violates rules
+            verifiedConfidence = Math.max(0, verifiedConfidence * 0.7);
+            logger.warn("[CrossEnrollment] Recommendation failed statutory verification", {
+              programCode: program.code,
+              householdId: household.householdId,
+              violationCount: verificationResult.symbolicVerification.violationCount,
+              service: "CrossEnrollmentEngine"
+            });
+          }
+        } catch (gatewayError) {
+          logger.warn("[CrossEnrollment] Gateway verification failed - proceeding with unverified recommendation", {
+            programCode: program.code,
+            error: gatewayError instanceof Error ? gatewayError.message : "Unknown",
+            service: "CrossEnrollmentEngine"
+          });
+        }
+        
         recommendations.push({
           programId: program.id,
           programName: program.name,
@@ -373,7 +415,9 @@ class CrossEnrollmentEngineService {
           estimatedBenefit: prediction.estimatedBenefit,
           impactScore: prediction.impactScore,
           priority: prediction.priority,
-          explanation: prediction.explanation,
+          explanation: prediction.explanation + (isStatutorilyVerified && statutoryCitations.length > 0 
+            ? ` (Based on: ${statutoryCitations.slice(0, 2).join(', ')})` 
+            : ''),
           requirements: prediction.requirements,
           processingTime: prediction.processingTime,
           deadline: this.calculateDeadline(program.code)

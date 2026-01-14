@@ -18,6 +18,7 @@ import { createHash, randomBytes } from "crypto";
 import { cacheOrchestrator } from "./cacheOrchestrator";
 import { GoogleGenAI } from "@google/genai";
 import { logger } from "./logger.service";
+import { neuroSymbolicHybridGateway } from "./neuroSymbolicHybridGateway";
 
 // ============================================================================
 // TYPES AND CONSTANTS
@@ -776,17 +777,80 @@ export class BenefitsAccessReviewService {
   }
 
   /**
-   * Run AI assessment for a review
+   * Run AI assessment for a review with Z3 solver verification
+   * Per neuro-symbolic architecture: Compare AI assessment against formal verification
    */
   private async runAIAssessment(reviewId: string, caseId: string): Promise<void> {
     const assessment = await aiAssessmentService.assessCaseQuality(caseId);
+    
+    // NEURO-SYMBOLIC VERIFICATION
+    // Compare AI assessment summary against statutory rules to detect inconsistencies
+    // Per paper: "All eligibility determinations must be verified by Z3 solver"
+    let solverVerification: {
+      verified: boolean;
+      isConsistent: boolean;
+      discrepancies?: string[];
+      gatewayRunId?: string;
+    } = { verified: false, isConsistent: true };
+
+    try {
+      // Mode 1: Verify AI assessment summary against statutory rules
+      const verificationResult = await neuroSymbolicHybridGateway.verifyExplanation(
+        assessment.summary,
+        "MD",
+        "SNAP",
+        {
+          caseId,
+          triggeredBy: "bar_ai_assessment"
+        }
+      );
+
+      solverVerification = {
+        verified: true,
+        isConsistent: verificationResult.isLegallyConsistent,
+        gatewayRunId: verificationResult.gatewayRunId
+      };
+
+      // Log if AI assessment and solver verification disagree
+      if (!verificationResult.isLegallyConsistent) {
+        logger.warn("[BAR] AI assessment failed solver verification - discrepancy detected", {
+          reviewId,
+          caseId,
+          violationCount: verificationResult.symbolicVerification.violationCount,
+          citations: verificationResult.statutoryCitations,
+          gatewayRunId: verificationResult.gatewayRunId,
+          service: "BenefitsAccessReviewService"
+        });
+
+        solverVerification.discrepancies = verificationResult.symbolicVerification.violations.map(v =>
+          `${v.ruleName}: ${v.explanation}`
+        );
+      }
+    } catch (solverError) {
+      logger.warn("[BAR] Solver verification failed - proceeding with unverified AI assessment", {
+        reviewId,
+        caseId,
+        error: solverError instanceof Error ? solverError.message : "Unknown",
+        service: "BenefitsAccessReviewService"
+      });
+    }
+
+    // Include solver verification status in assessment details
+    const enhancedDetails = {
+      ...assessment.details,
+      solverVerification
+    };
     
     await db
       .update(benefitsAccessReviews)
       .set({
         aiAssessmentScore: assessment.score,
-        aiAssessmentSummary: assessment.summary,
-        aiAssessmentDetails: assessment.details,
+        aiAssessmentSummary: assessment.summary + (
+          !solverVerification.isConsistent 
+            ? " [⚠️ Solver verification detected potential inconsistencies]"
+            : ""
+        ),
+        aiAssessmentDetails: enhancedDetails,
         aiAssessmentDate: new Date(),
         updatedAt: new Date()
       })
