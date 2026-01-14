@@ -9070,6 +9070,328 @@ export type InsertEEIndividualRecord = z.infer<typeof insertEEIndividualRecordSc
 export type EEVerificationResult = typeof eeVerificationResults.$inferSelect;
 export type InsertEEVerificationResult = z.infer<typeof insertEEVerificationResultSchema>;
 
+// ============================================================================
+// E&E SYNTHETIC DATABASE - Complete 172-field representation for sidecar testing
+// Based on Maryland E&E Data Dictionary (CARES/SAWS system simulation)
+// ============================================================================
+
+// E&E Synthetic Individuals - Fields 1-38 (Demographics, Names, Personal Info)
+export const eeSyntheticIndividuals = pgTable("ee_synthetic_individuals", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  individualId: varchar("individual_id", { length: 50 }).notNull().unique(),
+  mdmId: varchar("mdm_id", { length: 50 }),
+  sourceSystem: varchar("source_system", { length: 50 }).default("CARES"),
+  ssn: varchar("ssn", { length: 11 }),
+  dateOfBirth: date("date_of_birth"),
+  birthStateCode: varchar("birth_state_code", { length: 2 }),
+  birthState: varchar("birth_state", { length: 50 }),
+  deathDate: date("death_date"),
+  deathState: varchar("death_state", { length: 50 }),
+  deathStateCode: varchar("death_state_code", { length: 2 }),
+  domesticViolenceInd: boolean("domestic_violence_ind").default(false),
+  effectiveBeginDate: date("effective_begin_date"),
+  effectiveEndDate: date("effective_end_date"),
+  genderCode: varchar("gender_code", { length: 1 }),
+  gender: varchar("gender", { length: 20 }),
+  raceCode: varchar("race_code", { length: 2 }),
+  race: varchar("race", { length: 50 }),
+  ethnicityCode: varchar("ethnicity_code", { length: 1 }),
+  ethnicity: varchar("ethnicity", { length: 50 }),
+  citizenshipStatusCode: varchar("citizenship_status_code", { length: 10 }),
+  citizenship: varchar("citizenship", { length: 50 }),
+  countryOfOriginCode: varchar("country_of_origin_code", { length: 3 }),
+  countryOfOrigin: varchar("country_of_origin", { length: 100 }),
+  maritalStatusInd: varchar("marital_status_ind", { length: 10 }),
+  maritalStatus: varchar("marital_status", { length: 30 }),
+  ssnVerificationSourceCode: varchar("ssn_verification_source_code", { length: 10 }),
+  ssnVerificationSource: varchar("ssn_verification_source", { length: 100 }),
+  ssnVerificationIndicator: boolean("ssn_verification_indicator"),
+  hearingImpairedIndicator: boolean("hearing_impaired_indicator").default(false),
+  preferredLanguageCode: varchar("preferred_language_code", { length: 10 }),
+  preferredLanguage: varchar("preferred_language", { length: 50 }),
+  firstName: varchar("first_name", { length: 100 }),
+  lastName: varchar("last_name", { length: 100 }),
+  middleName: varchar("middle_name", { length: 100 }),
+  suffixCode: varchar("suffix_code", { length: 10 }),
+  suffix: varchar("suffix", { length: 20 }),
+  nameEffectiveBeginDate: date("name_effective_begin_date"),
+  nameEffectiveEndDate: date("name_effective_end_date"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => ({
+  individualIdIdx: index("ee_synth_ind_individual_id_idx").on(table.individualId),
+  mdmIdIdx: index("ee_synth_ind_mdm_id_idx").on(table.mdmId),
+  ssnIdx: index("ee_synth_ind_ssn_idx").on(table.ssn),
+  nameIdx: index("ee_synth_ind_name_idx").on(table.lastName, table.firstName),
+}));
+
+// E&E Synthetic Contacts - Fields 39-86 (Business, Personal, Other contact details)
+export const eeSyntheticContacts = pgTable("ee_synthetic_contacts", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  individualId: varchar("individual_id", { length: 50 }).notNull(),
+  caseNumber: varchar("case_number", { length: 50 }),
+  contactType: varchar("contact_type", { length: 20 }).notNull(), // business, personal, other
+  phoneNumber: varchar("phone_number", { length: 20 }),
+  phoneNumberExt: varchar("phone_number_ext", { length: 10 }),
+  phoneNumberTypeCode: varchar("phone_number_type_code", { length: 10 }),
+  phoneType: varchar("phone_type", { length: 30 }),
+  altPhoneNumber: varchar("alt_phone_number", { length: 20 }),
+  altPhoneNumberExt: varchar("alt_phone_number_ext", { length: 10 }),
+  altPhoneNumberTypeCode: varchar("alt_phone_number_type_code", { length: 10 }),
+  altPhoneType: varchar("alt_phone_type", { length: 30 }),
+  commModeCode: varchar("comm_mode_code", { length: 10 }),
+  communicationMode: varchar("communication_mode", { length: 30 }),
+  commPrefTimeCode: varchar("comm_pref_time_code", { length: 10 }),
+  email: varchar("email", { length: 255 }),
+  effectiveBeginDate: date("effective_begin_date"),
+  effectiveEndDate: date("effective_end_date"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => ({
+  individualIdIdx: index("ee_synth_contacts_individual_id_idx").on(table.individualId),
+  caseNumberIdx: index("ee_synth_contacts_case_number_idx").on(table.caseNumber),
+  contactTypeIdx: index("ee_synth_contacts_type_idx").on(table.contactType),
+}));
+
+// E&E Synthetic Addresses - Fields 87-128 (Residential, Mailing, Other addresses)
+export const eeSyntheticAddresses = pgTable("ee_synthetic_addresses", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  individualId: varchar("individual_id", { length: 50 }).notNull(),
+  caseNumber: varchar("case_number", { length: 50 }),
+  addressType: varchar("address_type", { length: 20 }).notNull(), // residential, mailing, other
+  addressLine1: varchar("address_line_1", { length: 255 }),
+  addressLine2: varchar("address_line_2", { length: 255 }),
+  city: varchar("city", { length: 100 }),
+  countyCode: varchar("county_code", { length: 3 }),
+  county: varchar("county", { length: 100 }),
+  stateCode: varchar("state_code", { length: 2 }),
+  state: varchar("state", { length: 50 }),
+  zipCode: varchar("zip_code", { length: 5 }),
+  zip4Code: varchar("zip_4_code", { length: 4 }),
+  effectiveBeginDate: date("effective_begin_date"),
+  effectiveEndDate: date("effective_end_date"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => ({
+  individualIdIdx: index("ee_synth_addr_individual_id_idx").on(table.individualId),
+  caseNumberIdx: index("ee_synth_addr_case_number_idx").on(table.caseNumber),
+  addressTypeIdx: index("ee_synth_addr_type_idx").on(table.addressType),
+  countyCodeIdx: index("ee_synth_addr_county_code_idx").on(table.countyCode),
+  zipCodeIdx: index("ee_synth_addr_zip_code_idx").on(table.zipCode),
+}));
+
+// E&E Synthetic Identification - Fields 129-136 (IRN, MA ID, PIN, Passport, Alien Number)
+export const eeSyntheticIdentification = pgTable("ee_synthetic_identification", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  individualId: varchar("individual_id", { length: 50 }).notNull(),
+  mdmId: varchar("mdm_id", { length: 50 }),
+  irn: varchar("irn", { length: 9 }),
+  maId: varchar("ma_id", { length: 50 }),
+  maIdSuffix: varchar("ma_id_suffix", { length: 10 }),
+  pin: varchar("pin", { length: 20 }),
+  passportNumber: varchar("passport_number", { length: 50 }),
+  alienNumber: varchar("alien_number", { length: 50 }),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => ({
+  individualIdIdx: index("ee_synth_ident_individual_id_idx").on(table.individualId),
+  irnIdx: index("ee_synth_ident_irn_idx").on(table.irn),
+  maIdIdx: index("ee_synth_ident_ma_id_idx").on(table.maId),
+}));
+
+// E&E Synthetic Cases - Fields 137-147 (Case information, HOH, Status, LDSS)
+export const eeSyntheticCases = pgTable("ee_synthetic_cases", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  caseNumber: varchar("case_number", { length: 50 }).notNull().unique(),
+  hohIndividualId: varchar("hoh_individual_id", { length: 50 }).notNull(),
+  hohIndicator: boolean("hoh_indicator").default(true),
+  caseStatusCode: varchar("case_status_code", { length: 10 }),
+  caseStatus: varchar("case_status", { length: 30 }),
+  caseModeCode: varchar("case_mode_code", { length: 10 }),
+  caseMode: varchar("case_mode", { length: 30 }),
+  effectiveBeginDate: date("effective_begin_date"),
+  effectiveEndDate: date("effective_end_date"),
+  ldssCode: varchar("ldss_code", { length: 20 }),
+  districtOffice: varchar("district_office", { length: 100 }),
+  householdSize: integer("household_size").default(1),
+  monthlyIncome: integer("monthly_income"),
+  monthlyExpenses: integer("monthly_expenses"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => ({
+  caseNumberIdx: index("ee_synth_cases_case_number_idx").on(table.caseNumber),
+  hohIndividualIdIdx: index("ee_synth_cases_hoh_idx").on(table.hohIndividualId),
+  caseStatusIdx: index("ee_synth_cases_status_idx").on(table.caseStatus),
+  ldssCodeIdx: index("ee_synth_cases_ldss_idx").on(table.ldssCode),
+}));
+
+// E&E Synthetic Program Enrollments - Fields 148-160 (Programs, status, workers)
+export const eeSyntheticProgramEnrollments = pgTable("ee_synthetic_program_enrollments", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  individualId: varchar("individual_id", { length: 50 }).notNull(),
+  caseNumber: varchar("case_number", { length: 50 }).notNull(),
+  programCode: varchar("program_code", { length: 20 }).notNull(),
+  programName: varchar("program_name", { length: 100 }),
+  coverageGroupCode: varchar("coverage_group_code", { length: 20 }),
+  programStatusCode: varchar("program_status_code", { length: 10 }),
+  programStatus: varchar("program_status", { length: 30 }),
+  effectiveBeginDate: date("effective_begin_date"),
+  effectiveEndDate: date("effective_end_date"),
+  ldssCode: varchar("ldss_code", { length: 20 }),
+  districtOffice: varchar("district_office", { length: 100 }),
+  worker: varchar("worker", { length: 100 }),
+  supervisor: varchar("supervisor", { length: 100 }),
+  monthlyBenefitAmount: integer("monthly_benefit_amount"),
+  certificationPeriodEnd: date("certification_period_end"),
+  redeterminationDue: date("redetermination_due"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => ({
+  individualIdIdx: index("ee_synth_prog_individual_id_idx").on(table.individualId),
+  caseNumberIdx: index("ee_synth_prog_case_number_idx").on(table.caseNumber),
+  programCodeIdx: index("ee_synth_prog_program_code_idx").on(table.programCode),
+  programStatusIdx: index("ee_synth_prog_status_idx").on(table.programStatus),
+  ldssCodeIdx: index("ee_synth_prog_ldss_idx").on(table.ldssCode),
+}));
+
+// E&E Synthetic Providers - Fields 161-172 (Provider details)
+export const eeSyntheticProviders = pgTable("ee_synthetic_providers", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  individualId: varchar("individual_id", { length: 50 }),
+  providerId: varchar("provider_id", { length: 50 }).notNull(),
+  providerName: varchar("provider_name", { length: 255 }),
+  providerAddressLine1: varchar("provider_address_line_1", { length: 255 }),
+  providerAddressLine2: varchar("provider_address_line_2", { length: 255 }),
+  providerCity: varchar("provider_city", { length: 100 }),
+  providerStateCode: varchar("provider_state_code", { length: 2 }),
+  providerState: varchar("provider_state", { length: 50 }),
+  providerZipcode: varchar("provider_zipcode", { length: 10 }),
+  effectiveBeginDate: date("effective_begin_date"),
+  effectiveEndDate: date("effective_end_date"),
+  systemId: varchar("system_id", { length: 50 }).default("E&E"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => ({
+  providerIdIdx: index("ee_synth_prov_provider_id_idx").on(table.providerId),
+  individualIdIdx: index("ee_synth_prov_individual_id_idx").on(table.individualId),
+}));
+
+// E&E Synthetic Case Closures - For churn analysis testing (from SNAP Churn Analysis)
+export const eeSyntheticCaseClosures = pgTable("ee_synthetic_case_closures", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  caseNumber: varchar("case_number", { length: 50 }).notNull(),
+  programCode: varchar("program_code", { length: 20 }).notNull(),
+  closureDate: date("closure_date").notNull(),
+  closureReasonCode: varchar("closure_reason_code", { length: 20 }),
+  closureReason: varchar("closure_reason", { length: 255 }),
+  closureCategory: varchar("closure_category", { length: 50 }),
+  ldssCode: varchar("ldss_code", { length: 20 }),
+  regionCode: varchar("region_code", { length: 20 }),
+  fiscalMonth: varchar("fiscal_month", { length: 7 }),
+  wasChurn: boolean("was_churn").default(false),
+  daysUntilReopen: integer("days_until_reopen"),
+  reopenedCaseNumber: varchar("reopened_case_number", { length: 50 }),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => ({
+  caseNumberIdx: index("ee_synth_closure_case_number_idx").on(table.caseNumber),
+  programCodeIdx: index("ee_synth_closure_program_code_idx").on(table.programCode),
+  closureDateIdx: index("ee_synth_closure_date_idx").on(table.closureDate),
+  closureReasonIdx: index("ee_synth_closure_reason_idx").on(table.closureReasonCode),
+  ldssCodeIdx: index("ee_synth_closure_ldss_idx").on(table.ldssCode),
+  fiscalMonthIdx: index("ee_synth_closure_fiscal_month_idx").on(table.fiscalMonth),
+}));
+
+// E&E Synthetic Case Members - Link individuals to cases (household composition)
+export const eeSyntheticCaseMembers = pgTable("ee_synthetic_case_members", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  caseNumber: varchar("case_number", { length: 50 }).notNull(),
+  individualId: varchar("individual_id", { length: 50 }).notNull(),
+  relationshipToHoh: varchar("relationship_to_hoh", { length: 50 }),
+  isHoh: boolean("is_hoh").default(false),
+  isApplicant: boolean("is_applicant").default(false),
+  memberStatusCode: varchar("member_status_code", { length: 10 }),
+  memberStatus: varchar("member_status", { length: 30 }),
+  effectiveBeginDate: date("effective_begin_date"),
+  effectiveEndDate: date("effective_end_date"),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => ({
+  caseNumberIdx: index("ee_synth_member_case_number_idx").on(table.caseNumber),
+  individualIdIdx: index("ee_synth_member_individual_id_idx").on(table.individualId),
+}));
+
+// Insert schemas for E&E Synthetic tables
+export const insertEESyntheticIndividualSchema = createInsertSchema(eeSyntheticIndividuals).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertEESyntheticContactSchema = createInsertSchema(eeSyntheticContacts).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertEESyntheticAddressSchema = createInsertSchema(eeSyntheticAddresses).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertEESyntheticIdentificationSchema = createInsertSchema(eeSyntheticIdentification).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertEESyntheticCaseSchema = createInsertSchema(eeSyntheticCases).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertEESyntheticProgramEnrollmentSchema = createInsertSchema(eeSyntheticProgramEnrollments).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertEESyntheticProviderSchema = createInsertSchema(eeSyntheticProviders).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertEESyntheticCaseClosureSchema = createInsertSchema(eeSyntheticCaseClosures).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertEESyntheticCaseMemberSchema = createInsertSchema(eeSyntheticCaseMembers).omit({
+  id: true,
+  createdAt: true,
+});
+
+// Types for E&E Synthetic tables
+export type EESyntheticIndividual = typeof eeSyntheticIndividuals.$inferSelect;
+export type InsertEESyntheticIndividual = z.infer<typeof insertEESyntheticIndividualSchema>;
+export type EESyntheticContact = typeof eeSyntheticContacts.$inferSelect;
+export type InsertEESyntheticContact = z.infer<typeof insertEESyntheticContactSchema>;
+export type EESyntheticAddress = typeof eeSyntheticAddresses.$inferSelect;
+export type InsertEESyntheticAddress = z.infer<typeof insertEESyntheticAddressSchema>;
+export type EESyntheticIdentification = typeof eeSyntheticIdentification.$inferSelect;
+export type InsertEESyntheticIdentification = z.infer<typeof insertEESyntheticIdentificationSchema>;
+export type EESyntheticCase = typeof eeSyntheticCases.$inferSelect;
+export type InsertEESyntheticCase = z.infer<typeof insertEESyntheticCaseSchema>;
+export type EESyntheticProgramEnrollment = typeof eeSyntheticProgramEnrollments.$inferSelect;
+export type InsertEESyntheticProgramEnrollment = z.infer<typeof insertEESyntheticProgramEnrollmentSchema>;
+export type EESyntheticProvider = typeof eeSyntheticProviders.$inferSelect;
+export type InsertEESyntheticProvider = z.infer<typeof insertEESyntheticProviderSchema>;
+export type EESyntheticCaseClosure = typeof eeSyntheticCaseClosures.$inferSelect;
+export type InsertEESyntheticCaseClosure = z.infer<typeof insertEESyntheticCaseClosureSchema>;
+export type EESyntheticCaseMember = typeof eeSyntheticCaseMembers.$inferSelect;
+export type InsertEESyntheticCaseMember = z.infer<typeof insertEESyntheticCaseMemberSchema>;
+
 // Export tax return tables from taxReturnSchema
 // COMMENTED OUT DURING SCHEMA ROLLBACK - taxReturnSchema.ts moved to backup
 // export * from './taxReturnSchema';

@@ -11935,6 +11935,13 @@ What would you like to know more about? You can also call 1-800-332-6347 for imm
   const researchRouter = (await import('./api/research.routes')).default;
   app.use('/api/research', researchRouter);
 
+  // ============================================================================
+  // Mount E&E Synthetic Data Routes - CARES/SAWS Sidecar Testing Database
+  // Implements complete 172-field Maryland data dictionary representation
+  // ============================================================================
+  const eeSyntheticDataRouter = (await import('./api/eeSyntheticData.routes')).default;
+  app.use('/api/ee-synthetic', eeSyntheticDataRouter);
+
   const httpServer = createServer(app);
   
   // Initialize WebSocket service for real-time notifications

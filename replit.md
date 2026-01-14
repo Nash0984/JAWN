@@ -43,6 +43,14 @@ The backend is built with Express.js and TypeScript, utilizing PostgreSQL via Dr
     -   **Tier 3 (Caseworker)**: Real-time AI nudges, risk scoring, and decision support
     -   LDSS office selector for tier switching (Maryland-only; multi-state filtering requires counties.stateCode column migration)
     -   99.9% accuracy is an aspirational documentation goal, not a system requirement
+-   **E&E Synthetic Database**: CARES/SAWS sidecar testing database implementing Maryland E&E Data Dictionary fields:
+    -   **9 Core Tables**: eeSyntheticIndividuals, eeSyntheticContacts, eeSyntheticAddresses, eeSyntheticIdentification, eeSyntheticCases, eeSyntheticProgramEnrollments, eeSyntheticProviders, eeSyntheticCaseClosures, eeSyntheticCaseMembers
+    -   **Synthetic Data Generator**: Creates 500+ realistic client records with varied scenarios
+    -   **Churn Patterns**: Implements Maryland SNAP churn analysis (20% rate, 39.67% form not received, 25.03% redet expired)
+    -   **LDSS Distribution**: Cases distributed across 24 Maryland LDSS offices with population-weighted sampling
+    -   **Cross-Enrollment Opportunities**: 35% of cases have identifiable cross-enrollment potential
+    -   **API Endpoints**: GET /api/ee-synthetic/health, GET /api/ee-synthetic/stats, POST /api/ee-synthetic/generate, DELETE /api/ee-synthetic/clear
+    -   Note: Core fields implemented; full 172-field compliance pending (contacts fields 39-86, addresses 87-128 need expansion)
 
 ## System Design Choices
 -   **Data Management**: PostgreSQL for core data, Google Cloud Storage for files.
