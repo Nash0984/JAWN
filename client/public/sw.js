@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'v1';
+const CACHE_VERSION = 'v2';
 const STATIC_CACHE = `md-benefits-static-${CACHE_VERSION}`;
 const DYNAMIC_CACHE = `md-benefits-dynamic-${CACHE_VERSION}`;
 const OFFLINE_PAGE = '/offline.html';
@@ -9,6 +9,9 @@ const STATIC_ASSETS = [
   '/maryland-seal.svg',
   '/manifest.json'
 ];
+
+// Development paths that should always use network-first
+const DEV_PATHS = ['/src/', '/@vite/', '/@react-refresh', '/@fs/', '/node_modules/.vite/'];
 
 self.addEventListener('install', (event) => {
   console.log('[Service Worker] Installing...');
@@ -47,6 +50,13 @@ self.addEventListener('fetch', (event) => {
   const url = new URL(request.url);
 
   if (request.method !== 'GET') {
+    return;
+  }
+
+  // Development files should always use network-first
+  const isDevPath = DEV_PATHS.some(path => url.pathname.startsWith(path));
+  if (isDevPath) {
+    event.respondWith(networkFirstStrategy(request));
     return;
   }
 

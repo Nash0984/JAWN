@@ -86,6 +86,7 @@ The backend is built with Express.js and TypeScript, utilizing PostgreSQL via Dr
 -   **Universal Feature Registry**: Ensures all programs access all features, with modular architecture and cross-enrollment intelligence.
 -   **PM2 Production Deployment**: Cluster mode deployment.
 -   **Multi-tenant Architecture**: Single unified application for all 24 Maryland LDSS offices.
+-   **Error Tracking & Monitoring**: Sentry integration with lazy initialization pattern - error boundary uses pure React class component to avoid hook timing issues at module load, and Sentry SDK is only imported when an error actually occurs. Service Worker caching disabled in development (replit.dev, localhost) to prevent stale code issues.
 
 # External Dependencies
 

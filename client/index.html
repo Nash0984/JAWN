@@ -26,41 +26,81 @@
   </head>
   <body>
     <div id="root"></div>
+    
+    <!-- Service Worker Management - Development vs Production -->
+    <script>
+      (function() {
+        // Check if we're in development mode
+        var hostname = window.location.hostname;
+        var isDev = hostname.includes('replit.dev') || 
+                    hostname.includes('localhost') || 
+                    hostname.includes('127.0.0.1');
+        
+        if (isDev && 'serviceWorker' in navigator) {
+          // In development: Unregister service workers to prevent caching issues
+          navigator.serviceWorker.getRegistrations().then(function(registrations) {
+            registrations.forEach(function(registration) {
+              registration.unregister();
+              console.log('[DEV] Unregistered service worker');
+            });
+          });
+          
+          // Clear all caches
+          if ('caches' in window) {
+            caches.keys().then(function(names) {
+              names.forEach(function(name) {
+                caches.delete(name);
+                console.log('[DEV] Cleared cache:', name);
+              });
+            });
+          }
+        }
+      })();
+    </script>
+    
     <script type="module" src="/src/main.tsx"></script>
     
-    <!-- Service Worker Registration -->
+    <!-- Service Worker Registration - Only in Production -->
     <script>
-      if ('serviceWorker' in navigator) {
-        window.addEventListener('load', () => {
-          navigator.serviceWorker.register('/sw.js')
-            .then((registration) => {
-              console.log('Service Worker registered successfully:', registration.scope);
-              
-              registration.addEventListener('updatefound', () => {
-                const newWorker = registration.installing;
-                newWorker.addEventListener('statechange', () => {
-                  if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
-                    if (confirm('A new version is available. Reload to update?')) {
-                      newWorker.postMessage({ type: 'SKIP_WAITING' });
-                      window.location.reload();
+      (function() {
+        var hostname = window.location.hostname;
+        var isDev = hostname.includes('replit.dev') || 
+                    hostname.includes('localhost') || 
+                    hostname.includes('127.0.0.1');
+        
+        // Only register service worker in production
+        if (!isDev && 'serviceWorker' in navigator) {
+          window.addEventListener('load', function() {
+            navigator.serviceWorker.register('/sw.js')
+              .then(function(registration) {
+                console.log('Service Worker registered:', registration.scope);
+                
+                registration.addEventListener('updatefound', function() {
+                  var newWorker = registration.installing;
+                  newWorker.addEventListener('statechange', function() {
+                    if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                      if (confirm('A new version is available. Reload to update?')) {
+                        newWorker.postMessage({ type: 'SKIP_WAITING' });
+                        window.location.reload();
+                      }
                     }
-                  }
+                  });
                 });
+              })
+              .catch(function(error) {
+                console.error('Service Worker registration failed:', error);
               });
-            })
-            .catch((error) => {
-              console.error('Service Worker registration failed:', error);
-            });
 
-          let refreshing = false;
-          navigator.serviceWorker.addEventListener('controllerchange', () => {
-            if (!refreshing) {
-              refreshing = true;
-              window.location.reload();
-            }
+            var refreshing = false;
+            navigator.serviceWorker.addEventListener('controllerchange', function() {
+              if (!refreshing) {
+                refreshing = true;
+                window.location.reload();
+              }
+            });
           });
-        });
-      }
+        }
+      })();
     </script>
     
     <!-- This is a replit script which adds a banner on the top of the page when opened in development mode outside the replit environment -->

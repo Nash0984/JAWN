@@ -1,164 +1,177 @@
 /**
  * Sentry Client Configuration
  * 
- * Initializes Sentry for frontend error tracking and performance monitoring
- * with graceful degradation when packages are not available
+ * Simple, robust error boundary that works without any startup dependencies.
+ * Sentry is only loaded lazily when an error occurs AND DSN is configured.
  */
 
 import * as React from "react";
-import { ComponentType, ReactNode } from "react";
+import { ReactNode } from "react";
 
+// Sentry state - starts null, loaded lazily only when needed
 let Sentry: any = null;
-let sentryEnabled = false;
-let initializationPromise: Promise<void> | null = null;
+let sentryInitialized = false;
 
-// Try to import Sentry packages - gracefully handle if not installed
-async function initializeSentry() {
-  // Early return if DSN is not configured - prevents unnecessary module loading
-  const dsn = import.meta.env.VITE_SENTRY_DSN;
-  if (!dsn) {
-    console.warn("⚠️  Sentry DSN not configured (VITE_SENTRY_DSN). Frontend error tracking disabled.");
-    return;
+// Check if DSN is configured (can be checked synchronously)
+const SENTRY_DSN = typeof window !== 'undefined' 
+  ? (import.meta.env.VITE_SENTRY_DSN || '') 
+  : '';
+
+/**
+ * Lazily initialize Sentry - only called when an error actually occurs
+ * This avoids all timing issues with React initialization
+ */
+async function initializeSentryLazily(): Promise<boolean> {
+  // Already initialized
+  if (sentryInitialized) return true;
+  
+  // No DSN configured
+  if (!SENTRY_DSN) {
+    return false;
   }
   
   try {
     const sentryModule = await import("@sentry/react");
-    Sentry = sentryModule.default || sentryModule;
+    Sentry = sentryModule;
     
-    if (dsn) {
-      const environment = import.meta.env.VITE_SENTRY_ENVIRONMENT || import.meta.env.MODE || "development";
-      const tracesSampleRate = parseFloat(import.meta.env.VITE_SENTRY_TRACES_SAMPLE_RATE || "0.1");
-      
-      Sentry.init({
-        dsn,
-        environment,
-        
-        // Performance monitoring
-        tracesSampleRate,
-        
-        // Integrations
-        integrations: [
-          Sentry.browserTracingIntegration(),
-          Sentry.replayIntegration({
-            maskAllText: true, // Mask all text to protect PII
-            blockAllMedia: true, // Block all media
-          }),
-        ],
-        
-        // Session replay sample rate
-        replaysSessionSampleRate: 0.1,
-        replaysOnErrorSampleRate: 1.0, // Always capture replay on error
-        
-        // PII filtering
-        beforeSend(event: any, hint: any) {
-          // Remove PII from error messages
-          if (event.exception?.values) {
-            event.exception.values.forEach((exception: any) => {
-              if (exception.value) {
-                // Scrub SSN patterns
-                exception.value = exception.value.replace(/\b\d{3}-\d{2}-\d{4}\b/g, "[SSN REDACTED]");
-                // Scrub email addresses
-                exception.value = exception.value.replace(/\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/g, "[EMAIL REDACTED]");
-                // Scrub phone numbers
-                exception.value = exception.value.replace(/\b\d{3}[-.]?\d{3}[-.]?\d{4}\b/g, "[PHONE REDACTED]");
-              }
-            });
-          }
-          
-          return event;
-        },
-      });
-      
-      sentryEnabled = true;
-      // Keep: Sentry initialization confirmation - important for production monitoring
-      console.log(`✅ Sentry initialized (${environment}) on frontend`);
-    }
+    const environment = import.meta.env.VITE_SENTRY_ENVIRONMENT || import.meta.env.MODE || "development";
+    const tracesSampleRate = parseFloat(import.meta.env.VITE_SENTRY_TRACES_SAMPLE_RATE || "0.1");
+    
+    Sentry.init({
+      dsn: SENTRY_DSN,
+      environment,
+      tracesSampleRate,
+      replaysSessionSampleRate: 0.1,
+      replaysOnErrorSampleRate: 1.0,
+      beforeSend(event: any) {
+        // Scrub PII from error messages
+        if (event.exception?.values) {
+          event.exception.values.forEach((exception: any) => {
+            if (exception.value) {
+              exception.value = exception.value
+                .replace(/\b\d{3}-\d{2}-\d{4}\b/g, "[SSN REDACTED]")
+                .replace(/\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/g, "[EMAIL REDACTED]")
+                .replace(/\b\d{3}[-.]?\d{3}[-.]?\d{4}\b/g, "[PHONE REDACTED]");
+            }
+          });
+        }
+        return event;
+      },
+    });
+    
+    sentryInitialized = true;
+    console.log(`✅ Sentry initialized (${environment}) on frontend`);
+    return true;
   } catch (error) {
-    // Keep: Sentry package warning - important for setup diagnostics
-    console.warn("⚠️  Sentry packages not installed. Frontend error tracking disabled.");
-    sentryEnabled = false;
+    console.warn("⚠️  Failed to load Sentry:", error);
+    return false;
   }
 }
 
-// Initialize Sentry and store the promise
-if (typeof window !== 'undefined') {
-  initializationPromise = initializeSentry();
+// Log once at startup if DSN is not configured
+if (typeof window !== 'undefined' && !SENTRY_DSN) {
+  console.warn("⚠️  Sentry DSN not configured (VITE_SENTRY_DSN). Frontend error tracking disabled.");
 }
 
 /**
- * Sentry Error Boundary Component
- * Simple passthrough error boundary - Sentry integration disabled to avoid hook conflicts
- * Uses a class component for React error boundary compatibility
+ * Simple Error Boundary Component
+ * 
+ * This is a pure React class component with zero external dependencies at startup.
+ * Sentry is only loaded lazily when an error is caught.
  */
-interface SentryErrorBoundaryState {
+interface ErrorBoundaryState {
   hasError: boolean;
   error: Error | null;
 }
 
 export class SentryErrorBoundary extends React.Component<
-  { children: ReactNode },
-  SentryErrorBoundaryState
+  { children: ReactNode; fallback?: ReactNode },
+  ErrorBoundaryState
 > {
-  constructor(props: { children: ReactNode }) {
+  constructor(props: { children: ReactNode; fallback?: ReactNode }) {
     super(props);
-    this.state = {
-      hasError: false,
-      error: null
-    };
+    this.state = { hasError: false, error: null };
   }
 
-  static getDerivedStateFromError(error: Error) {
+  static getDerivedStateFromError(error: Error): ErrorBoundaryState {
     return { hasError: true, error };
   }
 
   componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
-    console.error('[SentryErrorBoundary] Caught error:', error, errorInfo);
-    if (sentryEnabled && Sentry?.captureException) {
-      try {
-        Sentry.captureException(error, { extra: { componentStack: errorInfo.componentStack } });
-      } catch (e) {
-        // Silently fail if Sentry is not available
-      }
+    console.error('[ErrorBoundary] Caught error:', error);
+    
+    // Lazily load and report to Sentry only when an error actually occurs
+    if (SENTRY_DSN) {
+      initializeSentryLazily().then((initialized) => {
+        if (initialized && Sentry?.captureException) {
+          Sentry.captureException(error, { 
+            extra: { componentStack: errorInfo.componentStack } 
+          });
+        }
+      });
     }
   }
 
   render() {
-    const { children } = this.props;
+    const { children, fallback } = this.props;
     const { hasError, error } = this.state;
 
     if (hasError) {
+      if (fallback) {
+        return <>{fallback}</>;
+      }
+      
       return (
-        <div style={{ padding: '20px', textAlign: 'center', fontFamily: 'system-ui, sans-serif' }}>
-          <h2 style={{ color: '#e53e3e', marginBottom: '16px' }}>Something went wrong</h2>
-          <p style={{ color: '#4a5568', marginBottom: '16px' }}>
-            We're sorry, but something unexpected happened.
-          </p>
-          <button 
-            onClick={() => window.location.reload()}
-            style={{ 
-              padding: '8px 16px', 
-              backgroundColor: '#3182ce', 
-              color: 'white', 
-              border: 'none', 
-              borderRadius: '4px',
-              cursor: 'pointer'
-            }}
-          >
-            Refresh Page
-          </button>
-          {import.meta.env.DEV && error && (
-            <pre style={{ 
-              marginTop: '20px', 
-              padding: '12px', 
-              backgroundColor: '#f7fafc', 
-              borderRadius: '4px',
-              textAlign: 'left',
-              fontSize: '12px',
-              overflow: 'auto'
-            }}>
-              {error.message}
-            </pre>
-          )}
+        <div style={{ 
+          padding: '40px 20px', 
+          textAlign: 'center', 
+          fontFamily: 'system-ui, -apple-system, sans-serif',
+          minHeight: '100vh',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          backgroundColor: '#f8fafc'
+        }}>
+          <div style={{ maxWidth: '400px' }}>
+            <h2 style={{ color: '#dc2626', marginBottom: '16px', fontSize: '24px' }}>
+              Something went wrong
+            </h2>
+            <p style={{ color: '#64748b', marginBottom: '24px', lineHeight: '1.6' }}>
+              We're sorry, but something unexpected happened. Please try refreshing the page.
+            </p>
+            <button 
+              onClick={() => window.location.reload()}
+              style={{ 
+                padding: '12px 24px', 
+                backgroundColor: '#2563eb', 
+                color: 'white', 
+                border: 'none', 
+                borderRadius: '8px',
+                cursor: 'pointer',
+                fontSize: '16px',
+                fontWeight: '500'
+              }}
+            >
+              Refresh Page
+            </button>
+            {import.meta.env.DEV && error && (
+              <pre style={{ 
+                marginTop: '24px', 
+                padding: '16px', 
+                backgroundColor: '#1e293b', 
+                color: '#f1f5f9',
+                borderRadius: '8px',
+                textAlign: 'left',
+                fontSize: '12px',
+                overflow: 'auto',
+                maxHeight: '200px'
+              }}>
+                {error.message}
+                {error.stack && `\n\n${error.stack}`}
+              </pre>
+            )}
+          </div>
         </div>
       );
     }
@@ -168,22 +181,10 @@ export class SentryErrorBoundary extends React.Component<
 }
 
 /**
- * Get Sentry Error Boundary component (deprecated - use SentryErrorBoundary component instead)
- * @deprecated Use SentryErrorBoundary component for proper async handling
- */
-export function getSentryErrorBoundary() {
-  if (sentryEnabled && Sentry?.ErrorBoundary) {
-    return Sentry.ErrorBoundary;
-  }
-  // Return a fallback error boundary
-  return ({ children }: { children: ReactNode }) => <>{children}</>;
-}
-
-/**
- * Set user context
+ * Set user context - only works if Sentry has been initialized
  */
 export function setUserContext(user: { id: string; username?: string; email?: string; role?: string } | null) {
-  if (!sentryEnabled) return;
+  if (!sentryInitialized || !Sentry) return;
   
   try {
     if (user) {
@@ -197,53 +198,57 @@ export function setUserContext(user: { id: string; username?: string; email?: st
       Sentry.setUser(null);
     }
   } catch (error) {
-    // console.error("Failed to set Sentry user context:", error);
+    // Silently fail
   }
 }
 
 /**
- * Capture an exception
+ * Capture an exception - lazily initializes Sentry if needed
  */
-export function captureException(error: Error, context?: Record<string, any>) {
-  if (!sentryEnabled) {
-    // Keep: Fallback error logging when Sentry is disabled - important for debugging
-    console.error("[Frontend Error]", error, context);
-    return null;
-  }
+export async function captureException(error: Error, context?: Record<string, any>): Promise<string | null> {
+  // Always log to console
+  console.error("[Frontend Error]", error, context);
+  
+  if (!SENTRY_DSN) return null;
+  
+  const initialized = await initializeSentryLazily();
+  if (!initialized || !Sentry) return null;
   
   try {
-    return Sentry.captureException(error, {
-      extra: context,
-    });
+    return Sentry.captureException(error, { extra: context });
   } catch (err) {
-    // console.error("Failed to capture exception in Sentry:", err);
     return null;
   }
 }
 
 /**
- * Capture a message
+ * Capture a message - lazily initializes Sentry if needed
  */
-export function captureMessage(message: string, level: 'fatal' | 'error' | 'warning' | 'info' | 'debug' = 'info') {
-  if (!sentryEnabled) {
-    const logLevel = level === 'fatal' || level === 'error' ? 'error' : level === 'warning' ? 'warn' : 'log';
-    console[logLevel](`[${level.toUpperCase()}]`, message);
-    return null;
-  }
+export async function captureMessage(
+  message: string, 
+  level: 'fatal' | 'error' | 'warning' | 'info' | 'debug' = 'info'
+): Promise<string | null> {
+  // Always log to console
+  const logLevel = level === 'fatal' || level === 'error' ? 'error' : level === 'warning' ? 'warn' : 'log';
+  console[logLevel](`[${level.toUpperCase()}]`, message);
+  
+  if (!SENTRY_DSN) return null;
+  
+  const initialized = await initializeSentryLazily();
+  if (!initialized || !Sentry) return null;
   
   try {
     return Sentry.captureMessage(message, level);
   } catch (error) {
-    // console.error("Failed to capture message in Sentry:", error);
     return null;
   }
 }
 
 /**
- * Add a breadcrumb
+ * Add a breadcrumb - only works if Sentry is already initialized
  */
 export function addBreadcrumb(message: string, category: string, data?: Record<string, any>) {
-  if (!sentryEnabled) return;
+  if (!sentryInitialized || !Sentry) return;
   
   try {
     Sentry.addBreadcrumb({
@@ -253,18 +258,29 @@ export function addBreadcrumb(message: string, category: string, data?: Record<s
       level: 'info',
     });
   } catch (error) {
-    // console.error("Failed to add Sentry breadcrumb:", error);
+    // Silently fail
   }
 }
 
 /**
- * Check if Sentry is enabled
+ * Check if Sentry is enabled (DSN configured)
  */
 export function isSentryEnabled(): boolean {
-  return sentryEnabled;
+  return Boolean(SENTRY_DSN);
 }
 
-// Also export as default for backward compatibility
+/**
+ * Check if Sentry has been initialized
+ */
+export function isSentryInitialized(): boolean {
+  return sentryInitialized;
+}
+
+// Deprecated - kept for backward compatibility
+export function getSentryErrorBoundary() {
+  return SentryErrorBoundary;
+}
+
 export default {
   SentryErrorBoundary,
   getSentryErrorBoundary,
@@ -273,4 +289,5 @@ export default {
   captureMessage,
   addBreadcrumb,
   isSentryEnabled,
+  isSentryInitialized,
 };
