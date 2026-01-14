@@ -223,6 +223,228 @@ async function extractRuleWithStrategy(
 }
 
 class RuleExtractionService {
+  /**
+   * PAPER ALIGNMENT: Direct text-to-Z3 extraction with embedding-based concept retrieval
+   * This implements the "directed symbolic" prompting strategy from the paper:
+   * 1. Extract concepts from input text using embeddings
+   * 2. Retrieve semantically similar ontology terms
+   * 3. Build directed prompt with retrieved concepts
+   * 4. Generate Z3 logic via Gemini
+   */
+  async extractRuleFromText(
+    statutoryText: string,
+    stateCode: string,
+    programCode: string,
+    domain?: EligibilityDomain,
+    statutoryCitation?: string
+  ): Promise<{
+    success: boolean;
+    z3Logic?: string;
+    ontologyTermsUsed?: string[];
+    validation?: { valid: boolean; errors: string[] };
+    formalRuleId?: string;
+    error?: string;
+  }> {
+    try {
+      // Step 1: Find semantically similar ontology terms using embeddings
+      const similarTerms = await legalOntologyService.findSimilarTerms(
+        statutoryText,
+        stateCode,
+        programCode,
+        0.6, // Lower threshold to capture more relevant terms
+        25   // Get top 25 similar terms
+      );
+
+      // Step 2: Also get domain-specific terms if domain provided
+      let domainTerms: typeof similarTerms = [];
+      if (domain) {
+        const allTerms = await legalOntologyService.getTermsByProgram(stateCode, programCode);
+        domainTerms = allTerms
+          .filter(t => t.domain === domain)
+          .slice(0, 15)
+          .map(t => ({ term: t, similarity: 0.8 }));
+      }
+
+      // Combine and deduplicate terms
+      const termMap = new Map<string, { termName: string; canonicalName: string; definition: string | null }>();
+      for (const { term } of [...similarTerms, ...domainTerms]) {
+        if (!termMap.has(term.canonicalName)) {
+          termMap.set(term.canonicalName, {
+            termName: term.termName,
+            canonicalName: term.canonicalName,
+            definition: term.definition
+          });
+        }
+      }
+      const ontologyTermsForPrompt = Array.from(termMap.values()).slice(0, 30);
+      
+      // Step 3: Determine domain if not provided
+      const detectedDomain = domain || this.detectDomain(statutoryText);
+
+      // Step 4: Build directed symbolic prompt with retrieved concepts
+      const prompt = buildDirectedSymbolicPrompt(
+        statutoryText,
+        detectedDomain,
+        ontologyTermsForPrompt
+      );
+
+      // Step 5: Generate Z3 logic using Gemini
+      const startTime = Date.now();
+      const response = await generateTextWithGemini(prompt);
+      const latencyMs = Date.now() - startTime;
+
+      let extractedLogic = response.trim();
+      if (extractedLogic.startsWith("```")) {
+        extractedLogic = extractedLogic.replace(/```[a-z]*\n?/g, "").replace(/```/g, "").trim();
+      }
+
+      // Step 6: Validate Z3 syntax
+      const validation = validateZ3Syntax(extractedLogic);
+      const ontologyTermsUsed = ontologyTermsForPrompt.map(t => t.canonicalName);
+
+      // Step 7: Store the formal rule if valid
+      let formalRuleId: string | undefined;
+      if (validation.valid) {
+        const [formalRule] = await db.insert(formalRules).values({
+          stateCode,
+          programCode,
+          ruleName: `${programCode}_${detectedDomain}_${Date.now()}`,
+          eligibilityDomain: detectedDomain,
+          z3Logic: extractedLogic,
+          ontologyTermsUsed,
+          statutoryCitation: statutoryCitation || `${stateCode} ${programCode} regulations`,
+          isValid: true,
+          extractionPrompt: prompt,
+          extractionModel: EXTRACTION_MODEL,
+          promptStrategy: "directed_symbolic",
+          extractionConfidence: 0.85,
+          status: "pending_review"
+        }).returning();
+        formalRuleId = formalRule.id;
+      }
+
+      // Step 8: Log extraction attempt
+      await db.insert(ruleExtractionLogs).values({
+        extractionModel: EXTRACTION_MODEL,
+        promptStrategy: "directed_symbolic",
+        prompt,
+        response: extractedLogic,
+        extractedLogic,
+        isSuccess: validation.valid,
+        errorMessage: validation.errors.length > 0 ? validation.errors.join("; ") : null,
+        z3ValidationResult: validation.valid ? "valid" : "syntax_error",
+        inputTokens: Math.ceil(prompt.length / 4),
+        outputTokens: Math.ceil(extractedLogic.length / 4),
+        latencyMs
+      });
+
+      return {
+        success: validation.valid,
+        z3Logic: extractedLogic,
+        ontologyTermsUsed,
+        validation,
+        formalRuleId,
+        error: validation.errors.length > 0 ? validation.errors.join("; ") : undefined
+      };
+
+    } catch (error: any) {
+      return {
+        success: false,
+        error: error.message
+      };
+    }
+  }
+
+  /**
+   * Detect eligibility domain from statutory text
+   */
+  private detectDomain(text: string): EligibilityDomain {
+    const textLower = text.toLowerCase();
+    
+    const domainKeywords: Record<EligibilityDomain, string[]> = {
+      income: ["income", "earnings", "salary", "wages", "poverty", "fpl", "gross", "net", "deduction"],
+      residency: ["resident", "reside", "living", "domicile", "state of"],
+      citizenship: ["citizen", "national", "alien", "immigrant", "immigration", "lawful"],
+      resources: ["resource", "asset", "property", "savings", "bank account", "countable"],
+      work_requirement: ["work", "employment", "employed", "abawd", "job", "hours per"],
+      student_status: ["student", "enrolled", "school", "university", "college", "education"],
+      household_composition: ["household", "family", "dependent", "member", "spouse", "child"],
+      age: ["age", "years old", "elderly", "minor", "under 18", "over 60"],
+      disability: ["disabled", "disability", "incapacitated", "unable to work"],
+      other: []
+    };
+
+    let bestDomain: EligibilityDomain = "other";
+    let maxMatches = 0;
+
+    for (const [domain, keywords] of Object.entries(domainKeywords)) {
+      const matches = keywords.filter(kw => textLower.includes(kw)).length;
+      if (matches > maxMatches) {
+        maxMatches = matches;
+        bestDomain = domain as EligibilityDomain;
+      }
+    }
+
+    return bestDomain;
+  }
+
+  /**
+   * Batch extract rules from multiple statutory clauses
+   */
+  async batchExtractFromText(
+    clauses: Array<{
+      text: string;
+      citation?: string;
+      domain?: EligibilityDomain;
+    }>,
+    stateCode: string,
+    programCode: string
+  ): Promise<{
+    total: number;
+    successful: number;
+    failed: number;
+    results: Array<{
+      text: string;
+      success: boolean;
+      z3Logic?: string;
+      error?: string;
+    }>;
+  }> {
+    const results: Array<{
+      text: string;
+      success: boolean;
+      z3Logic?: string;
+      error?: string;
+    }> = [];
+
+    for (const clause of clauses) {
+      const result = await this.extractRuleFromText(
+        clause.text,
+        stateCode,
+        programCode,
+        clause.domain,
+        clause.citation
+      );
+
+      results.push({
+        text: clause.text.substring(0, 100) + "...",
+        success: result.success,
+        z3Logic: result.z3Logic,
+        error: result.error
+      });
+
+      // Rate limiting between extractions
+      await new Promise(resolve => setTimeout(resolve, 500));
+    }
+
+    return {
+      total: clauses.length,
+      successful: results.filter(r => r.success).length,
+      failed: results.filter(r => !r.success).length,
+      results
+    };
+  }
+
   async createRuleFragment(
     statutorySourceId: string,
     clauseText: string,
