@@ -46,9 +46,8 @@ The backend is built with Express.js and TypeScript, utilizing PostgreSQL via Dr
 -   **E&E Synthetic Database**: CARES/SAWS sidecar testing database implementing Maryland E&E Data Dictionary fields:
     -   **9 Core Tables**: eeSyntheticIndividuals, eeSyntheticContacts, eeSyntheticAddresses, eeSyntheticIdentification, eeSyntheticCases, eeSyntheticProgramEnrollments, eeSyntheticProviders, eeSyntheticCaseClosures, eeSyntheticCaseMembers
     -   **Synthetic Data Generator**: Creates 500+ realistic client records with varied scenarios
-    -   **Churn Patterns**: Implements Maryland SNAP churn analysis (20% rate, 39.67% form not received, 25.03% redet expired)
-    -   **LDSS Distribution**: Cases distributed across 24 Maryland LDSS offices with population-weighted sampling
-    -   **Cross-Enrollment Opportunities**: 35% of cases have identifiable cross-enrollment potential
+    -   **Configurable Parameters**: churnRate, crossEnrollmentOpportunityRate, averageHouseholdSize, activeEnrollmentRate (no hardcoded assumptions)
+    -   **LDSS Distribution**: Cases distributed across 24 Maryland LDSS offices
     -   **API Endpoints**: GET /api/ee-synthetic/health, GET /api/ee-synthetic/stats, POST /api/ee-synthetic/generate, DELETE /api/ee-synthetic/clear
     -   Note: Core fields implemented; full 172-field compliance pending (contacts fields 39-86, addresses 87-128 need expansion)
 

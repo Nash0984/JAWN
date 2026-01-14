@@ -95,16 +95,16 @@ const STREET_NAMES = [
 
 const STREET_TYPES = ["St", "Ave", "Blvd", "Dr", "Ln", "Rd", "Ct", "Way", "Pl"];
 
-const CLOSURE_REASONS = {
-  formNotReceived: { code: "FNR", reason: "Form Not Received", category: "procedural", churnRate: 0.3967 },
-  redetExpired: { code: "RDE", reason: "Redetermination Expired", category: "procedural", churnRate: 0.2503 },
-  incomeOver: { code: "IOL", reason: "Income Over Limit", category: "eligibility", churnRate: 0.10 },
-  failedToComply: { code: "FTC", reason: "Failed to Comply", category: "procedural", churnRate: 0.15 },
-  movedOutOfState: { code: "MOS", reason: "Moved Out of State", category: "eligibility", churnRate: 0.02 },
-  voluntaryClosure: { code: "VOL", reason: "Voluntary Closure", category: "client", churnRate: 0.05 },
-  noEligibleMembers: { code: "NEM", reason: "No Eligible Members", category: "eligibility", churnRate: 0.03 },
-  resources: { code: "RES", reason: "Resources Over Limit", category: "eligibility", churnRate: 0.02 },
-};
+const CLOSURE_REASONS = [
+  { code: "FNR", reason: "Form Not Received", category: "procedural" },
+  { code: "RDE", reason: "Redetermination Expired", category: "procedural" },
+  { code: "IOL", reason: "Income Over Limit", category: "eligibility" },
+  { code: "FTC", reason: "Failed to Comply", category: "procedural" },
+  { code: "MOS", reason: "Moved Out of State", category: "eligibility" },
+  { code: "VOL", reason: "Voluntary Closure", category: "client" },
+  { code: "NEM", reason: "No Eligible Members", category: "eligibility" },
+  { code: "RES", reason: "Resources Over Limit", category: "eligibility" },
+];
 
 const PROGRAMS = [
   { code: "SNAP", name: "Supplemental Nutrition Assistance Program", maxBenefit: 1751 },
@@ -388,19 +388,7 @@ export async function generateSyntheticData(
     }
 
     if (!isActiveCase) {
-      const closureReasonKeys = Object.keys(CLOSURE_REASONS) as (keyof typeof CLOSURE_REASONS)[];
-      const closureWeights = closureReasonKeys.map(k => CLOSURE_REASONS[k].churnRate);
-      const totalWeight = closureWeights.reduce((a, b) => a + b, 0);
-      let random = Math.random() * totalWeight;
-      let selectedClosure = CLOSURE_REASONS.formNotReceived;
-      
-      for (let i = 0; i < closureReasonKeys.length; i++) {
-        random -= closureWeights[i];
-        if (random <= 0) {
-          selectedClosure = CLOSURE_REASONS[closureReasonKeys[i]];
-          break;
-        }
-      }
+      const selectedClosure = randomElement(CLOSURE_REASONS);
 
       const closureDate = randomDate(oneYearAgo, now);
       const fiscalDate = new Date(closureDate);
