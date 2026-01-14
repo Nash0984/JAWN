@@ -18,7 +18,13 @@ export type OntologyDomain =
   | "categorical_eligibility"
   | "deductions"
   | "assets"
-  | "time_limits";
+  | "time_limits"
+  | "due_process"
+  | "change_reporting"
+  | "recertification"
+  | "disqualification"
+  | "claims_recovery"
+  | "employment_training";
 
 export type RelationshipType = 
   | "is_a"
