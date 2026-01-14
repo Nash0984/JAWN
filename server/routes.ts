@@ -11891,6 +11891,12 @@ What would you like to know more about? You can also call 1-800-332-6347 for imm
   app.use('/api/case-assertions', caseAssertionRouter);
 
   // ============================================================================
+  // Mount Explanation Parser Routes - NOA/Explanation Clause Parsing to ABox
+  // ============================================================================
+  const explanationParserRouter = (await import('./api/explanationParser.routes')).default;
+  app.use('/api/explanation-parser', explanationParserRouter);
+
+  // ============================================================================
   // Mount Z3 Solver Routes - Neuro-Symbolic AI Formal Verification
   // ============================================================================
   const z3SolverRouter = (await import('./api/z3Solver.routes')).default;

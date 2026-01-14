@@ -160,4 +160,110 @@ router.get("/appeal-guidance/:violationTraceId", async (req: Request, res: Respo
   }
 });
 
+router.get("/visualization/:solverRunId", async (req: Request, res: Response) => {
+  try {
+    const { solverRunId } = req.params;
+    
+    const traces = await violationTraceService.getViolationTracesForRun(solverRunId);
+    
+    const nodes: Array<{
+      id: string;
+      type: "rule" | "assertion" | "violation" | "citation";
+      label: string;
+      domain?: string;
+      severity?: string;
+    }> = [];
+    
+    const edges: Array<{
+      source: string;
+      target: string;
+      label?: string;
+      type: "violates" | "cites" | "conflicts_with";
+    }> = [];
+    
+    for (const trace of traces) {
+      nodes.push({
+        id: `violation-${trace.id}`,
+        type: "violation",
+        label: trace.violationDescription?.substring(0, 80) || trace.ruleName,
+        domain: trace.eligibilityDomain,
+        severity: trace.severityLevel
+      });
+      
+      if (trace.formalRuleId) {
+        nodes.push({
+          id: `rule-${trace.formalRuleId}`,
+          type: "rule",
+          label: trace.ruleName,
+          domain: trace.eligibilityDomain
+        });
+        
+        edges.push({
+          source: `violation-${trace.id}`,
+          target: `rule-${trace.formalRuleId}`,
+          label: "violates",
+          type: "violates"
+        });
+      }
+      
+      if (trace.statutoryCitation) {
+        const citationId = `citation-${trace.statutoryCitation.replace(/[^a-zA-Z0-9]/g, "_")}`;
+        if (!nodes.find(n => n.id === citationId)) {
+          nodes.push({
+            id: citationId,
+            type: "citation",
+            label: trace.statutoryCitation
+          });
+        }
+        
+        edges.push({
+          source: trace.formalRuleId ? `rule-${trace.formalRuleId}` : `violation-${trace.id}`,
+          target: citationId,
+          label: "cites",
+          type: "cites"
+        });
+      }
+      
+      const conflictingIds = trace.conflictingAssertionIds || [];
+      for (const assertionId of conflictingIds) {
+        const assertionNodeId = `assertion-${assertionId}`;
+        if (!nodes.find(n => n.id === assertionNodeId)) {
+          nodes.push({
+            id: assertionNodeId,
+            type: "assertion",
+            label: `Case Fact ${assertionId.substring(0, 8)}...`
+          });
+        }
+        
+        edges.push({
+          source: `violation-${trace.id}`,
+          target: assertionNodeId,
+          label: "conflicts with",
+          type: "conflicts_with"
+        });
+      }
+    }
+    
+    res.json({
+      success: true,
+      solverRunId,
+      graph: {
+        nodes,
+        edges,
+        metadata: {
+          totalViolations: traces.length,
+          domains: [...new Set(traces.map(t => t.eligibilityDomain))],
+          severities: traces.map(t => t.severityLevel).filter(Boolean)
+        }
+      }
+    });
+  } catch (error) {
+    console.error("[ViolationTrace] Error generating visualization:", error);
+    res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : "Failed to generate visualization"
+    });
+  }
+});
+
 export default router;

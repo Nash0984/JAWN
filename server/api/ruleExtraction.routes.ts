@@ -271,4 +271,74 @@ router.get(
   }
 );
 
+const directExtractSchema = z.object({
+  statutoryText: z.string().min(20, "Statutory text must be at least 20 characters"),
+  stateCode: z.string().length(2),
+  programCode: z.string().min(2).max(20),
+  domain: z.enum(["income", "residency", "citizenship", "resources", "work_requirement", "student_status", "household_composition", "age", "disability", "other"]).optional(),
+  statutoryCitation: z.string().optional()
+});
+
+const batchDirectExtractSchema = z.object({
+  clauses: z.array(z.object({
+    text: z.string().min(20),
+    citation: z.string().optional(),
+    domain: z.enum(["income", "residency", "citizenship", "resources", "work_requirement", "student_status", "household_composition", "age", "disability", "other"]).optional()
+  })).min(1).max(20),
+  stateCode: z.string().length(2),
+  programCode: z.string().min(2).max(20)
+});
+
+router.post(
+  "/extract/direct",
+  requireAuth,
+  requireRole("admin"),
+  async (req: Request, res: Response) => {
+    try {
+      const data = directExtractSchema.parse(req.body);
+      
+      const result = await ruleExtractionService.extractRuleFromText(
+        data.statutoryText,
+        data.stateCode,
+        data.programCode,
+        data.domain as EligibilityDomain | undefined,
+        data.statutoryCitation
+      );
+
+      res.json(result);
+    } catch (error: any) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: "Validation failed", details: error.errors });
+      }
+      console.error("Error in direct rule extraction:", error);
+      res.status(500).json({ error: "Failed to extract rule from text" });
+    }
+  }
+);
+
+router.post(
+  "/extract/direct/batch",
+  requireAuth,
+  requireRole("admin"),
+  async (req: Request, res: Response) => {
+    try {
+      const data = batchDirectExtractSchema.parse(req.body);
+      
+      const result = await ruleExtractionService.batchExtractFromText(
+        data.clauses,
+        data.stateCode,
+        data.programCode
+      );
+
+      res.json(result);
+    } catch (error: any) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: "Validation failed", details: error.errors });
+      }
+      console.error("Error in batch direct rule extraction:", error);
+      res.status(500).json({ error: "Failed to batch extract rules from text" });
+    }
+  }
+);
+
 export default router;
