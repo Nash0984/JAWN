@@ -43,7 +43,7 @@ The backend is built with Express.js and TypeScript, utilizing PostgreSQL via Dr
     -   **Tier 3 (Caseworker)**: Real-time AI nudges, risk scoring, and decision support
     -   LDSS office selector for tier switching (Maryland-only; multi-state filtering requires counties.stateCode column migration)
     -   99.9% accuracy is an aspirational documentation goal, not a system requirement
--   **E&E Synthetic Database**: CARES/SAWS sidecar testing database implementing Maryland E&E Data Dictionary fields:
+-   **E&E Synthetic Database**: Sidecar testing database implementing Maryland E&E Data Dictionary fields:
     -   **9 Core Tables**: eeSyntheticIndividuals, eeSyntheticContacts, eeSyntheticAddresses, eeSyntheticIdentification, eeSyntheticCases, eeSyntheticProgramEnrollments, eeSyntheticProviders, eeSyntheticCaseClosures, eeSyntheticCaseMembers
     -   **Synthetic Data Generator**: Creates 500+ realistic client records with varied scenarios
     -   **Configurable Parameters**: churnRate, crossEnrollmentOpportunityRate, averageHouseholdSize, activeEnrollmentRate (no hardcoded assumptions)

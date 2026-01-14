@@ -8977,7 +8977,7 @@ export const eeDataDictionaryFields = pgTable("ee_data_dictionary_fields", {
   subcategory: varchar("subcategory", { length: 100 }),
   isRequired: boolean("is_required").default(false),
   isEncrypted: boolean("is_encrypted").default(false), // For PII like SSN
-  sourceSystem: varchar("source_system", { length: 100 }), // CARES, MD_SAIL, NDNH, etc.
+  sourceSystem: varchar("source_system", { length: 100 }), // E&E, MD_SAIL, NDNH, etc.
   mappingExpression: text("mapping_expression"), // JSONPath or transformation expression
   validationRules: jsonb("validation_rules"), // JSON validation rules
   defaultValue: text("default_value"),
@@ -9072,7 +9072,7 @@ export type InsertEEVerificationResult = z.infer<typeof insertEEVerificationResu
 
 // ============================================================================
 // E&E SYNTHETIC DATABASE - Complete 172-field representation for sidecar testing
-// Based on Maryland E&E Data Dictionary (CARES/SAWS system simulation)
+// Based on Maryland E&E Data Dictionary (system simulation)
 // ============================================================================
 
 // E&E Synthetic Individuals - Fields 1-38 (Demographics, Names, Personal Info)
@@ -9080,7 +9080,7 @@ export const eeSyntheticIndividuals = pgTable("ee_synthetic_individuals", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   individualId: varchar("individual_id", { length: 50 }).notNull().unique(),
   mdmId: varchar("mdm_id", { length: 50 }),
-  sourceSystem: varchar("source_system", { length: 50 }).default("CARES"),
+  sourceSystem: varchar("source_system", { length: 50 }).default("E&E"),
   ssn: varchar("ssn", { length: 11 }),
   dateOfBirth: date("date_of_birth"),
   birthStateCode: varchar("birth_state_code", { length: 2 }),
