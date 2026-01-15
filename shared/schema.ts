@@ -9125,12 +9125,12 @@ export const eeSyntheticIndividuals = pgTable("ee_synthetic_individuals", {
   nameIdx: index("ee_synth_ind_name_idx").on(table.lastName, table.firstName),
 }));
 
-// E&E Synthetic Contacts - Fields 39-86 (Business, Personal, Other contact details)
+// E&E Synthetic Contacts - Fields 39-86 (Business, Personal, Other contact details, Employer, Emergency, Authorized Rep)
 export const eeSyntheticContacts = pgTable("ee_synthetic_contacts", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   individualId: varchar("individual_id", { length: 50 }).notNull(),
   caseNumber: varchar("case_number", { length: 50 }),
-  contactType: varchar("contact_type", { length: 20 }).notNull(), // business, personal, other
+  contactType: varchar("contact_type", { length: 20 }).notNull(), // business, personal, other, employer, emergency, authorized_rep
   phoneNumber: varchar("phone_number", { length: 20 }),
   phoneNumberExt: varchar("phone_number_ext", { length: 10 }),
   phoneNumberTypeCode: varchar("phone_number_type_code", { length: 10 }),
@@ -9139,10 +9139,34 @@ export const eeSyntheticContacts = pgTable("ee_synthetic_contacts", {
   altPhoneNumberExt: varchar("alt_phone_number_ext", { length: 10 }),
   altPhoneNumberTypeCode: varchar("alt_phone_number_type_code", { length: 10 }),
   altPhoneType: varchar("alt_phone_type", { length: 30 }),
+  faxNumber: varchar("fax_number", { length: 20 }),
   commModeCode: varchar("comm_mode_code", { length: 10 }),
   communicationMode: varchar("communication_mode", { length: 30 }),
   commPrefTimeCode: varchar("comm_pref_time_code", { length: 10 }),
+  commPrefTime: varchar("comm_pref_time", { length: 50 }),
   email: varchar("email", { length: 255 }),
+  emailVerified: boolean("email_verified").default(false),
+  textMessageOptIn: boolean("text_message_opt_in").default(false),
+  employerName: varchar("employer_name", { length: 255 }),
+  employerAddressLine1: varchar("employer_address_line_1", { length: 255 }),
+  employerAddressLine2: varchar("employer_address_line_2", { length: 255 }),
+  employerCity: varchar("employer_city", { length: 100 }),
+  employerStateCode: varchar("employer_state_code", { length: 2 }),
+  employerZipCode: varchar("employer_zip_code", { length: 10 }),
+  employerPhone: varchar("employer_phone", { length: 20 }),
+  employerFein: varchar("employer_fein", { length: 20 }),
+  emergencyContactName: varchar("emergency_contact_name", { length: 255 }),
+  emergencyContactRelationship: varchar("emergency_contact_relationship", { length: 50 }),
+  emergencyContactPhone: varchar("emergency_contact_phone", { length: 20 }),
+  authorizedRepName: varchar("authorized_rep_name", { length: 255 }),
+  authorizedRepRelationship: varchar("authorized_rep_relationship", { length: 50 }),
+  authorizedRepPhone: varchar("authorized_rep_phone", { length: 20 }),
+  authorizedRepAddressLine1: varchar("authorized_rep_address_line_1", { length: 255 }),
+  authorizedRepCity: varchar("authorized_rep_city", { length: 100 }),
+  authorizedRepStateCode: varchar("authorized_rep_state_code", { length: 2 }),
+  authorizedRepZipCode: varchar("authorized_rep_zip_code", { length: 10 }),
+  authorizedRepTypeCode: varchar("authorized_rep_type_code", { length: 10 }),
+  authorizedRepType: varchar("authorized_rep_type", { length: 50 }),
   effectiveBeginDate: date("effective_begin_date"),
   effectiveEndDate: date("effective_end_date"),
   createdAt: timestamp("created_at").defaultNow(),
@@ -9153,14 +9177,15 @@ export const eeSyntheticContacts = pgTable("ee_synthetic_contacts", {
   contactTypeIdx: index("ee_synth_contacts_type_idx").on(table.contactType),
 }));
 
-// E&E Synthetic Addresses - Fields 87-128 (Residential, Mailing, Other addresses)
+// E&E Synthetic Addresses - Fields 87-128 (Residential, Mailing, Other, Shelter, Homeless addresses)
 export const eeSyntheticAddresses = pgTable("ee_synthetic_addresses", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   individualId: varchar("individual_id", { length: 50 }).notNull(),
   caseNumber: varchar("case_number", { length: 50 }),
-  addressType: varchar("address_type", { length: 20 }).notNull(), // residential, mailing, other
+  addressType: varchar("address_type", { length: 20 }).notNull(), // residential, mailing, shelter, homeless, temporary
   addressLine1: varchar("address_line_1", { length: 255 }),
   addressLine2: varchar("address_line_2", { length: 255 }),
+  addressLine3: varchar("address_line_3", { length: 255 }),
   city: varchar("city", { length: 100 }),
   countyCode: varchar("county_code", { length: 3 }),
   county: varchar("county", { length: 100 }),
@@ -9168,6 +9193,30 @@ export const eeSyntheticAddresses = pgTable("ee_synthetic_addresses", {
   state: varchar("state", { length: 50 }),
   zipCode: varchar("zip_code", { length: 5 }),
   zip4Code: varchar("zip_4_code", { length: 4 }),
+  countryCode: varchar("country_code", { length: 3 }),
+  country: varchar("country", { length: 100 }),
+  homelessIndicator: boolean("homeless_indicator").default(false),
+  homelessTypeCode: varchar("homeless_type_code", { length: 10 }),
+  homelessType: varchar("homeless_type", { length: 50 }),
+  shelterName: varchar("shelter_name", { length: 255 }),
+  shelterPhone: varchar("shelter_phone", { length: 20 }),
+  shelterContactName: varchar("shelter_contact_name", { length: 255 }),
+  addressVerificationCode: varchar("address_verification_code", { length: 10 }),
+  addressVerificationStatus: varchar("address_verification_status", { length: 30 }),
+  addressVerificationDate: date("address_verification_date"),
+  addressVerificationSource: varchar("address_verification_source", { length: 50 }),
+  residencyStartDate: date("residency_start_date"),
+  residencyEndDate: date("residency_end_date"),
+  ldssServiceAreaCode: varchar("ldss_service_area_code", { length: 20 }),
+  ldssServiceArea: varchar("ldss_service_area", { length: 100 }),
+  congressionalDistrict: varchar("congressional_district", { length: 10 }),
+  legislativeDistrict: varchar("legislative_district", { length: 10 }),
+  censusTrack: varchar("census_track", { length: 20 }),
+  censusBlockGroup: varchar("census_block_group", { length: 20 }),
+  latitude: varchar("latitude", { length: 20 }),
+  longitude: varchar("longitude", { length: 20 }),
+  isPrimaryResidence: boolean("is_primary_residence").default(true),
+  isMailingAddress: boolean("is_mailing_address").default(false),
   effectiveBeginDate: date("effective_begin_date"),
   effectiveEndDate: date("effective_end_date"),
   createdAt: timestamp("created_at").defaultNow(),
@@ -9178,6 +9227,8 @@ export const eeSyntheticAddresses = pgTable("ee_synthetic_addresses", {
   addressTypeIdx: index("ee_synth_addr_type_idx").on(table.addressType),
   countyCodeIdx: index("ee_synth_addr_county_code_idx").on(table.countyCode),
   zipCodeIdx: index("ee_synth_addr_zip_code_idx").on(table.zipCode),
+  homelessIdx: index("ee_synth_addr_homeless_idx").on(table.homelessIndicator),
+  ldssServiceAreaIdx: index("ee_synth_addr_ldss_area_idx").on(table.ldssServiceAreaCode),
 }));
 
 // E&E Synthetic Identification - Fields 129-136 (IRN, MA ID, PIN, Passport, Alien Number)
@@ -9319,6 +9370,271 @@ export const eeSyntheticCaseMembers = pgTable("ee_synthetic_case_members", {
   individualIdIdx: index("ee_synth_member_individual_id_idx").on(table.individualId),
 }));
 
+// E&E Synthetic Income - Employment, self-employment, unearned income sources
+export const eeSyntheticIncome = pgTable("ee_synthetic_income", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  individualId: varchar("individual_id", { length: 50 }).notNull(),
+  caseNumber: varchar("case_number", { length: 50 }).notNull(),
+  incomeTypeCode: varchar("income_type_code", { length: 20 }).notNull(),
+  incomeType: varchar("income_type", { length: 100 }),
+  incomeSourceCode: varchar("income_source_code", { length: 20 }),
+  incomeSource: varchar("income_source", { length: 100 }),
+  employerName: varchar("employer_name", { length: 255 }),
+  employerFein: varchar("employer_fein", { length: 20 }),
+  employerAddressLine1: varchar("employer_address_line_1", { length: 255 }),
+  employerCity: varchar("employer_city", { length: 100 }),
+  employerStateCode: varchar("employer_state_code", { length: 2 }),
+  employerZipCode: varchar("employer_zip_code", { length: 10 }),
+  employerPhone: varchar("employer_phone", { length: 20 }),
+  jobTitle: varchar("job_title", { length: 100 }),
+  employmentStatusCode: varchar("employment_status_code", { length: 10 }),
+  employmentStatus: varchar("employment_status", { length: 50 }),
+  hoursPerWeek: integer("hours_per_week"),
+  payFrequencyCode: varchar("pay_frequency_code", { length: 10 }),
+  payFrequency: varchar("pay_frequency", { length: 30 }),
+  grossAmount: integer("gross_amount"),
+  netAmount: integer("net_amount"),
+  monthlyGross: integer("monthly_gross"),
+  monthlyNet: integer("monthly_net"),
+  annualGross: integer("annual_gross"),
+  selfEmploymentIndicator: boolean("self_employment_indicator").default(false),
+  selfEmploymentExpenses: integer("self_employment_expenses"),
+  seasonalIndicator: boolean("seasonal_indicator").default(false),
+  variableIncomeIndicator: boolean("variable_income_indicator").default(false),
+  verificationStatusCode: varchar("verification_status_code", { length: 10 }),
+  verificationStatus: varchar("verification_status", { length: 50 }),
+  verificationDate: date("verification_date"),
+  verificationSource: varchar("verification_source", { length: 100 }),
+  ndnhVerified: boolean("ndnh_verified").default(false),
+  swicaVerified: boolean("swica_verified").default(false),
+  wageRecordDate: date("wage_record_date"),
+  startDate: date("start_date"),
+  endDate: date("end_date"),
+  effectiveBeginDate: date("effective_begin_date"),
+  effectiveEndDate: date("effective_end_date"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => ({
+  individualIdIdx: index("ee_synth_income_individual_id_idx").on(table.individualId),
+  caseNumberIdx: index("ee_synth_income_case_number_idx").on(table.caseNumber),
+  incomeTypeIdx: index("ee_synth_income_type_idx").on(table.incomeTypeCode),
+  employerFeinIdx: index("ee_synth_income_employer_fein_idx").on(table.employerFein),
+  verificationIdx: index("ee_synth_income_verification_idx").on(table.verificationStatusCode),
+}));
+
+// E&E Synthetic Resources - Countable assets for SNAP eligibility
+export const eeSyntheticResources = pgTable("ee_synthetic_resources", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  individualId: varchar("individual_id", { length: 50 }).notNull(),
+  caseNumber: varchar("case_number", { length: 50 }).notNull(),
+  resourceTypeCode: varchar("resource_type_code", { length: 20 }).notNull(),
+  resourceType: varchar("resource_type", { length: 100 }),
+  resourceDescription: varchar("resource_description", { length: 500 }),
+  accountNumber: varchar("account_number", { length: 100 }),
+  institutionName: varchar("institution_name", { length: 255 }),
+  institutionAddressLine1: varchar("institution_address_line_1", { length: 255 }),
+  institutionCity: varchar("institution_city", { length: 100 }),
+  institutionStateCode: varchar("institution_state_code", { length: 2 }),
+  institutionZipCode: varchar("institution_zip_code", { length: 10 }),
+  currentValue: integer("current_value"),
+  fairMarketValue: integer("fair_market_value"),
+  encumbrance: integer("encumbrance"),
+  countableValue: integer("countable_value"),
+  ownershipTypeCode: varchar("ownership_type_code", { length: 10 }),
+  ownershipType: varchar("ownership_type", { length: 50 }),
+  ownershipPercentage: integer("ownership_percentage"),
+  isCountable: boolean("is_countable").default(true),
+  isExempt: boolean("is_exempt").default(false),
+  exemptionReasonCode: varchar("exemption_reason_code", { length: 20 }),
+  exemptionReason: varchar("exemption_reason", { length: 255 }),
+  vehicleYear: varchar("vehicle_year", { length: 4 }),
+  vehicleMake: varchar("vehicle_make", { length: 50 }),
+  vehicleModel: varchar("vehicle_model", { length: 50 }),
+  vehicleVin: varchar("vehicle_vin", { length: 20 }),
+  vehicleUseCode: varchar("vehicle_use_code", { length: 10 }),
+  vehicleUse: varchar("vehicle_use", { length: 50 }),
+  propertyAddressLine1: varchar("property_address_line_1", { length: 255 }),
+  propertyCity: varchar("property_city", { length: 100 }),
+  propertyStateCode: varchar("property_state_code", { length: 2 }),
+  propertyZipCode: varchar("property_zip_code", { length: 10 }),
+  propertyTypeCode: varchar("property_type_code", { length: 10 }),
+  propertyType: varchar("property_type", { length: 50 }),
+  verificationStatusCode: varchar("verification_status_code", { length: 10 }),
+  verificationStatus: varchar("verification_status", { length: 50 }),
+  verificationDate: date("verification_date"),
+  verificationSource: varchar("verification_source", { length: 100 }),
+  effectiveBeginDate: date("effective_begin_date"),
+  effectiveEndDate: date("effective_end_date"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => ({
+  individualIdIdx: index("ee_synth_resources_individual_id_idx").on(table.individualId),
+  caseNumberIdx: index("ee_synth_resources_case_number_idx").on(table.caseNumber),
+  resourceTypeIdx: index("ee_synth_resources_type_idx").on(table.resourceTypeCode),
+  countableIdx: index("ee_synth_resources_countable_idx").on(table.isCountable),
+}));
+
+// E&E Synthetic Expenses - Shelter, medical, childcare, utility deductions
+export const eeSyntheticExpenses = pgTable("ee_synthetic_expenses", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  individualId: varchar("individual_id", { length: 50 }).notNull(),
+  caseNumber: varchar("case_number", { length: 50 }).notNull(),
+  expenseTypeCode: varchar("expense_type_code", { length: 20 }).notNull(),
+  expenseType: varchar("expense_type", { length: 100 }),
+  expenseCategoryCode: varchar("expense_category_code", { length: 20 }),
+  expenseCategory: varchar("expense_category", { length: 100 }),
+  payeeName: varchar("payee_name", { length: 255 }),
+  payeeAddressLine1: varchar("payee_address_line_1", { length: 255 }),
+  payeeCity: varchar("payee_city", { length: 100 }),
+  payeeStateCode: varchar("payee_state_code", { length: 2 }),
+  payeeZipCode: varchar("payee_zip_code", { length: 10 }),
+  payeePhone: varchar("payee_phone", { length: 20 }),
+  monthlyAmount: integer("monthly_amount"),
+  annualAmount: integer("annual_amount"),
+  frequencyCode: varchar("frequency_code", { length: 10 }),
+  frequency: varchar("frequency", { length: 30 }),
+  actualAmount: integer("actual_amount"),
+  standardUtilityAllowanceCode: varchar("sua_code", { length: 10 }),
+  standardUtilityAllowance: varchar("sua", { length: 100 }),
+  suaType: varchar("sua_type", { length: 50 }),
+  rentMortgageAmount: integer("rent_mortgage_amount"),
+  propertyTaxAmount: integer("property_tax_amount"),
+  insuranceAmount: integer("insurance_amount"),
+  heatingFuelType: varchar("heating_fuel_type", { length: 50 }),
+  coolingIndicator: boolean("cooling_indicator").default(false),
+  phoneIndicator: boolean("phone_indicator").default(false),
+  electricIndicator: boolean("electric_indicator").default(false),
+  gasIndicator: boolean("gas_indicator").default(false),
+  waterSewerIndicator: boolean("water_sewer_indicator").default(false),
+  trashIndicator: boolean("trash_indicator").default(false),
+  medicalExpenseType: varchar("medical_expense_type", { length: 100 }),
+  medicalProviderName: varchar("medical_provider_name", { length: 255 }),
+  dependentCareProviderName: varchar("dependent_care_provider_name", { length: 255 }),
+  dependentCareProviderType: varchar("dependent_care_provider_type", { length: 50 }),
+  childSupportObligationAmount: integer("child_support_obligation_amount"),
+  childSupportCourtOrderNumber: varchar("child_support_court_order_number", { length: 50 }),
+  verificationStatusCode: varchar("verification_status_code", { length: 10 }),
+  verificationStatus: varchar("verification_status", { length: 50 }),
+  verificationDate: date("verification_date"),
+  verificationSource: varchar("verification_source", { length: 100 }),
+  effectiveBeginDate: date("effective_begin_date"),
+  effectiveEndDate: date("effective_end_date"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => ({
+  individualIdIdx: index("ee_synth_expenses_individual_id_idx").on(table.individualId),
+  caseNumberIdx: index("ee_synth_expenses_case_number_idx").on(table.caseNumber),
+  expenseTypeIdx: index("ee_synth_expenses_type_idx").on(table.expenseTypeCode),
+  categoryIdx: index("ee_synth_expenses_category_idx").on(table.expenseCategoryCode),
+}));
+
+// E&E Synthetic Verifications - Document verification tracking
+export const eeSyntheticVerifications = pgTable("ee_synthetic_verifications", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  individualId: varchar("individual_id", { length: 50 }).notNull(),
+  caseNumber: varchar("case_number", { length: 50 }).notNull(),
+  verificationTypeCode: varchar("verification_type_code", { length: 20 }).notNull(),
+  verificationType: varchar("verification_type", { length: 100 }),
+  verificationCategoryCode: varchar("verification_category_code", { length: 20 }),
+  verificationCategory: varchar("verification_category", { length: 100 }),
+  documentTypeCode: varchar("document_type_code", { length: 20 }),
+  documentType: varchar("document_type", { length: 100 }),
+  documentDescription: varchar("document_description", { length: 500 }),
+  documentNumber: varchar("document_number", { length: 100 }),
+  issuingAuthority: varchar("issuing_authority", { length: 255 }),
+  issueDate: date("issue_date"),
+  expirationDate: date("expiration_date"),
+  verificationStatusCode: varchar("verification_status_code", { length: 10 }),
+  verificationStatus: varchar("verification_status", { length: 50 }),
+  verificationDate: date("verification_date"),
+  verifiedBy: varchar("verified_by", { length: 100 }),
+  verificationMethod: varchar("verification_method", { length: 50 }),
+  verificationSource: varchar("verification_source", { length: 100 }),
+  electronicVerificationCode: varchar("electronic_verification_code", { length: 20 }),
+  electronicVerification: varchar("electronic_verification", { length: 100 }),
+  ssnVerificationSource: varchar("ssn_verification_source", { length: 50 }),
+  ssnVerificationDate: date("ssn_verification_date"),
+  identityVerificationSource: varchar("identity_verification_source", { length: 50 }),
+  identityVerificationDate: date("identity_verification_date"),
+  citizenshipVerificationSource: varchar("citizenship_verification_source", { length: 50 }),
+  citizenshipVerificationDate: date("citizenship_verification_date"),
+  incomeVerificationSource: varchar("income_verification_source", { length: 50 }),
+  incomeVerificationDate: date("income_verification_date"),
+  residencyVerificationSource: varchar("residency_verification_source", { length: 50 }),
+  residencyVerificationDate: date("residency_verification_date"),
+  wasPending: boolean("was_pending").default(false),
+  pendingReasonCode: varchar("pending_reason_code", { length: 20 }),
+  pendingReason: varchar("pending_reason", { length: 255 }),
+  dueDate: date("due_date"),
+  receivedDate: date("received_date"),
+  notes: text("notes"),
+  effectiveBeginDate: date("effective_begin_date"),
+  effectiveEndDate: date("effective_end_date"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => ({
+  individualIdIdx: index("ee_synth_verif_individual_id_idx").on(table.individualId),
+  caseNumberIdx: index("ee_synth_verif_case_number_idx").on(table.caseNumber),
+  verificationTypeIdx: index("ee_synth_verif_type_idx").on(table.verificationTypeCode),
+  statusIdx: index("ee_synth_verif_status_idx").on(table.verificationStatusCode),
+  pendingIdx: index("ee_synth_verif_pending_idx").on(table.wasPending),
+}));
+
+// E&E Synthetic ABAWD - Able-Bodied Adults Without Dependents work requirement tracking
+export const eeSyntheticAbawd = pgTable("ee_synthetic_abawd", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  individualId: varchar("individual_id", { length: 50 }).notNull(),
+  caseNumber: varchar("case_number", { length: 50 }).notNull(),
+  abawdStatusCode: varchar("abawd_status_code", { length: 10 }),
+  abawdStatus: varchar("abawd_status", { length: 50 }),
+  isAbawd: boolean("is_abawd").default(false),
+  isExempt: boolean("is_exempt").default(false),
+  exemptionReasonCode: varchar("exemption_reason_code", { length: 20 }),
+  exemptionReason: varchar("exemption_reason", { length: 255 }),
+  exemptionStartDate: date("exemption_start_date"),
+  exemptionEndDate: date("exemption_end_date"),
+  workRequirementMonthsUsed: integer("work_requirement_months_used").default(0),
+  workRequirementMonthsRemaining: integer("work_requirement_months_remaining"),
+  workRequirementPeriodStart: date("work_requirement_period_start"),
+  workRequirementPeriodEnd: date("work_requirement_period_end"),
+  countableMonthsIn36: integer("countable_months_in_36").default(0),
+  lastCountableMonth: varchar("last_countable_month", { length: 7 }),
+  workHoursPerWeek: integer("work_hours_per_week"),
+  workProgramCode: varchar("work_program_code", { length: 20 }),
+  workProgram: varchar("work_program", { length: 100 }),
+  workProgramEnrollmentDate: date("work_program_enrollment_date"),
+  workProgramCompletionDate: date("work_program_completion_date"),
+  workProgramStatusCode: varchar("work_program_status_code", { length: 10 }),
+  workProgramStatus: varchar("work_program_status", { length: 50 }),
+  volunteerHoursPerMonth: integer("volunteer_hours_per_month"),
+  volunteerOrganization: varchar("volunteer_organization", { length: 255 }),
+  workfareParticipant: boolean("workfare_participant").default(false),
+  workfareHoursRequired: integer("workfare_hours_required"),
+  workfareHoursCompleted: integer("workfare_hours_completed"),
+  goodCauseExemptionCode: varchar("good_cause_exemption_code", { length: 20 }),
+  goodCauseExemption: varchar("good_cause_exemption", { length: 255 }),
+  goodCauseStartDate: date("good_cause_start_date"),
+  goodCauseEndDate: date("good_cause_end_date"),
+  sanctionIndicator: boolean("sanction_indicator").default(false),
+  sanctionStartDate: date("sanction_start_date"),
+  sanctionEndDate: date("sanction_end_date"),
+  sanctionReasonCode: varchar("sanction_reason_code", { length: 20 }),
+  sanctionReason: varchar("sanction_reason", { length: 255 }),
+  waiverCountyIndicator: boolean("waiver_county_indicator").default(false),
+  waiverTypeCode: varchar("waiver_type_code", { length: 20 }),
+  waiverType: varchar("waiver_type", { length: 100 }),
+  effectiveBeginDate: date("effective_begin_date"),
+  effectiveEndDate: date("effective_end_date"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => ({
+  individualIdIdx: index("ee_synth_abawd_individual_id_idx").on(table.individualId),
+  caseNumberIdx: index("ee_synth_abawd_case_number_idx").on(table.caseNumber),
+  abawdStatusIdx: index("ee_synth_abawd_status_idx").on(table.abawdStatusCode),
+  exemptIdx: index("ee_synth_abawd_exempt_idx").on(table.isExempt),
+  sanctionIdx: index("ee_synth_abawd_sanction_idx").on(table.sanctionIndicator),
+}));
+
 // Insert schemas for E&E Synthetic tables
 export const insertEESyntheticIndividualSchema = createInsertSchema(eeSyntheticIndividuals).omit({
   id: true,
@@ -9372,6 +9688,36 @@ export const insertEESyntheticCaseMemberSchema = createInsertSchema(eeSyntheticC
   createdAt: true,
 });
 
+export const insertEESyntheticIncomeSchema = createInsertSchema(eeSyntheticIncome).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertEESyntheticResourceSchema = createInsertSchema(eeSyntheticResources).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertEESyntheticExpenseSchema = createInsertSchema(eeSyntheticExpenses).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertEESyntheticVerificationSchema = createInsertSchema(eeSyntheticVerifications).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertEESyntheticAbawdSchema = createInsertSchema(eeSyntheticAbawd).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
 // Types for E&E Synthetic tables
 export type EESyntheticIndividual = typeof eeSyntheticIndividuals.$inferSelect;
 export type InsertEESyntheticIndividual = z.infer<typeof insertEESyntheticIndividualSchema>;
@@ -9391,6 +9737,16 @@ export type EESyntheticCaseClosure = typeof eeSyntheticCaseClosures.$inferSelect
 export type InsertEESyntheticCaseClosure = z.infer<typeof insertEESyntheticCaseClosureSchema>;
 export type EESyntheticCaseMember = typeof eeSyntheticCaseMembers.$inferSelect;
 export type InsertEESyntheticCaseMember = z.infer<typeof insertEESyntheticCaseMemberSchema>;
+export type EESyntheticIncome = typeof eeSyntheticIncome.$inferSelect;
+export type InsertEESyntheticIncome = z.infer<typeof insertEESyntheticIncomeSchema>;
+export type EESyntheticResource = typeof eeSyntheticResources.$inferSelect;
+export type InsertEESyntheticResource = z.infer<typeof insertEESyntheticResourceSchema>;
+export type EESyntheticExpense = typeof eeSyntheticExpenses.$inferSelect;
+export type InsertEESyntheticExpense = z.infer<typeof insertEESyntheticExpenseSchema>;
+export type EESyntheticVerification = typeof eeSyntheticVerifications.$inferSelect;
+export type InsertEESyntheticVerification = z.infer<typeof insertEESyntheticVerificationSchema>;
+export type EESyntheticAbawd = typeof eeSyntheticAbawd.$inferSelect;
+export type InsertEESyntheticAbawd = z.infer<typeof insertEESyntheticAbawdSchema>;
 
 // Export tax return tables from taxReturnSchema
 // COMMENTED OUT DURING SCHEMA ROLLBACK - taxReturnSchema.ts moved to backup

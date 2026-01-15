@@ -26,6 +26,8 @@ router.post("/generate", requireAuth, requireAdmin, asyncHandler(async (req: Req
     crossEnrollmentOpportunityRate: z.number().min(0).max(1).default(0.35),
     averageHouseholdSize: z.number().min(1).max(10).default(2.5),
     activeEnrollmentRate: z.number().min(0).max(1).default(0.75),
+    homelessRate: z.number().min(0).max(1).default(0.05),
+    abawdRate: z.number().min(0).max(1).default(0.15),
   });
 
   const validated = inputSchema.parse(req.body);
@@ -35,12 +37,14 @@ router.post("/generate", requireAuth, requireAdmin, asyncHandler(async (req: Req
     crossEnrollmentOpportunityRate: validated.crossEnrollmentOpportunityRate,
     averageHouseholdSize: validated.averageHouseholdSize,
     activeEnrollmentRate: validated.activeEnrollmentRate,
+    homelessRate: validated.homelessRate,
+    abawdRate: validated.abawdRate,
   });
 
   res.json({
     success: true,
     data: generationStats,
-    message: `Generated ${generationStats.individuals} individuals across ${generationStats.cases} cases`
+    message: `Generated ${generationStats.individuals} individuals across ${generationStats.cases} cases with ${generationStats.incomeRecords} income records, ${generationStats.abawdRecords} ABAWD records`
   });
 }));
 
@@ -60,7 +64,17 @@ router.get("/health", asyncHandler(async (req: Request, res: Response) => {
     totalRecords: stats.totalIndividuals,
     totalCases: stats.totalCases,
     activeCases: stats.activeCases,
-    description: "E&E Synthetic Database for sidecar testing"
+    closedCases: stats.closedCases,
+    churnCases: stats.churnCases,
+    incomeRecords: stats.incomeRecords,
+    resourceRecords: stats.resourceRecords,
+    expenseRecords: stats.expenseRecords,
+    verificationRecords: stats.verificationRecords,
+    abawdRecords: stats.abawdRecords,
+    homelessIndividuals: stats.homelessIndividuals,
+    tableCount: 14,
+    fieldCompliance: "172 E&E Data Dictionary fields implemented",
+    description: "E&E Synthetic Database for sidecar testing - Maryland E&E Data Dictionary compliant"
   });
 }));
 

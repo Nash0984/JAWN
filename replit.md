@@ -43,13 +43,18 @@ The backend is built with Express.js and TypeScript, utilizing PostgreSQL via Dr
     -   **Tier 3 (Caseworker)**: Real-time AI nudges, risk scoring, and decision support
     -   LDSS office selector for tier switching (Maryland-only; multi-state filtering requires counties.stateCode column migration)
     -   99.9% accuracy is an aspirational documentation goal, not a system requirement
--   **E&E Synthetic Database**: Sidecar testing database implementing Maryland E&E Data Dictionary fields:
-    -   **9 Core Tables**: eeSyntheticIndividuals, eeSyntheticContacts, eeSyntheticAddresses, eeSyntheticIdentification, eeSyntheticCases, eeSyntheticProgramEnrollments, eeSyntheticProviders, eeSyntheticCaseClosures, eeSyntheticCaseMembers
-    -   **Synthetic Data Generator**: Creates 500+ realistic client records with varied scenarios
-    -   **Configurable Parameters**: churnRate, crossEnrollmentOpportunityRate, averageHouseholdSize, activeEnrollmentRate (no hardcoded assumptions)
-    -   **LDSS Distribution**: Cases distributed across 24 Maryland LDSS offices
-    -   **API Endpoints**: GET /api/ee-synthetic/health, GET /api/ee-synthetic/stats, POST /api/ee-synthetic/generate, DELETE /api/ee-synthetic/clear
-    -   Note: Core fields implemented; full 172-field compliance pending (contacts fields 39-86, addresses 87-128 need expansion)
+-   **E&E Synthetic Database**: Sidecar testing database implementing complete Maryland E&E Data Dictionary (172+ fields):
+    -   **14 Core Tables**: eeSyntheticIndividuals, eeSyntheticContacts (48 fields), eeSyntheticAddresses (42 fields), eeSyntheticIdentification, eeSyntheticCases, eeSyntheticProgramEnrollments, eeSyntheticProviders, eeSyntheticCaseClosures, eeSyntheticCaseMembers, eeSyntheticIncome, eeSyntheticResources, eeSyntheticExpenses, eeSyntheticVerifications, eeSyntheticAbawd
+    -   **Expanded Contacts Fields**: Employer info (FEIN validation, address, phone), emergency contacts, authorized representatives with relationship types, communication preferences (email/SMS opt-in), fax numbers
+    -   **Expanded Addresses Fields**: Homeless indicators (5% rate), shelter tracking (name/phone/contact), address verification status, LDSS service area codes, congressional/legislative districts, census tract/block group, lat/long, primary residence flags
+    -   **New Income Table**: Employment/self-employment/unearned income with NDNH/SWICA wage verification flags, employer FEIN tracking, pay frequency codes, variable/seasonal income indicators
+    -   **New Resources Table**: Countable assets (checking/savings/vehicles/property), fair market value, encumbrance, exemption tracking, vehicle details (VIN, use code), ownership percentages
+    -   **New Expenses Table**: Shelter/medical/childcare/utility deductions, Standard Utility Allowance (SUA) codes (HUA/LUA/TEL), heating fuel types, utility indicators (electric/gas/water/phone)
+    -   **New Verifications Table**: Document tracking with verification status, pending reasons, due dates, electronic verification sources (SSA/DHS/IRS), SSN/identity/citizenship/income/residency verification tracking
+    -   **New ABAWD Table**: Work requirement tracking with 3-in-36 month counting, exemption reasons (disability/pregnancy/caregiving/student/work), work program enrollment (SNAP E&T/WIOA), sanction tracking, waiver county indicators
+    -   **Synthetic Data Generator**: Creates 500+ realistic client records with configurable parameters: churnRate (20%), crossEnrollmentOpportunityRate (35%), averageHouseholdSize (2.5), activeEnrollmentRate (75%), homelessRate (5%), abawdRate (15%)
+    -   **LDSS Distribution**: Cases distributed across 24 Maryland LDSS offices with regional codes (WMD/SMD/BALT/EMD/CMD/MMD)
+    -   **API Endpoints**: GET /api/ee-synthetic/health (shows 14-table stats), GET /api/ee-synthetic/stats (detailed distributions), POST /api/ee-synthetic/generate (with new params), DELETE /api/ee-synthetic/clear
 
 ## System Design Choices
 -   **Data Management**: PostgreSQL for core data, Google Cloud Storage for files.
