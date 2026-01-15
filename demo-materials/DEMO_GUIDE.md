@@ -137,6 +137,61 @@ The Joint Access Welfare Network (JAWN) is a production-ready sovereign white-la
   - Compliance deadline tracking
   - Citation management
 
+### 3.6 Security Dashboard
+- **URL:** `/admin/security`
+- **Role Required:** Admin
+- **Features:**
+  - Security Score card (overall security posture)
+  - Total security events count
+  - Failed login attempts monitoring
+  - Active threats indicator
+  - Recent Security Events table with severity indicators
+  - Threat types: Brute Force, Suspicious IP, Session Anomaly
+  - Real-time security monitoring
+
+### 3.7 User Management
+- **URL:** `/admin/users`
+- **Role Required:** Admin
+- **Features:**
+  - Total users count with role breakdown
+  - Active users tracking
+  - User search functionality
+  - Role filter (All Roles, Admin, Staff, Researcher)
+  - Status filter (All Status, Active, Inactive, Pending)
+  - User table with: Username, Email, Role, Status, Last Active, Actions
+  - User management actions
+
+### 3.8 Analytics Dashboard
+- **URL:** `/admin/analytics`
+- **Role Required:** Admin
+- **Features:**
+  - KPI Cards:
+    - Total Sessions
+    - Unique Users
+    - Average Session Duration
+    - Total Page Views
+  - Tabbed interface:
+    - **Activity Tab:** Daily usage trends chart
+    - **Features Tab:** Feature usage breakdown
+    - **Programs Tab:** Benefits program popularity
+    - **Users Tab:** User engagement metrics
+  - Interactive Recharts visualizations
+
+### 3.9 Benefits Access Review (BAR) Dashboard
+- **URL:** `/admin/bar`
+- **Role Required:** Admin
+- **Features:**
+  - Total Reviews count
+  - Pending reviews indicator
+  - Completed reviews with accuracy metrics
+  - Average Score tracking
+  - Tabbed interface:
+    - **Review Queue:** Pending case reviews table
+    - **Completed:** Finished reviews with outcomes
+    - **Analytics:** BAR performance metrics
+  - AI Assessment scores for case quality
+  - Case review workflow integration
+
 ---
 
 ## 4. Payment Error Reduction (PER) Dashboard

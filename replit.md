@@ -25,7 +25,13 @@ The backend is built with Express.js and TypeScript, utilizing PostgreSQL via Dr
 -   **Cross-Enrollment Intelligence Engine**: AI-powered recommendations for unclaimed benefits.
 -   **IRS Use & Disclosure Consent Form**: IRS Publication 4299 compliant consent form with electronic signature.
 -   **Unified Monitoring & Analytics Platform**: 7 observability domains and an admin dashboard.
--   **Benefits Access Review (BAR)**: Autonomous case quality monitoring with AI assessment, blind supervisor review, and automated notifications.
+-   **Benefits Access Review (BAR)**: Autonomous case quality monitoring with AI assessment, blind supervisor review, and automated notifications. Accessible at `/admin/bar` with review queue, completed reviews, and analytics tabs.
+-   **Admin Dashboard Suite**: Comprehensive administrative interfaces including:
+    -   `/admin/monitoring` - System health, performance metrics, cache status, e-filing tracking
+    -   `/admin/security` - Security events monitoring, login attempts, threat detection, security score
+    -   `/admin/users` - User management with role assignment, status filtering, activity tracking
+    -   `/admin/analytics` - Platform usage metrics, feature adoption, session analytics
+    -   `/admin/ai-monitoring` - AI service health, Gemini API usage, cost tracking
 -   **AI Document Intelligence Pipeline**: Gemini Vision API for OCR and smart field extraction.
 -   **Conversational AI Intake Assistant**: Natural language chat with multi-language and voice support.
 -   **Smart RAG System**: Semantic search across policy documents using Gemini embeddings.

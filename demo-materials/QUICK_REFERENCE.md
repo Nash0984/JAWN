@@ -35,9 +35,14 @@
 | Admin Dashboard | `/admin` |
 | PER Dashboard | `/admin/per` |
 | AI Monitoring | `/admin/ai-monitoring` |
+| System Monitoring | `/admin/monitoring` |
 | Counties/LDSS | `/admin/counties` |
 | FNS State Options | `/admin/fns-state-options` |
 | Federal Law Tracker | `/admin/federal-law-tracker` |
+| Security Dashboard | `/admin/security` |
+| User Management | `/admin/users` |
+| Analytics Dashboard | `/admin/analytics` |
+| Benefits Access Review | `/admin/bar` |
 
 ---
 
