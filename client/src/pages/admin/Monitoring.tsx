@@ -72,6 +72,40 @@ export default function Monitoring() {
 
   const displayMetrics = metrics || polledMetrics?.data;
 
+  // Helper to safely convert Record<string, T> to array format for charts
+  const objectToArray = <T extends Record<string, any>>(
+    obj: T | undefined | null, 
+    keyName: string = 'key'
+  ): Array<{ [k: string]: any }> => {
+    if (!obj || typeof obj !== 'object') return [];
+    return Object.entries(obj).map(([key, value]) => ({
+      [keyName]: key,
+      ...(typeof value === 'object' ? value : { value })
+    }));
+  };
+
+  // Safe accessor for nested arrays with fallback
+  const safeArray = <T,>(arr: T[] | undefined | null): T[] => arr || [];
+
+  // Normalize health components to array format
+  const getHealthComponents = (): Array<{ name: string; status: string; uptime: number }> => {
+    if (!displayMetrics?.health?.components) return [];
+    if (Array.isArray(displayMetrics.health.components)) {
+      return displayMetrics.health.components.map(c => ({
+        name: c.name,
+        status: c.status,
+        uptime: c.uptime ?? 0
+      }));
+    }
+    // Convert object format to array
+    const comps = displayMetrics.health.components;
+    return Object.entries(comps).map(([name, data]) => ({
+      name,
+      status: (data as any)?.status === 'pass' ? 'healthy' : 'unhealthy',
+      uptime: 0
+    }));
+  };
+
   const handleExportCSV = (data: any[], filename: string) => {
     if (!data || data.length === 0) return;
     const headers = Object.keys(data[0]).map(key => ({ key, label: key }));
@@ -315,7 +349,7 @@ export default function Monitoring() {
             <Button 
               variant="outline" 
               size="sm"
-              onClick={() => handleExportCSV(displayMetrics.security.trend, `security-trend-${Date.now()}.csv`)}
+              onClick={() => handleExportCSV(safeArray(displayMetrics?.security?.trend), `security-trend-${Date.now()}.csv`)}
               data-testid="button-export-csv-security"
             >
               <Download className="h-4 w-4 mr-2" />
@@ -324,7 +358,7 @@ export default function Monitoring() {
             <Button 
               variant="outline" 
               size="sm"
-              onClick={() => handleExportJSON(displayMetrics.security, `security-metrics-${Date.now()}.json`)}
+              onClick={() => handleExportJSON(displayMetrics?.security, `security-metrics-${Date.now()}.json`)}
               data-testid="button-export-json-security"
             >
               <Download className="h-4 w-4 mr-2" />
@@ -339,7 +373,7 @@ export default function Monitoring() {
               </CardHeader>
               <CardContent>
                 <TrendChart
-                  data={displayMetrics.security.trend}
+                  data={safeArray(displayMetrics?.security?.trend)}
                   dataKey="events"
                   xAxisKey="timestamp"
                   title=""
@@ -357,7 +391,7 @@ export default function Monitoring() {
                 <ResponsiveContainer width="100%" height={300}>
                   <PieChart>
                     <Pie
-                      data={displayMetrics.security.eventsByType}
+                      data={safeArray(displayMetrics?.security?.eventsByType)}
                       cx="50%"
                       cy="50%"
                       labelLine={false}
@@ -366,7 +400,7 @@ export default function Monitoring() {
                       fill="#8884d8"
                       dataKey="count"
                     >
-                      {displayMetrics.security.eventsByType.map((entry, index) => (
+                      {safeArray(displayMetrics?.security?.eventsByType).map((entry, index) => (
                         <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                       ))}
                     </Pie>
@@ -384,7 +418,7 @@ export default function Monitoring() {
             <Button 
               variant="outline" 
               size="sm"
-              onClick={() => handleExportCSV(displayMetrics.performance.trend, `performance-trend-${Date.now()}.csv`)}
+              onClick={() => handleExportCSV(safeArray(displayMetrics?.performance?.trend), `performance-trend-${Date.now()}.csv`)}
               data-testid="button-export-csv-performance"
             >
               <Download className="h-4 w-4 mr-2" />
@@ -393,7 +427,7 @@ export default function Monitoring() {
             <Button 
               variant="outline" 
               size="sm"
-              onClick={() => handleExportJSON(displayMetrics.performance, `performance-metrics-${Date.now()}.json`)}
+              onClick={() => handleExportJSON(displayMetrics?.performance, `performance-metrics-${Date.now()}.json`)}
               data-testid="button-export-json-performance"
             >
               <Download className="h-4 w-4 mr-2" />
@@ -408,7 +442,7 @@ export default function Monitoring() {
               </CardHeader>
               <CardContent>
                 <TrendChart
-                  data={displayMetrics.performance.trend}
+                  data={safeArray(displayMetrics?.performance?.trend)}
                   dataKey="avg"
                   xAxisKey="timestamp"
                   title=""
@@ -427,7 +461,7 @@ export default function Monitoring() {
               </CardHeader>
               <CardContent>
                 <ResponsiveContainer width="100%" height={300}>
-                  <BarChart data={displayMetrics.performance.slowestEndpoints}>
+                  <BarChart data={safeArray(displayMetrics?.performance?.slowestEndpoints)}>
                     <CartesianGrid strokeDasharray="3 3" />
                     <XAxis dataKey="endpoint" />
                     <YAxis />
@@ -446,7 +480,7 @@ export default function Monitoring() {
             <Button 
               variant="outline" 
               size="sm"
-              onClick={() => handleExportCSV(displayMetrics.eFiling.processingTimeTrend, `efiling-trend-${Date.now()}.csv`)}
+              onClick={() => handleExportCSV(safeArray(displayMetrics?.eFiling?.processingTimeTrend), `efiling-trend-${Date.now()}.csv`)}
               data-testid="button-export-csv-efiling"
             >
               <Download className="h-4 w-4 mr-2" />
@@ -455,7 +489,7 @@ export default function Monitoring() {
             <Button 
               variant="outline" 
               size="sm"
-              onClick={() => handleExportJSON(displayMetrics.eFiling, `efiling-metrics-${Date.now()}.json`)}
+              onClick={() => handleExportJSON(displayMetrics?.eFiling, `efiling-metrics-${Date.now()}.json`)}
               data-testid="button-export-json-efiling"
             >
               <Download className="h-4 w-4 mr-2" />
@@ -472,7 +506,7 @@ export default function Monitoring() {
                 <ResponsiveContainer width="100%" height={300}>
                   <PieChart>
                     <Pie
-                      data={displayMetrics.eFiling.byStatus}
+                      data={safeArray(displayMetrics?.eFiling?.byStatus)}
                       cx="50%"
                       cy="50%"
                       labelLine={false}
@@ -481,7 +515,7 @@ export default function Monitoring() {
                       fill="#8884d8"
                       dataKey="count"
                     >
-                      {displayMetrics.eFiling.byStatus.map((entry, index) => (
+                      {safeArray(displayMetrics?.eFiling?.byStatus).map((entry, index) => (
                         <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                       ))}
                     </Pie>
@@ -497,7 +531,7 @@ export default function Monitoring() {
               </CardHeader>
               <CardContent>
                 <TrendChart
-                  data={displayMetrics.eFiling.processingTimeTrend}
+                  data={safeArray(displayMetrics?.eFiling?.processingTimeTrend)}
                   dataKey="avgTime"
                   xAxisKey="timestamp"
                   title=""
@@ -515,7 +549,7 @@ export default function Monitoring() {
             <Button 
               variant="outline" 
               size="sm"
-              onClick={() => handleExportCSV(displayMetrics.ai.costTrend, `ai-cost-trend-${Date.now()}.csv`)}
+              onClick={() => handleExportCSV(safeArray(displayMetrics?.ai?.costTrend), `ai-cost-trend-${Date.now()}.csv`)}
               data-testid="button-export-csv-ai"
             >
               <Download className="h-4 w-4 mr-2" />
@@ -524,7 +558,7 @@ export default function Monitoring() {
             <Button 
               variant="outline" 
               size="sm"
-              onClick={() => handleExportJSON(displayMetrics.ai, `ai-metrics-${Date.now()}.json`)}
+              onClick={() => handleExportJSON(displayMetrics?.ai, `ai-metrics-${Date.now()}.json`)}
               data-testid="button-export-json-ai"
             >
               <Download className="h-4 w-4 mr-2" />
@@ -539,7 +573,7 @@ export default function Monitoring() {
               </CardHeader>
               <CardContent>
                 <TrendChart
-                  data={displayMetrics.ai.costTrend}
+                  data={safeArray(displayMetrics?.ai?.costTrend)}
                   dataKey="cost"
                   xAxisKey="timestamp"
                   title=""
@@ -555,7 +589,7 @@ export default function Monitoring() {
               </CardHeader>
               <CardContent>
                 <ResponsiveContainer width="100%" height={300}>
-                  <BarChart data={displayMetrics.ai.callsByFeature}>
+                  <BarChart data={objectToArray(displayMetrics?.ai?.callsByFeature, 'feature')}>
                     <CartesianGrid strokeDasharray="3 3" />
                     <XAxis dataKey="feature" />
                     <YAxis />
@@ -574,7 +608,7 @@ export default function Monitoring() {
                 <ResponsiveContainer width="100%" height={300}>
                   <PieChart>
                     <Pie
-                      data={displayMetrics.ai.tokensByModel}
+                      data={objectToArray(displayMetrics?.ai?.callsByModel, 'model')}
                       cx="50%"
                       cy="50%"
                       labelLine={false}
@@ -583,7 +617,7 @@ export default function Monitoring() {
                       fill="#8884d8"
                       dataKey="tokens"
                     >
-                      {displayMetrics.ai.tokensByModel.map((entry, index) => (
+                      {objectToArray(displayMetrics?.ai?.callsByModel, 'model').map((entry, index) => (
                         <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                       ))}
                     </Pie>
@@ -601,7 +635,7 @@ export default function Monitoring() {
             <Button 
               variant="outline" 
               size="sm"
-              onClick={() => handleExportCSV(displayMetrics.cache.hitRateByLayer, `cache-hitrate-${Date.now()}.csv`)}
+              onClick={() => handleExportCSV(safeArray(displayMetrics?.cache?.hitRateByLayer), `cache-hitrate-${Date.now()}.csv`)}
               data-testid="button-export-csv-cache"
             >
               <Download className="h-4 w-4 mr-2" />
@@ -610,7 +644,7 @@ export default function Monitoring() {
             <Button 
               variant="outline" 
               size="sm"
-              onClick={() => handleExportJSON(displayMetrics.cache, `cache-metrics-${Date.now()}.json`)}
+              onClick={() => handleExportJSON(displayMetrics?.cache, `cache-metrics-${Date.now()}.json`)}
               data-testid="button-export-json-cache"
             >
               <Download className="h-4 w-4 mr-2" />
@@ -625,7 +659,7 @@ export default function Monitoring() {
               </CardHeader>
               <CardContent>
                 <ResponsiveContainer width="100%" height={300}>
-                  <BarChart data={displayMetrics.cache.hitRateByLayer}>
+                  <BarChart data={safeArray(displayMetrics?.cache?.hitRateByLayer)}>
                     <CartesianGrid strokeDasharray="3 3" />
                     <XAxis dataKey="layer" />
                     <YAxis />
@@ -642,7 +676,7 @@ export default function Monitoring() {
               </CardHeader>
               <CardContent>
                 <TrendChart
-                  data={displayMetrics.cache.invalidationEvents}
+                  data={safeArray(displayMetrics?.cache?.invalidationEvents)}
                   dataKey="count"
                   xAxisKey="timestamp"
                   title=""
@@ -660,7 +694,7 @@ export default function Monitoring() {
             <Button 
               variant="outline" 
               size="sm"
-              onClick={() => handleExportCSV(displayMetrics.health.components, `health-components-${Date.now()}.csv`)}
+              onClick={() => handleExportCSV(getHealthComponents(), `health-components-${Date.now()}.csv`)}
               data-testid="button-export-csv-health"
             >
               <Download className="h-4 w-4 mr-2" />
@@ -669,7 +703,7 @@ export default function Monitoring() {
             <Button 
               variant="outline" 
               size="sm"
-              onClick={() => handleExportJSON(displayMetrics.health, `health-metrics-${Date.now()}.json`)}
+              onClick={() => handleExportJSON(displayMetrics?.health, `health-metrics-${Date.now()}.json`)}
               data-testid="button-export-json-health"
             >
               <Download className="h-4 w-4 mr-2" />
@@ -677,7 +711,7 @@ export default function Monitoring() {
             </Button>
           </div>
           <div className="grid gap-6 md:grid-cols-3">
-            {displayMetrics.health.components.map((component, index) => (
+            {getHealthComponents().map((component, index) => (
               <KPICard
                 key={index}
                 title={component.name}
@@ -695,10 +729,10 @@ export default function Monitoring() {
             </CardHeader>
             <CardContent>
               <div className="text-4xl font-bold">
-                {(displayMetrics.health.uptime / 3600).toFixed(1)} hours
+                {((displayMetrics?.health?.uptime ?? 0) / 3600).toFixed(1)} hours
               </div>
               <p className="text-sm text-muted-foreground mt-2">
-                Database: {displayMetrics.health.databaseConnected ? '✓ Connected' : '✗ Disconnected'}
+                Database: {displayMetrics?.health?.databaseConnected ? '✓ Connected' : '✗ Disconnected'}
               </p>
             </CardContent>
           </Card>

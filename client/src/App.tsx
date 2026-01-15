@@ -69,6 +69,10 @@ import CountyTaxRates from "@/pages/admin/CountyTaxRates";
 import WebhookManagement from "@/pages/admin/WebhookManagement";
 import PerDashboard from "@/pages/admin/PerDashboard";
 import ResearcherManagement from "@/pages/admin/ResearcherManagement";
+import SecurityDashboard from "@/pages/admin/SecurityDashboard";
+import UserManagement from "@/pages/admin/UserManagement";
+import AnalyticsDashboard from "@/pages/admin/AnalyticsDashboard";
+import BarDashboard from "@/pages/admin/BarDashboard";
 import DocumentReviewQueue from "@/pages/DocumentReviewQueue";
 import TaxPreparation from "@/pages/TaxPreparation";
 import CountyManagement from "@/pages/CountyManagement";
@@ -621,6 +625,34 @@ function Router() {
             {() => (
               <ProtectedRoute requireAdmin>
                 <WebhookManagement />
+              </ProtectedRoute>
+            )}
+          </Route>
+          <Route path="/admin/security">
+            {() => (
+              <ProtectedRoute requireAdmin>
+                <SecurityDashboard />
+              </ProtectedRoute>
+            )}
+          </Route>
+          <Route path="/admin/users">
+            {() => (
+              <ProtectedRoute requireAdmin>
+                <UserManagement />
+              </ProtectedRoute>
+            )}
+          </Route>
+          <Route path="/admin/analytics">
+            {() => (
+              <ProtectedRoute requireAdmin>
+                <AnalyticsDashboard />
+              </ProtectedRoute>
+            )}
+          </Route>
+          <Route path="/admin/bar">
+            {() => (
+              <ProtectedRoute requireAdmin>
+                <BarDashboard />
               </ProtectedRoute>
             )}
           </Route>
