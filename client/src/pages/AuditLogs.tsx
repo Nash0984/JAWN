@@ -45,16 +45,16 @@ export default function AuditLogs() {
   const [activeTab, setActiveTab] = useState("audit");
   
   // Audit logs filters
-  const [auditAction, setAuditAction] = useState("");
-  const [auditEntityType, setAuditEntityType] = useState("");
+  const [auditAction, setAuditAction] = useState("all");
+  const [auditEntityType, setAuditEntityType] = useState("all");
   const [auditStartDate, setAuditStartDate] = useState("");
   const [auditEndDate, setAuditEndDate] = useState("");
   const [auditPage, setAuditPage] = useState(0);
   const auditPageSize = 50;
 
   // Rule change logs filters
-  const [ruleTable, setRuleTable] = useState("");
-  const [changeType, setChangeType] = useState("");
+  const [ruleTable, setRuleTable] = useState("all");
+  const [changeType, setChangeType] = useState("all");
   const [ruleStartDate, setRuleStartDate] = useState("");
   const [ruleEndDate, setRuleEndDate] = useState("");
   const [rulePage, setRulePage] = useState(0);
@@ -203,7 +203,7 @@ export default function AuditLogs() {
                         <SelectValue placeholder="All actions" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="">All actions</SelectItem>
+                        <SelectItem value="all">All actions</SelectItem>
                         <SelectItem value="API_REQUEST">API Request</SelectItem>
                         <SelectItem value="ERROR">Error</SelectItem>
                         <SelectItem value="AUTH_LOGIN">Login</SelectItem>
@@ -222,7 +222,7 @@ export default function AuditLogs() {
                         <SelectValue placeholder="All entities" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="">All entities</SelectItem>
+                        <SelectItem value="all">All entities</SelectItem>
                         <SelectItem value="USER">User</SelectItem>
                         <SelectItem value="RULE">Rule</SelectItem>
                         <SelectItem value="DOCUMENT">Document</SelectItem>
@@ -259,8 +259,8 @@ export default function AuditLogs() {
                   <Button
                     variant="outline"
                     onClick={() => {
-                      setAuditAction("");
-                      setAuditEntityType("");
+                      setAuditAction("all");
+                      setAuditEntityType("all");
                       setAuditStartDate("");
                       setAuditEndDate("");
                       setAuditPage(0);
@@ -423,7 +423,7 @@ export default function AuditLogs() {
                         <SelectValue placeholder="All tables" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="">All tables</SelectItem>
+                        <SelectItem value="all">All tables</SelectItem>
                         <SelectItem value="snap_income_limits">Income Limits</SelectItem>
                         <SelectItem value="snap_deductions">Deductions</SelectItem>
                         <SelectItem value="snap_allotments">Allotments</SelectItem>
@@ -440,7 +440,7 @@ export default function AuditLogs() {
                         <SelectValue placeholder="All types" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="">All types</SelectItem>
+                        <SelectItem value="all">All types</SelectItem>
                         <SelectItem value="create">Create</SelectItem>
                         <SelectItem value="update">Update</SelectItem>
                         <SelectItem value="delete">Delete</SelectItem>
@@ -476,8 +476,8 @@ export default function AuditLogs() {
                   <Button
                     variant="outline"
                     onClick={() => {
-                      setRuleTable("");
-                      setChangeType("");
+                      setRuleTable("all");
+                      setChangeType("all");
                       setRuleStartDate("");
                       setRuleEndDate("");
                       setRulePage(0);
