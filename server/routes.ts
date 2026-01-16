@@ -11942,6 +11942,14 @@ What would you like to know more about? You can also call 1-800-332-6347 for imm
   const eeSyntheticDataRouter = (await import('./api/eeSyntheticData.routes')).default;
   app.use('/api/ee-synthetic', eeSyntheticDataRouter);
 
+  // ============================================================================
+  // Mount External Data Sources Routes - Digital Twin Adapter Layer
+  // Provides abstracted access to BEACON, Vital Stats, MVA, W-2, SSA with
+  // swappable production adapters. Currently using synthetic data for testing.
+  // ============================================================================
+  const externalDataSourcesRouter = (await import('./routes/externalDataSources.routes')).default;
+  app.use('/api/external-data', externalDataSourcesRouter);
+
   const httpServer = createServer(app);
   
   // Initialize WebSocket service for real-time notifications

@@ -105,7 +105,7 @@ export default function Demo() {
             </Card>
             <Card data-testid="stat-services">
               <CardHeader className="pb-3">
-                <CardTitle className="text-3xl font-bold text-primary">140+</CardTitle>
+                <CardTitle className="text-3xl font-bold text-primary">127</CardTitle>
                 <CardDescription>Services</CardDescription>
               </CardHeader>
             </Card>

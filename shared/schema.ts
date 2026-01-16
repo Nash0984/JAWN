@@ -9635,6 +9635,38 @@ export const eeSyntheticAbawd = pgTable("ee_synthetic_abawd", {
   sanctionIdx: index("ee_synth_abawd_sanction_idx").on(table.sanctionIndicator),
 }));
 
+// E&E Synthetic Life Events - Life event tracking for proactive case management
+export const eeSyntheticLifeEvents = pgTable("ee_synthetic_life_events", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  individualId: varchar("individual_id", { length: 50 }).notNull(),
+  caseNumber: varchar("case_number", { length: 50 }),
+  eventType: varchar("event_type", { length: 50 }).notNull(), // birth, death, marriage, divorce, address_change, income_change, employment_change, household_composition_change
+  eventDate: date("event_date").notNull(),
+  detectedAt: timestamp("detected_at").defaultNow(),
+  source: varchar("source", { length: 50 }).notNull(), // beacon, vital_statistics, mva, w2_wage_records, ndnh, swica
+  details: jsonb("details"), // Event-specific details
+  processedAt: timestamp("processed_at"),
+  caseImpactAssessed: boolean("case_impact_assessed").default(false),
+  impactType: varchar("impact_type", { length: 100 }), // eligibility_change, benefit_change, recertification_needed, no_impact
+  impactSeverity: varchar("impact_severity", { length: 20 }), // high, medium, low
+  assignedWorkerId: integer("assigned_worker_id"),
+  actionRequired: text("action_required"),
+  actionCompletedAt: timestamp("action_completed_at"),
+  notificationSentAt: timestamp("notification_sent_at"),
+  ldssOfficeCode: varchar("ldss_office_code", { length: 10 }),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => ({
+  individualIdIdx: index("ee_synth_life_event_individual_id_idx").on(table.individualId),
+  caseNumberIdx: index("ee_synth_life_event_case_number_idx").on(table.caseNumber),
+  eventTypeIdx: index("ee_synth_life_event_type_idx").on(table.eventType),
+  eventDateIdx: index("ee_synth_life_event_date_idx").on(table.eventDate),
+  processedIdx: index("ee_synth_life_event_processed_idx").on(table.processedAt),
+  impactSeverityIdx: index("ee_synth_life_event_impact_idx").on(table.impactSeverity),
+  ldssOfficeIdx: index("ee_synth_life_event_ldss_idx").on(table.ldssOfficeCode),
+}));
+
 // Insert schemas for E&E Synthetic tables
 export const insertEESyntheticIndividualSchema = createInsertSchema(eeSyntheticIndividuals).omit({
   id: true,
@@ -9718,6 +9750,12 @@ export const insertEESyntheticAbawdSchema = createInsertSchema(eeSyntheticAbawd)
   updatedAt: true,
 });
 
+export const insertEESyntheticLifeEventSchema = createInsertSchema(eeSyntheticLifeEvents).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
 // Types for E&E Synthetic tables
 export type EESyntheticIndividual = typeof eeSyntheticIndividuals.$inferSelect;
 export type InsertEESyntheticIndividual = z.infer<typeof insertEESyntheticIndividualSchema>;
@@ -9747,6 +9785,8 @@ export type EESyntheticVerification = typeof eeSyntheticVerifications.$inferSele
 export type InsertEESyntheticVerification = z.infer<typeof insertEESyntheticVerificationSchema>;
 export type EESyntheticAbawd = typeof eeSyntheticAbawd.$inferSelect;
 export type InsertEESyntheticAbawd = z.infer<typeof insertEESyntheticAbawdSchema>;
+export type EESyntheticLifeEvent = typeof eeSyntheticLifeEvents.$inferSelect;
+export type InsertEESyntheticLifeEvent = z.infer<typeof insertEESyntheticLifeEventSchema>;
 
 // Export tax return tables from taxReturnSchema
 // COMMENTED OUT DURING SCHEMA ROLLBACK - taxReturnSchema.ts moved to backup

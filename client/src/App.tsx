@@ -120,6 +120,13 @@ const Developers = lazy(() => import("@/pages/Developers"));
 const EFileDashboard = lazy(() => import("@/pages/EFileDashboard"));
 const SupervisorReviewDashboard = lazy(() => import("@/pages/SupervisorReviewDashboard"));
 
+const SnapManual = lazy(() => import("@/pages/manual/SnapManual"));
+const MedicaidManual = lazy(() => import("@/pages/manual/MedicaidManual"));
+const TanfManual = lazy(() => import("@/pages/manual/TanfManual"));
+const OhepManual = lazy(() => import("@/pages/manual/OhepManual"));
+const SsiManual = lazy(() => import("@/pages/manual/SsiManual"));
+const TaxCreditsManual = lazy(() => import("@/pages/manual/TaxCreditsManual"));
+
 function Router() {
   const [location] = useLocation();
   const isAuthPage = location === "/login" || location === "/signup";
@@ -656,6 +663,14 @@ function Router() {
                 </ProtectedRoute>
               )}
             </Route>
+            
+            {/* Program Manual E-Books - Public access for policy reference */}
+            <Route path="/manual/snap" component={SnapManual} />
+            <Route path="/manual/medicaid" component={MedicaidManual} />
+            <Route path="/manual/tanf" component={TanfManual} />
+            <Route path="/manual/ohep" component={OhepManual} />
+            <Route path="/manual/ssi" component={SsiManual} />
+            <Route path="/manual/tax-credits" component={TaxCreditsManual} />
             
             {/* 404 fallback */}
             <Route component={NotFound} />
