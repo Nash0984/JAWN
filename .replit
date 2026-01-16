@@ -48,4 +48,3 @@ defaultBucketID = "replit-objstore-b4ecfa39-f52a-4d52-96db-a130c34e3d80"
 [userenv]
 
 [userenv.shared]
-GEMINI_API_KEY = "AIzaSyCrDcaoOIoerY-SCdhPuFmsXe8LHVNIyo4"
