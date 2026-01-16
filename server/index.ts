@@ -219,7 +219,7 @@ const sessionMiddleware = session({
     maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
     httpOnly: true, // Prevent XSS attacks by making cookie inaccessible to JavaScript
     secure: process.env.NODE_ENV === "production", // Only send cookie over HTTPS in production
-    sameSite: "strict", // Always strict for maximum CSRF protection
+    sameSite: "lax", // Lax allows top-level navigation while protecting against CSRF POST attacks
     path: "/", // Cookie available for entire domain
   },
   rolling: true, // Extend session on activity (rolling session timeout)
@@ -245,7 +245,7 @@ const csrfProtection = doubleCsrf({
   cookieName: "x-csrf-token",
   cookieOptions: {
     httpOnly: true,
-    sameSite: "strict", // Match session cookie's sameSite policy
+    sameSite: "lax", // Match session cookie's sameSite policy for mobile/external URL compatibility
     secure: process.env.NODE_ENV === "production",
     maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
   },
@@ -310,6 +310,13 @@ app.get("/api/csrf-token", (req, res) => {
     if (!req.session) {
       logger.error("[CSRF] Session not found on /api/csrf-token request");
       return res.status(500).json({ error: "Session not initialized" });
+    }
+    
+    // Initialize session with minimal data to ensure it persists
+    // This is needed because saveUninitialized: false means empty sessions aren't saved
+    if (!(req.session as any).csrfInitialized) {
+      (req.session as any).csrfInitialized = true;
+      (req.session as any).csrfCreatedAt = Date.now();
     }
     
     // Force session save to ensure sessionID is available

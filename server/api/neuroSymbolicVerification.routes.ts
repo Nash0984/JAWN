@@ -375,4 +375,183 @@ async function checkZ3Availability(): Promise<boolean> {
   }
 }
 
+/**
+ * Comprehensive verification health check endpoint
+ * Tests Gemini API connectivity and Neuro-Symbolic Gateway components
+ * 
+ * This endpoint is designed for grant demonstrations and production readiness verification
+ * 
+ * SECURITY: Caches Gemini health results for 60 seconds to prevent quota abuse
+ */
+let geminiHealthCache: { result: any; timestamp: number } | null = null;
+const GEMINI_HEALTH_CACHE_TTL = 60000; // 60 seconds
+
+router.get("/health", async (_req: Request, res: Response) => {
+  const startTime = Date.now();
+  const results: {
+    gemini: { status: string; latencyMs?: number; error?: string; model?: string };
+    neuroSymbolicGateway: {
+      z3Solver: { status: string; latencyMs?: number; error?: string };
+      rulesAsCode: { status: string; count?: number; error?: string };
+      legalOntology: { status: string; terms?: number; sources?: number; error?: string };
+      dualVerificationModes: { mode1: string; mode2: string };
+    };
+    overallStatus: string;
+    totalLatencyMs: number;
+  } = {
+    gemini: { status: "unchecked" },
+    neuroSymbolicGateway: {
+      z3Solver: { status: "unchecked" },
+      rulesAsCode: { status: "unchecked" },
+      legalOntology: { status: "unchecked" },
+      dualVerificationModes: { mode1: "unchecked", mode2: "unchecked" }
+    },
+    overallStatus: "unchecked",
+    totalLatencyMs: 0
+  };
+
+  try {
+    // Test 1: Gemini API Connection (with caching to prevent quota abuse)
+    const geminiStart = Date.now();
+    
+    // Check cache first
+    if (geminiHealthCache && (Date.now() - geminiHealthCache.timestamp) < GEMINI_HEALTH_CACHE_TTL) {
+      results.gemini = { ...geminiHealthCache.result, cached: true };
+    } else {
+      try {
+        const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
+        if (!apiKey) {
+          results.gemini = { status: "unhealthy", error: "API key not configured" };
+        } else {
+          // Make a minimal API call to verify connection
+          const { generateTextWithGemini } = await import("../services/gemini.service");
+          const testResponse = await generateTextWithGemini("Reply with exactly one word: 'OK'");
+          results.gemini = {
+            status: testResponse && testResponse.length > 0 ? "healthy" : "degraded",
+            latencyMs: Date.now() - geminiStart,
+            model: "gemini-2.0-flash"
+          };
+        }
+        // Cache the result
+        geminiHealthCache = { result: results.gemini, timestamp: Date.now() };
+      } catch (geminiError) {
+        results.gemini = {
+          status: "unhealthy",
+          latencyMs: Date.now() - geminiStart,
+          error: "Gemini API check failed" // Redact detailed error for security
+        };
+        // Cache even failed results to prevent repeated API calls
+        geminiHealthCache = { result: results.gemini, timestamp: Date.now() };
+      }
+    }
+
+    // Test 2: Z3 Solver Availability
+    const z3Start = Date.now();
+    try {
+      const z3Available = await checkZ3Availability();
+      results.neuroSymbolicGateway.z3Solver = {
+        status: z3Available ? "healthy" : "degraded",
+        latencyMs: Date.now() - z3Start
+      };
+    } catch (z3Error) {
+      results.neuroSymbolicGateway.z3Solver = {
+        status: "unhealthy",
+        latencyMs: Date.now() - z3Start,
+        error: z3Error instanceof Error ? z3Error.message : "Z3 initialization failed"
+      };
+    }
+
+    // Test 3: Rules-as-Code (TBox) - Formal Rules
+    try {
+      const tboxStats = await getTBoxStats("MD", "SNAP");
+      results.neuroSymbolicGateway.rulesAsCode = {
+        status: tboxStats.rulesCount > 0 ? "healthy" : "degraded",
+        count: tboxStats.rulesCount
+      };
+    } catch (rulesError) {
+      results.neuroSymbolicGateway.rulesAsCode = {
+        status: "unhealthy",
+        error: rulesError instanceof Error ? rulesError.message : "Rules query failed"
+      };
+    }
+
+    // Test 4: Legal Ontology (TBox) - Ontology Terms & Statutory Sources
+    try {
+      const tboxStats = await getTBoxStats("MD", "SNAP");
+      results.neuroSymbolicGateway.legalOntology = {
+        status: tboxStats.ontologyTermsCount > 0 || tboxStats.statutorySourcesCount > 0 ? "healthy" : "degraded",
+        terms: tboxStats.ontologyTermsCount,
+        sources: tboxStats.statutorySourcesCount
+      };
+    } catch (ontologyError) {
+      results.neuroSymbolicGateway.legalOntology = {
+        status: "unhealthy",
+        error: ontologyError instanceof Error ? ontologyError.message : "Ontology query failed"
+      };
+    }
+
+    // Test 5: Dual Verification Modes
+    // Mode 1: Explanation Verification - Tests if AI explanations are legally consistent
+    // Mode 2: Case Eligibility Verification - Tests if case data satisfies eligibility rules
+    results.neuroSymbolicGateway.dualVerificationModes = {
+      mode1: results.neuroSymbolicGateway.z3Solver.status === "healthy" ? "ready" : "degraded",
+      mode2: results.neuroSymbolicGateway.z3Solver.status === "healthy" ? "ready" : "degraded"
+    };
+
+    // Determine overall status
+    const allStatuses = [
+      results.gemini.status,
+      results.neuroSymbolicGateway.z3Solver.status,
+      results.neuroSymbolicGateway.rulesAsCode.status,
+      results.neuroSymbolicGateway.legalOntology.status
+    ];
+    
+    if (allStatuses.every(s => s === "healthy")) {
+      results.overallStatus = "healthy";
+    } else if (allStatuses.some(s => s === "unhealthy")) {
+      results.overallStatus = "unhealthy";
+    } else {
+      results.overallStatus = "degraded";
+    }
+
+    results.totalLatencyMs = Date.now() - startTime;
+
+    res.json({
+      success: true,
+      timestamp: new Date().toISOString(),
+      ...results,
+      grantDeliverables: {
+        arnoldVentures: {
+          component: "Neuro-Symbolic Hybrid Gateway",
+          status: results.neuroSymbolicGateway.z3Solver.status === "healthy" ? "operational" : "degraded"
+        },
+        georgetown: {
+          component: "Rules-as-Code Engine",
+          status: results.neuroSymbolicGateway.rulesAsCode.status === "healthy" ? "operational" : "degraded"
+        },
+        ptig: {
+          component: "AI Integration (Gemini)",
+          status: results.gemini.status === "healthy" ? "operational" : "degraded"
+        }
+      },
+      architecture: {
+        description: "Three-layer neuro-symbolic architecture per 'A Neuro-Symbolic Framework for Accountability in Public-Sector AI' (Allen Sunny, UMD)",
+        layers: {
+          neural: "Gemini API for extraction/translation only (never decides eligibility)",
+          symbolic: "Z3 SMT Solver for formal verification and legally-grounded decisions",
+          rulesAsCode: "Statutory rules encoded in SMT-LIB format with traceable citations"
+        }
+      }
+    });
+  } catch (error) {
+    results.totalLatencyMs = Date.now() - startTime;
+    res.status(500).json({
+      success: false,
+      timestamp: new Date().toISOString(),
+      ...results,
+      error: error instanceof Error ? error.message : "Health check failed"
+    });
+  }
+});
+
 export default router;
