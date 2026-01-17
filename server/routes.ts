@@ -1174,6 +1174,36 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
     });
   }));
 
+  // Download a specific public law by package ID (e.g., PLAW-119publ21)
+  app.post("/api/legislative/govinfo-public-law/:packageId", requireAdmin, asyncHandler(async (req: Request, res: Response) => {
+    const { govInfoPublicLawsDownloader } = await import("./services/govInfoPublicLawsDownloader");
+    
+    const { packageId } = req.params;
+    
+    if (!packageId || !packageId.match(/^PLAW-\d+publ\d+$/i)) {
+      return res.status(400).json({
+        success: false,
+        error: "Invalid package ID format. Expected format: PLAW-119publ21"
+      });
+    }
+    
+    logger.info(`Downloading specific public law from GovInfo: ${packageId}`);
+    
+    const result = await govInfoPublicLawsDownloader.downloadSpecificPublicLaw(packageId);
+    
+    res.json({
+      success: result.success,
+      message: result.success 
+        ? `Public Law ${packageId} downloaded and stored successfully` 
+        : `Download completed with errors`,
+      packageId,
+      lawsProcessed: result.lawsProcessed,
+      lawsUpdated: result.lawsUpdated,
+      documentsCreated: result.documentsCreated,
+      errors: result.errors
+    });
+  }));
+
   // GovInfo Version Checker - Check for updates without downloading
   app.post("/api/govinfo/check-versions", requireAdmin, asyncHandler(async (req: Request, res: Response) => {
     const { govInfoVersionChecker } = await import("./services/govInfoVersionChecker");

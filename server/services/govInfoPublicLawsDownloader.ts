@@ -62,6 +62,46 @@ export class GovInfoPublicLawsDownloader {
   ];
 
   /**
+   * Download a specific public law by package ID
+   * Package ID format: PLAW-119publ21 for Public Law 119-21
+   */
+  async downloadSpecificPublicLaw(packageId: string): Promise<PublicLawsDownloadResult> {
+    logger.info('Downloading specific public law from GovInfo', { packageId });
+    
+    const result: PublicLawsDownloadResult = {
+      success: true,
+      lawsProcessed: 0,
+      lawsUpdated: 0,
+      lawsSkipped: 0,
+      documentsCreated: 0,
+      errors: [],
+    };
+
+    try {
+      // Extract congress number from packageId (e.g., "PLAW-119publ21" -> 119)
+      const congressMatch = packageId.match(/PLAW-(\d+)publ/i);
+      const congress = congressMatch ? parseInt(congressMatch[1], 10) : 119;
+      
+      await this.processPublicLaw(packageId, congress, result);
+      
+      logger.info('Specific public law download complete', {
+        packageId,
+        processed: result.lawsProcessed,
+        updated: result.lawsUpdated,
+        errors: result.errors.length
+      });
+      
+    } catch (error) {
+      result.success = false;
+      const errorMsg = `Error downloading ${packageId}: ${error instanceof Error ? error.message : 'Unknown error'}`;
+      logger.error('Failed to download specific public law', { packageId, error: errorMsg });
+      result.errors.push(errorMsg);
+    }
+
+    return result;
+  }
+
+  /**
    * Download public laws for a specific Congress
    */
   async downloadPublicLaws(congress: number = 119): Promise<PublicLawsDownloadResult> {
@@ -154,8 +194,13 @@ export class GovInfoPublicLawsDownloader {
     // Fetch package metadata to get XML URL and last modified date
     const metadata = await govInfoClient.getPackageMetadata(packageId);
     
-    if (!metadata.download.xmlLink) {
-      logger.debug('Skipping public law - no XML available', { packageId });
+    // Determine best available format: prefer XML, fall back to HTML/text
+    const downloadUrl = metadata.download.xmlLink || metadata.download.txtLink;
+    const isXml = !!metadata.download.xmlLink;
+    const contentType = isXml ? 'application/xml' : 'text/html';
+    
+    if (!downloadUrl) {
+      logger.debug('Skipping public law - no XML or HTML available', { packageId });
       result.lawsSkipped++;
       return;
     }
@@ -185,29 +230,31 @@ export class GovInfoPublicLawsDownloader {
       return;
     }
 
-    logger.info('Downloading public law', { publicLawNumber });
+    logger.info('Downloading public law', { publicLawNumber, format: isXml ? 'XML' : 'HTML' });
 
-    // Download USLM XML
-    const xmlContent = await govInfoClient.downloadXML(metadata.download.xmlLink);
+    // Download content (XML or HTML)
+    const content = await govInfoClient.downloadXML(downloadUrl);
     
-    // Parse XML to extract law data
-    const lawData = await this.parsePublicLawXML(xmlContent, packageId, congress);
+    // Parse content to extract law data
+    const lawData = isXml 
+      ? await this.parsePublicLawXML(content, packageId, congress)
+      : await this.parsePublicLawHTML(content, packageId, congress, metadata.title);
 
-    // Upload XML to object storage
+    // Upload content to object storage
     const objectStorageService = new ObjectStorageService();
     const uploadUrl = await objectStorageService.getObjectEntityUploadURL();
     
-    const buffer = Buffer.from(xmlContent, 'utf-8');
+    const buffer = Buffer.from(content, 'utf-8');
     const uploadResponse = await fetch(uploadUrl, {
       method: 'PUT',
       body: buffer,
       headers: {
-        'Content-Type': 'application/xml',
+        'Content-Type': contentType,
       },
     });
 
     if (!uploadResponse.ok) {
-      throw new Error(`Failed to upload XML: ${uploadResponse.statusText}`);
+      throw new Error(`Failed to upload content: ${uploadResponse.statusText}`);
     }
 
     const objectPath = objectStorageService.normalizeObjectEntityPath(uploadUrl);
@@ -222,9 +269,9 @@ export class GovInfoPublicLawsDownloader {
       await db.update(publicLaws)
         .set({
           ...lawData,
-          uslmXml: xmlContent,
+          uslmXml: content,
           govInfoPackageId: packageId,
-          sourceUrl: metadata.download.xmlLink,
+          sourceUrl: downloadUrl,
           downloadedAt: new Date(),
           updatedAt: new Date(),
         })
@@ -234,9 +281,9 @@ export class GovInfoPublicLawsDownloader {
     } else {
       await db.insert(publicLaws).values({
         ...lawData,
-        uslmXml: xmlContent,
+        uslmXml: content,
         govInfoPackageId: packageId,
-        sourceUrl: metadata.download.xmlLink,
+        sourceUrl: downloadUrl,
         downloadedAt: new Date(),
       });
       
@@ -251,7 +298,7 @@ export class GovInfoPublicLawsDownloader {
       packageId,
       objectPath,
       buffer.length,
-      metadata.download.xmlLink
+      downloadUrl
     );
 
     if (documentId) {
@@ -331,6 +378,99 @@ export class GovInfoPublicLawsDownloader {
     // Extract policy changes (simplified - could use AI here)
     const policyChanges = this.extractPolicyChanges(law, affectedPrograms);
 
+    return {
+      publicLawNumber,
+      congress,
+      lawType: 'public',
+      title: String(title),
+      enactmentDate,
+      billNumber,
+      fullText,
+      affectedPrograms,
+      policyChanges,
+      usCodeCitations,
+    };
+  }
+
+  /**
+   * Parse Public Law from HTML content (fallback when XML unavailable)
+   */
+  private async parsePublicLawHTML(
+    html: string,
+    packageId: string,
+    congress: number,
+    metadataTitle?: string
+  ): Promise<ParsedPublicLaw> {
+    // Extract public law number from package ID
+    const publicLawNumber = this.extractPublicLawNumber(packageId);
+    
+    // Use metadata title if provided, otherwise try to extract from HTML
+    let title = metadataTitle || `Public Law ${publicLawNumber}`;
+    
+    // Try to extract title from HTML if metadata title is generic
+    const titleMatch = html.match(/<title>([^<]+)<\/title>/i) || 
+                       html.match(/<h1[^>]*>([^<]+)<\/h1>/i);
+    if (titleMatch && !metadataTitle) {
+      title = titleMatch[1].trim();
+    }
+    
+    // Extract enactment date from HTML - look for approval date patterns
+    let enactmentDate = new Date();
+    const dateMatch = html.match(/Approved\s+(\w+\s+\d+,\s+\d{4})/i) ||
+                      html.match(/(\w+\s+\d+,\s+\d{4})\s*\.\s*\[Public Law/i);
+    if (dateMatch) {
+      const parsed = new Date(dateMatch[1]);
+      if (!isNaN(parsed.getTime())) {
+        enactmentDate = parsed;
+      }
+    }
+    
+    // Extract bill number from HTML
+    let billNumber: string | undefined;
+    const billMatch = html.match(/\[(H\.?\s*R\.?|S\.?)\s*(\d+)/i);
+    if (billMatch) {
+      const type = billMatch[1].replace(/\./g, '').replace(/\s/g, '').toUpperCase();
+      billNumber = `${type} ${billMatch[2]}`;
+    }
+    
+    // Strip HTML tags to get plain text
+    const fullText = html
+      .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+      .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .substring(0, 50000);
+    
+    // Extract US Code citations from full text
+    const usCodeCitations: any[] = [];
+    const uscRegex = /(\d+)\s+U\.?S\.?C\.?\s+(\d+)/gi;
+    let match;
+    while ((match = uscRegex.exec(fullText)) !== null) {
+      usCodeCitations.push({
+        title: match[1],
+        section: match[2],
+        text: match[0],
+      });
+    }
+    
+    // Determine affected programs
+    const affectedPrograms = this.determineAffectedPrograms(title, fullText);
+    
+    // Extract key policy changes (basic analysis)
+    const policyChanges = {
+      sections: [],
+      amendments: [],
+      effectiveDates: [],
+    };
+    
+    logger.info('Parsed public law from HTML', { 
+      publicLawNumber, 
+      title: title.substring(0, 100),
+      affectedPrograms,
+      usCodeCitationsCount: usCodeCitations.length
+    });
+    
     return {
       publicLawNumber,
       congress,
