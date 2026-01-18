@@ -1,6 +1,7 @@
 import { db } from "../db";
 import { benefitPrograms } from "@shared/schema";
 import { eq } from "drizzle-orm";
+import { getVITAStatutoryCitations } from "../seeds/vitaStatutorySources";
 
 /**
  * VITA Tax Rules Engine (Volunteer Income Tax Assistance)
@@ -186,8 +187,7 @@ class VITATaxRulesEngine {
       breakdown.push(`Gross Business Income: $${(input.selfEmploymentIncome / 100).toFixed(2)}`);
       breakdown.push(`Business Expenses: $${(businessExpenses / 100).toFixed(2)}`);
       breakdown.push(`Net Profit from Business: $${(netProfit / 100).toFixed(2)}`);
-      citations.push(`IRS Schedule C - Profit or Loss from Business`);
-      citations.push(`IRS Publication 334 - Tax Guide for Small Business`);
+      citations.push(...getVITAStatutoryCitations("self_employment", "MD"));
       
       scheduleC = {
         grossBusinessIncome: input.selfEmploymentIncome,
@@ -209,9 +209,7 @@ class VITATaxRulesEngine {
         breakdown.push(`  • Social Security: 12.4%`);
         breakdown.push(`  • Medicare: 2.9%`);
         breakdown.push(`Deductible SE Tax (50%): $${(seResult.deductiblePortion / 100).toFixed(2)}`);
-        citations.push(`26 U.S.C. § 1401 - Self-Employment Tax (15.3%)`);
-        citations.push(`IRS Schedule SE - Self-Employment Tax`);
-        citations.push(`IRS Publication 334 - 50% SE tax deduction reduces AGI`);
+        // Self-employment tax citations already added above
       }
     }
     
@@ -230,7 +228,7 @@ class VITATaxRulesEngine {
     // Step 3: Get Standard Deduction
     const standardDeduction = await this.getStandardDeduction(input.filingStatus, input.taxYear);
     breakdown.push(`\nStandard Deduction: $${(standardDeduction / 100).toFixed(2)}`);
-    citations.push(`IRS Publication 17 - Standard Deduction for ${input.filingStatus}`);
+    citations.push(...getVITAStatutoryCitations("standard_deduction", "MD"));
     
     // Step 4: Calculate Taxable Income
     const taxableIncome = Math.max(0, adjustedGrossIncome - standardDeduction);
@@ -239,7 +237,7 @@ class VITATaxRulesEngine {
     // Step 5: Calculate Income Tax using progressive brackets
     const incomeTaxBeforeCredits = await this.calculateIncomeTax(taxableIncome, input.filingStatus, input.taxYear);
     breakdown.push(`\nIncome Tax (before credits): $${(incomeTaxBeforeCredits / 100).toFixed(2)}`);
-    citations.push(`26 U.S.C. § 1 - Federal Tax Brackets`);
+    citations.push(...getVITAStatutoryCitations("income_tax", "MD"));
     
     // Add self-employment tax to income tax (SE tax is a separate tax)
     let totalTaxBeforeCredits = incomeTaxBeforeCredits + (selfEmploymentTax?.seTax || 0);
@@ -259,8 +257,7 @@ class VITATaxRulesEngine {
       input.taxYear
     );
     breakdown.push(`\nEarned Income Tax Credit (EITC): $${(eitc / 100).toFixed(2)}`);
-    citations.push(`26 U.S.C. § 32 - Earned Income Tax Credit`);
-    citations.push(`IRS Publication 596 - EITC for ${input.numberOfQualifyingChildren} qualifying children`);
+    citations.push(...getVITAStatutoryCitations("eitc", "MD"));
     
     // Step 7: Calculate Child Tax Credit (CTC)
     const ctcResult = await this.calculateCTC(
@@ -284,8 +281,7 @@ class VITATaxRulesEngine {
       breakdown.push(`  • Non-refundable: $${(nonRefundableCTC / 100).toFixed(2)} (offsets tax)`);
       breakdown.push(`  • Refundable (ACTC): $${(refundableCTC / 100).toFixed(2)} (max $1,700/child)`);
     }
-    citations.push(`26 U.S.C. § 24 - Child Tax Credit ($2,000 per qualifying child)`);
-    citations.push(`26 U.S.C. § 24(h) - Additional Child Tax Credit (refundable up to $1,700/child)`);
+    citations.push(...getVITAStatutoryCitations("ctc", "MD"));
     
     // Step 8: Calculate Education Credits (Form 8863) if applicable
     let educationCredits: VITATaxResult["federalTax"]["educationCredits"] | undefined;
@@ -354,7 +350,7 @@ class VITATaxRulesEngine {
     // Calculate Maryland State Tax using progressive brackets
     const stateTax = await this.calculateMarylandStateTax(marylandTaxableIncome, input.taxYear);
     breakdown.push(`Maryland State Tax: $${(stateTax / 100).toFixed(2)}`);
-    citations.push(`Maryland Tax Code § 10-105 - State Tax Rates (2%-5.75%)`);
+    citations.push("MD Tax-General § 10-105 - Maryland Income Tax Rates (2%-5.75%)");
     
     // Get county tax rate
     const countyInfo = await this.getCountyTaxRate(input.marylandCounty, input.taxYear);
@@ -362,7 +358,7 @@ class VITATaxRulesEngine {
     
     breakdown.push(`${countyInfo.name} County Tax Rate: ${countyInfo.rate.toFixed(2)}%`);
     breakdown.push(`${countyInfo.name} County Tax: $${(countyTax / 100).toFixed(2)}`);
-    citations.push(`Maryland Tax Code § 10-103 - County Tax Rates`);
+    citations.push("COMAR 03.04.07 - Maryland County Income Tax Rates");
     
     // Maryland EITC (50% of federal EITC for most taxpayers)
     const federalEITC = input.wages > 0 ? await this.calculateEITC(
@@ -375,7 +371,7 @@ class VITATaxRulesEngine {
     
     const marylandEITC = Math.round(federalEITC * 0.50); // Maryland EITC is 50% of federal
     breakdown.push(`Maryland EITC (50% of federal): $${(marylandEITC / 100).toFixed(2)}`);
-    citations.push(`Maryland Tax Code § 10-704 - Maryland EITC (50% of federal)`);
+    citations.push("MD Tax-General § 10-701 - Maryland EITC (50% of federal refundable)");
     
     // Total Maryland credits
     const marylandCredits = marylandEITC;

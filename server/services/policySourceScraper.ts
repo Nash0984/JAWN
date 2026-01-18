@@ -7,6 +7,12 @@ import { unifiedDocumentService as documentProcessor } from './unified/UnifiedDo
 import { ecfrBulkDownloader } from './ecfrBulkDownloader';
 import { irsDirectDownloader } from './irsDirectDownloader';
 import { createLogger } from './logger.service';
+import { 
+  ALL_SNAP_POLICY_SOURCES, 
+  getRegistryStats, 
+  getStateByCode,
+  type StatePolicySource 
+} from '../seeds/snapPolicyRegistry';
 
 const logger = createLogger('PolicySourceScraper');
 
@@ -2120,6 +2126,79 @@ export class PolicySourceScraper {
       throw error;
     }
   }
+  
+  /**
+   * Get 50-state SNAP policy sources from the registry
+   * Returns the complete list of state SNAP policy manual configurations
+   */
+  get50StateSNAPSources(): StatePolicySource[] {
+    return ALL_SNAP_POLICY_SOURCES;
+  }
+  
+  /**
+   * Get SNAP policy source for a specific state
+   */
+  getSNAPSourceByState(stateCode: string): StatePolicySource | undefined {
+    return getStateByCode(stateCode);
+  }
+  
+  /**
+   * Get statistics about the 50-state SNAP registry
+   */
+  getSNAPRegistryStats(): {
+    totalStates: number;
+    totalTerritories: number;
+    countyAdministered: number;
+    stateAdministered: number;
+    customBranding: string[];
+  } {
+    return getRegistryStats();
+  }
+  
+  /**
+   * Convert 50-state SNAP sources to InsertPolicySource format
+   * for database seeding
+   */
+  getInsertableSNAPSources(benefitProgramId: string): Omit<InsertPolicySource, 'benefitProgramId'>[] {
+    return ALL_SNAP_POLICY_SOURCES.map(source => ({
+      name: `${source.stateName} SNAP Policy Manual`,
+      sourceType: "state_policy" as const,
+      jurisdiction: source.stateCode.toLowerCase(),
+      description: `${source.agencyName} - ${source.programBrand} Policy Manual (${source.policyManualCitation})`,
+      url: source.policyManualUrl,
+      syncType: "web_scraping" as const,
+      syncSchedule: "off" as const,
+      maxAllowedFrequency: "monthly" as const,
+      priority: 50,
+      isActive: source.isActive,
+      syncConfig: {
+        scrapeType: "state_snap_manual",
+        stateCode: source.stateCode,
+        adminModel: source.adminModel,
+        programBrand: source.programBrand,
+        agencyAbbreviation: source.agencyAbbreviation,
+        notes: source.notes,
+      },
+    }));
+  }
+  
+  /**
+   * Log 50-state SNAP registry summary
+   */
+  logSNAPRegistrySummary(): void {
+    const stats = this.getSNAPRegistryStats();
+    
+    logger.info('[50-State SNAP Registry] Summary', {
+      totalStates: stats.totalStates,
+      totalTerritories: stats.totalTerritories,
+      countyAdministered: stats.countyAdministered,
+      stateAdministered: stats.stateAdministered,
+      customBranding: stats.customBranding,
+    });
+  }
 }
 
 export const policySourceScraper = new PolicySourceScraper();
+
+// Re-export registry types for external use
+export { type StatePolicySource } from '../seeds/snapPolicyRegistry';

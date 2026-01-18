@@ -701,6 +701,201 @@ const MARYLAND_OHEP_TERMS: TermSeed[] = [
   }
 ];
 
+// VITA Tax Ontology Terms - Federal and State
+const VITA_TAX_TERMS: TermSeed[] = [
+  // Federal Income Tax Terms
+  {
+    termName: "Taxable Income",
+    domain: "income",
+    definition: "Gross income minus allowable deductions and exemptions, the amount subject to federal income tax rates",
+    synonyms: ["tax base", "net taxable income"],
+    statutoryCitation: "26 U.S.C. § 63"
+  },
+  {
+    termName: "Adjusted Gross Income",
+    domain: "income",
+    definition: "Total income from all sources minus above-the-line deductions such as educator expenses, student loan interest, and self-employment tax deduction",
+    synonyms: ["AGI", "adjusted income"],
+    statutoryCitation: "26 U.S.C. § 62"
+  },
+  {
+    termName: "Standard Deduction",
+    domain: "deductions",
+    definition: "A flat dollar amount that reduces taxable income, varying by filing status: single ($14,600), married filing jointly ($29,200), head of household ($21,900) for 2024",
+    synonyms: ["basic deduction", "automatic deduction"],
+    statutoryCitation: "26 U.S.C. § 63(c)"
+  },
+  {
+    termName: "Filing Status",
+    domain: "household_composition",
+    definition: "Tax classification based on marital status and family situation: single, married filing jointly, married filing separately, head of household, or qualifying widow(er)",
+    synonyms: ["tax status", "filing category"],
+    statutoryCitation: "26 U.S.C. § 1"
+  },
+  {
+    termName: "Earned Income Tax Credit",
+    domain: "income",
+    definition: "Refundable federal tax credit for low-to-moderate income workers, calculated based on earned income, filing status, and number of qualifying children",
+    synonyms: ["EITC", "EIC", "earned income credit"],
+    statutoryCitation: "26 U.S.C. § 32"
+  },
+  {
+    termName: "Child Tax Credit",
+    domain: "income",
+    definition: "Tax credit of $2,000 per qualifying child under age 17, partially refundable up to $1,700 as Additional Child Tax Credit (ACTC)",
+    synonyms: ["CTC", "child credit"],
+    statutoryCitation: "26 U.S.C. § 24"
+  },
+  {
+    termName: "Additional Child Tax Credit",
+    domain: "income",
+    definition: "The refundable portion of the Child Tax Credit, up to $1,700 per qualifying child for taxpayers with earned income",
+    synonyms: ["ACTC", "refundable CTC"],
+    statutoryCitation: "26 U.S.C. § 24(h)"
+  },
+  {
+    termName: "Qualifying Child",
+    domain: "household_composition",
+    definition: "A child who meets relationship, age, residency, support, and joint return tests for claiming tax credits",
+    synonyms: ["eligible child", "dependent child"],
+    statutoryCitation: "26 U.S.C. § 152(c)"
+  },
+  {
+    termName: "Self-Employment Income",
+    domain: "income",
+    definition: "Net earnings from operating a trade or business as a sole proprietor, independent contractor, or member of a partnership",
+    synonyms: ["business income", "Schedule C income"],
+    statutoryCitation: "26 U.S.C. § 1402"
+  },
+  {
+    termName: "Self-Employment Tax",
+    domain: "income",
+    definition: "Tax on self-employment earnings consisting of 12.4% Social Security and 2.9% Medicare (15.3% total) on net self-employment income",
+    synonyms: ["SE tax", "FICA for self-employed"],
+    statutoryCitation: "26 U.S.C. § 1401"
+  },
+  {
+    termName: "American Opportunity Credit",
+    domain: "deductions",
+    definition: "Education tax credit of up to $2,500 per student for first four years of post-secondary education, 40% refundable (max $1,000)",
+    synonyms: ["AOC", "college credit"],
+    statutoryCitation: "26 U.S.C. § 25A(b)"
+  },
+  {
+    termName: "Lifetime Learning Credit",
+    domain: "deductions",
+    definition: "Non-refundable education tax credit of up to $2,000 per return for qualified education expenses",
+    synonyms: ["LLC", "continuing education credit"],
+    statutoryCitation: "26 U.S.C. § 25A(c)"
+  },
+  
+  // Maryland State Tax Terms
+  {
+    termName: "Maryland Earned Income Tax Credit",
+    domain: "income",
+    definition: "Maryland state credit equal to 50% of federal EITC (refundable) or 100% (non-refundable) for qualifying residents",
+    synonyms: ["MD EITC", "Maryland earned income credit"],
+    statutoryCitation: "MD Tax-General § 10-701"
+  },
+  {
+    termName: "Maryland Child Tax Credit",
+    domain: "income",
+    definition: "Maryland state credit for qualifying children, providing additional refundable credit beyond federal CTC",
+    synonyms: ["MD CTC", "Maryland child credit"],
+    statutoryCitation: "MD Tax-General § 10-751"
+  },
+  {
+    termName: "County Income Tax",
+    domain: "income",
+    definition: "Local income tax imposed by Maryland counties and Baltimore City, ranging from 2.25% to 3.20% of Maryland taxable income",
+    synonyms: ["local tax", "piggyback tax"],
+    statutoryCitation: "COMAR 03.04.07"
+  },
+  
+  // Pennsylvania State Tax Terms
+  {
+    termName: "Pennsylvania Flat Tax",
+    domain: "income",
+    definition: "Pennsylvania personal income tax at flat rate of 3.07% on eight classes of income: compensation, net profits, interest, dividends, rents, royalties, patents, and gambling winnings",
+    synonyms: ["PA PIT", "Pennsylvania income tax"],
+    statutoryCitation: "72 P.S. § 7302"
+  },
+  {
+    termName: "Tax Forgiveness Credit",
+    domain: "deductions",
+    definition: "Pennsylvania credit that reduces or eliminates tax liability for low-income taxpayers based on eligibility income and family size",
+    synonyms: ["PA tax forgiveness", "poverty exemption"],
+    statutoryCitation: "72 P.S. § 7314"
+  },
+  {
+    termName: "Property Tax Rent Rebate",
+    domain: "deductions",
+    definition: "Pennsylvania rebate program for eligible seniors, widows/widowers, and persons with disabilities on property taxes or rent paid",
+    synonyms: ["PTRR", "PA-1000 rebate"],
+    statutoryCitation: "72 P.S. § 8701-F"
+  },
+  
+  // Virginia State Tax Terms
+  {
+    termName: "Virginia Graduated Tax",
+    domain: "income",
+    definition: "Virginia income tax with rates of 2%, 3%, 5%, and 5.75% on graduated income brackets",
+    synonyms: ["VA income tax", "Virginia state tax"],
+    statutoryCitation: "Va. Code § 58.1-320"
+  },
+  {
+    termName: "Virginia EITC",
+    domain: "income",
+    definition: "Virginia earned income tax credit equal to 20% of federal EITC, fully refundable",
+    synonyms: ["VA EITC", "Virginia earned income credit"],
+    statutoryCitation: "Va. Code § 58.1-339.8"
+  },
+  
+  // Utah State Tax Terms
+  {
+    termName: "Utah Flat Tax",
+    domain: "income",
+    definition: "Utah individual income tax at flat rate of 4.65% on Utah taxable income",
+    synonyms: ["UT income tax", "Utah state tax"],
+    statutoryCitation: "Utah Code § 59-10-104"
+  },
+  {
+    termName: "Utah EITC",
+    domain: "income",
+    definition: "Utah earned income tax credit equal to 20% of federal EITC, non-refundable",
+    synonyms: ["UT EITC", "Utah earned income credit"],
+    statutoryCitation: "Utah Code § 59-10-1017"
+  }
+];
+
+const VITA_TAX_RELATIONSHIPS: RelationshipSeed[] = [
+  // Income calculation flow
+  { fromTermName: "Taxable Income", toTermName: "Adjusted Gross Income", type: "depends_on", description: "Taxable income is calculated from AGI minus deductions" },
+  { fromTermName: "Adjusted Gross Income", toTermName: "Self-Employment Income", type: "part_of", description: "Self-employment income is a component of AGI" },
+  { fromTermName: "Standard Deduction", toTermName: "Taxable Income", type: "constrains", description: "Standard deduction reduces taxable income" },
+  
+  // Credit relationships
+  { fromTermName: "Earned Income Tax Credit", toTermName: "Adjusted Gross Income", type: "depends_on", description: "EITC phases out based on AGI" },
+  { fromTermName: "Child Tax Credit", toTermName: "Qualifying Child", type: "requires", description: "CTC requires qualifying children" },
+  { fromTermName: "Additional Child Tax Credit", toTermName: "Child Tax Credit", type: "part_of", description: "ACTC is the refundable portion of CTC" },
+  { fromTermName: "American Opportunity Credit", toTermName: "Adjusted Gross Income", type: "depends_on", description: "AOC phases out based on AGI" },
+  { fromTermName: "Lifetime Learning Credit", toTermName: "Adjusted Gross Income", type: "depends_on", description: "LLC phases out based on AGI" },
+  
+  // Self-employment
+  { fromTermName: "Self-Employment Tax", toTermName: "Self-Employment Income", type: "depends_on", description: "SE tax calculated on net SE income" },
+  
+  // State credit relationships
+  { fromTermName: "Maryland Earned Income Tax Credit", toTermName: "Earned Income Tax Credit", type: "depends_on", description: "MD EITC is percentage of federal EITC" },
+  { fromTermName: "Maryland Child Tax Credit", toTermName: "Qualifying Child", type: "requires", description: "MD CTC requires qualifying children" },
+  { fromTermName: "Virginia EITC", toTermName: "Earned Income Tax Credit", type: "depends_on", description: "VA EITC is 20% of federal EITC" },
+  { fromTermName: "Utah EITC", toTermName: "Earned Income Tax Credit", type: "depends_on", description: "UT EITC is 20% of federal EITC" },
+  { fromTermName: "Tax Forgiveness Credit", toTermName: "Pennsylvania Flat Tax", type: "constrains", description: "Tax forgiveness reduces PA tax liability" },
+  
+  // Filing status relationships
+  { fromTermName: "Filing Status", toTermName: "Standard Deduction", type: "constrains", description: "Filing status determines standard deduction amount" },
+  { fromTermName: "Filing Status", toTermName: "Earned Income Tax Credit", type: "constrains", description: "Filing status affects EITC income limits" }
+];
+
 const SNAP_RELATIONSHIPS: RelationshipSeed[] = [
   { fromTermName: "Net Income", toTermName: "Gross Income", type: "depends_on", description: "Net income is calculated from gross income minus deductions" },
   { fromTermName: "Earned Income", toTermName: "Gross Income", type: "part_of", description: "Earned income is a component of gross income" },
@@ -776,7 +971,7 @@ export async function seedOntologyTerms(
   let termSeeds: TermSeed[] = [];
   let relationshipSeeds: RelationshipSeed[] = [];
   
-  if (stateCode === "MD") {
+  if (stateCode === "MD" || stateCode === "US") {
     switch (programCode) {
       case "SNAP":
         termSeeds = [...MARYLAND_SNAP_TERMS, ...SNAP_FEDERAL_REGULATION_TERMS];
@@ -791,8 +986,24 @@ export async function seedOntologyTerms(
       case "OHEP":
         termSeeds = MARYLAND_OHEP_TERMS;
         break;
+      case "VITA":
+      case "TAX_CREDITS":
+        termSeeds = VITA_TAX_TERMS;
+        relationshipSeeds = VITA_TAX_RELATIONSHIPS;
+        break;
       default:
         errors.push(`Unknown program code: ${programCode}`);
+        return { termsCreated: 0, relationshipsCreated: 0, errors };
+    }
+  } else if (["PA", "VA", "UT", "IN", "MI"].includes(stateCode)) {
+    switch (programCode) {
+      case "VITA":
+      case "TAX_CREDITS":
+        termSeeds = VITA_TAX_TERMS;
+        relationshipSeeds = VITA_TAX_RELATIONSHIPS;
+        break;
+      default:
+        errors.push(`Program ${programCode} not yet supported for state ${stateCode}`);
         return { termsCreated: 0, relationshipsCreated: 0, errors };
     }
   } else {
@@ -868,7 +1079,7 @@ export async function seedAllMarylandPrograms(): Promise<{
   totalTerms: number;
   totalRelationships: number;
 }> {
-  const programs = ["SNAP", "MEDICAID", "TANF", "OHEP"];
+  const programs = ["SNAP", "MEDICAID", "TANF", "OHEP", "VITA"];
   const results: Record<string, { termsCreated: number; relationshipsCreated: number; errors: string[] }> = {};
   let totalTerms = 0;
   let totalRelationships = 0;
@@ -879,6 +1090,32 @@ export async function seedAllMarylandPrograms(): Promise<{
     totalTerms += result.termsCreated;
     totalRelationships += result.relationshipsCreated;
   }
+  
+  return { results, totalTerms, totalRelationships };
+}
+
+export async function seedVITAOntologyForAllStates(): Promise<{
+  results: Record<string, { termsCreated: number; relationshipsCreated: number; errors: string[] }>;
+  totalTerms: number;
+  totalRelationships: number;
+}> {
+  const states = ["MD", "PA", "VA", "UT", "IN", "MI"];
+  const results: Record<string, { termsCreated: number; relationshipsCreated: number; errors: string[] }> = {};
+  let totalTerms = 0;
+  let totalRelationships = 0;
+  
+  for (const stateCode of states) {
+    const result = await seedOntologyTerms(stateCode, "VITA");
+    results[stateCode] = result;
+    totalTerms += result.termsCreated;
+    totalRelationships += result.relationshipsCreated;
+  }
+  
+  logger.info("Seeded VITA ontology for all JAWN states", {
+    states,
+    totalTerms,
+    totalRelationships
+  });
   
   return { results, totalTerms, totalRelationships };
 }
