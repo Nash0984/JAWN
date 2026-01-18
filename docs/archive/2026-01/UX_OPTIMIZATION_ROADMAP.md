@@ -1,3 +1,9 @@
+---
+**ARCHIVED:** January 18, 2026
+**Status:** Point-in-time snapshot - no longer actively maintained
+**Purpose:** Historical reference only. See living documentation for current state.
+---
+
 # UX & Efficiency Optimization Roadmap
 ## Maryland Universal Benefits-Tax Service Delivery Platform
 

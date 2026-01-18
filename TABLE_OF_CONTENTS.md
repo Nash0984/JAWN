@@ -1,8 +1,8 @@
 # JAWN Platform - Master Documentation Index
 
-**Last Updated:** October 23, 2025  
-**Version:** 2.0.0  
-**Status:** White-Labeling Complete, Multi-State Ready
+**Last Updated:** January 18, 2026  
+**Version:** 2.2.0  
+**Status:** White-Labeling Complete, Human-in-the-Loop Provision Mapping Pipeline Added
 
 ---
 
@@ -48,8 +48,8 @@
 | **[README.md](../README.md)** | ✅ Updated | Main project overview, multi-state platform positioning |
 | **[CHANGELOG.md](../CHANGELOG.md)** | ✅ New | Version history with v2.0.0 white-labeling milestone |
 | **[SECURITY.md](../SECURITY.md)** | ✅ New | CVE reporting, vulnerability disclosure, compliance |
-| **[FEATURES.md](../FEATURES.md)** | ✅ Current | Complete feature list (93 features) |
-| **[CONTRIBUTING.md](../CONTRIBUTING.md)** | ✅ Current | Contribution guidelines |
+| **[FEATURES.md](../FEATURES.md)** | ✅ Current | Complete feature list (104 features) |
+| **[CONTRIBUTING.md](../CONTRIBUTING.md)** | ✅ Updated | Contribution guidelines + Documentation Audit Process |
 | **[LICENSE](../LICENSE)** | ✅ Current | MIT License |
 | **[TABLE_OF_CONTENTS.md](../TABLE_OF_CONTENTS.md)** | ✅ This File | Master documentation index |
 
@@ -129,9 +129,11 @@ jawn-platform/
 │   │   └── PENNSYLVANIA_IMPLEMENTATION.md # PA roadmap (pending)
 │   │
 │   ├── 📂 archive/                       # Archived documentation
-│   │   └── 📂 2025-10/                  # October 2025 archive
-│   │       ├── ARCHIVE_MANIFEST.md      # Archive index
-│   │       └── [16 archived docs]       # Legacy documentation
+│   │   ├── 📂 2025-10/                  # October 2025 archive
+│   │   │   ├── ARCHIVE_MANIFEST.md      # Archive index
+│   │   │   └── [16 archived docs]       # Legacy documentation
+│   │   └── 📂 2026-01/                  # January 2026 archive
+│   │       └── [8 snapshot docs]        # Point-in-time snapshots (audits, roadmaps)
 │   │
 │   └── 📂 testing-artifacts/             # Test evidence
 │       └── 📂 oct-2025/                 # October 2025 tests

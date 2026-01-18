@@ -1,12 +1,12 @@
 # Maryland Universal Benefits-Tax Navigator - Complete Feature Catalog
 
-**Version:** 4.1  
-**Last Updated:** October 20, 2025  
-**Total Features:** 110
+**Version:** 4.2  
+**Last Updated:** January 18, 2026  
+**Total Features:** 104
 
-**Note:** This document reflects the complete feature inventory discovered through comprehensive production readiness audit (October 2025), including enterprise compliance features (GDPR/HIPAA) and advanced infrastructure capabilities verified in Phase A re-audit.
+**Note:** This document reflects the complete feature inventory verified through comprehensive production readiness audit, including the Human-in-the-Loop Provision Mapping Pipeline (Feature 104), enterprise compliance features (GDPR/HIPAA), and advanced infrastructure capabilities.
 
-This document provides a comprehensive catalog of all 110 features implemented in the Maryland Universal Benefits-Tax Service Delivery Platform. The platform integrates 5 Maryland benefit programs (SNAP, Medicaid, TANF, OHEP, Tax Credits) with federal/state tax preparation (VITA), quality control analytics, multi-county deployment, AI-powered assistance, legislative tracking, accessibility compliance, enterprise compliance (GDPR/HIPAA), and production infrastructure operations.
+This document provides a comprehensive catalog of all 104 features implemented in the JAWN (Joint Access Welfare Network) multi-state benefits-tax platform. The platform integrates 6 benefit programs (SNAP, Medicaid, TANF, OHEP, Tax Credits, SSI) with federal/state tax preparation (VITA), quality control analytics, multi-county deployment, AI-powered assistance, legislative tracking, accessibility compliance, enterprise compliance (GDPR/HIPAA), and production infrastructure operations.
 
 **Planned for Future Development:**
 - SSI (Supplemental Security Income) standalone benefit program
@@ -2566,6 +2566,56 @@ This document provides a comprehensive catalog of all 110 features implemented i
 
 ---
 
+### 104. Human-in-the-Loop Provision Mapping Pipeline
+**User Type:** Admin + Policy Analyst  
+**Purpose:** Automated legislative change detection with human oversight for mapping law provisions to policy rules
+
+**Features:**
+- **Provision Extraction Service**: Gemini 2.0 Flash parses public law text to extract section-level amendments with:
+  - U.S. Code citations (e.g., "7 USC 2015(d)(1)")
+  - Affected benefit programs (SNAP, TANF, Medicaid, etc.)
+  - Provision types: `amends`, `supersedes`, `adds_exception`, `modifies_threshold`, `clarifies`, `removes`, `creates`
+- **Ontology Matcher Service**: Three-strategy AI matching system:
+  - **Citation Matching** (95% score): Exact U.S. Code citation lookup
+  - **Semantic Similarity** (75% threshold): Gemini embedding cosine similarity
+  - **AI Inference**: Gemini-powered reasoning for complex mappings
+- **Provision Review UI** (`/admin/provision-review`):
+  - Side-by-side law text and ontology term comparison
+  - Priority filtering (urgent/high/normal/low)
+  - Bulk approve/reject actions
+  - Public law context display
+  - Affected rules badge showing count of formal rules requiring re-verification
+- **Human Checkpoint Enforcement**: All AI-proposed mappings require human approval before affecting the rules engine
+- **Z3 Re-verification Queue**: When approved mappings affect existing formal rules:
+  - `appliedAt` is deferred
+  - `processingStatus` set to `pending_rule_verification`
+  - Affected rules queued with batch tracking (`verificationBatchId`)
+- **GovInfo Integration**: Auto-triggers provision extraction when new public laws are synced via Smart Scheduler
+
+**Technical Details:**
+- Tables: `lawProvisions` (shared/schema.ts), `provisionOntologyMappings` (shared/schema.ts)
+- Services: 
+  - `provisionExtractor.service.ts` - Gemini-powered law parsing
+  - `ontologyMatcher.service.ts` - Three-strategy matching with confidence scoring
+- API Routes:
+  - `GET /api/provision-mappings` - Get all mappings (with priority/status filtering)
+  - `POST /api/provision-mappings/:id/approve` - Approve single mapping
+  - `POST /api/provision-mappings/:id/reject` - Reject single mapping
+  - `POST /api/provision-mappings/bulk-approve` - Bulk approve multiple mappings
+  - `GET /api/provision-mappings/stats` - Dashboard statistics
+- UI: `client/src/pages/admin/ProvisionReview.tsx`
+
+**Neuro-Symbolic Maintenance Methodology:**
+This feature extends the original neuro-symbolic hybrid framework to *maintain the engine itself* when laws change:
+1. **Neural (Gemini 2.0 Flash)**: Parses public law text, extracts provisions, proposes ontology mappings
+2. **Human-in-the-Loop Checkpoint**: Human reviewers validate AI-proposed mappings before they affect rules
+3. **Symbolic (Z3 Re-verification)**: Affected formal rules are automatically queued for Z3 re-verification
+
+**Production Status**: ✅ Production Ready  
+**Completion Notes**: Complete pipeline from law detection → provision extraction → AI matching → human review → rule re-verification → applied. Ensures no law changes automatically affect the eligibility engine until human review AND Z3 re-verification complete.
+
+---
+
 ## Summary Statistics
 
 **Total Features:** 110  
@@ -2686,6 +2736,9 @@ This document provides a comprehensive catalog of all 110 features implemented i
 4. **County Analytics** - Multi-county performance tracking
 5. **PWA Support** - Offline-first capabilities
 6. **Mobile Bottom Nav** - Mobile-optimized navigation
+
+### January 2026 Additions
+18. ⭐ **Human-in-the-Loop Provision Mapping Pipeline** - Automated legislative change detection with human oversight for mapping law provisions to policy rules (Feature 104)
 
 ### Newly Documented Features (Production Audit - October 2025)
 7. ⭐ **Legislative & Regulatory Tracking** (6 features) - Federal and Maryland law tracking with GovInfo integration

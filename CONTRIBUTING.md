@@ -254,6 +254,64 @@ For feature requests, please include:
 - Use `X-Test-Bypass: integration-test` header for rate limiter bypass in tests
 - No merges permitted if test count drops below baseline (192 tests)
 
+### Documentation Maintenance
+
+The JAWN platform maintains living documentation that must stay synchronized with the codebase. We use a combination of automated drift detection and quarterly manual audits.
+
+#### Automated Drift Detection Script
+
+Run the documentation audit script to detect drift between code and documentation:
+
+```bash
+npx ts-node scripts/audit-docs.ts
+```
+
+This script compares:
+- **Actual API routes** vs **documented endpoints** in docs/API.md
+- **Actual frontend pages** vs **documented page count** in README.md
+- **Actual backend services** vs **documented service count** in README.md
+- **Documented features** in FEATURES.md
+
+Run this script:
+- Before each release
+- After adding significant new features
+- As part of quarterly audits
+
+#### Quarterly Manual Audit Process
+
+Every quarter (Q1, Q2, Q3, Q4), conduct a comprehensive documentation audit:
+
+**Audit Checklist:**
+
+| Item | Owner | Frequency |
+|------|-------|-----------|
+| Run `npx ts-node scripts/audit-docs.ts` | Development Lead | Quarterly |
+| Verify FEATURES.md feature count matches actual features | Product Manager | Quarterly |
+| Update README.md badges (features, endpoints, tables) | Development Lead | Quarterly |
+| Review and update docs/ARCHITECTURE.md | Tech Lead | Quarterly |
+| Archive outdated snapshot docs to docs/archive/ | Documentation Owner | Quarterly |
+| Verify docs/API.md covers all public endpoints | API Lead | Quarterly |
+| Confirm docs/DATABASE.md reflects current schema | Database Lead | Quarterly |
+
+**Quarterly Audit Schedule:**
+- **Q1 (January):** Post-holiday feature freeze audit
+- **Q2 (April):** Pre-summer release audit
+- **Q3 (July):** Mid-year comprehensive audit
+- **Q4 (October):** Pre-annual review audit
+
+**Document Classification:**
+
+| Type | Description | Maintenance |
+|------|-------------|-------------|
+| **Living Docs** | README, FEATURES, ARCHITECTURE, API, DATABASE, CHANGELOG | Continuous updates |
+| **Snapshot Docs** | Audit reports, roadmaps, phase evidence | Archive when superseded |
+
+**Archive Process:**
+1. Create timestamped archive folder: `docs/archive/YYYY-MM/`
+2. Add archive header to document with date and status
+3. Move document to archive folder
+4. Update TABLE_OF_CONTENTS.md
+
 ### Security
 
 - Never commit secrets or API keys

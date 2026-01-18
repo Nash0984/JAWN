@@ -1,7 +1,7 @@
 # Maryland Multi-Program Benefits Navigator - System Architecture
 
-**Version:** 2.0  
-**Last Updated:** October 2025  
+**Version:** 2.2  
+**Last Updated:** January 2026  
 **Architecture Style:** Layered Monolith with Service-Oriented Components
 
 ---
@@ -651,6 +651,98 @@ The system uses a **two-tier intelligence system**:
 **Combined (Hybrid):**
 - "Am I eligible and how much?" → RAG explains + Rules calculate
 - "What if I get a raise?" → Rules recalculate + RAG explains impact
+
+---
+
+## Neuro-Symbolic Hybrid Gateway
+
+### Decision-Time Accountability
+
+Based on *"A Neuro-Symbolic Framework for Accountability in Public-Sector AI"*, the system routes all eligibility decisions through a three-layer architecture ensuring accountability:
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                      NEURO-SYMBOLIC HYBRID GATEWAY                          │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  ┌─────────────────────────────────────────────────────────────────────┐   │
+│  │  1. NEURAL LAYER (Gemini 2.0 Flash)                                 │   │
+│  │     Purpose: Extraction and translation of unstructured data ONLY  │   │
+│  │     - OCR document text extraction                                   │   │
+│  │     - Natural language → structured data translation                 │   │
+│  │     - Semantic similarity matching for ontology terms                │   │
+│  └─────────────────────────────────────────────────────────────────────┘   │
+│                                    │                                        │
+│                                    ▼                                        │
+│  ┌─────────────────────────────────────────────────────────────────────┐   │
+│  │  2. RULES-AS-CODE (RaC) LAYER                                       │   │
+│  │     Purpose: Legal knowledge base with machine-verifiable artifacts  │   │
+│  │     - 176+ ontology terms with U.S. Code citations                   │   │
+│  │     - SMT-LIB formal rule expressions                                │   │
+│  │     - Living Policy Manual with plain-language explanations          │   │
+│  └─────────────────────────────────────────────────────────────────────┘   │
+│                                    │                                        │
+│                                    ▼                                        │
+│  ┌─────────────────────────────────────────────────────────────────────┐   │
+│  │  3. SYMBOLIC LAYER (Z3 Solver)                                      │   │
+│  │     Purpose: Proof engine for satisfiability checks                  │   │
+│  │     - SAT/UNSAT determination with statutory citations               │   │
+│  │     - UNSAT core extraction for denial explanations                  │   │
+│  │     - Dual verification modes: explanation + case eligibility        │   │
+│  └─────────────────────────────────────────────────────────────────────┘   │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Maintenance Methodology
+
+The same neuro-symbolic principles are applied to **maintain the engine itself** when laws change:
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                   NEURO-SYMBOLIC MAINTENANCE PIPELINE                       │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  ┌────────────────────────────────────────┐                                │
+│  │ 1. NEURAL: Provision Extraction        │  Gemini 2.0 Flash parses      │
+│  │    - Parse public law text             │  legislation and proposes      │
+│  │    - Extract U.S. Code amendments      │  ontology mappings             │
+│  │    - Identify affected programs        │                                │
+│  │    - Propose ontology mappings         │                                │
+│  └────────────────────────────────────────┘                                │
+│                         │                                                   │
+│                         ▼                                                   │
+│  ┌────────────────────────────────────────┐                                │
+│  │ 2. HUMAN CHECKPOINT: Review UI         │  Policy analysts approve/      │
+│  │    - /admin/provision-review           │  reject AI-proposed mappings   │
+│  │    - Side-by-side law + ontology       │  before they affect rules      │
+│  │    - Priority-based workflow           │                                │
+│  │    - Bulk approve/reject               │                                │
+│  └────────────────────────────────────────┘                                │
+│                         │                                                   │
+│                         ▼                                                   │
+│  ┌────────────────────────────────────────┐                                │
+│  │ 3. SYMBOLIC: Z3 Re-verification Queue  │  Affected formal rules         │
+│  │    - Queue rules with affected terms   │  are re-verified to ensure     │
+│  │    - Batch verification tracking       │  continued validity            │
+│  │    - SMT-LIB re-execution              │                                │
+│  │    - Validity confirmation             │                                │
+│  └────────────────────────────────────────┘                                │
+│                                                                             │
+│  RESULT: No law changes affect eligibility engine until:                   │
+│          ✓ Human review of AI-proposed mappings                            │
+│          ✓ Z3 re-verification of affected formal rules                     │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Key Services
+
+| Service | Purpose | Layer |
+|---------|---------|-------|
+| `provisionExtractor.service.ts` | Parse public law text, extract provisions | Neural |
+| `ontologyMatcher.service.ts` | Three-strategy matching (citation, semantic, AI) | Neural |
+| `ProvisionReview.tsx` | Human review interface | Human Checkpoint |
+| `z3VerificationQueue.service.ts` | Re-verify affected formal rules | Symbolic |
 
 ---
 

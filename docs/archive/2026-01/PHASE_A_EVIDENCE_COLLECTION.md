@@ -1,3 +1,9 @@
+---
+**ARCHIVED:** January 18, 2026
+**Status:** Point-in-time snapshot - no longer actively maintained
+**Purpose:** Historical reference only. See living documentation for current state.
+---
+
 # Phase A: Evidence Collection Report
 **Date:** October 20, 2025  
 **Audit Scope:** GDPR, HIPAA, and Infrastructure features beyond the original 93  

@@ -7,6 +7,67 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.2.0] - 2026-01-18 🎯 **HUMAN-IN-THE-LOOP PROVISION MAPPING PIPELINE**
+
+### 🚀 Major Feature: Legislative Change Integration
+
+#### **Human-in-the-Loop Provision Mapping Pipeline** (Feature 104)
+Complete automated legislative change detection with mandatory human oversight:
+
+- **Provision Extraction Service** (`provisionExtractor.service.ts`)
+  - Gemini 2.0 Flash parses public law text
+  - Extracts section-level amendments with U.S. Code citations
+  - Identifies affected benefit programs (SNAP, TANF, Medicaid, etc.)
+  - Provision types: `amends`, `supersedes`, `adds_exception`, `modifies_threshold`, `clarifies`, `removes`, `creates`
+
+- **Ontology Matcher Service** (`ontologyMatcher.service.ts`)
+  - **Citation Matching** (95% confidence): Exact U.S. Code citation lookup
+  - **Semantic Similarity** (75% threshold): Gemini embedding cosine similarity against 176+ ontology terms
+  - **AI Inference**: Gemini-powered reasoning for complex multi-term mappings
+
+- **Provision Review UI** (`/admin/provision-review`)
+  - Side-by-side law text and ontology term comparison
+  - Priority filtering (urgent/high/normal/low)
+  - Bulk approve/reject actions for efficiency
+  - Affected rules badge showing Z3 re-verification queue depth
+  - Real-time cache invalidation across all dashboard views
+
+- **Z3 Re-verification Queue**
+  - Approved mappings with affected formal rules trigger re-verification
+  - `processingStatus` set to `pending_rule_verification` until Z3 confirms validity
+  - Batch tracking via `verificationBatchId`
+  - `appliedAt` deferred until re-verification completes
+
+#### **Neuro-Symbolic Maintenance Methodology**
+Key innovation extending the original academic framework:
+1. **Neural Layer**: Gemini 2.0 Flash for extraction and matching
+2. **Human Checkpoint**: Mandatory review before rules engine affected
+3. **Symbolic Layer**: Z3 re-verification ensures continued formal validity
+
+Result: No law changes automatically affect eligibility engine until human review AND Z3 re-verification complete.
+
+### 📊 Database Updates
+- Added `law_provisions` table for extracted legislative provisions
+- Added `provision_ontology_mappings` table for AI-proposed and human-reviewed mappings
+- Added indexes for status, priority, and term lookups
+
+### 🔧 API Endpoints
+- `GET /api/provision-mappings` - List mappings with filtering
+- `GET /api/provision-mappings/stats` - Dashboard statistics
+- `POST /api/provision-mappings/:id/approve` - Approve single mapping
+- `POST /api/provision-mappings/:id/reject` - Reject single mapping
+- `POST /api/provision-mappings/bulk-approve` - Bulk approve mappings
+
+### 📖 Documentation
+- Updated README.md with Strategic Positioning and Neuro-Symbolic Maintenance Methodology
+- Added Feature 104 to FEATURES.md
+- Updated docs/ARCHITECTURE.md with Neuro-Symbolic Hybrid Gateway section
+- Updated docs/API.md with provision mapping endpoints
+- Updated docs/DATABASE.md with new tables
+- Feature count updated from 103 to 104
+
+---
+
 ## [2.1.0] - 2026-01-11 🎯 **TECHNICAL DEBT CLEANUP & COMPLIANCE UPDATE**
 
 ### 🧹 Technical Debt Cleanup

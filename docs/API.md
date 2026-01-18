@@ -1,7 +1,7 @@
 # Maryland Multi-Program Benefits Navigator API Documentation
 
-**Version:** 2.0  
-**Last Updated:** October 2025  
+**Version:** 2.2  
+**Last Updated:** January 2026  
 **Base URL:** `https://your-domain.replit.app/api`
 
 This document provides comprehensive documentation for all API endpoints in the Maryland Multi-Program Benefits Navigator System.
@@ -392,6 +392,126 @@ Authorization: Required
 ```http
 GET /api/eligibility/calculations
 Authorization: Required
+```
+
+### Provision Mappings (Human-in-the-Loop Pipeline)
+
+#### Get All Mappings
+```http
+GET /api/provision-mappings
+Authorization: Required (Admin)
+Query Parameters:
+  - status: pending | approved | rejected (optional)
+  - priority: urgent | high | normal | low (optional)
+```
+
+**Response:**
+```json
+{
+  "mappings": [
+    {
+      "id": "pm_123abc",
+      "provisionId": "prov_456def",
+      "ontologyTermId": "term_789ghi",
+      "matchScore": 0.87,
+      "matchStrategy": "semantic_similarity",
+      "status": "pending",
+      "priority": "high",
+      "affectedRulesCount": 3,
+      "provision": {
+        "sectionNumber": "2",
+        "provisionType": "amends",
+        "affectedPrograms": ["SNAP"],
+        "effectiveDate": "2026-03-01",
+        "provisionText": "Section 5(d)(1) of the Food and Nutrition Act..."
+      },
+      "ontologyTerm": {
+        "canonicalName": "snap_income_deduction_standard",
+        "plainLanguage": "Standard deduction from gross income",
+        "usCitation": "7 USC 2014(e)(1)"
+      }
+    }
+  ],
+  "total": 42
+}
+```
+
+#### Get Mapping Statistics
+```http
+GET /api/provision-mappings/stats
+Authorization: Required (Admin)
+```
+
+**Response:**
+```json
+{
+  "pending": 12,
+  "approved": 156,
+  "rejected": 8,
+  "byPriority": {
+    "urgent": 2,
+    "high": 5,
+    "normal": 4,
+    "low": 1
+  }
+}
+```
+
+#### Approve Single Mapping
+```http
+POST /api/provision-mappings/:id/approve
+Authorization: Required (Admin)
+Content-Type: application/json
+
+{
+  "notes": "Verified citation matches current law"
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "mapping": {
+    "id": "pm_123abc",
+    "status": "approved",
+    "reviewedBy": "user_789",
+    "reviewedAt": "2026-01-18T14:30:00.000Z",
+    "processingStatus": "pending_rule_verification",
+    "affectedRulesQueued": 3
+  }
+}
+```
+
+#### Reject Single Mapping
+```http
+POST /api/provision-mappings/:id/reject
+Authorization: Required (Admin)
+Content-Type: application/json
+
+{
+  "reason": "Incorrect ontology term match - provision modifies threshold, not definition"
+}
+```
+
+#### Bulk Approve Mappings
+```http
+POST /api/provision-mappings/bulk-approve
+Authorization: Required (Admin)
+Content-Type: application/json
+
+{
+  "mappingIds": ["pm_123abc", "pm_456def", "pm_789ghi"]
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "approved": 3,
+  "affectedRulesQueued": 8
+}
 ```
 
 ---

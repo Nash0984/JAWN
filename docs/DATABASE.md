@@ -1,9 +1,9 @@
 # Maryland Multi-Program Benefits Navigator - Database Schema Documentation
 
-**Version:** 2.0  
+**Version:** 2.2  
 **Database:** PostgreSQL (Neon)  
 **ORM:** Drizzle  
-**Last Updated:** October 2025
+**Last Updated:** January 2026
 
 ---
 
@@ -512,6 +512,52 @@ LIMIT 10;
 | is_eligible | boolean | NOT NULL | Eligibility result |
 | calculation_method | text | NOT NULL | Method used |
 | created_at | timestamp | NOT NULL, DEFAULT NOW() | Calculation timestamp |
+
+### law_provisions
+**Purpose:** Extracted provisions from public laws for ontology mapping
+
+| Column | Type | Constraints | Description |
+|--------|------|------------|-------------|
+| id | varchar | PRIMARY KEY | Provision identifier |
+| public_law_id | varchar | FOREIGN KEY → public_laws | Source law |
+| section_number | text | NOT NULL | Section within law |
+| provision_type | text | NOT NULL | amends, supersedes, adds_exception, modifies_threshold, clarifies, removes, creates |
+| us_code_citation | text | | U.S. Code citation (e.g., "7 USC 2015(d)(1)") |
+| provision_text | text | NOT NULL | Full provision text |
+| plain_language_summary | text | | AI-generated plain language summary |
+| affected_programs | text().array() | | Affected benefit programs |
+| effective_date | timestamp | | When provision takes effect |
+| extraction_confidence | real | | 0-1 AI extraction confidence |
+| extracted_by | varchar | | AI model used |
+| processing_status | text | NOT NULL, DEFAULT 'pending' | pending, mapped, applied |
+| created_at | timestamp | NOT NULL, DEFAULT NOW() | Creation timestamp |
+
+### provision_ontology_mappings
+**Purpose:** AI-proposed and human-reviewed mappings between provisions and ontology terms
+
+| Column | Type | Constraints | Description |
+|--------|------|------------|-------------|
+| id | varchar | PRIMARY KEY | Mapping identifier |
+| provision_id | varchar | FOREIGN KEY → law_provisions, NOT NULL | Source provision |
+| ontology_term_id | varchar | FOREIGN KEY → ontology_terms, NOT NULL | Target ontology term |
+| match_score | real | NOT NULL | 0-1 confidence score |
+| match_strategy | text | NOT NULL | citation_match, semantic_similarity, ai_inference |
+| status | text | NOT NULL, DEFAULT 'pending' | pending, approved, rejected |
+| priority | text | NOT NULL, DEFAULT 'normal' | urgent, high, normal, low |
+| reviewed_by | varchar | FOREIGN KEY → users | Reviewer user |
+| reviewed_at | timestamp | | Review timestamp |
+| review_notes | text | | Reviewer notes |
+| rejection_reason | text | | Reason if rejected |
+| processing_status | text | DEFAULT 'pending' | pending, pending_rule_verification, applied |
+| verification_batch_id | varchar | | Z3 batch verification tracking |
+| applied_at | timestamp | | When mapping applied to rules |
+| created_at | timestamp | NOT NULL, DEFAULT NOW() | Creation timestamp |
+
+**Indexes:**
+- `idx_provision_mappings_status` on (status)
+- `idx_provision_mappings_priority` on (priority)
+- `idx_provision_mappings_provision` on (provision_id)
+- `idx_provision_mappings_term` on (ontology_term_id)
 
 ---
 
