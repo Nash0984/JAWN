@@ -1,9 +1,10 @@
 # JAWN API Documentation
 
-**Version:** 2.2  
 **Base URL:** `/api`
 
 This document provides comprehensive documentation for all API endpoints in the JAWN (Joint Access Welfare Network) platform.
+
+> **Note:** Examples throughout this documentation use Maryland as the reference implementation. The platform supports multiple jurisdictions; replace `MD_` prefixes and Maryland-specific values with your jurisdiction's configuration.
 
 ---
 
@@ -179,8 +180,8 @@ Authorization: Required
 Content-Type: application/json
 
 {
-  "query": "What are the income limits for SNAP in Maryland?",
-  "programCode": "MD_SNAP",
+  "query": "What are the income limits for SNAP?",
+  "programCode": "STATE_SNAP",
   "searchMode": "hybrid",
   "topK": 5
 }
@@ -189,8 +190,8 @@ Content-Type: application/json
 **Response:**
 ```json
 {
-  "query": "What are the income limits for SNAP in Maryland?",
-  "response": "For Maryland SNAP (Food Supplement Program), income limits vary by household size...",
+  "query": "What are the income limits for SNAP?",
+  "response": "For SNAP (Food Supplement Program), income limits vary by household size...",
   "confidence": 0.92,
   "sources": [
     {
@@ -300,11 +301,11 @@ requirementType: "identity"
   "isValid": true,
   "confidence": 0.95,
   "extractedData": {
-    "documentType": "Maryland Driver's License",
+    "documentType": "State Driver's License",
     "expirationDate": "2028-03-15",
     "name": "John Doe"
   },
-  "explanation": "This is a valid Maryland driver's license that can be used for identity verification.",
+  "explanation": "This is a valid state driver's license that can be used for identity verification.",
   "requirements": {
     "identity": "met",
     "residency": "met"
@@ -327,7 +328,7 @@ GET /api/benefit-programs
   {
     "id": 1,
     "code": "MD_SNAP",
-    "name": "Maryland SNAP (Food Supplement Program)",
+    "name": "SNAP (Food Supplement Program)",
     "description": "Supplemental nutrition assistance...",
     "active": true,
     "eligibilityRules": {...}
@@ -816,7 +817,7 @@ Authorization: Required (Staff)
 Content-Type: application/json
 
 {
-  "batchName": "October 2025 Enrollments",
+  "batchName": "Q4 Enrollments",
   "sessionIds": [1, 2, 3, 4],
   "format": "xml"
 }
@@ -985,7 +986,7 @@ Authorization: Required
 ```json
 {
   "topic": "income_limits",
-  "generatedText": "Maryland SNAP Income Limits (FY 2026)\n\nIncome limits determine who qualifies for SNAP benefits. These limits are based on household size and gross monthly income...",
+  "generatedText": "SNAP Income Limits\n\nIncome limits determine who qualifies for SNAP benefits. These limits are based on household size and gross monthly income...",
   "readingLevel": 7.8,
   "wordCount": 425,
   "rulesIncluded": 8
@@ -1044,7 +1045,7 @@ Authorization: Required (Staff)
   {
     "id": 1,
     "formType": "information_sharing",
-    "title": "Maryland SNAP Information Sharing Consent",
+    "title": "SNAP Information Sharing Consent",
     "description": "Allows sharing of SNAP application data with partner agencies",
     "requiredForPrograms": ["MD_SNAP"],
     "version": "2.0",
@@ -1061,7 +1062,7 @@ Content-Type: application/json
 
 {
   "formType": "information_sharing",
-  "title": "Maryland SNAP Information Sharing Consent",
+  "title": "SNAP Information Sharing Consent",
   "description": "Allows sharing of SNAP application data with partner agencies",
   "requiredForPrograms": ["MD_SNAP"],
   "version": "2.0",
@@ -1078,7 +1079,7 @@ Content-Type: application/json
 {
   "id": 1,
   "formType": "information_sharing",
-  "title": "Maryland SNAP Information Sharing Consent",
+  "title": "SNAP Information Sharing Consent",
   "description": "Allows sharing of SNAP application data with partner agencies",
   "requiredForPrograms": ["MD_SNAP"],
   "version": "2.0",

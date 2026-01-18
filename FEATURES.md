@@ -1,9 +1,10 @@
 # JAWN Feature Catalog
 
-**Version:** 4.2  
 **Total Features:** 104
 
 The JAWN (Joint Access Welfare Network) platform is a multi-state benefits-tax platform integrating 6 benefit programs (SNAP, Medicaid, TANF, OHEP, Tax Credits, SSI) with federal/state tax preparation (VITA). The system includes quality control analytics, multi-county deployment, AI-powered assistance, legislative tracking, accessibility compliance, and enterprise compliance (GDPR/HIPAA).
+
+> **Note:** This documentation uses Maryland as the reference implementation example. The platform supports multiple jurisdictions; features labeled with Maryland-specific names (e.g., "Maryland State Law Tracker") represent jurisdiction-specific implementations that each tenant configures.
 
 ---
 
@@ -35,7 +36,7 @@ The JAWN (Joint Access Welfare Network) platform is a multi-state benefits-tax p
 ### 1. Anonymous Benefit Screener
 **Location:** `/screener`  
 **User Type:** Public (no login required)  
-**Purpose:** Quick eligibility check for Maryland benefit programs
+**Purpose:** Quick eligibility check for benefit programs (supports multiple jurisdictions)
 
 **Features:**
 - No login required - privacy-first design
@@ -116,7 +117,7 @@ The JAWN (Joint Access Welfare Network) platform is a multi-state benefits-tax p
 ### 5. Simplified Policy Search
 **Location:** `/public/search`  
 **User Type:** Public  
-**Purpose:** Search Maryland SNAP policy manual
+**Purpose:** Search jurisdiction-specific SNAP policy manual (e.g., Maryland)
 
 **Features:**
 - Natural language queries
@@ -192,7 +193,7 @@ The JAWN (Joint Access Welfare Network) platform is a multi-state benefits-tax p
 **Purpose:** Accurate multi-benefit calculations
 
 **Features:**
-- Federal and Maryland-specific rules
+- Federal and state-specific rules (configurable per jurisdiction)
 - SNAP, Medicaid, EITC, CTC, SSI, TANF calculations
 - Tax liability and refund calculations
 - Deduction optimization
@@ -296,13 +297,13 @@ The JAWN (Joint Access Welfare Network) platform is a multi-state benefits-tax p
 ### 13. Tax Preparation
 **Location:** `/tax`  
 **User Type:** All authenticated users  
-**Purpose:** Federal and Maryland state tax return preparation
+**Purpose:** Federal and state tax return preparation (supports multiple states)
 
 **Features:**
 - Form 1040 generation (federal)
-- Maryland Form 502 generation (state)
-- County tax calculations (24 Maryland counties)
-- Maryland-specific credits (EITC supplement)
+- State tax form generation (e.g., Maryland Form 502)
+- County tax calculations (e.g., 24 Maryland counties)
+- State-specific credits (e.g., EITC supplement)
 - Tax document upload and extraction
 - PolicyEngine tax calculations
 - Cross-enrollment analysis (tax → benefits)
@@ -507,10 +508,10 @@ The JAWN (Joint Access Welfare Network) platform is a multi-state benefits-tax p
 ### 83. County Tax Rate Management
 **Location:** Integrated in tax preparation  
 **User Type:** Tax preparers  
-**Purpose:** Manage county-specific tax rates for all 24 Maryland counties
+**Purpose:** Manage county-specific tax rates (e.g., 24 Maryland counties)
 
 **Features:**
-- County tax rate configuration for 24 Maryland counties ✅
+- County tax rate configuration (e.g., 24 Maryland counties) ✅
 - Automatic rate application based on county ✅
 - Tax year versioning ❌ (hard-coded, not versioned)
 - Rate change history tracking ❌ (no history tracking)
@@ -520,18 +521,18 @@ The JAWN (Joint Access Welfare Network) platform is a multi-state benefits-tax p
 **Technical Details:**
 - Database: County tax rate tables ❌ (rates hard-coded in form502Generator.ts)
 - Service: `server/services/form502Generator.ts` ✅
-- Integration: Maryland Form 502 generator ✅
+- Integration: State tax form generator ✅
 
   
 ---
 
-### 84. Maryland Credit Calculations
+### 84. State Credit Calculations
 **Location:** Integrated in tax preparation  
 **User Type:** Tax preparers  
-**Purpose:** Calculate Maryland-specific tax credits
+**Purpose:** Calculate state-specific tax credits (supports multiple states)
 
 **Features:**
-- Maryland EITC supplement calculation
+- State EITC supplement calculation (e.g., Maryland)
 - State-specific credit eligibility checks
 - Credit amount calculation
 - Multi-credit optimization
@@ -610,13 +611,13 @@ The JAWN (Joint Access Welfare Network) platform is a multi-state benefits-tax p
 ### 110. E-Filing Dashboard
 **Location:** `/efile`  
 **User Type:** Navigators, Caseworkers, Administrators  
-**Purpose:** Comprehensive e-filing management for federal and Maryland tax returns
+**Purpose:** Comprehensive e-filing management for federal and state tax returns
 
 **Features:**
 - Federal Returns tab with submission status tracking
-- Maryland Returns tab with linked federal returns
+- State Returns tab with linked federal returns (e.g., Maryland)
 - E-File Queue monitoring with real-time status updates
-- Validate tax returns before submission (IRS/Maryland business rules)
+- Validate tax returns before submission (IRS/state business rules)
 - Submit for e-filing (Form 1040 and Form 502)
 - Download generated XML files (federal and state)
 - Real-time WebSocket status updates with live connection indicator
@@ -818,7 +819,7 @@ The JAWN (Joint Access Welfare Network) platform is a multi-state benefits-tax p
   
 ---
 
-### 27. Maryland Evaluation Framework
+### 27. Jurisdiction Evaluation Framework
 **Location:** `/evaluation`  
 **User Type:** Administrators  
 **Purpose:** Accuracy testing and validation
@@ -1196,7 +1197,7 @@ The JAWN (Joint Access Welfare Network) platform is a multi-state benefits-tax p
 **Technical Details:**
 - Page: `client/src/pages/CountyManagement.tsx`
 - Database: `counties` table
-- 24 Maryland counties supported
+- Multi-county support (e.g., 24 Maryland counties)
 
   
 ---
@@ -1416,10 +1417,10 @@ The JAWN (Joint Access Welfare Network) platform is a multi-state benefits-tax p
   
 ---
 
-### 48. Maryland State Law Tracker
-**Location:** `/admin/maryland-law-tracker`  
+### 48. State Law Tracker
+**Location:** `/admin/maryland-law-tracker` (route varies by jurisdiction)  
 **User Type:** Administrators  
-**Purpose:** Track Maryland state legislation affecting benefits programs
+**Purpose:** Track state legislation affecting benefits programs (per jurisdiction)
 
 **Features:**
 - MGA Legislature website scraping ✅
@@ -1958,7 +1959,7 @@ The JAWN (Joint Access Welfare Network) platform is a multi-state benefits-tax p
 ### 89. Compliance Reporting Suite
 **Location:** Documentation and reporting infrastructure  
 **User Type:** Administrators and stakeholders  
-**Purpose:** Professional compliance documentation for Maryland DHS review
+**Purpose:** Professional compliance documentation for stakeholder review
 
 **Features:**
 - 1,578-line comprehensive audit report (THIRD_PARTY_STANDARDS_AUDIT.md)
@@ -1993,7 +1994,6 @@ The JAWN (Joint Access Welfare Network) platform is a multi-state benefits-tax p
 **Technical Details:**
 - Implementation: React components with aria-label attributes
 - Page Titles: react-helmet-async in all page components
-- Completion: October 16-17, 2025
 - Impact: 91.7% Level A compliance (5 violations remaining)
 
   

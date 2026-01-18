@@ -1,6 +1,5 @@
 # JAWN System Architecture
 
-**Version:** 2.2  
 **Architecture Style:** Layered Monolith with Service-Oriented Components
 
 ---

@@ -20,7 +20,7 @@ The backend uses Express.js and TypeScript, with PostgreSQL via Drizzle ORM on N
 -   **Financial Opportunity Radar**: Real-time cross-program eligibility and dynamic benefit calculations.
 -   **Adaptive Intake Copilot**: Conversational AI for application guidance.
 -   **PolicyEngine Integration**: Multi-benefit calculations.
--   **Tax Preparation System**: Integrates federal/state tax preparation with benefits, including Gemini Vision for tax document extraction, VITA document upload, PolicyEngine tax calculation, and PDF generation for Form 1040/Maryland Form 502.
+-   **Tax Preparation System**: Integrates federal/state tax preparation with benefits, including Gemini Vision for tax document extraction, VITA document upload, PolicyEngine tax calculation, and PDF generation for federal and state forms (e.g., Form 1040, Maryland Form 502).
 -   **E-Filing Dashboard**: Production-ready e-filing management with real-time WebSocket status updates, validation, XML generation, and submission tracking.
 -   **Cross-Enrollment Intelligence Engine**: AI-powered recommendations for unclaimed benefits.
 -   **IRS Use & Disclosure Consent Form**: IRS Publication 4299 compliant consent form with electronic signature.
@@ -71,7 +71,7 @@ The backend uses Express.js and TypeScript, with PostgreSQL via Drizzle ORM on N
 -   **Unified Metrics Service**: Comprehensive monitoring with Prometheus Export.
 -   **Universal Feature Registry**: Ensures all programs access all features through a modular architecture.
 -   **PM2 Production Deployment**: Cluster mode deployment.
--   **Multi-tenant Architecture**: Single unified application for all 24 Maryland LDSS offices.
+-   **Multi-tenant Architecture**: Single unified application supporting multiple offices per jurisdiction (e.g., 24 Maryland LDSS offices).
 -   **Error Tracking & Monitoring**: Sentry integration with lazy initialization and error boundary.
 
 # External Dependencies

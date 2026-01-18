@@ -1,8 +1,9 @@
 # JAWN Database Schema Documentation
 
-**Version:** 2.2  
 **Database:** PostgreSQL (Neon)  
 **ORM:** Drizzle
+
+> **Note:** Schema examples use Maryland as the reference implementation (e.g., `MD_SNAP`, `MD_MEDICAID`). The platform supports multiple jurisdictions; each tenant configures jurisdiction-specific program codes and rules.
 
 ---
 
@@ -53,7 +54,7 @@ The database consists of **229 tables** organized into the following logical dom
 | Multi-State | 7 | Cross-state rules, reciprocity, portability |
 | GDPR/HIPAA | 11 | Consents, access logs, breach incidents |
 | Program-Specific Rules | 11 | Medicaid, OHEP, TANF engines |
-| Legislative Tracking | 6 | Federal/Maryland bills, public laws |
+| Legislative Tracking | 6 | Federal/state bills, public laws |
 | Monitoring | 6 | Metrics, alerts, security events |
 | Additional | 72 | Search, ML models, audit logs, ABAWD, enrollment
 
@@ -154,7 +155,7 @@ The database consists of **229 tables** organized into the following logical dom
 | full_name | text | | User's full name |
 | phone | text | | Contact phone |
 | role | text | NOT NULL, DEFAULT 'client' | client, navigator, caseworker, admin |
-| dhs_employee_id | text | | Maryland DHS staff ID |
+| dhs_employee_id | text | | Agency staff ID (e.g., Maryland DHS) |
 | office_location | text | | DHS office location |
 | is_active | boolean | NOT NULL, DEFAULT true | Account active status |
 | created_at | timestamp | NOT NULL, DEFAULT NOW() | Creation timestamp |
@@ -171,7 +172,7 @@ The database consists of **229 tables** organized into the following logical dom
 |--------|------|------------|-------------|
 | id | varchar | PRIMARY KEY, DEFAULT uuid | Program identifier |
 | name | text | NOT NULL | Program display name |
-| code | text | NOT NULL, UNIQUE | MD_SNAP, MD_MEDICAID, etc. |
+| code | text | NOT NULL, UNIQUE | Program code (e.g., MD_SNAP, MD_MEDICAID) |
 | description | text | | Program description |
 | program_type | text | NOT NULL, DEFAULT 'benefit' | benefit, tax, hybrid |
 | has_rules_engine | boolean | NOT NULL, DEFAULT false | Supports rules extraction |
@@ -185,6 +186,7 @@ The database consists of **229 tables** organized into the following logical dom
 | updated_at | timestamp | NOT NULL, DEFAULT NOW() | Last update timestamp |
 
 **Supported Programs:**
+Examples (Maryland reference implementation):
 - MD_SNAP (Food Supplement Program)
 - MD_MEDICAID (Medical Assistance)
 - MD_TCA (TANF)
@@ -714,7 +716,7 @@ LIMIT 10;
 |--------|------|------------|-------------|
 | id | varchar | PRIMARY KEY | Session identifier |
 | user_id | varchar | FOREIGN KEY → users | User |
-| program_code | text | NOT NULL | MD_SNAP, etc. |
+| program_code | text | NOT NULL | Program code (e.g., MD_SNAP) |
 | session_status | text | NOT NULL, DEFAULT 'active' | active, completed, abandoned |
 | extracted_data | jsonb | DEFAULT {} | Extracted application data |
 | completeness | real | DEFAULT 0 | 0-1 completeness score |
@@ -743,7 +745,7 @@ LIMIT 10;
 | id | varchar | PRIMARY KEY | Form identifier |
 | intake_session_id | varchar | FOREIGN KEY → intake_sessions | Source session |
 | user_id | varchar | FOREIGN KEY → users | Applicant |
-| program_code | text | NOT NULL | MD_SNAP, etc. |
+| program_code | text | NOT NULL | Program code (e.g., MD_SNAP) |
 | form_data | jsonb | NOT NULL | Complete form data |
 | completeness | real | NOT NULL | 0-1 completeness |
 | missing_fields | text().array() | | Incomplete fields |
@@ -773,7 +775,7 @@ LIMIT 10;
 | Column | Type | Constraints | Description |
 |--------|------|------------|-------------|
 | id | varchar | PRIMARY KEY | Template identifier |
-| program_code | text | NOT NULL | MD_SNAP, etc. |
+| program_code | text | NOT NULL | Program code (e.g., MD_SNAP) |
 | requirement_category | text | NOT NULL | income, identity, residency |
 | requirement_name | text | NOT NULL | Requirement name |
 | description | text | NOT NULL | Requirement description |
@@ -788,7 +790,7 @@ LIMIT 10;
 |--------|------|------------|-------------|
 | id | varchar | PRIMARY KEY | Template identifier |
 | notice_type | text | NOT NULL | approval, denial, recertification |
-| program_code | text | NOT NULL | MD_SNAP, etc. |
+| program_code | text | NOT NULL | Program code (e.g., MD_SNAP) |
 | template_name | text | NOT NULL | Template name |
 | description | text | NOT NULL | Template description |
 | key_sections | text().array() | | Important sections |
@@ -802,7 +804,7 @@ LIMIT 10;
 | Column | Type | Constraints | Description |
 |--------|------|------------|-------------|
 | id | varchar | PRIMARY KEY | FAQ identifier |
-| program_code | text | NOT NULL | MD_SNAP, etc. |
+| program_code | text | NOT NULL | Program code (e.g., MD_SNAP) |
 | category | text | NOT NULL | eligibility, application, etc. |
 | question | text | NOT NULL | FAQ question |
 | answer | text | NOT NULL | FAQ answer |
@@ -868,7 +870,7 @@ LIMIT 10;
 | Column | Type | Constraints | Description |
 |--------|------|------------|-------------|
 | id | varchar | PRIMARY KEY | Test case identifier |
-| program_code | text | NOT NULL | MD_SNAP, etc. |
+| program_code | text | NOT NULL | Program code (e.g., MD_SNAP) |
 | test_type | text | NOT NULL | eligibility, calculation, edge |
 | case_name | text | NOT NULL | Test case name |
 | input_data | jsonb | NOT NULL | Test input |
@@ -884,7 +886,7 @@ LIMIT 10;
 |--------|------|------------|-------------|
 | id | varchar | PRIMARY KEY | Run identifier |
 | test_suite_name | text | NOT NULL | Suite name |
-| program_code | text | NOT NULL | MD_SNAP, etc. |
+| program_code | text | NOT NULL | Program code (e.g., MD_SNAP) |
 | total_cases | integer | NOT NULL | Total test cases |
 | passed_cases | integer | NOT NULL | Passed count |
 | failed_cases | integer | NOT NULL | Failed count |
