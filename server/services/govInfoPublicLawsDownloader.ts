@@ -6,6 +6,7 @@ import { eq, and, sql } from 'drizzle-orm';
 import { ObjectStorageService } from '../objectStorage';
 import { unifiedDocumentService as documentProcessor } from './unified/UnifiedDocumentService';
 import { logger } from './logger.service';
+import { ProvisionExtractor } from './provisionExtractor.service';
 
 /**
  * GovInfo Public Laws Downloader
@@ -306,6 +307,35 @@ export class GovInfoPublicLawsDownloader {
       
       // Process document through RAG pipeline
       await documentProcessor.processDocument(documentId);
+    }
+
+    // Auto-trigger provision extraction for Human-in-the-Loop review
+    try {
+      const [insertedLaw] = await db.select()
+        .from(publicLaws)
+        .where(eq(publicLaws.publicLawNumber, lawData.publicLawNumber))
+        .limit(1);
+
+      if (insertedLaw && lawData.fullText) {
+        logger.info('Auto-triggering provision extraction for newly synced law', {
+          publicLawNumber: lawData.publicLawNumber,
+          publicLawId: insertedLaw.id
+        });
+
+        const provisionExtractor = new ProvisionExtractor();
+        const extractedProvisions = await provisionExtractor.extractProvisions(insertedLaw.id);
+
+        logger.info('Provision extraction complete for new law', {
+          publicLawNumber: lawData.publicLawNumber,
+          provisionsExtracted: extractedProvisions.length
+        });
+      }
+    } catch (provisionError) {
+      // Log but don't fail the sync - provision extraction is a downstream process
+      logger.warn('Failed to auto-extract provisions from new law', {
+        publicLawNumber: lawData.publicLawNumber,
+        error: provisionError
+      });
     }
   }
 

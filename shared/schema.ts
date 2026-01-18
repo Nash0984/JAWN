@@ -9756,6 +9756,124 @@ export const insertEESyntheticLifeEventSchema = createInsertSchema(eeSyntheticLi
   updatedAt: true,
 });
 
+// ============================================================================
+// LAW PROVISIONS & PROVISION-ONTOLOGY MAPPINGS
+// Implements the "Living Policy Manual" pipeline with Human-in-the-Loop review
+// ============================================================================
+
+// Law Provisions - Extracted sections/amendments from public laws
+export const lawProvisions = pgTable("law_provisions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  publicLawId: varchar("public_law_id").references(() => publicLaws.id).notNull(),
+  
+  // Provision identification
+  sectionNumber: text("section_number"), // e.g., "Sec. 101", "Section 2(a)"
+  sectionTitle: text("section_title"),
+  provisionType: text("provision_type").notNull(), // amendment, repeal, new_section, modification, technical_correction
+  
+  // Content
+  provisionText: text("provision_text").notNull(), // The actual text of the provision
+  provisionSummary: text("provision_summary"), // AI-generated summary
+  
+  // U.S. Code references
+  usCodeTitle: text("us_code_title"), // e.g., "7" for Food and Nutrition Act
+  usCodeSection: text("us_code_section"), // e.g., "2012"
+  usCodeCitation: text("us_code_citation"), // Full citation: "7 U.S.C. 2012"
+  amendedText: text("amended_text"), // The text being amended (if applicable)
+  
+  // Program impact
+  affectedPrograms: text("affected_programs").array(), // SNAP, Medicaid, etc.
+  effectiveDate: date("effective_date"),
+  
+  // Extraction metadata
+  extractionMethod: text("extraction_method").notNull().default("gemini"), // gemini, manual, hybrid
+  extractionModel: text("extraction_model"),
+  extractionConfidence: real("extraction_confidence"),
+  
+  // Processing status
+  processingStatus: text("processing_status").notNull().default("extracted"), // extracted, matched, reviewed, applied
+  
+  // Audit
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  publicLawIdx: index("law_provisions_public_law_idx").on(table.publicLawId),
+  usCodeCitationIdx: index("law_provisions_us_code_citation_idx").on(table.usCodeCitation),
+  provisionTypeIdx: index("law_provisions_provision_type_idx").on(table.provisionType),
+  affectedProgramsIdx: index("law_provisions_affected_programs_idx").on(table.affectedPrograms),
+  processingStatusIdx: index("law_provisions_processing_status_idx").on(table.processingStatus),
+}));
+
+// Provision-Ontology Mappings - Links provisions to ontology terms with human review
+export const provisionOntologyMappings = pgTable("provision_ontology_mappings", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  
+  // Source provision
+  lawProvisionId: varchar("law_provision_id").references(() => lawProvisions.id).notNull(),
+  
+  // Target ontology term
+  ontologyTermId: varchar("ontology_term_id").references(() => ontologyTerms.id).notNull(),
+  
+  // Mapping details
+  mappingType: text("mapping_type").notNull(), // amends, supersedes, adds_exception, modifies_threshold, clarifies
+  mappingReason: text("mapping_reason"), // AI-generated explanation of why this mapping was proposed
+  impactDescription: text("impact_description"), // How this affects the ontology term/rule
+  
+  // Matching metadata
+  matchMethod: text("match_method").notNull(), // citation_match, semantic_similarity, ai_inference
+  citationMatchScore: real("citation_match_score"), // 0.0 to 1.0 if citation-based
+  semanticSimilarityScore: real("semantic_similarity_score"), // 0.0 to 1.0 if embedding-based
+  aiConfidenceScore: real("ai_confidence_score"), // AI's overall confidence
+  
+  // Human-in-the-loop review status
+  reviewStatus: text("review_status").notNull().default("pending_review"), // pending_review, approved, rejected, needs_clarification
+  
+  // Reviewer tracking
+  reviewedBy: varchar("reviewed_by").references(() => users.id),
+  reviewedAt: timestamp("reviewed_at"),
+  reviewNotes: text("review_notes"),
+  rejectionReason: text("rejection_reason"),
+  
+  // Post-approval tracking
+  appliedToRuleId: varchar("applied_to_rule_id").references(() => formalRules.id),
+  appliedAt: timestamp("applied_at"),
+  z3VerificationRunId: varchar("z3_verification_run_id"), // Links to solver_runs after re-verification
+  
+  // Priority and urgency
+  priorityLevel: text("priority_level").default("normal"), // urgent, high, normal, low
+  dueDate: date("due_date"), // Deadline for review (e.g., before effective date)
+  
+  // Audit trail
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  lawProvisionIdx: index("provision_mappings_law_provision_idx").on(table.lawProvisionId),
+  ontologyTermIdx: index("provision_mappings_ontology_term_idx").on(table.ontologyTermId),
+  reviewStatusIdx: index("provision_mappings_review_status_idx").on(table.reviewStatus),
+  reviewedByIdx: index("provision_mappings_reviewed_by_idx").on(table.reviewedBy),
+  priorityIdx: index("provision_mappings_priority_idx").on(table.priorityLevel),
+  dueDateIdx: index("provision_mappings_due_date_idx").on(table.dueDate),
+}));
+
+// Insert schemas for law provisions and mappings
+export const insertLawProvisionSchema = createInsertSchema(lawProvisions).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertProvisionOntologyMappingSchema = createInsertSchema(provisionOntologyMappings).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+// Types for law provisions and mappings
+export type LawProvision = typeof lawProvisions.$inferSelect;
+export type InsertLawProvision = z.infer<typeof insertLawProvisionSchema>;
+export type ProvisionOntologyMapping = typeof provisionOntologyMappings.$inferSelect;
+export type InsertProvisionOntologyMapping = z.infer<typeof insertProvisionOntologyMappingSchema>;
+
 // Types for E&E Synthetic tables
 export type EESyntheticIndividual = typeof eeSyntheticIndividuals.$inferSelect;
 export type InsertEESyntheticIndividual = z.infer<typeof insertEESyntheticIndividualSchema>;

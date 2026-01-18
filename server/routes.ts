@@ -11980,6 +11980,13 @@ What would you like to know more about? You can also call 1-800-332-6347 for imm
   const externalDataSourcesRouter = (await import('./routes/externalDataSources.routes')).default;
   app.use('/api/external-data', externalDataSourcesRouter);
 
+  // ============================================================================
+  // Mount Provision Mapping Routes - Living Policy Manual Human-in-the-Loop
+  // Extracts provisions from public laws and maps to ontology with review queue
+  // ============================================================================
+  const provisionMappingRouter = (await import('./api/provisionMapping.routes')).default;
+  app.use('/api/provision-mappings', provisionMappingRouter);
+
   const httpServer = createServer(app);
   
   // Initialize WebSocket service for real-time notifications

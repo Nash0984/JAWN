@@ -86,6 +86,7 @@ const AbawdVerificationAdmin = lazy(() => import("@/pages/AbawdVerificationAdmin
 const CrossEnrollmentAdmin = lazy(() => import("@/pages/CrossEnrollmentAdmin"));
 const FNSStateOptionsManager = lazy(() => import("@/pages/admin/FNSStateOptionsManager"));
 const FederalLawTracker = lazy(() => import("@/pages/admin/FederalLawTracker"));
+const ProvisionReview = lazy(() => import("@/pages/admin/ProvisionReview"));
 const StateLawTracker = lazy(() => import("@/pages/admin/StateLawTracker"));
 const SmartScheduler = lazy(() => import("@/pages/admin/SmartScheduler"));
 const CountyTaxRates = lazy(() => import("@/pages/admin/CountyTaxRates"));
@@ -604,6 +605,13 @@ function Router() {
               {() => (
                 <ProtectedRoute requireAdmin>
                   <FederalLawTracker />
+                </ProtectedRoute>
+              )}
+            </Route>
+            <Route path="/admin/provision-review">
+              {() => (
+                <ProtectedRoute requireAdmin>
+                  <ProvisionReview />
                 </ProtectedRoute>
               )}
             </Route>
