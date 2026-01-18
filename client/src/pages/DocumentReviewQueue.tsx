@@ -76,7 +76,7 @@ export default function DocumentReviewQueue() {
   // Build filter URL
   const buildFilterUrl = () => {
     const params = new URLSearchParams();
-    if (filterStatus) params.append("verificationStatus", filterStatus);
+    if (filterStatus && filterStatus !== "all") params.append("verificationStatus", filterStatus);
     if (filterCaseId) params.append("clientCaseId", filterCaseId);
     const queryString = params.toString();
     return queryString ? `/api/document-review/queue?${queryString}` : "/api/document-review/queue";
@@ -315,7 +315,7 @@ export default function DocumentReviewQueue() {
         doc.setTextColor(0, 0, 0);
         doc.setFontSize(10);
         doc.text(`Generated: ${format(new Date(), 'MMM d, yyyy h:mm a')}`, 14, 38);
-        doc.text(`Status Filter: ${filterStatus ? filterStatus.replace(/_/g, ' ') : 'All Statuses'}`, 14, 44);
+        doc.text(`Status Filter: ${filterStatus && filterStatus !== 'all' ? filterStatus.replace(/_/g, ' ') : 'All Statuses'}`, 14, 44);
         doc.text(`Case ID Filter: ${filterCaseId || 'All Cases'}`, 14, 50);
         doc.text(`Total Documents: ${documents.length}`, 14, 56);
         
@@ -431,7 +431,7 @@ export default function DocumentReviewQueue() {
                   <SelectValue placeholder="All statuses" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">All Statuses</SelectItem>
+                  <SelectItem value="all">All Statuses</SelectItem>
                   <SelectItem value="pending_review">Pending Review</SelectItem>
                   <SelectItem value="approved">Approved</SelectItem>
                   <SelectItem value="rejected">Rejected</SelectItem>

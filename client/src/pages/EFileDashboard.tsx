@@ -137,10 +137,11 @@ export default function EFileDashboard() {
   });
 
   // Fetch e-file queue
-  const { data: queue, isLoading: queueLoading, refetch: refetchQueue } = useQuery<QueueItem[]>({
+  const { data: queueResponse, isLoading: queueLoading, refetch: refetchQueue } = useQuery<{ success: boolean; count: number; submissions: QueueItem[] }>({
     queryKey: ['/api/efile/queue'],
     enabled: !!user,
   });
+  const queue = queueResponse?.submissions || [];
 
   // Submit for federal e-filing
   const submitFederalMutation = useMutation({
