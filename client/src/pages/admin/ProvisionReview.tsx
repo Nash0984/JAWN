@@ -360,7 +360,8 @@ export default function ProvisionReview() {
                 <div className="flex justify-center py-8">Loading...</div>
               ) : pendingMappings.length === 0 ? (
                 <EmptyState
-                  icon={<CheckCircle2 className="h-12 w-12 text-green-500" />}
+                  icon={CheckCircle2}
+                  iconColor="green"
                   title="All caught up!"
                   description="No pending mappings to review. New mappings will appear here when laws are synced."
                 />
@@ -426,7 +427,8 @@ export default function ProvisionReview() {
             <CardContent>
               {approvedMappings.length === 0 ? (
                 <EmptyState
-                  icon={<History className="h-12 w-12" />}
+                  icon={History}
+                  iconColor="gray"
                   title="No approved mappings yet"
                   description="Approved mappings will appear here for audit trail purposes."
                 />
