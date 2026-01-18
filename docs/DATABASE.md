@@ -1,9 +1,8 @@
-# Maryland Multi-Program Benefits Navigator - Database Schema Documentation
+# JAWN Database Schema Documentation
 
 **Version:** 2.2  
 **Database:** PostgreSQL (Neon)  
-**ORM:** Drizzle  
-**Last Updated:** January 2026
+**ORM:** Drizzle
 
 ---
 
@@ -29,40 +28,40 @@
 
 ## Overview
 
-The database consists of **229 tables** organized into logical domains:
+The database consists of **229 tables** organized into the following logical domains:
 
-### Originally Documented (57 tables)
-- **Core:** Users, programs, document types (3 tables)
-- **Document Management:** Documents, chunks, versions, sources (7 tables)
-- **Navigator Workspace:** Cases, sessions, exports, documents (6 tables)
-- **Rules as Code:** Income limits, deductions, allotments, extracted rules (13 tables)
-- **Notifications:** Notifications, preferences, templates (3 tables)
-- **Compliance:** Rules, violations, policy changes (6 tables)
-- **Intake:** Sessions, messages, forms, screening (6 tables)
-- **Public Portal:** Templates, FAQs, notices (3 tables)
-- **Scenario Modeling:** Scenarios, calculations, comparisons (5 tables)
-- **Plus:** Search, ML models, audit logs, ABAWD, enrollment, VITA
-
-### Additional Tables (172 tables - January 2026 Audit)
-- **E&E Synthetic Database:** 14 tables for sidecar testing
-- **Neuro-Symbolic Engine:** Case assertions, solver runs, violation traces
-- **Legal Ontology:** Terms, relationships, law provisions
-- **Payment Error Reduction:** Nudges, verifications, PERM samples
-- **Tax Preparation:** Federal/state returns, county rates, VITA sessions
-- **Cross-Enrollment:** Predictions, recommendations, audit events
-- **Phone System:** Call records, IVR menus, recording consents
-- **Gamification:** Achievements, leaderboards, navigator KPIs
-- **Multi-State:** Cross-state rules, reciprocity agreements, portability
-- **GDPR/HIPAA:** Consents, access logs, breach incidents
-- **Medicaid/OHEP/TANF:** Program-specific rules engines
-- **Legislative Tracking:** Federal/Maryland bills, public laws
-- **Monitoring:** Metrics, alerts, security events
+| Domain | Tables | Description |
+|--------|--------|-------------|
+| Core | 3 | Users, programs, document types |
+| Document Management | 7 | Documents, chunks, versions, sources |
+| Navigator Workspace | 6 | Cases, sessions, exports, documents |
+| Rules as Code | 13 | Income limits, deductions, allotments, extracted rules |
+| Notifications | 3 | Notifications, preferences, templates |
+| Compliance | 6 | Rules, violations, policy changes |
+| Intake | 6 | Sessions, messages, forms, screening |
+| Public Portal | 3 | Templates, FAQs, notices |
+| Scenario Modeling | 5 | Scenarios, calculations, comparisons |
+| E&E Synthetic Database | 14 | Sidecar testing environment |
+| Neuro-Symbolic Engine | 6 | Case assertions, solver runs, violation traces |
+| Legal Ontology | 5 | Terms, relationships, law provisions |
+| Payment Error Reduction | 5 | Nudges, verifications, PERM samples |
+| Tax Preparation | 12 | Federal/state returns, county rates |
+| VITA | 7 | VITA sessions, documents, certifications |
+| Cross-Enrollment | 4 | Predictions, recommendations, audit events |
+| Phone System | 7 | Call records, IVR menus, recording consents |
+| Gamification | 4 | Achievements, leaderboards, navigator KPIs |
+| Multi-State | 7 | Cross-state rules, reciprocity, portability |
+| GDPR/HIPAA | 11 | Consents, access logs, breach incidents |
+| Program-Specific Rules | 11 | Medicaid, OHEP, TANF engines |
+| Legislative Tracking | 6 | Federal/Maryland bills, public laws |
+| Monitoring | 6 | Metrics, alerts, security events |
+| Additional | 72 | Search, ML models, audit logs, ABAWD, enrollment
 
 ---
 
 ## Entity Relationship Diagram
 
-**Note:** This simplified ERD shows the primary entity groups and their verified foreign key relationships. See individual table sections below for complete FK details. All 57 tables are documented.
+**Note:** This simplified ERD shows the primary entity groups and their foreign key relationships. See individual table sections below for complete details.
 
 ### High-Level Entity Relationship Overview
 
@@ -1200,13 +1199,13 @@ export const db = drizzle(sql)
 
 ---
 
-*This database documentation is maintained by the Maryland DHS Technology Team. Last updated: January 2026*
+*This database documentation is maintained by the JAWN development team.*
 
 ---
 
-## Additional Tables (January 2026 Audit)
+## Additional Tables
 
-The following tables were documented during the January 2026 comprehensive audit.
+The following tables support advanced platform functionality.
 
 ---
 

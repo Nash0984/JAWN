@@ -1,7 +1,6 @@
-# Maryland Multi-Program Benefits Navigator - System Architecture
+# JAWN System Architecture
 
 **Version:** 2.2  
-**Last Updated:** January 2026  
 **Architecture Style:** Layered Monolith with Service-Oriented Components
 
 ---
@@ -27,15 +26,15 @@
 
 ## System Overview
 
-The Maryland Multi-Program Benefits Navigator is an AI-powered platform that combines **Retrieval-Augmented Generation (RAG)** with **Rules as Code** to help Maryland residents navigate 7 major benefit programs:
+JAWN (Joint Access Welfare Network) is an AI-powered, white-label, multi-state platform that combines **Retrieval-Augmented Generation (RAG)** with **Rules as Code** to help residents navigate major benefit programs:
 
 ### Supported Programs
-1. **Maryland SNAP** (Food Supplement Program)
-2. **Maryland Medicaid** (Medical Assistance)
-3. **Maryland TCA** (TANF - Temporary Cash Assistance)
-4. **Maryland OHEP** (Energy Assistance)
-5. **Maryland WIC** (Women, Infants, Children)
-6. **Maryland Children's Health Program** (MCHP)
+1. **SNAP** (Food Supplement Program)
+2. **Medicaid** (Medical Assistance)
+3. **TCA/TANF** (Temporary Cash Assistance)
+4. **OHEP** (Energy Assistance)
+5. **WIC** (Women, Infants, Children)
+6. **Children's Health Program**
 7. **IRS VITA** (Tax Assistance)
 
 ### Core Capabilities
@@ -48,9 +47,9 @@ The Maryland Multi-Program Benefits Navigator is an AI-powered platform that com
 - **Policy Change Monitoring** - Automated diff detection with impact analysis
 
 ### Design Principles
-1. **Maryland Replaceability** - All components swappable with existing DHS systems
+1. **White-Label Architecture** - All components configurable per tenant/jurisdiction
 2. **Plain Language First** - Grade 6-8 reading level compliance
-3. **Mobile-First** - Optimized for Maryland residents on smartphones
+3. **Mobile-First** - Optimized for residents on smartphones
 4. **Accessibility Mandatory** - WCAG 2.1 AA compliance throughout
 5. **Security by Design** - Multi-tier protection, role-based access
 
@@ -1498,13 +1497,9 @@ spec:
 
 ---
 
-*This architecture documentation is maintained by the Maryland DHS Technology Team. Last updated: January 2026*
+## Service Inventory
 
----
-
-## Complete Service Inventory (January 2026 Audit)
-
-The following comprehensive service inventory was compiled during the January 2026 documentation audit. The system includes **117 backend services** across multiple domains.
+The JAWN platform includes **117 backend services** organized across the following domains.
 
 ### AI & Machine Learning Services
 | Service | File | Purpose |

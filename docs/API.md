@@ -1,10 +1,9 @@
-# Maryland Multi-Program Benefits Navigator API Documentation
+# JAWN API Documentation
 
 **Version:** 2.2  
-**Last Updated:** January 2026  
-**Base URL:** `https://your-domain.replit.app/api`
+**Base URL:** `/api`
 
-This document provides comprehensive documentation for all API endpoints in the Maryland Multi-Program Benefits Navigator System.
+This document provides comprehensive documentation for all API endpoints in the JAWN (Joint Access Welfare Network) platform.
 
 ---
 
@@ -2669,7 +2668,7 @@ For API support, contact:
 
 ---
 
-*This API documentation is maintained by the Maryland Department of Human Services Technology Team.*
+*This API documentation is maintained by the JAWN development team.*
 
 ---
 
@@ -3563,25 +3562,4 @@ Authorization: Required
 
 ---
 
-## Changelog (Continued)
-
-### Version 2.2 (January 2026)
-- Added Benefits Navigation API
-- Added Cross-Enrollment Intelligence API
-- Added Decision Points API
-- Added Info Cost Reduction API
-- Added MAIVE Testing API
-- Added QC Analytics API
-- Added Maryland E-File API
-- Added Legal Ontology API
-- Added Case Assertion API
-- Added Z3 Solver API
-- Added Phone System API
-- Added Provision Mapping API
-- Added PER API (Payment Error Reduction)
-- Added External Data Integration API
-- Added Multi-State Portability API
-- Added Supervisor Dashboard API
-- Added Proactive Messaging API
-- Added Training Interventions API
-- Comprehensive documentation audit and update
+*For version history, see [CHANGELOG.md](../CHANGELOG.md)*
