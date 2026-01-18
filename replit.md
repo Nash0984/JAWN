@@ -88,3 +88,13 @@ The backend uses Express.js and TypeScript, with PostgreSQL via Drizzle ORM on N
 -   **Monitoring & Alerts**: Sentry error tracking.
 -   **Communication**: Email service (Nodemailer).
 -   **Caching**: Redis/Upstash.
+
+# Recent Changes
+
+**January 18, 2026 - Comprehensive Testing & Bug Fixes**
+- Fixed EmptyState component icon prop in ProvisionReview.tsx (pass component ref, not JSX)
+- Fixed E-File Dashboard API response handling (properly access submissions array)
+- Fixed SelectItem empty value validation in DocumentReviewQueue.tsx (use "all" instead of "")
+- Created comprehensive discrepancy report: `docs/DISCREPANCY_REPORT_2026_01.md`
+- Verified 6 major user journeys through E2E testing
+- System health: 229 tables operational, Gemini AI configured, WebSocket healthy
