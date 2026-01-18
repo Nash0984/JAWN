@@ -41,6 +41,7 @@ interface ExplainedNotice {
 export default function NoticeExplainer() {
   const { stateConfig } = useTenant();
   const stateName = stateConfig?.stateName || 'State';
+  const agencyAcronym = stateConfig?.agencyAcronym || 'DHS';
   const { toast } = useToast();
   const [mode, setMode] = useState<"simple" | "smart">("simple");
   const [selectedNoticeType, setSelectedNoticeType] = useState<string>("");
@@ -105,7 +106,7 @@ export default function NoticeExplainer() {
       <div className="mb-8">
         <h1 className="text-3xl font-bold mb-2">Notice Letter Explainer</h1>
         <p className="text-muted-foreground">
-          Understand what your DHS notice means in plain language
+          Understand what your {agencyAcronym} notice means in plain language
         </p>
       </div>
 
@@ -126,7 +127,7 @@ export default function NoticeExplainer() {
             <CardHeader>
               <CardTitle>Select Your Notice Type</CardTitle>
               <CardDescription>
-                Choose the type of notice you received from DHS
+                Choose the type of notice you received from {agencyAcronym}
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -157,7 +158,7 @@ export default function NoticeExplainer() {
                 Paste Your Notice Text
               </CardTitle>
               <CardDescription>
-                Copy and paste the text from your DHS notice for AI-powered explanation
+                Copy and paste the text from your {agencyAcronym} notice for AI-powered explanation
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
