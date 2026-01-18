@@ -37,6 +37,13 @@ The backend uses Express.js and TypeScript, with PostgreSQL via Drizzle ORM on N
 -   **E&E Synthetic Database**: Sidecar testing database implementing the Maryland E&E Data Dictionary with 14 core tables, expanded fields for contacts, addresses, income, resources, expenses, verifications, and ABAWD tracking. Includes a Synthetic Data Generator to create realistic client records.
 -   **External Data Source Abstraction Layer**: Digital twin architecture for external system integration with swappable adapters and a registry pattern. Registers 6 data sources (wage records, vital statistics, MVA, commercial verification, SSA, beacon). Includes a Life Event Monitor Service to detect and process life events.
 -   **PolicyEngine Guardrail Service**: Cross-validates Rules as Code decisions against PolicyEngine as a verification layer.
+-   **Human-in-the-Loop Provision Mapping Pipeline**: Automated legislative change detection and integration system:
+    -   **Provision Extraction Service**: Gemini 2.0 Flash parses public law text to extract section-level amendments with U.S. Code citations, affected programs, and provision types (amends, supersedes, adds_exception, modifies_threshold, clarifies, removes, creates).
+    -   **Ontology Matcher Service**: Three-strategy AI matching system proposing links between extracted provisions and 176+ ontology terms via citation matching (95% score), semantic similarity (75% threshold), and AI inference (Gemini).
+    -   **Provision Review UI** (`/admin/provision-review`): Side-by-side law text and ontology term comparison, priority filtering (urgent/high/normal/low), bulk approve/reject, public law context, and display of affected rules requiring re-verification.
+    -   **Human Checkpoint Enforcement**: All AI-proposed mappings require human approval before affecting the rules engine. When approved mappings affect existing formal rules, `appliedAt` is deferred and `processingStatus` set to `pending_rule_verification` until Z3 re-verification completes.
+    -   **Z3 Re-verification Queue**: Affected formal rules are automatically queued with batch tracking (`verificationBatchId`) to ensure continued validity under updated law.
+    -   **GovInfo Integration**: Auto-triggers provision extraction when new public laws are synced via the Smart Scheduler.
 
 ## System Design Choices
 -   **Data Management**: PostgreSQL for core data, Google Cloud Storage for files.
@@ -52,6 +59,11 @@ The backend uses Express.js and TypeScript, with PostgreSQL via Drizzle ORM on N
     2.  **Rules-as-Code (RaC) Layer**: Legal knowledge base transforming statutes into machine-verifiable SMT-LIB artifacts.
     3.  **Symbolic/Z3 Solver Layer**: Proof engine for satisfiability checks, generating UNSAT cores with statutory citations.
     Includes Dual Verification Modes for explanation and case eligibility, run in parallel with cross-validation.
+-   **Neuro-Symbolic Maintenance Methodology**: A key methodological innovation applying the same hybrid principles used for eligibility decisions to *maintain the engine itself* when laws change. This extends the original paper's framework beyond decision-time accountability:
+    1.  **Neural (Gemini 2.0 Flash)**: Parses public law text, extracts provisions, proposes ontology mappings via semantic similarity and AI inference.
+    2.  **Human-in-the-Loop Checkpoint**: Acts as the verification/proof layer - reviewers validate AI-proposed mappings before they can affect the rules engine (replacing blind trust with human oversight).
+    3.  **Z3 Re-verification Queue**: Affected formal rules are automatically queued for symbolic re-verification, ensuring they remain valid under updated law.
+    This ensures no law changes automatically affect the eligibility engine until a human reviews the mapping AND the affected formal rules are re-verified, maintaining accountability throughout the system lifecycle.
 -   **Testing**: Comprehensive testing with Vitest, @testing-library/react, and supertest, including a regression gate with 216+ integration tests.
 -   **Distributed Caching System**: Redis/Upstash.
 -   **Scalable Connection Pooling**: Neon Pooled Connections.
