@@ -1,18 +1,38 @@
 import { storage } from '../storage';
 import { policyEngineService, PolicyEngineHousehold } from './policyEngine.service';
+import { PolicyEngineGuardrailService } from './policyEngineGuardrail';
+import { rulesEngineAdapter, type HybridEligibilityPayload, type HybridCalculationResult } from './rulesEngineAdapter';
+import { logger } from './logger.service';
 import type { EeClient, ClientCase, BenefitProgram, CrossEnrollmentOpportunity } from '@shared/schema';
 
 /**
  * E&E Cross-Enrollment Analysis Service
- * Integrates PolicyEngine to calculate real eligibility scores for cross-enrollment opportunities
+ * Uses neuro-symbolic hybrid architecture for eligibility determination:
+ * 
+ * 1. Rules-as-Code Layer: Internal rules engines (SNAP, Medicaid, TANF, OHEP, Tax)
+ * 2. Symbolic/Z3 Solver Layer: Verification with statutory citations
+ * 3. PolicyEngine: Verification-only via guardrail service (NOT primary calculation)
  * 
  * Flow:
  * 1. Get matched E&E clients with cross-enrollment opportunities
- * 2. Build PolicyEngine household scenarios from client data
- * 3. Calculate multi-benefit eligibility using PolicyEngine API
- * 4. Update opportunities with real eligibility scores and reasoning
- * 5. Prioritize opportunities based on benefit amounts and household need
+ * 2. Build household scenarios from client data
+ * 3. Calculate eligibility using internal RaC engines with Z3 verification
+ * 4. Cross-validate with PolicyEngine via guardrail service
+ * 5. Update opportunities with real eligibility scores and reasoning
+ * 6. Prioritize opportunities based on benefit amounts and household need
  */
+
+const PROGRAM_CODE_TO_ADAPTER: Record<string, string> = {
+  'SNAP': 'MD_SNAP',
+  'MEDICAID': 'MEDICAID',
+  'TANF': 'MD_TANF',
+  'TCA': 'MD_TANF',
+  'OHEP': 'MD_OHEP',
+  'LIHEAP': 'MD_OHEP',
+  'EITC': 'MD_VITA_TAX',
+  'CTC': 'MD_VITA_TAX',
+  'SSI': 'SSI',
+};
 
 interface EligibilityAnalysisResult {
   opportunityId: string;
@@ -95,9 +115,13 @@ class EeCrossEnrollmentAnalysisService {
   }
 
   /**
-   * Analyze a single cross-enrollment opportunity using PolicyEngine
+   * Analyze a single cross-enrollment opportunity using neuro-symbolic hybrid architecture:
+   * 1. Internal RaC rules engines with Z3 verification (PRIMARY)
+   * 2. PolicyEngine for cross-validation only (VERIFICATION)
    */
   async analyzeOpportunity(opportunity: CrossEnrollmentOpportunity): Promise<EligibilityAnalysisResult> {
+    const policyEngineGuardrail = PolicyEngineGuardrailService.getInstance();
+    
     // Get the E&E client data
     if (!opportunity.eeClientId) {
       throw new Error('Opportunity missing eeClientId');
@@ -127,29 +151,152 @@ class EeCrossEnrollmentAnalysisService {
 
     // Build household scenario from E&E client data
     const household = this.buildHouseholdScenario(eeClient, clientCase);
-
-    // Calculate benefits using PolicyEngine
-    const policyEngineResult = await policyEngineService.calculateBenefits(household);
-
-    if (!policyEngineResult.success) {
-      return {
-        opportunityId: opportunity.id,
-        clientId: eeClient.id,
-        targetProgram: targetProgram.code,
-        isEligible: false,
-        eligibilityScore: 0,
-        estimatedBenefit: 0,
-        eligibilityReason: `PolicyEngine calculation failed: ${policyEngineResult.error}`,
-        priority: 'low',
-      };
+    const eligibilityPayload = this.buildEligibilityPayload(eeClient, clientCase, targetProgram.id);
+    
+    // Get adapter code for the target program
+    const adapterCode = PROGRAM_CODE_TO_ADAPTER[targetProgram.code.toUpperCase()];
+    
+    let isEligible = false;
+    let benefit = 0;
+    let reason = '';
+    let statutoryCitations: string[] = [];
+    let hybridVerificationStatus: 'verified' | 'unverified' | 'fallback' = 'unverified';
+    
+    // STEP 1: Calculate eligibility using internal RaC engine with Z3 verification
+    if (adapterCode && rulesEngineAdapter.isSupported(adapterCode)) {
+      try {
+        const racResult = await rulesEngineAdapter.calculateEligibility(
+          adapterCode,
+          eligibilityPayload
+        );
+        
+        if (racResult) {
+          isEligible = racResult.eligible;
+          benefit = (racResult.estimatedBenefit || 0) / 100; // Convert cents to dollars
+          statutoryCitations = racResult.citations || [];
+          
+          // Build reason from RaC result
+          reason = racResult.reason || (isEligible 
+            ? `Eligible for ${targetProgram.name} based on household income and composition`
+            : `Does not meet ${targetProgram.name} eligibility criteria`);
+          
+          // Check Z3 verification status
+          if (racResult.hybridVerification?.verificationStatus === 'verified') {
+            hybridVerificationStatus = 'verified';
+            reason += ' [Z3 Verified]';
+          }
+          
+          logger.info('[EeCrossEnrollment] RaC eligibility calculated', {
+            opportunityId: opportunity.id,
+            programCode: targetProgram.code,
+            adapterCode,
+            isEligible,
+            benefit,
+            z3Verified: hybridVerificationStatus === 'verified',
+            service: 'EeCrossEnrollmentAnalysis'
+          });
+          
+          // STEP 2: PolicyEngine cross-validation (VERIFICATION ONLY)
+          try {
+            const policyEngineResult = await policyEngineService.calculateBenefits(household);
+            
+            if (policyEngineResult.success) {
+              const peEligibility = this.extractProgramEligibility(
+                targetProgram,
+                policyEngineResult.benefits,
+                household
+              );
+              
+              // Cross-validate using guardrail
+              const guardrailResult = await policyEngineGuardrail.crossValidate(
+                targetProgram.id,
+                eligibilityPayload,
+                {
+                  programId: targetProgram.id,
+                  eligible: isEligible,
+                  benefitAmount: benefit * 100,
+                  reasonCodes: [reason],
+                  legalCitations: statutoryCitations,
+                  calculationMethod: 'RaC_Z3_Hybrid'
+                },
+                { eligible: peEligibility.isEligible, benefitAmount: peEligibility.benefit * 100 }
+              );
+              
+              if (guardrailResult.discrepancyDetected) {
+                logger.warn('[EeCrossEnrollment] PolicyEngine discrepancy detected', {
+                  opportunityId: opportunity.id,
+                  programCode: targetProgram.code,
+                  discrepancyType: guardrailResult.discrepancyType,
+                  severity: guardrailResult.discrepancySeverity,
+                  service: 'EeCrossEnrollmentAnalysis'
+                });
+                reason += ` (Note: PolicyEngine ${guardrailResult.discrepancyType} - RaC decision stands)`;
+              }
+            }
+          } catch (peError) {
+            logger.warn('[EeCrossEnrollment] PolicyEngine verification unavailable', {
+              opportunityId: opportunity.id,
+              error: peError instanceof Error ? peError.message : 'Unknown',
+              service: 'EeCrossEnrollmentAnalysis'
+            });
+          }
+        }
+      } catch (racError) {
+        logger.error('[EeCrossEnrollment] RaC calculation failed', {
+          opportunityId: opportunity.id,
+          programCode: targetProgram.code,
+          error: racError instanceof Error ? racError.message : 'Unknown',
+          service: 'EeCrossEnrollmentAnalysis'
+        });
+      }
     }
-
-    // Extract eligibility for the target program
-    const { isEligible, benefit, reason } = this.extractProgramEligibility(
-      targetProgram,
-      policyEngineResult.benefits,
-      household
-    );
+    
+    // STEP 3: Fallback to PolicyEngine if no RaC adapter available
+    if (!adapterCode || !rulesEngineAdapter.isSupported(adapterCode)) {
+      hybridVerificationStatus = 'fallback';
+      try {
+        const policyEngineResult = await policyEngineService.calculateBenefits(household);
+        
+        if (policyEngineResult.success) {
+          const extracted = this.extractProgramEligibility(
+            targetProgram,
+            policyEngineResult.benefits,
+            household
+          );
+          isEligible = extracted.isEligible;
+          benefit = extracted.benefit;
+          reason = extracted.reason + ' (PolicyEngine fallback - no RaC adapter)';
+          
+          logger.info('[EeCrossEnrollment] PolicyEngine fallback used', {
+            opportunityId: opportunity.id,
+            programCode: targetProgram.code,
+            service: 'EeCrossEnrollmentAnalysis'
+          });
+        } else {
+          return {
+            opportunityId: opportunity.id,
+            clientId: eeClient.id,
+            targetProgram: targetProgram.code,
+            isEligible: false,
+            eligibilityScore: 0,
+            estimatedBenefit: 0,
+            eligibilityReason: `Eligibility calculation unavailable: No RaC adapter and PolicyEngine failed`,
+            priority: 'low',
+          };
+        }
+      } catch (fallbackError) {
+        return {
+          opportunityId: opportunity.id,
+          clientId: eeClient.id,
+          targetProgram: targetProgram.code,
+          isEligible: false,
+          eligibilityScore: 0,
+          estimatedBenefit: 0,
+          eligibilityReason: `Eligibility calculation failed: ${fallbackError instanceof Error ? fallbackError.message : 'Unknown error'}`,
+          priority: 'low',
+        };
+      }
+    }
 
     // Calculate eligibility score (0-1 scale)
     const eligibilityScore = isEligible ? this.calculateEligibilityScore(benefit, household) : 0;
@@ -166,6 +313,27 @@ class EeCrossEnrollmentAnalysisService {
       estimatedBenefit: benefit,
       eligibilityReason: reason,
       priority,
+    };
+  }
+  
+  /**
+   * Build eligibility payload for rules engine adapter
+   */
+  private buildEligibilityPayload(
+    eeClient: EeClient, 
+    clientCase: ClientCase,
+    programId: string
+  ): HybridEligibilityPayload {
+    const householdSize = eeClient.householdSize || 1;
+    const monthlyIncome = eeClient.householdIncome ? eeClient.householdIncome / 100 : 0;
+    
+    return {
+      householdSize,
+      income: monthlyIncome,
+      earnedIncome: monthlyIncome,
+      hasElderly: false,
+      hasDisabled: false,
+      benefitProgramId: programId,
     };
   }
 

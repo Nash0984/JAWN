@@ -3,10 +3,14 @@ import { storage } from "../storage";
 import type { IntakeSession, IntakeMessage, ApplicationForm } from "@shared/schema";
 import { policyEngineService } from "./policyEngine.service";
 import type { PolicyEngineResponse } from "./policyEngine.service";
+import { PolicyEngineGuardrailService } from "./policyEngineGuardrail";
+import { rulesEngineAdapter, type HybridEligibilityPayload } from "./rulesEngineAdapter";
 import { neuroSymbolicHybridGateway } from "./neuroSymbolicHybridGateway";
 import { createLogger } from './logger.service';
 
 const logger = createLogger('IntakeCopilot');
+
+const PROGRAM_CODES = ['MD_SNAP', 'MEDICAID', 'MD_TANF', 'MD_OHEP', 'MD_VITA_TAX', 'SSI'] as const;
 
 interface ExtractedData {
   fields: Record<string, any>;
@@ -159,20 +163,23 @@ export class IntakeCopilotService {
   }
 
   /**
-   * Check multi-benefit eligibility using PolicyEngine
+   * Check multi-benefit eligibility using neuro-symbolic hybrid architecture:
+   * 1. Rules-as-Code Layer: Internal rules engines (SNAP, Medicaid, TANF, OHEP, Tax)
+   * 2. Symbolic/Z3 Solver Layer: Verification with statutory citations
+   * 3. PolicyEngine: Verification-only via guardrail service
    */
   private async checkMultiBenefitEligibility(extractedData: any): Promise<BenefitSuggestions | undefined> {
     try {
-      // Extract household data for PolicyEngine
+      const policyEngineGuardrail = PolicyEngineGuardrailService.getInstance();
+      
+      // Extract household data
       const householdSize = extractedData.householdSize || extractedData.householdMembers?.length || 1;
       const adults = extractedData.adults || 1;
       const children = extractedData.children || (householdSize - adults) || 0;
       
-      // Calculate annual employment income
+      // Calculate income
       const monthlyIncome = extractedData.monthlyIncome || extractedData.employmentIncome || 0;
       const employmentIncome = typeof monthlyIncome === 'number' ? monthlyIncome * 12 : 0;
-      
-      // Calculate unearned income
       const unearnedIncome = (extractedData.unearnedIncome || 0) * 12;
       
       // Get state (default to MD)
@@ -183,81 +190,159 @@ export class IntakeCopilotService {
         return undefined;
       }
       
-      // Call PolicyEngine
-      const result = await policyEngineService.calculateBenefits({
-        adults,
-        children,
-        employmentIncome,
-        unearnedIncome,
-        stateCode,
-        householdAssets: extractedData.assets || 0,
-        rentOrMortgage: extractedData.rent || extractedData.mortgage || 0,
-        utilityCosts: extractedData.utilities || 0,
+      // Build eligibility payload for rules engine adapter
+      const eligibilityPayload: HybridEligibilityPayload = {
+        householdSize,
+        income: monthlyIncome,
+        earnedIncome: monthlyIncome,
+        unearnedIncome: extractedData.unearnedIncome || 0,
+        hasElderly: extractedData.elderlyOrDisabled || false,
+        hasDisabled: extractedData.elderlyOrDisabled || false,
+        assets: extractedData.assets || 0,
+        shelterCosts: extractedData.rent || extractedData.mortgage || 0,
         medicalExpenses: extractedData.medicalExpenses || 0,
-        childcareExpenses: extractedData.childcareExpenses || 0,
-        elderlyOrDisabled: extractedData.elderlyOrDisabled || false
-      });
+        dependentCareExpenses: extractedData.childcareExpenses || 0,
+        numberOfQualifyingChildren: children,
+        wages: employmentIncome,
+        filingStatus: adults > 1 ? 'married_joint' : 'single',
+        taxYear: new Date().getFullYear(),
+        benefitProgramId: 'multi-benefit-check',
+      };
       
-      if (!result.success) {
-        return undefined;
-      }
-      
-      // Identify eligible programs (excluding SNAP since they're already applying)
       const eligiblePrograms: string[] = [];
-      if (result.benefits.medicaid) eligiblePrograms.push("Medicaid");
-      if (result.benefits.eitc > 0) eligiblePrograms.push(`EITC ($${result.benefits.eitc.toFixed(0)}/year)`);
-      if (result.benefits.childTaxCredit > 0) eligiblePrograms.push(`Child Tax Credit ($${result.benefits.childTaxCredit.toFixed(0)}/year)`);
-      if (result.benefits.ssi > 0) eligiblePrograms.push(`SSI ($${result.benefits.ssi.toFixed(0)}/month)`);
-      if (result.benefits.tanf > 0) eligiblePrograms.push(`TANF ($${result.benefits.tanf.toFixed(0)}/month)`);
+      const allCitations: string[] = [];
+      let hybridValidation: HybridValidationContext | undefined;
+      let totalMonthlyBenefit = 0;
+      
+      // STEP 1: Calculate eligibility for each program using internal RaC engines
+      for (const programCode of PROGRAM_CODES) {
+        try {
+          const result = await rulesEngineAdapter.calculateEligibility(
+            programCode,
+            eligibilityPayload
+          );
+          
+          if (result && result.eligible) {
+            const benefitAmount = (result.estimatedBenefit || 0) / 100; // Convert cents to dollars
+            
+            switch (programCode) {
+              case 'MD_SNAP':
+                if (benefitAmount > 0) {
+                  eligiblePrograms.push(`SNAP ($${benefitAmount.toFixed(0)}/month)`);
+                  totalMonthlyBenefit += benefitAmount;
+                }
+                break;
+              case 'MEDICAID':
+                eligiblePrograms.push('Medicaid');
+                break;
+              case 'MD_TANF':
+                if (benefitAmount > 0) {
+                  eligiblePrograms.push(`TANF ($${benefitAmount.toFixed(0)}/month)`);
+                  totalMonthlyBenefit += benefitAmount;
+                }
+                break;
+              case 'MD_OHEP':
+                if (benefitAmount > 0) {
+                  eligiblePrograms.push(`OHEP ($${benefitAmount.toFixed(0)}/year)`);
+                }
+                break;
+              case 'MD_VITA_TAX':
+                if (result.refund && result.refund > 0) {
+                  const refundAmount = result.refund / 100;
+                  eligiblePrograms.push(`Tax Refund ($${refundAmount.toFixed(0)}/year)`);
+                }
+                break;
+            }
+            
+            // Collect citations from Z3 verification
+            if (result.citations) {
+              allCitations.push(...result.citations);
+            }
+            
+            // Capture hybrid verification status from the result
+            if (result.hybridVerification?.verificationStatus === 'verified' && !hybridValidation) {
+              hybridValidation = {
+                z3SolverRunId: result.hybridVerification.z3SolverRunId,
+                ontologyTermsMatched: result.hybridVerification.ontologyTermsMatched,
+                statutoryCitations: result.hybridVerification.statutoryCitations,
+                verificationStatus: 'verified',
+                grade6Explanation: result.hybridVerification.grade6Explanation
+              };
+            }
+            
+            logger.info('[IntakeCopilot] RaC eligibility calculated', {
+              programCode,
+              eligible: result.eligible,
+              benefitAmount,
+              z3Verified: result.hybridVerification?.verificationStatus === 'verified',
+              service: 'IntakeCopilot'
+            });
+          }
+        } catch (programError) {
+          logger.warn('[IntakeCopilot] Program eligibility check failed', {
+            programCode,
+            error: programError instanceof Error ? programError.message : 'Unknown',
+            service: 'IntakeCopilot'
+          });
+        }
+      }
       
       if (eligiblePrograms.length === 0) {
         return undefined;
       }
       
-      const summary = policyEngineService.formatBenefitsResponse(result);
-      
-      let hybridValidation: HybridValidationContext | undefined;
-      
+      // STEP 2: PolicyEngine cross-validation (VERIFICATION ONLY)
+      let policyEngineResults: PolicyEngineResponse | undefined;
       try {
-        const intakeCaseId = `intake-${Date.now()}`;
-        const hybridResult = await neuroSymbolicHybridGateway.verifyEligibility(
-          intakeCaseId,
+        policyEngineResults = await policyEngineService.calculateBenefits({
+          adults,
+          children,
+          employmentIncome,
+          unearnedIncome,
           stateCode,
-          'SNAP',
-          {
-            householdSize,
-            grossMonthlyIncome: monthlyIncome,
-            earnedIncome: monthlyIncome,
-            countableResources: extractedData.assets || 0,
-            hasElderlyMember: extractedData.elderlyOrDisabled || false,
-            hasDisabledMember: extractedData.elderlyOrDisabled || false,
-            shelterCosts: extractedData.rent || extractedData.mortgage || 0,
-            medicalCosts: extractedData.medicalExpenses || 0,
-            dependentCareCosts: extractedData.childcareExpenses || 0,
-          },
-          { triggeredBy: 'intakeCopilot.checkMultiBenefitEligibility' }
-        );
+          householdAssets: extractedData.assets || 0,
+          rentOrMortgage: extractedData.rent || extractedData.mortgage || 0,
+          utilityCosts: extractedData.utilities || 0,
+          medicalExpenses: extractedData.medicalExpenses || 0,
+          childcareExpenses: extractedData.childcareExpenses || 0,
+          elderlyOrDisabled: extractedData.elderlyOrDisabled || false
+        });
         
-        hybridValidation = {
-          z3SolverRunId: hybridResult.symbolicLayer.solverRunId,
-          ontologyTermsMatched: hybridResult.rulesContext.ontologyTermsMatched.map(t => t.termLabel),
-          statutoryCitations: hybridResult.rulesContext.statutoryCitations,
-          verificationStatus: hybridResult.symbolicLayer.isSatisfied ? 'verified' : 'conflict',
-          grade6Explanation: hybridResult.grade6Explanation
-        };
-        
-        logger.info('Hybrid verification completed for intake', {
-          caseId: intakeCaseId,
-          status: hybridValidation.verificationStatus,
+        if (policyEngineResults.success) {
+          // Cross-validate SNAP result
+          await policyEngineGuardrail.crossValidate(
+            'SNAP',
+            eligibilityPayload,
+            {
+              programId: 'MD_SNAP',
+              eligible: eligiblePrograms.some(p => p.includes('SNAP')),
+              benefitAmount: totalMonthlyBenefit * 100,
+              reasonCodes: ['RaC_PRIMARY_CALCULATION'],
+              legalCitations: allCitations,
+              calculationMethod: 'RaC_Z3_Hybrid'
+            },
+            { eligible: policyEngineResults.benefits.snap > 0, benefitAmount: policyEngineResults.benefits.snap * 100 }
+          );
+        }
+      } catch (peError) {
+        logger.warn('[IntakeCopilot] PolicyEngine verification unavailable', {
+          error: peError instanceof Error ? peError.message : 'Unknown',
           service: 'IntakeCopilot'
         });
-      } catch (hybridError) {
-        logger.warn('Hybrid verification skipped', {
-          error: hybridError instanceof Error ? hybridError.message : 'Unknown error',
-          service: 'IntakeCopilot'
-        });
+      }
+      
+      // Generate summary
+      const summary = `Based on your information, you may be eligible for ${eligiblePrograms.length} benefit programs: ${eligiblePrograms.join(', ')}. ${
+        hybridValidation?.verificationStatus === 'verified' 
+          ? 'These eligibility determinations have been formally verified against legal requirements.' 
+          : 'Final eligibility will be verified before approval.'
+      }`;
+      
+      // Ensure we have hybrid validation context
+      if (!hybridValidation) {
         hybridValidation = {
           verificationStatus: 'pending',
+          statutoryCitations: allCitations.slice(0, 5),
           grade6Explanation: 'Formal verification is pending. Eligibility will be verified before final approval.'
         };
       }
@@ -266,11 +351,11 @@ export class IntakeCopilotService {
         eligible: true,
         programs: eligiblePrograms,
         summary,
-        policyEngineResults: result,
+        policyEngineResults,
         hybridValidation
       };
     } catch (error) {
-      logger.error("PolicyEngine check failed", {
+      logger.error("[IntakeCopilot] Multi-benefit eligibility check failed", {
         error: error instanceof Error ? error.message : 'Unknown error',
         errorDetails: error,
         service: 'IntakeCopilot'

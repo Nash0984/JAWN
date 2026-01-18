@@ -12,10 +12,28 @@ import {
 import { eq, and, or, gte, lte, sql, inArray, notInArray, desc } from "drizzle-orm";
 import { generateTextWithGemini } from "./gemini.service";
 import { policyEngineService } from "./policyEngine.service";
+import { PolicyEngineGuardrailService } from "./policyEngineGuardrail";
+import { rulesEngineAdapter, type HybridEligibilityPayload } from "./rulesEngineAdapter";
 import { cacheService, CACHE_KEYS } from "./cacheService";
 import { notificationService } from "./notification.service";
 import { logger } from "./logger.service";
 import { neuroSymbolicHybridGateway } from "./neuroSymbolicHybridGateway";
+
+const PROGRAM_CODE_TO_ADAPTER: Record<string, string> = {
+  'SNAP': 'MD_SNAP',
+  'MEDICAID': 'MEDICAID',
+  'TANF': 'MD_TANF',
+  'TCA': 'MD_TANF',
+  'OHEP': 'MD_OHEP',
+  'LIHEAP': 'MD_OHEP',
+  'EITC': 'MD_VITA_TAX',
+  'CTC': 'MD_VITA_TAX',
+  'SSI': 'SSI',
+  'MD_SNAP': 'MD_SNAP',
+  'MD_TANF': 'MD_TANF',
+  'MD_OHEP': 'MD_OHEP',
+  'MD_VITA_TAX': 'MD_VITA_TAX',
+};
 
 interface HouseholdData {
   householdId: string;
@@ -301,125 +319,209 @@ class CrossEnrollmentEngineService {
     });
   }
 
+  /**
+   * Generate recommendations using neuro-symbolic hybrid architecture:
+   * 1. Rules-as-Code Layer: Internal rules engines (SNAP, Medicaid, TANF, OHEP, Tax)
+   * 2. Symbolic/Z3 Solver Layer: Verification with statutory citations
+   * 3. PolicyEngine: Verification-only via guardrail service
+   * 4. Neural Layer (Gemini): Generate explanations and supplementary analysis only
+   */
   private async generateRecommendations(
     household: HouseholdData,
     programs: any[]
   ): Promise<BenefitRecommendation[]> {
     const recommendations: BenefitRecommendation[] = [];
+    const policyEngineGuardrail = PolicyEngineGuardrailService.getInstance();
     
     for (const program of programs) {
-      // Use Gemini AI to predict eligibility and generate explanation
-      const prompt = `
-        Analyze eligibility for ${program.name} (${program.code}) for a household with:
-        - Size: ${household.householdSize} people
-        - Monthly Income: $${household.monthlyIncome}
-        - Has Children: ${household.hasChildren}
-        - Has Elderly: ${household.hasElderly}
-        - Has Disabled: ${household.hasDisabled}
-        - County: ${household.county || 'Unknown'}
-        - Employment Status: ${household.employmentStatus || 'Unknown'}
-        - Housing Status: ${household.housingStatus || 'Unknown'}
-        - Current Benefits: ${household.currentEnrollments.join(', ') || 'None'}
-        
-        Based on Maryland benefit program rules, provide:
-        1. Eligibility confidence score (0-1)
-        2. Estimated monthly benefit amount in dollars
-        3. Impact score (0-100) based on household need
-        4. Priority level (low, medium, high, critical)
-        5. Clear explanation of eligibility
-        6. List of requirements to qualify
-        7. Estimated processing time in days
-        
-        Format response as JSON:
-        {
-          "confidence": 0.85,
-          "estimatedBenefit": 250,
-          "impactScore": 75,
-          "priority": "high",
-          "explanation": "Your household likely qualifies for...",
-          "requirements": ["Income verification", "Proof of residency"],
-          "processingTime": 30
-        }
-      `;
-      
       try {
-        const aiResponse = await generateTextWithGemini(prompt);
-        const prediction = JSON.parse(aiResponse);
+        const adapterCode = PROGRAM_CODE_TO_ADAPTER[program.code];
         
-        // Verify with PolicyEngine if available
-        let verifiedConfidence = prediction.confidence;
-        if (program.hasPolicyEngineValidation) {
-          const policyEngineResult = await policyEngineService.calculateBenefits({
-            household: {
-              people: { you: { age: 35 } },
-              households: {
-                household: {
-                  members: ['you'],
-                  state_code: 'MD'
-                }
-              }
-            }
-          });
-          
-          // Adjust confidence based on PolicyEngine validation
-          if (policyEngineResult[program.code]) {
-            verifiedConfidence = Math.min(1, prediction.confidence * 1.2);
-          }
-        }
+        // Convert household data to HybridEligibilityPayload for adapter
+        const eligibilityPayload: HybridEligibilityPayload = {
+          householdSize: household.householdSize,
+          income: household.monthlyIncome,
+          hasElderly: household.hasElderly,
+          hasDisabled: household.hasDisabled,
+          hasSSI: household.currentEnrollments.includes('SSI'),
+          hasTANF: household.currentEnrollments.includes('TANF'),
+          benefitProgramId: program.id,
+        };
         
-        // NEURO-SYMBOLIC GATEWAY VERIFICATION
-        // Verify AI-generated recommendation explanation against statutory rules
-        // Per paper: All eligibility statements must be legally grounded
-        let isStatutorilyVerified = false;
+        let rulesEngineResult = null;
+        let confidence = 0;
+        let estimatedBenefit = 0;
+        let explanation = '';
         let statutoryCitations: string[] = [];
+        let hybridVerificationStatus: 'verified' | 'unverified' | 'fallback' = 'unverified';
         
-        try {
-          const verificationResult = await neuroSymbolicHybridGateway.verifyExplanation(
-            prediction.explanation,
-            "MD",
-            program.code,
-            {
-              caseId: household.householdId,
-              triggeredBy: "cross_enrollment_recommendation"
-            }
+        // STEP 1: Try internal Rules-as-Code engine with Z3 verification (PRIMARY)
+        if (adapterCode && rulesEngineAdapter.isSupported(adapterCode)) {
+          rulesEngineResult = await rulesEngineAdapter.calculateEligibility(
+            adapterCode,
+            eligibilityPayload
           );
-
-          isStatutorilyVerified = verificationResult.isLegallyConsistent;
-          statutoryCitations = verificationResult.statutoryCitations;
-
-          // Boost confidence if explanation is grounded in statute
-          if (isStatutorilyVerified) {
-            verifiedConfidence = Math.min(1, verifiedConfidence * 1.1);
-          } else if (verificationResult.symbolicVerification.violationCount > 0) {
-            // Reduce confidence if explanation violates rules
-            verifiedConfidence = Math.max(0, verifiedConfidence * 0.7);
-            logger.warn("[CrossEnrollment] Recommendation failed statutory verification", {
+          
+          if (rulesEngineResult) {
+            confidence = rulesEngineResult.eligible ? 0.95 : 0.1;
+            estimatedBenefit = (rulesEngineResult.estimatedBenefit || 0) / 100; // Convert cents to dollars
+            explanation = rulesEngineResult.reason;
+            statutoryCitations = rulesEngineResult.citations || [];
+            
+            // Check if Z3 verification was performed
+            if (rulesEngineResult.hybridVerification?.verificationStatus === 'verified') {
+              hybridVerificationStatus = 'verified';
+              // High confidence when Z3 verified
+              confidence = rulesEngineResult.eligible ? 0.98 : 0.02;
+            }
+            
+            logger.info("[CrossEnrollment] RaC/Z3 eligibility calculated", {
               programCode: program.code,
-              householdId: household.householdId,
-              violationCount: verificationResult.symbolicVerification.violationCount,
+              adapterCode,
+              eligible: rulesEngineResult.eligible,
+              hybridVerificationStatus,
               service: "CrossEnrollmentEngine"
             });
           }
-        } catch (gatewayError) {
-          logger.warn("[CrossEnrollment] Gateway verification failed - proceeding with unverified recommendation", {
-            programCode: program.code,
-            error: gatewayError instanceof Error ? gatewayError.message : "Unknown",
-            service: "CrossEnrollmentEngine"
-          });
         }
+        
+        // STEP 2: Fallback to Gemini AI for programs without adapters
+        if (!rulesEngineResult) {
+          hybridVerificationStatus = 'fallback';
+          const prompt = `
+            Analyze eligibility for ${program.name} (${program.code}) for a household with:
+            - Size: ${household.householdSize} people
+            - Monthly Income: $${household.monthlyIncome}
+            - Has Children: ${household.hasChildren}
+            - Has Elderly: ${household.hasElderly}
+            - Has Disabled: ${household.hasDisabled}
+            - County: ${household.county || 'Unknown'}
+            - Current Benefits: ${household.currentEnrollments.join(', ') || 'None'}
+            
+            Format response as JSON:
+            {
+              "confidence": 0.85,
+              "estimatedBenefit": 250,
+              "explanation": "Your household likely qualifies for...",
+              "requirements": ["Income verification", "Proof of residency"],
+              "processingTime": 30
+            }
+          `;
+          
+          const aiResponse = await generateTextWithGemini(prompt);
+          const prediction = JSON.parse(aiResponse);
+          
+          confidence = prediction.confidence * 0.8; // Lower confidence for AI-only
+          estimatedBenefit = prediction.estimatedBenefit || 0;
+          explanation = prediction.explanation;
+          
+          // Verify AI-generated explanation against statutory rules
+          try {
+            const verificationResult = await neuroSymbolicHybridGateway.verifyExplanation(
+              explanation,
+              "MD",
+              program.code,
+              {
+                caseId: household.householdId,
+                triggeredBy: "cross_enrollment_fallback"
+              }
+            );
+
+            if (verificationResult.isLegallyConsistent) {
+              statutoryCitations = verificationResult.statutoryCitations;
+            } else if (verificationResult.symbolicVerification.violationCount > 0) {
+              confidence = Math.max(0, confidence * 0.6);
+              logger.warn("[CrossEnrollment] AI fallback failed statutory verification", {
+                programCode: program.code,
+                violationCount: verificationResult.symbolicVerification.violationCount,
+                service: "CrossEnrollmentEngine"
+              });
+            }
+          } catch (gatewayError) {
+            logger.warn("[CrossEnrollment] Gateway verification unavailable for fallback", {
+              programCode: program.code,
+              service: "CrossEnrollmentEngine"
+            });
+          }
+        }
+        
+        // STEP 3: PolicyEngine cross-validation (VERIFICATION ONLY)
+        if (program.hasPolicyEngineValidation && rulesEngineResult) {
+          try {
+            const policyEngineResult = await policyEngineService.calculateBenefits({
+              household: {
+                people: { you: { age: 35 } },
+                households: {
+                  household: {
+                    members: ['you'],
+                    state_code: 'MD'
+                  }
+                }
+              }
+            });
+            
+            // Cross-validate using guardrail service
+            const guardrailResult = await policyEngineGuardrail.crossValidate(
+              program.id,
+              eligibilityPayload,
+              {
+                programId: program.id,
+                eligible: rulesEngineResult.eligible,
+                benefitAmount: rulesEngineResult.estimatedBenefit,
+                reasonCodes: [rulesEngineResult.reason],
+                legalCitations: statutoryCitations,
+                calculationMethod: 'RaC_Z3_Hybrid'
+              },
+              policyEngineResult[program.code]
+            );
+            
+            if (guardrailResult.discrepancyDetected) {
+              logger.warn("[CrossEnrollment] PolicyEngine discrepancy detected", {
+                programCode: program.code,
+                discrepancyType: guardrailResult.discrepancyType,
+                severity: guardrailResult.discrepancySeverity,
+                service: "CrossEnrollmentEngine"
+              });
+              
+              // Reduce confidence for discrepancies, but RaC decision stands
+              if (guardrailResult.discrepancySeverity === 'high' || 
+                  guardrailResult.discrepancySeverity === 'critical') {
+                confidence = Math.max(0.5, confidence * 0.85);
+              }
+            }
+          } catch (peError) {
+            logger.warn("[CrossEnrollment] PolicyEngine verification unavailable", {
+              programCode: program.code,
+              service: "CrossEnrollmentEngine"
+            });
+          }
+        }
+        
+        // Calculate impact score based on benefit relative to income
+        const incomeRatio = household.monthlyIncome > 0 
+          ? estimatedBenefit / household.monthlyIncome 
+          : 1;
+        const impactScore = Math.min(100, Math.round(incomeRatio * 100 + (household.hasChildren ? 15 : 0) + (household.hasDisabled ? 20 : 0)));
+        
+        // Determine priority based on impact and confidence
+        let priority: 'low' | 'medium' | 'high' | 'critical' = 'medium';
+        if (impactScore >= 80 && confidence >= 0.9) priority = 'critical';
+        else if (impactScore >= 60 && confidence >= 0.75) priority = 'high';
+        else if (impactScore >= 30 || confidence >= 0.65) priority = 'medium';
+        else priority = 'low';
         
         recommendations.push({
           programId: program.id,
           programName: program.name,
-          confidence: verifiedConfidence,
-          estimatedBenefit: prediction.estimatedBenefit,
-          impactScore: prediction.impactScore,
-          priority: prediction.priority,
-          explanation: prediction.explanation + (isStatutorilyVerified && statutoryCitations.length > 0 
-            ? ` (Based on: ${statutoryCitations.slice(0, 2).join(', ')})` 
-            : ''),
-          requirements: prediction.requirements,
-          processingTime: prediction.processingTime,
+          confidence,
+          estimatedBenefit,
+          impactScore,
+          priority,
+          explanation: explanation + (statutoryCitations.length > 0 
+            ? ` (Legal basis: ${statutoryCitations.slice(0, 2).join(', ')})` 
+            : '') + (hybridVerificationStatus === 'verified' ? ' [Z3 Verified]' : ''),
+          requirements: this.getRequirementsForProgram(program.code),
+          processingTime: this.getProcessingTimeForProgram(program.code),
           deadline: this.calculateDeadline(program.code)
         });
       } catch (error) {
@@ -433,6 +535,42 @@ class CrossEnrollmentEngineService {
     }
     
     return recommendations;
+  }
+  
+  /**
+   * Get standard requirements for a benefit program
+   */
+  private getRequirementsForProgram(programCode: string): string[] {
+    const requirements: Record<string, string[]> = {
+      'SNAP': ['Proof of identity', 'Proof of residency', 'Income verification', 'Asset documentation'],
+      'MD_SNAP': ['Proof of identity', 'Proof of residency', 'Income verification', 'Asset documentation'],
+      'MEDICAID': ['Proof of identity', 'Proof of residency', 'Income verification', 'Citizenship/immigration status'],
+      'TANF': ['Proof of identity', 'Proof of residency', 'Income verification', 'Child birth certificates', 'Work participation plan'],
+      'MD_TANF': ['Proof of identity', 'Proof of residency', 'Income verification', 'Child birth certificates', 'Work participation plan'],
+      'TCA': ['Proof of identity', 'Proof of residency', 'Income verification', 'Child birth certificates', 'Work participation plan'],
+      'OHEP': ['Utility bills', 'Proof of residency', 'Income verification'],
+      'MD_OHEP': ['Utility bills', 'Proof of residency', 'Income verification'],
+      'LIHEAP': ['Utility bills', 'Proof of residency', 'Income verification'],
+    };
+    return requirements[programCode] || ['Proof of identity', 'Proof of residency', 'Income verification'];
+  }
+  
+  /**
+   * Get standard processing time for a benefit program
+   */
+  private getProcessingTimeForProgram(programCode: string): number {
+    const processingTimes: Record<string, number> = {
+      'SNAP': 30,
+      'MD_SNAP': 30,
+      'MEDICAID': 45,
+      'TANF': 45,
+      'MD_TANF': 45,
+      'TCA': 45,
+      'OHEP': 21,
+      'MD_OHEP': 21,
+      'LIHEAP': 21,
+    };
+    return processingTimes[programCode] || 30;
   }
 
   private async generateImpactAnalysis(

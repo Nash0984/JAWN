@@ -10,6 +10,7 @@ import { ohepRulesEngine } from './ohepRulesEngine';
 import { tanfRulesEngine } from './tanfRulesEngine';
 import { medicaidRulesEngine } from './medicaidRulesEngine';
 import { vitaTaxRulesEngine } from './vitaTaxRulesEngine';
+import { ssiRulesEngine } from './ssiRulesEngine';
 import { cacheService, CACHE_KEYS, generateHouseholdHash } from './cacheService';
 import { logger } from './logger.service';
 
@@ -106,6 +107,7 @@ class RulesEngineAdapterService {
     'MD_TANF': this.tanfAdapter.bind(this),
     'MEDICAID': this.medicaidAdapter.bind(this),
     'MD_VITA_TAX': this.vitaTaxAdapter.bind(this),
+    'SSI': this.ssiAdapter.bind(this),
     'TAX_CREDITS': this.taxCreditsAdapter.bind(this), // Not implemented yet
   };
 
@@ -338,27 +340,59 @@ class RulesEngineAdapterService {
       marylandResidentMonths: 12, // Full year default
     };
 
-    const result = await vitaTaxRulesEngine.calculateTax(taxInput);
-
-    const refund = result.totalRefund || 0;
-    const taxOwed = result.totalTaxLiability > 0 ? result.totalTaxLiability : 0;
+    const result = await vitaTaxRulesEngine.calculateEligibilityWithHybridVerification(
+      taxInput,
+      'MD',
+      `adapter-tax-${Date.now()}`
+    );
 
     return {
-      eligible: true, // Tax calculations are always "eligible"
-      estimatedBenefit: refund,
-      reason: refund > 0 
-        ? `Eligible for tax refund of $${(refund / 100).toFixed(2)}`
-        : taxOwed > 0
-          ? `Tax owed: $${(taxOwed / 100).toFixed(2)}`
-          : 'No tax owed or refund',
+      eligible: result.isEligible,
+      estimatedBenefit: result.totalRefund,
+      reason: result.reason,
       breakdown: result.calculationBreakdown,
       citations: result.policyCitations,
-      federalTax: result.federalTax.totalFederalTax,
-      stateTax: result.marylandTax.totalMarylandTax,
-      totalTax: result.totalTaxLiability,
-      refund,
       programCode: 'MD_VITA_TAX',
-      calculationType: 'tax'
+      calculationType: 'tax',
+      hybridVerification: result.hybridVerification
+    };
+  }
+
+  /**
+   * SSI Adapter
+   */
+  private async ssiAdapter(input: HybridEligibilityPayload): Promise<HybridCalculationResult | null> {
+    const ssiInput = {
+      age: input.age || 30,
+      isBlind: false,
+      isDisabled: input.hasDisabled || false,
+      countableMonthlyIncome: (input.income || 0) * 100,
+      earnedIncome: (input.earnedIncome || 0) * 100,
+      unearnedIncome: (input.unearnedIncome || 0) * 100,
+      countableResources: (input.assets || 0) * 100,
+      maritalStatus: 'single' as const,
+      hasEligibleSpouse: false,
+      spouseReceivesSSI: false,
+      livingSituation: 'own_household' as const,
+      isCitizen: true,
+      meetsResidencyRequirements: true,
+    };
+
+    const result = await ssiRulesEngine.calculateEligibilityWithHybridVerification(
+      ssiInput,
+      'MD',
+      `adapter-ssi-${Date.now()}`
+    );
+
+    return {
+      eligible: result.isEligible,
+      estimatedBenefit: result.totalMonthlyBenefit,
+      reason: result.reason || '',
+      breakdown: result.calculationBreakdown,
+      citations: result.policyCitations,
+      programCode: 'SSI',
+      calculationType: 'eligibility',
+      hybridVerification: result.hybridVerification
     };
   }
 
