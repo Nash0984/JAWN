@@ -29,8 +29,9 @@
 
 ## Overview
 
-The database consists of **57 tables** organized into logical domains:
+The database consists of **229 tables** organized into logical domains:
 
+### Originally Documented (57 tables)
 - **Core:** Users, programs, document types (3 tables)
 - **Document Management:** Documents, chunks, versions, sources (7 tables)
 - **Navigator Workspace:** Cases, sessions, exports, documents (6 tables)
@@ -41,6 +42,21 @@ The database consists of **57 tables** organized into logical domains:
 - **Public Portal:** Templates, FAQs, notices (3 tables)
 - **Scenario Modeling:** Scenarios, calculations, comparisons (5 tables)
 - **Plus:** Search, ML models, audit logs, ABAWD, enrollment, VITA
+
+### Additional Tables (172 tables - January 2026 Audit)
+- **E&E Synthetic Database:** 14 tables for sidecar testing
+- **Neuro-Symbolic Engine:** Case assertions, solver runs, violation traces
+- **Legal Ontology:** Terms, relationships, law provisions
+- **Payment Error Reduction:** Nudges, verifications, PERM samples
+- **Tax Preparation:** Federal/state returns, county rates, VITA sessions
+- **Cross-Enrollment:** Predictions, recommendations, audit events
+- **Phone System:** Call records, IVR menus, recording consents
+- **Gamification:** Achievements, leaderboards, navigator KPIs
+- **Multi-State:** Cross-state rules, reciprocity agreements, portability
+- **GDPR/HIPAA:** Consents, access logs, breach incidents
+- **Medicaid/OHEP/TANF:** Program-specific rules engines
+- **Legislative Tracking:** Federal/Maryland bills, public laws
+- **Monitoring:** Metrics, alerts, security events
 
 ---
 
@@ -1184,4 +1200,332 @@ export const db = drizzle(sql)
 
 ---
 
-*This database documentation is maintained by the Maryland DHS Technology Team. Last updated: October 2025*
+*This database documentation is maintained by the Maryland DHS Technology Team. Last updated: January 2026*
+
+---
+
+## Additional Tables (January 2026 Audit)
+
+The following tables were documented during the January 2026 comprehensive audit.
+
+---
+
+### E&E Synthetic Database (14 tables)
+
+Sidecar testing database implementing the Maryland E&E Data Dictionary.
+
+| Table | Description |
+|-------|-------------|
+| `ee_clients` | Synthetic client records |
+| `ee_synthetic_individuals` | Individual household members |
+| `ee_synthetic_cases` | Case records |
+| `ee_synthetic_case_members` | Case-individual associations |
+| `ee_synthetic_addresses` | Address records |
+| `ee_synthetic_contacts` | Contact information |
+| `ee_synthetic_income` | Income sources |
+| `ee_synthetic_resources` | Asset/resource records |
+| `ee_synthetic_expenses` | Expense records |
+| `ee_synthetic_verifications` | Verification documents |
+| `ee_synthetic_abawd` | ABAWD tracking |
+| `ee_synthetic_program_enrollments` | Program enrollment status |
+| `ee_synthetic_life_events` | Life event tracking |
+| `ee_synthetic_providers` | Service provider records |
+| `ee_synthetic_case_closures` | Case closure records |
+| `ee_synthetic_identification` | ID documents |
+
+---
+
+### Neuro-Symbolic Engine Tables
+
+Support for the Z3 solver and formal verification.
+
+| Table | Description |
+|-------|-------------|
+| `case_assertions` | Formal assertions for case eligibility |
+| `solver_runs` | Z3 solver execution history |
+| `violation_traces` | Eligibility violation traces with statutory citations |
+| `hybrid_gateway_audit_logs` | Audit trail for neuro-symbolic decisions |
+| `formal_rules` | SMT-LIB formatted rules |
+| `explanation_clauses` | Human-readable explanation templates |
+
+---
+
+### Legal Ontology Tables
+
+Legal concept taxonomy and relationships.
+
+| Table | Description |
+|-------|-------------|
+| `ontology_terms` | Legal/policy concept definitions (176+ terms) |
+| `ontology_relationships` | Term-to-term relationships |
+| `law_provisions` | Extracted provisions from public laws |
+| `statutory_sources` | Source law references |
+| `section_cross_references` | Cross-references between manual sections |
+
+---
+
+### Payment Error Reduction (PER) Tables
+
+SNAP payment error prevention tracking.
+
+| Table | Description |
+|-------|-------------|
+| `per_income_verifications` | Income verification tracking |
+| `per_duplicate_claims` | Duplicate claim detection |
+| `per_caseworker_nudges` | Behavioral nudges for caseworkers |
+| `per_consistency_checks` | Data consistency validations |
+| `per_perm_samples` | PERM sampling records |
+
+---
+
+### Tax Preparation Tables
+
+Federal and state tax return processing.
+
+| Table | Description |
+|-------|-------------|
+| `federal_tax_returns` | IRS Form 1040 data |
+| `maryland_tax_returns` | Maryland Form 502 data |
+| `county_tax_rates` | Maryland county tax rates |
+| `maryland_county_tax_rates` | County-specific rates |
+| `federal_tax_brackets` | Federal tax bracket tables |
+| `federal_standard_deductions` | Standard deduction amounts |
+| `maryland_tax_rates` | State tax rate tables |
+| `maryland_state_credits` | State credit programs |
+| `eitc_tables` | Earned Income Tax Credit tables |
+| `ctc_rules` | Child Tax Credit rules |
+| `tax_documents` | Uploaded tax documents |
+| `taxslayer_returns` | TaxSlayer integration records |
+
+---
+
+### VITA Integration Tables
+
+Volunteer Income Tax Assistance program support.
+
+| Table | Description |
+|-------|-------------|
+| `vita_intake_sessions` | VITA intake sessions |
+| `vita_messages` | Client communications |
+| `vita_document_requests` | Document request tracking |
+| `vita_document_audit` | Document review audit trail |
+| `vita_signature_requests` | E-signature requests |
+| `taxpayer_messages` | Taxpayer communications |
+| `taxpayer_message_attachments` | Message attachments |
+
+---
+
+### Cross-Enrollment Tables
+
+Cross-program enrollment intelligence.
+
+| Table | Description |
+|-------|-------------|
+| `cross_enrollment_predictions` | AI-generated enrollment predictions |
+| `cross_enrollment_recommendations` | Recommended programs |
+| `cross_enrollment_opportunities` | Identified opportunities |
+| `cross_enrollment_audit_events` | Audit trail |
+
+---
+
+### Phone System Tables
+
+Twilio integration for voice communications.
+
+| Table | Description |
+|-------|-------------|
+| `phone_call_records` | Call history |
+| `phone_system_configs` | System configuration |
+| `call_queues` | Call queue management |
+| `call_queue_entries` | Queue entries |
+| `call_recording_consents` | Recording consent records |
+| `ivr_menus` | IVR menu definitions |
+| `ivr_menu_options` | IVR menu options |
+
+---
+
+### Gamification Tables
+
+Staff engagement and performance tracking.
+
+| Table | Description |
+|-------|-------------|
+| `achievements` | Achievement definitions |
+| `navigator_achievements` | Earned achievements |
+| `leaderboards` | Leaderboard configurations |
+| `navigator_kpis` | Navigator performance metrics |
+
+---
+
+### Multi-State Tables
+
+Interstate coordination and portability.
+
+| Table | Description |
+|-------|-------------|
+| `cross_state_rules` | Cross-state eligibility rules |
+| `cross_state_rule_applications` | Rule application records |
+| `state_reciprocity_agreements` | Reciprocity agreements |
+| `multi_state_households` | Households spanning states |
+| `state_configurations` | State-specific configurations |
+| `state_benefit_programs` | State program definitions |
+| `state_policy_rules` | State policy variations |
+
+---
+
+### GDPR/HIPAA Compliance Tables
+
+Privacy and security compliance.
+
+| Table | Description |
+|-------|-------------|
+| `gdpr_consents` | GDPR consent records |
+| `gdpr_data_subject_requests` | Data subject requests |
+| `gdpr_privacy_impact_assessments` | PIA records |
+| `gdpr_data_processing_activities` | Processing activity log |
+| `gdpr_breach_incidents` | Data breach tracking |
+| `hipaa_audit_logs` | HIPAA audit trail |
+| `hipaa_phi_access_logs` | PHI access records |
+| `hipaa_security_incidents` | Security incident tracking |
+| `hipaa_risk_assessments` | Risk assessment records |
+| `hipaa_business_associate_agreements` | BAA tracking |
+| `data_disposal_logs` | Data disposal records |
+
+---
+
+### Program-Specific Rules Tables
+
+Medicaid, OHEP, and TANF rules engines.
+
+| Table | Description |
+|-------|-------------|
+| `medicaid_income_limits` | Medicaid income thresholds |
+| `medicaid_categories` | Medicaid eligibility categories |
+| `medicaid_magi_rules` | MAGI-based rules |
+| `medicaid_non_magi_rules` | Non-MAGI rules |
+| `ohep_income_limits` | OHEP income limits |
+| `ohep_benefit_tiers` | OHEP benefit tiers |
+| `ohep_seasonal_factors` | Seasonal adjustment factors |
+| `tanf_income_limits` | TANF income limits |
+| `tanf_asset_limits` | TANF asset limits |
+| `tanf_time_limits` | Time limit tracking |
+| `tanf_work_requirements` | Work requirement rules |
+
+---
+
+### Legislative Tracking Tables
+
+Federal and state bill monitoring.
+
+| Table | Description |
+|-------|-------------|
+| `federal_bills` | Tracked federal legislation |
+| `maryland_bills` | Tracked Maryland legislation |
+| `legislative_impacts` | Assessed policy impacts |
+| `maryland_state_option_status` | State option elections |
+| `state_option_status_history` | Option status history |
+| `state_options_waivers` | Active waivers |
+
+---
+
+### Monitoring & Analytics Tables
+
+System observability and metrics.
+
+| Table | Description |
+|-------|-------------|
+| `monitoring_metrics` | System performance metrics |
+| `alert_rules` | Alert configuration |
+| `alert_history` | Alert history |
+| `security_events` | Security event log |
+| `analytics_aggregations` | Pre-computed analytics |
+| `county_metrics` | County-level metrics |
+
+---
+
+### Additional Tables
+
+| Table | Description |
+|-------|-------------|
+| `api_keys` | API key management |
+| `api_usage_logs` | API usage tracking |
+| `appointments` | Appointment scheduling |
+| `counties` | County reference data |
+| `county_users` | County-user associations |
+| `dhs_forms` | DHS form templates |
+| `e_signatures` | Electronic signatures |
+| `flagged_cases` | Cases flagged for review |
+| `fraud_detection_alerts` | Fraud detection alerts |
+| `household_profiles` | Unified household profiles |
+| `household_scenarios` | Scenario modeling data |
+| `job_aids` | Caseworker job aids |
+| `jurisdiction_hierarchies` | Jurisdiction structure |
+| `scenario_state_options` | Scenario state options |
+| `sms_conversations` | SMS conversation threads |
+| `sms_messages` | Individual SMS messages |
+| `sms_screening_links` | SMS screening links |
+| `sms_tenant_config` | SMS tenant configuration |
+| `tenants` | Multi-tenant configuration |
+| `tenant_branding` | Tenant branding settings |
+| `training_interventions` | Training recommendations |
+| `user_consents` | User consent records |
+| `verified_data_sources` | External data source registry |
+| `version_check_logs` | Version checking logs |
+| `war_gaming_scenarios` | War gaming scenario data |
+| `webhooks` | Webhook configurations |
+| `webhook_delivery_logs` | Webhook delivery tracking |
+
+---
+
+## Complete Table List (229 Tables)
+
+For reference, the complete list of all database tables:
+
+```
+abawdExemptionVerifications, achievements, agentCallStatus, aiTrainingExamples,
+aiUsageLogs, alertHistory, alertRules, analyticsAggregations, anonymousScreeningSessions,
+apiKeys, apiUsageLogs, applicationForms, appointments, auditLogs, benefitPrograms,
+benefitsAccessReviews, callQueueEntries, callQueues, callRecordingConsents,
+caseActivityEvents, caseAssertions, caseLifecycleEvents, categoricalEligibilityRules,
+clientCases, clientConsents, clientInteractionSessions, clientVerificationDocuments,
+complianceRules, complianceViolations, consentForms, counties, countyMetrics,
+countyTaxRates, countyUsers, crossEnrollmentAuditEvents, crossEnrollmentOpportunities,
+crossEnrollmentPredictions, crossEnrollmentRecommendations, crossStateRuleApplications,
+crossStateRules, ctcRules, dataDisposalLogs, dhsForms, documentChunks, documentRequests,
+documentRequirementRules, documentRequirementTemplates, documents, documentTypes,
+documentVerifications, documentVersions, eeClients, eeDataDictionaryFields,
+eeDatasetFiles, eeDatasets, eeExportBatches, eeFieldMappings, eeIndividualRecords,
+eeSyntheticAbawd, eeSyntheticAddresses, eeSyntheticCaseClosures, eeSyntheticCaseMembers,
+eeSyntheticCases, eeSyntheticContacts, eeSyntheticExpenses, eeSyntheticIdentification,
+eeSyntheticIncome, eeSyntheticIndividuals, eeSyntheticLifeEvents, eeSyntheticProgramEnrollments,
+eeSyntheticProviders, eeSyntheticResources, eeSyntheticVerifications, eeVerificationResults,
+eitcTables, eligibilityCalculations, eSignatures, evaluationResults, evaluationRuns,
+evaluationTestCases, explanationClauses, extractionJobs, federalBills, federalStandardDeductions,
+federalTaxBrackets, federalTaxReturns, feedbackSubmissions, flaggedCases, formalRules,
+fraudDetectionAlerts, gdprBreachIncidents, gdprConsents, gdprDataProcessingActivities,
+gdprDataSubjectRequests, gdprPrivacyImpactAssessments, hipaaAuditLogs,
+hipaaBusinessAssociateAgreements, hipaaPhiAccessLogs, hipaaRiskAssessments,
+hipaaSecurityIncidents, householdProfiles, householdScenarios, hybridGatewayAuditLogs,
+intakeMessages, intakeSessions, ivrMenuOptions, ivrMenus, jobAids, jurisdictionHierarchies,
+lawProvisions, leaderboards, legislativeImpacts, maiveEvaluations, maiveTestCases,
+maiveTestRuns, manualSections, marylandBills, marylandCountyTaxRates, marylandStateCredits,
+marylandStateOptionStatus, marylandTaxRates, marylandTaxReturns, medicaidCategories,
+medicaidIncomeLimits, medicaidMAGIRules, medicaidNonMAGIRules, mlModels, modelVersions,
+monitoringMetrics, multiStateHouseholds, navigatorAchievements, navigatorKpis,
+noticeTemplates, notificationPreferences, notifications, notificationTemplates,
+ohepBenefitTiers, ohepIncomeLimits, ohepSeasonalFactors, ontologyRelationships,
+ontologyTerms, perCaseworkerNudges, perConsistencyChecks, perDuplicateClaims,
+perIncomeVerifications, perPermSamples, phoneCallRecords, phoneSystemConfigs,
+policyChangeImpacts, policyChanges, scenarioCalculations, scenarioComparisons,
+scenarioStateOptions, schedulerConfigs, searchQueries, searchResults,
+sectionCrossReferences, securityEvents, smsConversations, smsMessages,
+smsScreeningLinks, smsTenantConfig, snapAllotments, snapDeductions, snapIncomeLimits,
+solverRuns, stateBenefitPrograms, stateConfigurations, stateForms, stateOptionStatusHistory,
+stateOptionsWaivers, statePolicyRules, stateReciprocityAgreements, statutorySources,
+tanfAssetLimits, tanfIncomeLimits, tanfTimeLimits, tanfWorkRequirements, taxDocuments,
+taxpayerMessageAttachments, taxpayerMessages, taxslayerReturns, tenantBranding, tenants,
+trainingInterventions, trainingJobs, userConsents, users, verificationRequirementsMet,
+verifiedDataSources, versionCheckLogs, violationTraces, vitaDocumentAudit,
+vitaDocumentRequests, vitaIntakeSessions, vitaMessages, vitaSignatureRequests,
+warGamingScenarios, webhookDeliveryLogs, webhooks
+```

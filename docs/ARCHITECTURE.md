@@ -1498,4 +1498,210 @@ spec:
 
 ---
 
-*This architecture documentation is maintained by the Maryland DHS Technology Team. Last updated: October 2025*
+*This architecture documentation is maintained by the Maryland DHS Technology Team. Last updated: January 2026*
+
+---
+
+## Complete Service Inventory (January 2026 Audit)
+
+The following comprehensive service inventory was compiled during the January 2026 documentation audit. The system includes **117 backend services** across multiple domains.
+
+### AI & Machine Learning Services
+| Service | File | Purpose |
+|---------|------|---------|
+| AI Orchestrator | `aiOrchestrator.ts` | Central AI request routing and rate limiting |
+| AI Service | `aiService.ts` | Core AI operations |
+| Gemini Service | `gemini.service.ts` | Google Gemini API integration |
+| RAG Service | `ragService.ts` | Retrieval-Augmented Generation |
+| Query Classifier | `queryClassifier.ts` | Classify user queries for routing |
+| Text Generation | `textGenerationService.ts` | AI-powered text generation |
+| Narrative Agent | `narrativeAgent.ts` | Generate human-readable explanations |
+| Reading Level Service | `readingLevelService.ts` | Adjust content reading levels |
+
+### Neuro-Symbolic Engine Services
+| Service | File | Purpose |
+|---------|------|---------|
+| Z3 Solver Service | `z3SolverService.ts` | Formal verification solver |
+| Hybrid Gateway | `neuroSymbolicHybridGateway.ts` | Route decisions through 3-layer architecture |
+| Violation Trace Service | `violationTraceService.ts` | Track eligibility violations |
+| Case Assertion Service | `caseAssertionService.ts` | Manage formal assertions |
+| Explanation Clause Parser | `explanationClauseParser.ts` | Parse explanation templates |
+
+### Rules Engine Services
+| Service | File | Purpose |
+|---------|------|---------|
+| Rules Engine | `rulesEngine.ts` | Core rules processing |
+| Rules Engine Adapter | `rulesEngineAdapter.ts` | Adapt rules for different contexts |
+| Rules as Code Service | `rulesAsCodeService.ts` | Transform policies to code |
+| Rules Extraction Service | `rulesExtractionService.ts` | Extract rules from documents |
+| State Rules Engines | `stateRulesEngines.ts` | State-specific rules |
+| Cross-State Rules Engine | `CrossStateRulesEngine.ts` | Multi-state rule coordination |
+| Multi-State Rules Service | `multiStateRules.service.ts` | Multi-state operations |
+| Multi-State Rules Seeder | `multiStateRulesSeeder.ts` | Seed multi-state data |
+
+### Program-Specific Rules Engines
+| Service | File | Purpose |
+|---------|------|---------|
+| Medicaid Rules Engine | `medicaidRulesEngine.ts` | Medicaid eligibility logic |
+| OHEP Rules Engine | `ohepRulesEngine.ts` | OHEP eligibility logic |
+| TANF Rules Engine | `tanfRulesEngine.ts` | TANF eligibility logic |
+| VITA Tax Rules Engine | `vitaTaxRulesEngine.ts` | VITA tax calculations |
+
+### PolicyEngine Integration Services
+| Service | File | Purpose |
+|---------|------|---------|
+| PolicyEngine Service | `policyEngine.service.ts` | Main PolicyEngine integration |
+| PolicyEngine HTTP Client | `policyEngineHttpClient.ts` | HTTP communication |
+| PolicyEngine OAuth | `policyEngineOAuth.ts` | OAuth authentication |
+| PolicyEngine Cache | `policyEngineCache.ts` | Response caching |
+| PolicyEngine Guardrail | `policyEngineGuardrail.ts` | Cross-validation layer |
+| PolicyEngine Verification | `policyEngineVerification.service.ts` | Verify calculations |
+| PolicyEngine Tax Calculation | `policyEngineTaxCalculation.ts` | Tax-specific calculations |
+
+### Legislative & Ontology Services
+| Service | File | Purpose |
+|---------|------|---------|
+| Legal Ontology Service | `legalOntologyService.ts` | Manage legal taxonomy |
+| Ontology Matcher | `ontologyMatcher.service.ts` | Match provisions to ontology |
+| Provision Extractor | `provisionExtractor.service.ts` | Extract law provisions |
+| Congress Bill Tracker | `congressBillTracker.ts` | Track federal legislation |
+| Congress.gov Client | `congressGovClient.ts` | Congress.gov API client |
+| GovInfo Client | `govInfoClient.ts` | GovInfo API client |
+| GovInfo Bill Status | `govInfoBillStatusDownloader.ts` | Download bill statuses |
+| GovInfo Public Laws | `govInfoPublicLawsDownloader.ts` | Download public laws |
+| GovInfo Version Checker | `govInfoVersionChecker.ts` | Check law versions |
+| Maryland Legislature Scraper | `marylandLegislatureScraper.ts` | Scrape MD legislature |
+
+### Tax Preparation Services
+| Service | File | Purpose |
+|---------|------|---------|
+| Form 1040 Generator | `form1040Generator.ts` | Generate IRS Form 1040 |
+| Form 1040 XML Generator | `form1040XmlGenerator.ts` | Generate 1040 XML for e-file |
+| Form 502 Generator | `form502Generator.ts` | Generate MD Form 502 |
+| Form 502 XML Generator | `form502XmlGenerator.ts` | Generate 502 XML for e-file |
+| E-File Queue Service | `eFileQueueService.ts` | Manage e-file queue |
+| Tax Year Config | `taxYearConfig.ts` | Tax year configuration |
+| IRS Direct Downloader | `irsDirectDownloader.ts` | Download IRS publications |
+
+### VITA Services
+| Service | File | Purpose |
+|---------|------|---------|
+| VITA Search | `vitaSearch.service.ts` | Search VITA documents |
+| VITA Certification Validation | `vitaCertificationValidation.service.ts` | Validate certifications |
+
+### Quality Control & Analytics Services
+| Service | File | Purpose |
+|---------|------|---------|
+| QC Analytics | `qcAnalytics.service.ts` | Quality control analytics |
+| PER Proactive Messaging | `perProactiveMessaging.service.ts` | Payment error messaging |
+| Benefits Access Review | `benefitsAccessReview.service.ts` | BAR case monitoring |
+| BAR Notification | `barNotification.service.ts` | BAR notifications |
+| MAIVE Service | `maive.service.ts` | AI validation testing |
+
+### Cross-Enrollment Services
+| Service | File | Purpose |
+|---------|------|---------|
+| Cross-Enrollment Engine | `crossEnrollmentEngine.service.ts` | Cross-program enrollment |
+| Cross-Enrollment Intelligence | `crossEnrollmentIntelligence.ts` | AI recommendations |
+| Benefits Navigation | `benefitsNavigation.service.ts` | Navigation assistance |
+| Decision Points | `decisionPoints.service.ts` | Track decision opportunities |
+| Info Cost Reduction | `infoCostReduction.service.ts` | Simplify policy language |
+| Predictive Analytics | `predictiveAnalytics.service.ts` | Predictive modeling |
+
+### E&E Integration Services
+| Service | File | Purpose |
+|---------|------|---------|
+| E&E Cross-Enrollment Analysis | `eeCrossEnrollmentAnalysis.service.ts` | E&E cross-enrollment |
+| E&E Client Matching | `eeClientMatchingService.ts` | Match E&E clients |
+| E&E File Upload | `eeFileUploadService.ts` | E&E file uploads |
+| E&E Synthetic Data Generator | `eeSyntheticDataGenerator.ts` | Generate test data |
+| External Data Integration | `externalDataIntegration.service.ts` | External data sources |
+
+### Communication Services
+| Service | File | Purpose |
+|---------|------|---------|
+| Email Service | `email.service.ts` | Email delivery |
+| Notification Service | `notification.service.ts` | In-app notifications |
+| WebSocket Service | `websocket.service.ts` | Real-time communications |
+| Voice Assistant | `voiceAssistant.service.ts` | Voice interactions |
+
+### Phone System Services
+| Service | File | Purpose |
+|---------|------|---------|
+| Phone System Adapter | `phoneSystemAdapter.ts` | Phone system integration |
+| SIP Adapter | `sipAdapter.ts` | SIP protocol support |
+| Twilio Config | `twilioConfig.ts` | Twilio configuration |
+| Twilio Voice Adapter | `twilioVoiceAdapter.ts` | Twilio voice calls |
+
+### Caching Services
+| Service | File | Purpose |
+|---------|------|---------|
+| Cache Service | `cacheService.ts` | Core caching |
+| Cache Orchestrator | `cacheOrchestrator.ts` | Multi-level cache coordination |
+| Cache Metrics | `cacheMetrics.ts` | Cache performance metrics |
+| Cache Invalidation Rules | `cacheInvalidationRules.ts` | Invalidation logic |
+| Redis Cache | `redisCache.ts` | Redis integration |
+| RAG Cache | `ragCache.ts` | RAG-specific caching |
+| Document Analysis Cache | `documentAnalysisCache.ts` | Document cache |
+| Embedding Cache | `embeddingCache.ts` | Embedding vectors cache |
+
+### Document Processing Services
+| Service | File | Purpose |
+|---------|------|---------|
+| Document Versioning | `documentVersioning.ts` | Document version control |
+| Policy Source Scraper | `policySourceScraper.ts` | Scrape policy sources |
+| Manual Scraper | `manualScraper.ts` | Scrape manuals |
+| ECFR Bulk Downloader | `ecfrBulkDownloader.ts` | Download eCFR content |
+| FNS State Options Parser | `fnsStateOptionsParser.ts` | Parse FNS options |
+| Program Detection | `programDetection.ts` | Detect benefit programs |
+
+### Security & Compliance Services
+| Service | File | Purpose |
+|---------|------|---------|
+| Encryption Service | `encryption.service.ts` | Data encryption |
+| Password Security | `passwordSecurity.service.ts` | Password management |
+| GDPR Service | `gdpr.service.ts` | GDPR compliance |
+| HIPAA Service | `hipaa.service.ts` | HIPAA compliance |
+| API Key Service | `apiKeyService.ts` | API key management |
+| Audit Service | `auditService.ts` | Audit trail |
+| Audit Log Service | `auditLog.service.ts` | Audit logging |
+
+### Monitoring & Operations Services
+| Service | File | Purpose |
+|---------|------|---------|
+| Health Check Service | `healthCheckService.ts` | System health monitoring |
+| Metrics Service | `metricsService.ts` | Performance metrics |
+| Alert Service | `alertService.ts` | Alert management |
+| Sentry Service | `sentryService.ts` | Error tracking |
+| Logger Service | `logger.service.ts` | Application logging |
+| Database Backup | `databaseBackup.service.ts` | Database backups |
+| Data Retention | `dataRetention.service.ts` | Data lifecycle management |
+
+### Scheduling & Workflow Services
+| Service | File | Purpose |
+|---------|------|---------|
+| Smart Scheduler | `smartScheduler.ts` | Intelligent job scheduling |
+| Webhook Service | `webhookService.ts` | Webhook management |
+
+### Configuration Services
+| Service | File | Purpose |
+|---------|------|---------|
+| State Configuration | `stateConfigurationService.ts` | State-specific config |
+| Tenant Service | `tenantService.ts` | Multi-tenant management |
+| Google Calendar | `googleCalendar.ts` | Calendar integration |
+
+### Gamification Services
+| Service | File | Purpose |
+|---------|------|---------|
+| Achievement System | `achievementSystem.service.ts` | Staff achievements |
+| Leaderboard Service | `leaderboard.service.ts` | Staff leaderboards |
+| KPI Tracking | `kpiTracking.service.ts` | KPI monitoring |
+
+### Intake & Application Services
+| Service | File | Purpose |
+|---------|------|---------|
+| Intake Copilot | `intakeCopilot.service.ts` | Conversational intake |
+| AI Intake Assistant | `aiIntakeAssistant.service.ts` | AI-powered intake |
+| Hybrid Service | `hybridService.ts` | Hybrid calculation service |
+| Demo Data Service | `demoDataService.ts` | Demo data generation |
+| Research Aggregation | `researchAggregation.service.ts` | Research data aggregation |

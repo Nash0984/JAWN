@@ -2670,3 +2670,918 @@ For API support, contact:
 ---
 
 *This API documentation is maintained by the Maryland Department of Human Services Technology Team.*
+
+---
+
+## Additional API Endpoints (Previously Undocumented)
+
+The following sections document API endpoints discovered during the January 2026 comprehensive audit.
+
+---
+
+## Benefits Navigation API
+
+Cross-enrollment analysis and strategic recommendations.
+
+### Analyze Benefits
+```http
+POST /api/benefits-navigation/analyze
+Authorization: Required
+Content-Type: application/json
+```
+
+### Get Case Analysis
+```http
+GET /api/benefits-navigation/case/:caseId
+Authorization: Required
+```
+
+### Quick Wins Recommendations
+```http
+POST /api/benefits-navigation/quick-wins
+Authorization: Required
+```
+
+### Strategic Analysis
+```http
+POST /api/benefits-navigation/strategic
+Authorization: Required
+```
+
+---
+
+## Cross-Enrollment Intelligence API
+
+AI-powered cross-program enrollment recommendations.
+
+### Analyze Tax for Benefits
+```http
+POST /api/cross-enrollment/analyze-tax
+Authorization: Required
+```
+
+### Analyze Benefits Cross-Enrollment
+```http
+POST /api/cross-enrollment/analyze-benefits
+Authorization: Required
+```
+
+### Full Analysis
+```http
+POST /api/cross-enrollment/full-analysis
+Authorization: Required
+```
+
+### High Priority Recommendations
+```http
+POST /api/cross-enrollment/high-priority
+Authorization: Required
+```
+
+### Auto-Eligible Programs
+```http
+POST /api/cross-enrollment/auto-eligible
+Authorization: Required
+```
+
+### By Category
+```http
+POST /api/cross-enrollment/by-category/:category
+Authorization: Required
+```
+
+### Navigator Notes
+```http
+POST /api/cross-enrollment/navigator-notes
+Authorization: Required
+```
+
+---
+
+## Decision Points API
+
+Track renewal deadlines, cliff effects, and intervention opportunities.
+
+### Scan Decision Points
+```http
+GET /api/decision-points/scan
+Authorization: Required (caseworker, supervisor, admin)
+```
+
+### Get Case Decision Points
+```http
+GET /api/decision-points/case/:caseId
+Authorization: Required
+```
+
+### Get Critical Decision Points
+```http
+GET /api/decision-points/critical
+Authorization: Required
+```
+
+### Get Renewals
+```http
+GET /api/decision-points/renewals
+Authorization: Required
+```
+
+### Get Cliff Effects
+```http
+GET /api/decision-points/cliff-effects
+Authorization: Required
+```
+
+### Intervene
+```http
+POST /api/decision-points/intervene/:pointId
+Authorization: Required (caseworker, supervisor)
+```
+
+### Get Interventions
+```http
+GET /api/decision-points/interventions
+Authorization: Required
+```
+
+---
+
+## Info Cost Reduction API
+
+Policy simplification and translation services.
+
+### Simplify Text
+```http
+POST /api/info-cost-reduction/simplify
+Authorization: Required
+```
+
+### Explain Policy
+```http
+POST /api/info-cost-reduction/explain
+Authorization: Required
+```
+
+### Generate Decision Tree
+```http
+POST /api/info-cost-reduction/decision-tree
+Authorization: Required
+```
+
+### Translate
+```http
+POST /api/info-cost-reduction/translate
+Authorization: Required
+```
+
+### Get Metrics
+```http
+GET /api/info-cost-reduction/metrics
+Authorization: Required
+```
+
+### Batch Simplify
+```http
+POST /api/info-cost-reduction/batch-simplify
+Authorization: Required
+```
+
+### Get Confusing Terms
+```http
+GET /api/info-cost-reduction/confusing-terms
+Authorization: Required
+```
+
+---
+
+## MAIVE Testing API
+
+Model AI Validation and Evaluation test suite.
+
+### Create Test Cases
+```http
+POST /api/maive/test-cases
+Authorization: Required (admin)
+```
+
+### Get Test Cases
+```http
+GET /api/maive/test-cases
+Authorization: Required
+```
+
+### Run Test Suite
+```http
+POST /api/maive/run-suite
+Authorization: Required (admin)
+```
+
+### Get Test Run
+```http
+GET /api/maive/test-runs/:runId
+Authorization: Required
+```
+
+### Get All Test Runs
+```http
+GET /api/maive/test-runs
+Authorization: Required
+```
+
+### Get Trends
+```http
+GET /api/maive/trends
+Authorization: Required
+```
+
+---
+
+## QC Analytics API
+
+Quality control metrics and caseworker performance analytics.
+
+### Get QC Metrics
+```http
+GET /api/qc-analytics/metrics
+Authorization: Required
+```
+
+### Get Error Patterns
+```http
+GET /api/qc-analytics/patterns
+Authorization: Required
+```
+
+### Get Case QC Data
+```http
+GET /api/qc-analytics/case/:caseId
+Authorization: Required
+```
+
+### Get Flagged Cases
+```http
+GET /api/qc-analytics/flagged-cases
+Authorization: Required
+```
+
+### Get Caseworker Analytics
+```http
+GET /api/qc-analytics/caseworker/:caseworkerId
+Authorization: Required (supervisor, admin)
+```
+
+### Get All Caseworkers
+```http
+GET /api/qc-analytics/caseworkers
+Authorization: Required (supervisor, admin)
+```
+
+### Get Training Recommendations
+```http
+GET /api/qc-analytics/training
+Authorization: Required
+```
+
+### Refresh Analytics
+```http
+POST /api/qc-analytics/refresh
+Authorization: Required (supervisor, admin)
+```
+
+---
+
+## Maryland E-File API
+
+State-specific electronic filing for Maryland Form 502.
+
+### Submit E-File
+```http
+POST /api/maryland-efile/submit/:id
+```
+
+### Get E-File Status
+```http
+GET /api/maryland-efile/status/:id
+```
+
+### Validate E-File
+```http
+POST /api/maryland-efile/validate/:id
+```
+
+### Get XML
+```http
+GET /api/maryland-efile/xml/:id
+```
+
+### Retry E-File
+```http
+POST /api/maryland-efile/retry/:id
+```
+
+---
+
+## Legal Ontology API
+
+Manage legal ontology terms and relationships.
+
+### List Terms
+```http
+GET /api/legal-ontology/terms
+Authorization: Required
+```
+
+### Get Term
+```http
+GET /api/legal-ontology/terms/:id
+Authorization: Required
+```
+
+### Create Term
+```http
+POST /api/legal-ontology/terms
+Authorization: Required (admin)
+```
+
+### Update Term
+```http
+PATCH /api/legal-ontology/terms/:id
+Authorization: Required (admin)
+```
+
+### Delete Term
+```http
+DELETE /api/legal-ontology/terms/:id
+Authorization: Required (admin)
+```
+
+### Find Similar Terms
+```http
+POST /api/legal-ontology/terms/similar
+Authorization: Required
+```
+
+### Get Relationships
+```http
+GET /api/legal-ontology/relationships
+Authorization: Required
+```
+
+### Create Relationship
+```http
+POST /api/legal-ontology/relationships
+Authorization: Required (admin)
+```
+
+### Traverse Graph
+```http
+GET /api/legal-ontology/graph/traverse
+Authorization: Required
+```
+
+### Get Stats
+```http
+GET /api/legal-ontology/stats
+Authorization: Required
+```
+
+### Seed Ontology
+```http
+POST /api/legal-ontology/seed
+Authorization: Required (admin)
+```
+
+---
+
+## Case Assertion API
+
+Z3 solver integration for case eligibility proofs.
+
+### Get Assertion Stats
+```http
+GET /api/case-assertion/stats
+Authorization: Required
+```
+
+### Get Case Assertions
+```http
+GET /api/case-assertion/case/:caseId
+Authorization: Required
+```
+
+### Get Program Assertions
+```http
+GET /api/case-assertion/case/:caseId/program
+Authorization: Required
+```
+
+### Get Z3 Results
+```http
+GET /api/case-assertion/case/:caseId/z3
+Authorization: Required
+```
+
+### Create Assertion
+```http
+POST /api/case-assertion
+Authorization: Required
+```
+
+### Create from Household
+```http
+POST /api/case-assertion/from-household
+Authorization: Required
+```
+
+### Verify Assertion
+```http
+PATCH /api/case-assertion/:assertionId/verify
+Authorization: Required (admin, supervisor)
+```
+
+### Delete Case Assertions
+```http
+DELETE /api/case-assertion/case/:caseId
+Authorization: Required (admin)
+```
+
+---
+
+## Z3 Solver API
+
+Formal verification solver endpoints.
+
+### Get Solver Stats
+```http
+GET /api/z3-solver/stats
+Authorization: Required
+```
+
+### Run Solver
+```http
+GET /api/z3-solver/run/:solverRunId
+Authorization: Required
+```
+
+### Get Visualization
+```http
+GET /api/z3-solver/visualization/:solverRunId
+Authorization: Required
+```
+
+### Generate Narrative
+```http
+POST /api/z3-solver/narrative
+Authorization: Required
+```
+
+### Generate Due Process Notice
+```http
+POST /api/z3-solver/due-process-notice/:solverRunId
+Authorization: Required
+```
+
+### Generate Report
+```http
+POST /api/z3-solver/generate/:solverRunId
+Authorization: Required
+```
+
+---
+
+## Phone System API
+
+Twilio integration for voice calls and IVR.
+
+### Initiate Call
+```http
+POST /api/phone-system/call/initiate
+Authorization: Required
+```
+
+### Get Call Status
+```http
+GET /api/phone-system/call/status/:callId
+Authorization: Required
+```
+
+### End Call
+```http
+POST /api/phone-system/call/end
+Authorization: Required
+```
+
+### Hold Call
+```http
+POST /api/phone-system/call/hold
+Authorization: Required
+```
+
+### Resume Call
+```http
+POST /api/phone-system/call/resume
+Authorization: Required
+```
+
+### Transfer Call
+```http
+POST /api/phone-system/call/transfer
+Authorization: Required
+```
+
+### Configure IVR
+```http
+POST /api/phone-system/ivr/configure
+Authorization: Required
+```
+
+### Get IVR Menus
+```http
+GET /api/phone-system/ivr/menus
+Authorization: Required
+```
+
+### Recording Consent
+```http
+POST /api/phone-system/recording/consent
+Authorization: Required
+```
+
+### Start Recording
+```http
+POST /api/phone-system/recording/start
+Authorization: Required
+```
+
+### Twilio Webhooks
+```http
+POST /api/phone-system/twilio/voice-webhook
+POST /api/phone-system/twilio/status-webhook
+```
+
+---
+
+## Provision Mapping API
+
+Human-in-the-loop legislative change integration.
+
+### Extract Provisions
+```http
+POST /api/provisions/extract/:publicLawId
+Authorization: Required
+```
+
+### Get Provisions
+```http
+GET /api/provisions/:publicLawId
+Authorization: Required
+```
+
+### Match Provision to Ontology
+```http
+POST /api/provisions/match/:provisionId
+Authorization: Required
+```
+
+### Process Law
+```http
+POST /api/provisions/process-law/:publicLawId
+Authorization: Required
+```
+
+---
+
+## PER (Payment Error Reduction) API
+
+SNAP payment error prevention and monitoring.
+
+### Get PER Metrics
+```http
+GET /api/per/per-metrics
+Authorization: Required
+```
+
+### Get Income Verification Stats
+```http
+GET /api/per/income-verification/stats
+Authorization: Required
+```
+
+### Get Pending Verifications
+```http
+GET /api/per/income-verification/pending
+Authorization: Required
+```
+
+### Verify Income
+```http
+POST /api/per/income-verification/:caseId
+Authorization: Required
+```
+
+### Resolve Verification
+```http
+POST /api/per/income-verification/:id/resolve
+Authorization: Required
+```
+
+### Get Duplicate Stats
+```http
+GET /api/per/duplicates/stats
+Authorization: Required
+```
+
+### Get Pending Duplicates
+```http
+GET /api/per/duplicates/pending
+Authorization: Required
+```
+
+### Scan for Duplicates
+```http
+POST /api/per/duplicates/scan/:caseId
+Authorization: Required
+```
+
+### Resolve Duplicate
+```http
+POST /api/per/duplicates/:id/resolve
+Authorization: Required
+```
+
+### Get Nudge Effectiveness
+```http
+GET /api/per/nudges/effectiveness
+Authorization: Required
+```
+
+### Get High Priority Nudges
+```http
+GET /api/per/nudges/high-priority
+Authorization: Required
+```
+
+### Get Pending Nudges
+```http
+GET /api/per/nudges/pending
+Authorization: Required
+```
+
+### Generate Nudges
+```http
+POST /api/per/nudges/generate/:caseId
+Authorization: Required
+```
+
+### Record Nudge Action
+```http
+POST /api/per/nudges/:id/action
+Authorization: Required
+```
+
+### Record Nudge View
+```http
+POST /api/per/nudges/:id/view
+Authorization: Required
+```
+
+### Get PERM Progress
+```http
+GET /api/per/perm/progress
+Authorization: Required
+```
+
+### Get PERM Report
+```http
+GET /api/per/perm/report
+Authorization: Required
+```
+
+### Get Pending PERM Samples
+```http
+GET /api/per/perm/samples/pending
+Authorization: Required
+```
+
+### Create PERM Sample
+```http
+POST /api/per/perm/sample
+Authorization: Required
+```
+
+### Submit PERM Findings
+```http
+POST /api/per/perm/samples/:id/findings
+Authorization: Required
+```
+
+---
+
+## External Data Integration API
+
+External system data verification and mapping.
+
+### Verify Wages
+```http
+POST /api/external-data/verify-wages
+Authorization: Required
+```
+
+### Employment Lookup
+```http
+POST /api/external-data/employment-lookup
+Authorization: Required
+```
+
+### Cross-Reference
+```http
+POST /api/external-data/cross-reference
+Authorization: Required
+```
+
+### Batch Verify
+```http
+POST /api/external-data/batch-verify
+Authorization: Required
+```
+
+### Map to E&E
+```http
+POST /api/external-data/map-to-ee
+Authorization: Required
+```
+
+### Get E&E Mapping
+```http
+GET /api/external-data/ee-mapping
+Authorization: Required
+```
+
+---
+
+## Multi-State Portability API
+
+Interstate benefits coordination.
+
+### Check Portability
+```http
+POST /api/portability/portability
+Authorization: Required
+```
+
+### Move Timing Analysis
+```http
+POST /api/portability/move-timing
+Authorization: Required
+```
+
+### Pre-Move Checklist
+```http
+POST /api/portability/pre-move-checklist
+Authorization: Required
+```
+
+### Post-Move Checklist
+```http
+POST /api/portability/post-move-checklist
+Authorization: Required
+```
+
+### Get Neighbors
+```http
+GET /api/portability/neighbors/:state/:program
+Authorization: Required
+```
+
+### Check Reciprocity
+```http
+GET /api/portability/reciprocity/:program
+Authorization: Required
+```
+
+### Get Border Counties
+```http
+GET /api/portability/border-county/:county
+Authorization: Required
+```
+
+---
+
+## Supervisor Dashboard API
+
+Quality assurance and caseworker oversight.
+
+### Get Supervisor Dashboard
+```http
+GET /api/supervisor/dashboard
+Authorization: Required (supervisor, admin)
+```
+
+### Get Coaching Queue
+```http
+GET /api/supervisor/coaching-queue
+Authorization: Required (supervisor, admin)
+```
+
+### Get Nudge Compliance
+```http
+GET /api/supervisor/nudge-compliance
+Authorization: Required (supervisor, admin)
+```
+
+### Get Error Drill-Down
+```http
+GET /api/supervisor/error-drill-down/:checkType
+Authorization: Required (supervisor, admin)
+```
+
+### Get Training Impact
+```http
+GET /api/supervisor/training-impact
+Authorization: Required (supervisor, admin)
+```
+
+### Get Z3 Reviews
+```http
+GET /api/supervisor/z3-reviews
+Authorization: Required (supervisor, admin)
+```
+
+### Get Solutions Hub
+```http
+GET /api/supervisor/solutions-hub
+Authorization: Required (supervisor, admin)
+```
+
+### Coaching Action
+```http
+POST /api/supervisor/coaching-action/:nudgeId
+Authorization: Required (supervisor, admin)
+```
+
+---
+
+## Proactive Messaging API
+
+Automated client outreach.
+
+### Get Templates
+```http
+GET /api/proactive-messaging/templates
+Authorization: Required
+```
+
+### Send Message
+```http
+POST /api/proactive-messaging/send
+Authorization: Required
+```
+
+### Batch Send
+```http
+POST /api/proactive-messaging/batch
+Authorization: Required
+```
+
+---
+
+## Training Interventions API
+
+Staff training recommendations and tracking.
+
+### Get Training Interventions
+```http
+GET /api/training/training-interventions
+Authorization: Required
+```
+
+### Create Training Intervention
+```http
+POST /api/training/training-interventions
+Authorization: Required
+```
+
+---
+
+## Changelog (Continued)
+
+### Version 2.2 (January 2026)
+- Added Benefits Navigation API
+- Added Cross-Enrollment Intelligence API
+- Added Decision Points API
+- Added Info Cost Reduction API
+- Added MAIVE Testing API
+- Added QC Analytics API
+- Added Maryland E-File API
+- Added Legal Ontology API
+- Added Case Assertion API
+- Added Z3 Solver API
+- Added Phone System API
+- Added Provision Mapping API
+- Added PER API (Payment Error Reduction)
+- Added External Data Integration API
+- Added Multi-State Portability API
+- Added Supervisor Dashboard API
+- Added Proactive Messaging API
+- Added Training Interventions API
+- Comprehensive documentation audit and update

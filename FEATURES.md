@@ -2779,6 +2779,146 @@ This feature extends the original neuro-symbolic hybrid framework to *maintain t
 
 ---
 
+---
+
+## Complete Page Inventory (January 2026 Audit)
+
+The following comprehensive list of all **95 frontend routes** was compiled during the January 2026 documentation audit.
+
+### Public Pages (No Authentication Required)
+| Route | Purpose |
+|-------|---------|
+| `/` | Home page |
+| `/login` | User login |
+| `/signup` | User registration |
+| `/screener` | Benefit screener |
+| `/public/quick-screener` | 5-question quick screener |
+| `/public/documents` | Document checklist generator |
+| `/public/notices` | Notice explainer |
+| `/public/fsa` | FSA information |
+| `/public/search` | Public policy search |
+| `/eligibility` | Eligibility calculator |
+| `/help` | Help center |
+| `/verify` | Document verification |
+
+### Legal & Compliance Pages
+| Route | Purpose |
+|-------|---------|
+| `/legal` | Legal information hub |
+| `/legal/privacy` | Privacy policy |
+| `/legal/terms` | Terms of service |
+| `/legal/accessibility` | Accessibility statement |
+| `/legal/disclaimer` | Disclaimer |
+| `/legal/security` | Security policy |
+| `/legal/license` | License information |
+| `/legal/breach-notification` | Breach notification policy |
+| `/consent` | Consent management |
+
+### Applicant/Client Pages
+| Route | Purpose |
+|-------|---------|
+| `/intake` | Application intake |
+| `/intake-assistant` | AI intake assistant |
+| `/household-profiler` | Household profile builder |
+| `/scenarios` | Scenario modeling |
+| `/search` | Policy search |
+| `/manual` | Policy manual |
+| `/manual/snap` | SNAP manual |
+| `/manual/medicaid` | Medicaid manual |
+| `/manual/tanf` | TANF manual |
+| `/manual/ohep` | OHEP manual |
+| `/manual/ssi` | SSI manual |
+| `/manual/tax-credits` | Tax credits manual |
+| `/upload` | Document upload |
+| `/appointments` | Appointment scheduling |
+| `/notifications` | Notification center |
+| `/settings/notifications` | Notification settings |
+| `/client/report-changes` | Report life changes |
+| `/dashboard/client` | Client dashboard |
+
+### Tax Preparation Pages
+| Route | Purpose |
+|-------|---------|
+| `/vita` | VITA intake |
+| `/vita-intake` | VITA intake form |
+| `/vita-documents/:sessionId` | VITA session documents |
+| `/tax` | Tax preparation |
+| `/taxpayer` | Taxpayer portal |
+| `/taxpayer/documents` | Taxpayer documents |
+| `/taxpayer/messages` | Taxpayer messaging |
+| `/taxpayer/signature` | E-signature |
+| `/efile` | E-file submission |
+
+### Navigator/Staff Pages
+| Route | Purpose |
+|-------|---------|
+| `/navigator` | Navigator workspace |
+| `/navigator/document-review` | Document review queue |
+| `/dashboard/navigator` | Navigator dashboard |
+| `/caseworker-cockpit` | Caseworker cockpit |
+| `/caseworker/cockpit` | Caseworker cockpit (alternate) |
+| `/dashboard/caseworker` | Caseworker dashboard |
+
+### Supervisor Pages
+| Route | Purpose |
+|-------|---------|
+| `/supervisor/cockpit` | Supervisor cockpit |
+| `/supervisor/reviews` | Supervisor review queue |
+
+### Admin Pages
+| Route | Purpose |
+|-------|---------|
+| `/admin` | Admin dashboard hub |
+| `/admin/users` | User management |
+| `/admin/security` | Security dashboard |
+| `/admin/security-monitoring` | Security monitoring |
+| `/admin/monitoring` | System monitoring |
+| `/admin/analytics` | Analytics dashboard |
+| `/admin/audit-logs` | Audit log viewer |
+| `/admin/feedback` | Feedback management |
+| `/admin/sources` | Policy source management |
+| `/admin/scheduler` | Smart scheduler |
+| `/admin/rules` | Rules management |
+| `/admin/compliance` | Compliance dashboard |
+| `/admin/policy-changes` | Policy change tracking |
+| `/admin/per` | PER dashboard |
+| `/admin/bar` | Benefits Access Review |
+| `/admin/cross-enrollment` | Cross-enrollment admin |
+| `/admin/counties` | County management |
+| `/admin/county-analytics` | County analytics |
+| `/admin/county-tax-rates` | County tax rates |
+| `/admin/efile-monitoring` | E-file monitoring |
+| `/admin/ai-monitoring` | AI service monitoring |
+| `/admin/evaluation` | Evaluation dashboard |
+| `/admin/maive` | MAIVE testing |
+| `/admin/fns-state-options` | FNS state options |
+| `/admin/federal-law-tracker` | Federal law tracker |
+| `/admin/state-law-tracker` | State law tracker |
+| `/admin/provision-review` | Provision mapping review |
+| `/admin/abawd-verifications` | ABAWD verifications |
+| `/admin/webhooks` | Webhook management |
+| `/admin/api-docs` | API documentation |
+| `/admin/researchers` | Researcher access |
+| `/dashboard/admin` | Admin dashboard |
+
+### Developer Pages
+| Route | Purpose |
+|-------|---------|
+| `/developer` | Developer portal |
+| `/developers` | Developer documentation |
+| `/api-explorer` | API explorer |
+
+### Gamification & Performance Pages
+| Route | Purpose |
+|-------|---------|
+| `/leaderboard` | Staff leaderboard |
+| `/training` | Training center |
+| `/performance` | Performance metrics |
+| `/analytics` | Analytics viewer |
+| `/demo` | Demo mode |
+
+---
+
 **For detailed technical documentation, see:**
 - [README.md](README.md) - Quick start and overview
 - [TECHNICAL_DOCUMENTATION.md](TECHNICAL_DOCUMENTATION.md) - Implementation details
