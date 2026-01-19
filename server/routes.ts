@@ -5480,14 +5480,29 @@ export async function registerRoutes(app: Express, sessionMiddleware?: any): Pro
     res.json(templates);
   }));
 
-  // Get public FAQ
+  // Get public FAQ with state and program filtering
   app.get("/api/public/faq", asyncHandler(async (req: Request, res: Response) => {
-    const { category } = req.query;
+    const { category, state, program } = req.query;
     
     const conditions = [eq(publicFaq.isActive, true)];
     
     if (category && category !== "all") {
       conditions.push(eq(publicFaq.category, category as string));
+    }
+    
+    // Filter by state if provided (FAQs can have stateCode field)
+    if (state && state !== "all") {
+      // Include FAQs that match the state OR have no state (federal/general)
+      conditions.push(
+        sql`(${publicFaq.stateCode} = ${state as string} OR ${publicFaq.stateCode} IS NULL)`
+      );
+    }
+    
+    // Filter by program if provided
+    if (program && program !== "all") {
+      conditions.push(
+        sql`(${publicFaq.program} = ${program as string} OR ${publicFaq.program} IS NULL)`
+      );
     }
     
     const faqs = await db
