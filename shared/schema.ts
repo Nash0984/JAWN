@@ -2267,12 +2267,18 @@ export const publicFaq = pgTable("public_faq", {
   answer: text("answer").notNull(),
   relatedQuestions: text("related_questions").array(), // IDs of related FAQs
   keywords: text("keywords").array(), // for search
+  stateCode: text("state_code"), // NULL = federal/general, otherwise state-specific (e.g., "MD", "PA")
+  program: text("program"), // NULL = all programs, otherwise specific program (e.g., "SNAP", "Medicaid")
   sortOrder: integer("sort_order").default(0),
   viewCount: integer("view_count").default(0),
   isActive: boolean("is_active").default(true).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
-});
+}, (table) => ({
+  stateCodeIdx: index("public_faq_state_code_idx").on(table.stateCode),
+  programIdx: index("public_faq_program_idx").on(table.program),
+  categoryIdx: index("public_faq_category_idx").on(table.category),
+}));
 
 // ============================================================================
 // POLICY CHANGE MONITORING - Phase 1 Feature
@@ -4968,6 +4974,28 @@ export const tenantBranding = pgTable("tenant_branding", {
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 }, (table) => ({
   tenantIdIdx: index("tenant_branding_tenant_idx").on(table.tenantId),
+}));
+
+export const tenantsRelations = relations(tenants, ({ one, many }) => ({
+  branding: one(tenantBranding, {
+    fields: [tenants.id],
+    references: [tenantBranding.tenantId],
+  }),
+  parentTenant: one(tenants, {
+    fields: [tenants.parentTenantId],
+    references: [tenants.id],
+    relationName: "tenantHierarchy",
+  }),
+  childTenants: many(tenants, {
+    relationName: "tenantHierarchy",
+  }),
+}));
+
+export const tenantBrandingRelations = relations(tenantBranding, ({ one }) => ({
+  tenant: one(tenants, {
+    fields: [tenantBranding.tenantId],
+    references: [tenants.id],
+  }),
 }));
 
 // ============================================================================
