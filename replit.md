@@ -9,7 +9,7 @@ Preferred communication style: Simple, everyday language.
 # System Architecture
 
 ## UI/UX
-The frontend is built with React 18, TypeScript, Vite, shadcn/ui (Radix UI), and Tailwind CSS, emphasizing modularity, accessibility, and mobile-first responsiveness. It includes a Command Palette, animations, resizable views, skeleton loading, and auto-save. A public applicant portal supports document checklist generation, notice letter explanation, and policy search.
+The frontend is built with React 18, TypeScript, Vite, shadcn/ui (Radix UI), and Tailwind CSS, emphasizing modularity, accessibility, and mobile-first responsiveness. It includes a Command Palette, animations, resizable views, skeleton loading, and auto-save. A public applicant portal supports document checklist generation, notice letter explanation, and multi-program benefits & tax search with dynamic state selection, program filtering (SNAP, Medicaid, TANF, OHEP, SSI, VITA), and context-aware categories.
 
 ## Technical Implementations
 The backend uses Express.js and TypeScript, with PostgreSQL via Drizzle ORM on Neon Database. It incorporates a multi-stage document processing pipeline (OCR, classification, semantic chunking, embedding generation). The Google Gemini API is central for AI analysis, query processing, and RAG. Policy text is transformed into "Rules as Code" via a "Living Policy Manual" and "Rules Extraction Pipeline." Google Cloud Storage handles document storage. AI orchestration includes a strategy pattern, centralized rate limiting, cost tracking, exponential backoff, and Gemini context caching.

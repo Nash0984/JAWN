@@ -5625,24 +5625,44 @@ Return a JSON object with:
     res.json(explanation);
   }));
 
-  // Search FAQ with AI
+  // Search FAQ with AI - supports state and program filtering
   app.post("/api/public/search-faq", asyncHandler(async (req: Request, res: Response) => {
-    const { query } = req.body;
+    const { query, state, program } = req.body;
     
     if (!query) {
       throw validationError("Search query is required");
     }
 
-    // Get all FAQs
+    // Build filter conditions
+    const conditions = [eq(publicFaq.isActive, true)];
+    
+    // Filter by state if provided (include state-specific + federal/general content)
+    if (state) {
+      conditions.push(
+        sql`(${publicFaq.stateCode} = ${state} OR ${publicFaq.stateCode} IS NULL)`
+      );
+    }
+    
+    // Filter by program if provided
+    if (program) {
+      conditions.push(
+        sql`(${publicFaq.program} = ${program} OR ${publicFaq.program} IS NULL)`
+      );
+    }
+
+    // Get filtered FAQs
     const faqs = await db
       .select()
       .from(publicFaq)
-      .where(eq(publicFaq.isActive, true));
+      .where(and(...conditions));
 
     // Use Gemini to find relevant FAQs and generate answer
     const faqContext = faqs.map((faq) => `Q: ${faq.question}\nA: ${faq.answer}`).join('\n\n');
     
-    const prompt = `You are a Maryland SNAP benefits expert. Answer this question using ONLY the information provided below. Use simple, everyday language.
+    const stateContext = state ? `for ${state}` : "";
+    const programContext = program ? `about ${program}` : "about benefits and tax credits";
+    
+    const prompt = `You are a public benefits expert. Answer this question ${programContext} ${stateContext} using ONLY the information provided below. Use simple, everyday language.
 
 Question: ${query}
 
@@ -5665,7 +5685,7 @@ Return JSON:
   ]
 }
 
-If the question cannot be answered with the available information, say so clearly and suggest contacting the local DHS office.`;
+If the question cannot be answered with the available information, say so clearly and suggest contacting the local benefits office.`;
 
     const result = await generateTextWithGemini(prompt);
     
@@ -5674,7 +5694,7 @@ If the question cannot be answered with the available information, say so clearl
       searchResult = JSON.parse(result);
     } catch (e) {
       searchResult = {
-        answer: "I couldn't find a clear answer to your question. Please contact your local DHS office at 1-800-332-6347 for help.",
+        answer: "I couldn't find a clear answer to your question. Please contact your local benefits office for help.",
         sources: []
       };
     }

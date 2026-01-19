@@ -114,22 +114,30 @@ The JAWN (Joint Access Welfare Network) platform is a multi-state benefits-tax p
   
 ---
 
-### 5. Simplified Policy Search
+### 5. Multi-Program Benefits & Tax Search
 **Location:** `/public/search`  
 **User Type:** Public  
-**Purpose:** Search jurisdiction-specific SNAP policy manual (e.g., Maryland)
+**Purpose:** Unified search across all benefit programs and tax credits with state/program filtering
 
 **Features:**
-- Natural language queries
-- No login required for public policies
-- Reading level optimization
-- Official policy citations
-- Mobile-responsive interface
+- **Multi-Program Support**: Search across SNAP, Medicaid, TANF, OHEP, SSI, and VITA/Tax Credits
+- **Dynamic State Selector**: Fetches supported states from API (`/api/states/selector`) for white-label compliance
+- **Program Filter with Grouped Options**:
+  - Benefits: SNAP (Food Assistance), Medicaid (Health Coverage), TANF (Cash Assistance), Energy Assistance, SSI (Disability)
+  - Tax: VITA & Tax Credits
+- **Context-Aware Categories**: Benefits topics (Eligibility, Income, Resources, Application) vs Tax topics (Filing Help, Tax Credits, Documents, Deadlines)
+- **State Selection Enforcement**: Prompts user to select state before search for accurate jurisdiction-specific results
+- **AI-Powered Search**: Natural language queries with RAG-powered answers
+- **Browse by Topic**: Category-based FAQ browsing with state/program filtering
+- No login required
+- Mobile-responsive interface with skip links for accessibility
 
 **Technical Details:**
 - Page: `client/src/pages/public/SimplifiedSearch.tsx`
-- RAG-powered search
-- Public policy access only
+- API: `GET /api/public/faq?state={code}&program={program}`
+- API: `POST /api/public/search-faq` with state/program parameters
+- Backend filtering with inclusive NULL logic (returns state-specific + federal/general content)
+- White-label ready: No hardcoded state names
 
   
 ---

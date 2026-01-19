@@ -1487,6 +1487,31 @@ GET /api/public/notice-templates
 ### FAQ
 ```http
 GET /api/public/faq
+GET /api/public/faq?state=MD
+GET /api/public/faq?state=MD&program=snap
+```
+
+**Query Parameters:**
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `state` | string | Optional. State code (e.g., `MD`, `PA`, `VA`). Returns state-specific FAQs plus federal/general content (NULL stateCode). |
+| `program` | string | Optional. Program filter: `snap`, `medicaid`, `tanf`, `ohep`, `ssi`, `vita`. Returns program-specific FAQs plus general content (NULL program). |
+| `category` | string | Optional. Category filter for browsing by topic. |
+
+**Response:**
+```json
+[
+  {
+    "id": "uuid",
+    "category": "eligibility",
+    "question": "What are the income limits for SNAP?",
+    "answer": "Income limits vary by household size...",
+    "relatedQuestions": ["How do I apply?"],
+    "viewCount": 150,
+    "stateCode": "MD",
+    "program": "snap"
+  }
+]
 ```
 
 ### Analyze Notice (Gemini Vision)
@@ -1513,7 +1538,30 @@ POST /api/public/search-faq
 Content-Type: application/json
 
 {
-  "query": "How do I renew my SNAP benefits?"
+  "query": "How do I renew my SNAP benefits?",
+  "state": "MD",
+  "program": "snap"
+}
+```
+
+**Request Body:**
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `query` | string | Yes | Natural language question |
+| `state` | string | No | State code for state-specific results |
+| `program` | string | No | Program filter for targeted results |
+
+**Response:**
+```json
+{
+  "answer": "AI-generated answer based on matched FAQs...",
+  "sources": [
+    {
+      "question": "How do I recertify for SNAP?",
+      "answer": "You can recertify online or by mail...",
+      "relevance": 0.95
+    }
+  ]
 }
 ```
 

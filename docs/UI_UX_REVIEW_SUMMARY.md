@@ -36,8 +36,13 @@ The JAWN platform demonstrates strong architectural consistency and adherence to
 | FsaLanding | ✅ | ✅ data-testid | ✅ | Ready |
 
 **Findings:**
-- NoticeExplainer (line 109): Uses "DHS" hardcoded - should use `agencyAcronym` from tenant config
-- SimplifiedSearch: SNAP-specific content could benefit from program-agnostic wording for multi-program support
+- ~~NoticeExplainer (line 109): Uses "DHS" hardcoded~~ **FIXED (v2.2.1)**: Now uses `agencyAcronym` from tenant config
+- ~~SimplifiedSearch: SNAP-specific content~~ **FIXED (v2.2.1)**: Refactored to full multi-program support with:
+  - Dynamic state selector fetching from `/api/states/selector` API
+  - Program filter with grouped options (Benefits: SNAP, Medicaid, TANF, OHEP, SSI | Tax: VITA)
+  - Context-aware categories (benefits vs tax topics)
+  - State selection enforcement before search with toast prompts
+  - Backend filtering with state/program query parameters
 - FsaLanding: Well-structured with comparison tables, proper SEO meta tags
 
 ### Category 2: Core Application Pages (15 pages)

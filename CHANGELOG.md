@@ -7,6 +7,46 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.2.1] - 2026-01-19 🔍 **MULTI-PROGRAM SEARCH & WHITE-LABEL COMPLIANCE**
+
+### 🚀 Feature Enhancement: SimplifiedSearch Multi-Program Support
+
+#### **Public Portal Search Transformation**
+Complete refactor of SimplifiedSearch from SNAP-only to full multi-program support:
+
+- **Multi-Program Support**
+  - Search across all 6 programs: SNAP, Medicaid, TANF, OHEP, SSI, VITA/Tax Credits
+  - Program filter with visual groupings (Benefits vs Tax)
+  - Context-aware placeholder text and descriptions
+
+- **Dynamic State Selection**
+  - States fetched from `/api/states/selector` API (white-label compliant)
+  - Removed all hardcoded state names
+  - State selection enforcement before search with toast prompts
+
+- **Context-Aware Categories**
+  - Benefits categories: Eligibility, Income Rules, Resources, Application
+  - Tax categories: Filing Help, Tax Credits, Documents, Deadlines
+  - Dynamic switching based on program filter selection
+
+- **Backend API Enhancements**
+  - `/api/public/faq` now accepts `state` and `program` query parameters
+  - Inclusive NULL filtering (returns state-specific + federal/general content)
+  - `/api/public/search-faq` accepts state/program in request body
+
+### 🔧 White-Label Fixes
+
+- **NoticeExplainer.tsx**: Replaced hardcoded "DHS" with `agencyAcronym` from tenant config
+- **SimplifiedSearch.tsx**: Complete multi-program refactor with API-driven state list (removed hardcoded state names)
+
+### 📖 Documentation Updates
+- Updated UI_UX_REVIEW_SUMMARY.md with completed fixes
+- Updated FEATURES.md Feature #5 with new capabilities
+- Updated docs/API.md with state/program parameters
+- Updated replit.md public portal description
+
+---
+
 ## [2.2.0] - 2026-01-18 🎯 **HUMAN-IN-THE-LOOP PROVISION MAPPING PIPELINE**
 
 ### 🚀 Major Feature: Legislative Change Integration
